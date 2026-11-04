@@ -31,23 +31,45 @@ reviewers:
   first `<` is measured. The rest follows from require order.
 - **The probe** in `tests/session.nix` sits directly after the Hyprforge
   probe (which ends around line 745). It runs in two stages:
-  1. `cp -p` `looknfeel.lua` aside. Append
-     `hl.config({ general = { border_size = 5 } })` to it, `hyprctl reload`,
-     and poll `getoption general:border_size -j` until it reads **5**. Fail
+  1. `cp -p` `looknfeel.lua` to `/tmp/looknfeel.lua.bak`, **outside**
+     `~/.config/hypr` (agy). Append the line with a leading newline,
+     `printf '\nhl.config({ general = { border_size = 5 } })\n' >>`, so it
+     can't join a last line that has no newline (agy). `hyprctl reload`,
+     then poll `getoption general:border_size -j` until it reads **5**. Fail
      with a message that names stage 1.
   2. Write `layouts.lua` containing
      `hl.config({ general = { border_size = 9 } })`, `chown omarchy:` it, and
      reload. Poll for **9**. Fail with "#1596: layouts.lua did not load after
      looknfeel", plus the reading.
 
-  Then restore `looknfeel.lua` with `cp -p`, `rm` `layouts.lua`, and reload.
+  Then restore with `cp -p /tmp/looknfeel.lua.bak` over `looknfeel.lua`,
+  `rm -f` the backup and `layouts.lua`, and reload.
+
+  **The seeded copy.** Also assert that `/home/omarchy/.config/hypr/hyprland.lua`,
+  the fresh home's seeded copy, contains `hypr.layouts`. That's the spec's
+  seeded-copy decision, which only this layer can see (codex).
   Parse the output as JSON, as the Hyprforge probe does, with no
   `| grep -q`.
-- **Docs.** `pkgs/AGENTS.md` gets a section with
-  `<a id="layouts-load-point"></a>` beside the Hyprforge one. In
-  `docs/manual/configuration.md`, the two brace lists stay as they are, and a
-  separate sentence follows the first one: optional, never seeded, loaded
-  automatically by the Omarchy session only, and the load order.
+- **Docs, the full content (codex, agy):**
+  - **`pkgs/AGENTS.md`:** a section anchored `<a id="layouts-load-point"></a>`,
+    placed after the Hyprforge section (around line 143). It says:
+    - what the hook is, and that it's optional (`require_optional`);
+    - why it's in the store file and not in `autostart.lua`: the session runs
+      the store `hyprland.lua` through `--config`, so downstream had to take
+      over `autostart.lua`, a file the user is meant to edit
+      (nixos_config#2686);
+    - the load order `looknfeel` < `layouts` < Hyprforge < toggles, and that
+      only the first `<` is measured;
+    - **coexistence:** a user's own `~/.config/hypr/layouts.lua`, written for
+      their own Hyprland session, is now also loaded by the Omarchy session.
+      Their own session is unaffected;
+    - that a fresh home's seeded `hyprland.lua` carries the line too.
+  - **`docs/manual/configuration.md`:** the brace lists at `:637` and `:667`
+    stay as they are. After the first one, add a short paragraph:
+    `~/.config/hypr/layouts.lua` is optional and never seeded. The Omarchy
+    session loads it automatically after `looknfeel`. Your own session loads
+    it only if your own `hyprland.lua` requires it. Then the load order, in
+    one line.
 - **No `data/bin-ledger.nix` row.** `config/hypr/hyprland.lua` is not under
   `bin/`, and Hyprforge's edit to the same file has no row.
   `tests/patched-files.nix` is a fixture test and needs no change.
@@ -59,8 +81,9 @@ reviewers:
 1. **`pkgs/omarchy/default.nix`:** add the substitution and its comment
    directly after Hyprforge's block. Verify with:
    - `git add`, then `nix build .#omarchy --no-link --print-out-paths`;
-   - `grep -n 'hypr.layouts' <out>/share/omarchy/config/hypr/hyprland.lua`
-     shows exactly one line, directly after `require("hypr.looknfeel")`;
+   - `grep -n -B1 'hypr.layouts' <out>/share/omarchy/config/hypr/hyprland.lua`
+     shows exactly one match, with `require("hypr.looknfeel")` on the line
+     before it (agy);
    - `nix build .#checks.x86_64-linux.install-phase-budget` (report the new
      margin).
 
@@ -84,21 +107,33 @@ reviewers:
    - A §1 break must be able to fail it (step 4).
 
 3. **`pkgs/AGENTS.md` and `docs/manual/configuration.md`:** the prose as
-   decided. Keep it short, without renumbering, and don't touch Hyprforge's
-   section. Verify with the cheap checks in step 4, which cover the docs and
-   llms counts.
+   decided, with every bullet above present. Keep it short, without
+   renumbering, and don't touch Hyprforge's section. Verify with
+   `grep -n 'layouts' pkgs/AGENTS.md docs/manual/configuration.md`, read
+   against the bullets, plus the cheap checks in step 4.
 
 4. **Mine: the proofs, every local check, and the PR.**
-   - Cheap tier: all `generated-checks.sh` targets plus `grep-q-pipefail`,
-     under `flock`, then `nix fmt -- --ci`, `statix` and `deadnix`.
+   - Cheap tier: all `generated-checks.sh` targets (they include
+     `patched-files`, which the spec names; confirm it's in the list) plus
+     `grep-q-pipefail`, under `flock`, then `nix fmt -- --ci`, `statix` and
+     `deadnix`.
    - Package tier: the `omarchy` package and `install-phase-budget`, gated as
      §6 says.
    - VM tier, only while CI is idle: `checks.session` must be green.
-   - **§1 breaks**, each on a temporary commit and each reverted with
-     `git checkout HEAD~ -- <file>`. Each must go red, and the red output
-     goes in the PR:
-     - (a) the hook placed above `looknfeel` (stage 2 reads 5);
-     - (b) the hook removed (stage 2 reads 5).
+   - **§1 breaks.** First commit the good tree as the baseline. Each break is
+     an **uncommitted** edit, `git add`ed so the flake sees it, and proven to
+     have landed with `git diff`. Evaluate its `drvPath` once and build that.
+     Restore with `git checkout HEAD -- pkgs/omarchy/default.nix`, which
+     restores HEAD, the good commit, and not the index. Then check that
+     `git diff HEAD` is empty before the next break (codex). Each break must
+     go red, and its output goes in the PR:
+     - (a) **the generated require above `looknfeel`**: the replacement
+       string becomes
+       `$'require("default.hypr.require_optional").module("hypr.layouts")\nrequire("hypr.looknfeel")'`.
+       Moving the Nix block alone would change nothing (codex). Stage 2
+       reads 5.
+     - (b) the substitution removed. Stage 2 reads 5, and the seeded-copy
+       assertion fails too.
    - Squash to a real subject, open the PR linking all three artifacts, and
      post `@codex review`.
    - If nothing in it is a CI gate, arm `--auto --squash`. This change

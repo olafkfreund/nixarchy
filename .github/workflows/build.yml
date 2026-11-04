@@ -1988,6 +1988,16 @@ jobs:
 
       - uses: actions/checkout@v5
         if: needs.gate.outputs.relevant == 'true'
+
+      - name: Free disk space
+        if: needs.gate.outputs.relevant == 'true'
+        # Three VM checks plus the box images outgrew the runner's disk once
+        # boot-hang-detect joined them (ENOSPC in box-boot, #1594).
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
       - uses: ./.github/actions/setup-nix
         if: needs.gate.outputs.relevant == 'true'
       - uses: cachix/cachix-action@v17

@@ -638,6 +638,11 @@ The two sessions share
 Omarchy's bootstrap builds Hyprland's Lua module path from `$HOME/.config` and
 nothing else. Only the entry point differs, so editing those changes both.
 
+`~/.config/hypr/layouts.lua` is optional and never seeded. The Omarchy session
+loads it automatically after `looknfeel`. Your own session loads it only if
+your own `hyprland.lua` requires it. Load order: `looknfeel`, `layouts`,
+Hyprforge, then the toggles.
+
 ## What defers to you automatically
 
 Every system service the module turns on is `mkDefault`, so your own settings

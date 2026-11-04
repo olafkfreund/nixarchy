@@ -140,6 +140,32 @@ The same line therefore goes into the store file, after
 
 `checks.session` writes the file and reads the option back through
 `hyprctl`. That is the only layer that can see "saved but never loaded" (§2).
+
+<a id="layouts-load-point"></a>
+
+### Layout settings load after looknfeel (#1596)
+
+`~/.config/hypr/layouts.lua` is an optional file for layout settings. The store
+`config/hypr/hyprland.lua` gets one `require_optional.module("hypr.layouts")`
+line directly after `require("hypr.looknfeel")`, so layout settings can
+override looknfeel's.
+
+- **It is in the store file, not `autostart.lua`.** The session runs the store
+  `hyprland.lua` through `--config`, so without this hook downstream had to
+  take over `autostart.lua`, a file the user is meant to edit
+  (nixos_config#2686).
+- **It is optional.** A machine with no `layouts.lua` is unchanged.
+- **Load order:** `looknfeel` < `layouts` < Hyprforge < toggles. Only the first
+  `<` is measured; the rest follows from require order.
+- **Coexistence:** a user's own `~/.config/hypr/layouts.lua`, written for their
+  own Hyprland session, is now also loaded by the Omarchy session. Their own
+  session is unaffected.
+- **A fresh home's seeded `hyprland.lua` carries the line too.** An existing
+  home keeps its older seeded copy, as with Hyprforge's line.
+
+`checks.session`'s two-stage probe measures the first `<`: looknfeel sets
+`general:border_size` to 5, then `layouts.lua` sets 9, and the read must be 9.
+
 <a id="omarchy-restart-shell-waits-for-the-old-shell-to-be-gone-953"></a>
 
 ### omarchy-restart-shell waits for the old shell to be gone (#953) (retired in v4.0.5)

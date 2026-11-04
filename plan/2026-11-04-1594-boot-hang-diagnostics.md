@@ -99,10 +99,11 @@ reviewers:
    list it), plus `actionlint`.
    Traps:
    - §4: claimed and built must agree in both directions.
-   - Read whether `pr-touches-build.sh` counts `tests/vm-cleanup.py` as
-     relevant. If not, a PR that edits only the helper skips this check, and
-     that must be said in the PR. Don't widen the gate in this PR (§11)
-     without asking.
+   - Relevance is already right: `pr-touches-build.sh` is a denylist
+     (header, lines 23–32), so `tests/vm-cleanup.py` and the new test make
+     `relevant=true`. Confirm with
+     `printf 'tests/vm-cleanup.py\n' | .github/scripts/pr-touches-build.sh -`
+     → `true`, and the same with `--install` (`install-gate.nix:45`).
 
 4. **`tests/AGENTS.md`:** one paragraph, placed where install checks and
    `vm-cleanup.py` are discussed (grep `vm-cleanup` there first, §12). It
@@ -113,7 +114,8 @@ reviewers:
    - how to read the dump: halted vs same-RIP vs moving RIP;
    - the `System.map` lookup command against the reference kernel;
    - why there's no sysrq.
-   → verify: `nix build .#checks.x86_64-linux.<docs/agents checks the generated list names>`.
+   → verify: the generated cheap checks in step 5, which include any check
+   that reads `tests/AGENTS.md`.
 
 5. **Mine: the proofs and the builds (§1, the local-checks rule).**
    - All cheap tier at any time: the 161 generated checks plus

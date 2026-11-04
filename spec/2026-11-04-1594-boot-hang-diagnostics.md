@@ -73,14 +73,14 @@ The cost of a hang drops from 990 s to about 120 + 35 + 90 ≈ 245 s.
 that loads `vm-cleanup.py`:
 
 - **Case A:** start the machine, `stop` it on the monitor before multi-user,
-  and call `wait_for_multi_user(m, silence=20)`. It must raise "console
-  silent" in under 60 s, and the log must hold an `info registers` dump
-  from the paused vCPU.
+  and call `wait_for_multi_user(m, timeout=120, silence=20)`. It must
+  raise "console silent" in under 60 s, and the log must hold an `info
+  registers` dump from the paused vCPU.
 - **Case B:** a normal boot through the same helper returns.
 
-The break that must turn A red: set `silence` back to the 900 s budget.
-Then A runs into the test's own short budget instead of raising "silent",
-and the check fails.
+The break that must turn A red: disable the silence branch. A then reaches
+the 120 s overall timeout, so the message and the elapsed-time assertions
+both fail.
 
 ## Alternatives rejected
 

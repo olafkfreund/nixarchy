@@ -161,3 +161,23 @@ reviewers:
 
 Revert the squash commit. The helper goes back to one 900 s wait, and the
 new check and its claim and step go with it.
+
+## Deviations found while implementing
+
+- **Non-timeout errors keep the #1365 contract.** `checks.boot-diagnostics`
+  (`tests/boot-diagnostics.py`) asserts that any other exception from the
+  console wait is diagnosed and re-raised unchanged. Catching only
+  `RequestedAssertionFailed` had let those errors escape with no probe. So
+  the dump and probe moved into `_diagnose()`, which both paths call.
+- **The import is guarded.** `boot-diagnostics` and `install-teardown` exec
+  `vm-cleanup.py` outside the test driver, so `RequestedAssertionFailed`
+  falls back to `AssertionError` when `test_driver` can't be imported.
+- **The exception is a declared `BootHang(AssertionError)`.** The driver's
+  type check rejects an undeclared `.monitor_dump`, and also rejects a base
+  class chosen by that guarded import. So the driver's filtered traceback
+  (`driver.py:405`) is given up, which is cosmetic.
+- **The register assertion is `IP=`, not `RIP=`.** A guest stopped in
+  firmware is in 32-bit mode and prints `EIP=`.
+- **`boot-diagnostics.py` gained** a stub `full_console_log`, a stub
+  `send_monitor_command`, and case 4, the silence detector against stubs,
+  which is red with the silence deadline removed (`timeout 30` → 124).

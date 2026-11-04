@@ -2070,6 +2070,12 @@ stdenvNoCC.mkDerivation {
                       --replace-fail 'require("hypr.autostart")' \
                       $'require("hypr.autostart")\nrequire("default.hypr.require_optional").module("hypr.hyprforge") -- Hyprforge (Omarchy plugin)'
 
+                    # Optional ~/.config/hypr/layouts.lua, loaded right after looknfeel (#1596).
+                    # Why: pkgs/AGENTS.md#layouts-load-point
+                    substituteInPlace $out/share/omarchy/config/hypr/hyprland.lua \
+                      --replace-fail 'require("hypr.looknfeel")' \
+                      $'require("hypr.looknfeel")\nrequire("default.hypr.require_optional").module("hypr.layouts") -- nixarchy: layout settings (#1596)'
+
                     # The default plugins' binds (#766), in the SEED, so new homes get
                     # them and nobody's edited bindings.lua is touched. Appended after
                     # upstream's last line, asserted first so a reworded seed fails here.

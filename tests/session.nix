@@ -739,6 +739,46 @@ pkgs.testers.runNixOSTest {
     machine.succeed("rm -f " + forge)
     machine.succeed(on_desktop("hyprctl reload"))
 
+    # ---- layouts.lua loads after looknfeel (#1596) ----
+    # The session runs the store hyprland.lua; the fresh home's seeded copy
+    # must carry the hook too. A later layouts.lua setting must win over
+    # looknfeel, so the require order is the property tested here.
+    assert "hypr.layouts" in machine.succeed(
+        "cat /home/omarchy/.config/hypr/hyprland.lua"), (
+        "#1596: the seeded hyprland.lua does not load hypr.layouts")
+    looknfeel = "/home/omarchy/.config/hypr/looknfeel.lua"
+    layouts = "/home/omarchy/.config/hypr/layouts.lua"
+    machine.succeed("cp -p " + looknfeel + " /tmp/looknfeel.lua.bak")
+    machine.succeed(
+        "printf '\\nhl.config({ general = { border_size = 5 } })\\n' >> " + looknfeel)
+    machine.succeed(on_desktop("hyprctl reload"))
+    for _ in range(30):
+        seen = border_size()
+        if 5 in seen.values():
+            break
+        time.sleep(1)
+    assert 5 in seen.values(), (
+        "#1596 stage 1: looknfeel.lua did not set general:border_size to 5 -- reads "
+        + str(seen))
+
+    machine.succeed(
+        "printf '%s\\n' 'hl.config({ general = { border_size = 9 } })' > " + layouts
+        + " && chown omarchy: " + layouts)
+    machine.succeed(on_desktop("hyprctl reload"))
+    for _ in range(30):
+        seen = border_size()
+        if 9 in seen.values():
+            break
+        time.sleep(1)
+    assert 9 in seen.values(), (
+        "#1596: layouts.lua did not load after looknfeel -- general:border_size reads "
+        + str(seen))
+    machine.succeed(
+        "cp -p /tmp/looknfeel.lua.bak " + looknfeel
+        + " && rm -f /tmp/looknfeel.lua.bak " + layouts)
+    machine.succeed(on_desktop("hyprctl reload"))
+    print("layouts.lua loads after looknfeel")
+
     # ---- summoning the menu opens one (#1069) ------------------------------
     # Omarchy's own menu by default since #1283. nixarchy-menu, when switched
     # on, loads MenuModel.js from the system profile; when that path was

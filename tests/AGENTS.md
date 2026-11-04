@@ -692,6 +692,41 @@ runs about ten minutes in, so "remove the slice and watch it fail" costs a full
 run. The before-state is an observed failure across three nightlies, which is
 better evidence than a synthetic break anyway.
 
+## Boot hang detect
+
+`checks.boot-hang-detect` (#1594). `wait_for_multi_user` in `vm-cleanup.py` used
+to be one 900 s wait, so an install target that froze in boot cost 15 minutes
+and left no evidence. It now waits in windows of at most 15 s and fails on
+either of two reasons:
+
+- `console silent for N s` -- no new console line for `silence` s (default
+  120). Healthy boots take 13-17 s with a longest console gap of 6.4 s over 65
+  waits, so 120 s is about 19x the worst healthy gap.
+- `multi-user not reached within N s` -- the console kept talking but the
+  budget ran out. A slow boot or a service loop, not a freeze.
+
+Both print two samples of `info cpus` and `info registers -a` from the qemu
+monitor, 5 s apart, then the #1365 systemd probe, and attach the text to the
+exception as `.monitor_dump`. Reading it:
+
+- both samples halted: the guest is blocked in an idle wait (lost interrupt,
+  device never answered);
+- same RIP (EIP while still in 32-bit firmware), not halted: a spin on one
+  instruction;
+- RIP moving: a livelock. The guest runs but makes no progress.
+
+To symbolise a RIP, `grep -i <first digits of RIP>` against `System.map`, which
+sits beside the target's bzImage in its kernel output (build the reference
+config's kernel; the address is only meaningful for that exact kernel).
+
+There is no sysrq dump: systemd sets `kernel.sysrq=16` about a second into boot,
+and enabling more would change the shipped closure to diagnose a test.
+
+The check stops one guest with the monitor's `stop` and expects the first
+reason in under 60 s, then boots a second guest that must pass. Break it by
+dropping the silence deadline from the window and it fails on elapsed time:
+`AssertionError: took 130 s to notice`.
+
 ## A test file in tests/ is not a check, and the coverage gate cannot see that
 
 `tests/shell-ipc-resolve.nix` shipped with #963 and `flake.nix` named it

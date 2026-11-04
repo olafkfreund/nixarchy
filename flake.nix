@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/81a04071a4bac9e7391fbaa0d7d6572e8a1ba481";
+      url = "github:0xc000022070/zen-browser-flake/3c9750e20fd25605fbd2f7a71253997cc45838c5";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -1845,6 +1845,8 @@
             # tests/bin-ledger.nix and #447.
             "bin-ledger"
             "bluetooth-pairing"
+            # A hung install-target boot fails fast with a monitor dump (#1594). Needs KVM.
+            "boot-hang-detect"
             "branch-guard"
             # Boots the Omarchy session on a machine whose hyprland.lua belongs to
             # somebody else -- the case the session entry exists for.

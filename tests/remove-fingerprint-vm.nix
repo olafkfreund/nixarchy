@@ -9,6 +9,7 @@ pkgs.testers.runNixOSTest {
     { lib, ... }:
     {
       services.fprintd.enable = true;
+      security.polkit.enable = true;
       users.users = {
         alice = {
           isNormalUser = true;
@@ -35,9 +36,6 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     machine.wait_for_unit("multi-user.target")
-    # The first D-Bus request activates fprintd.
-    machine.execute("${pkgs.fprintd}/bin/fprintd-list alice")
-    machine.wait_until_succeeds("test -S /run/fprintd-virt/sock", timeout=60)
 
     def send(command):
         machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket, sys; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall((sys.argv[1] + \"\\n\").encode()); s.close()' " + command)
@@ -45,9 +43,13 @@ pkgs.testers.runNixOSTest {
     def stored():
         return machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(b\"LIST\\n\"); print(s.recv(4096).decode())'")
 
+    machine.succeed("sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger alice > /tmp/enroll-alice 2>&1 < /dev/null &")
+    machine.wait_until_succeeds("test -S /run/fprintd-virt/sock", timeout=60)
+    send("SET_KEEP_ALIVE 1")
     send("SET_ENROLL_STAGES 1")
     for user in ("alice", "bob"):
-        machine.succeed(f"sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger {user} > /tmp/enroll-{user} 2>&1 < /dev/null &")
+        if user == "bob":
+            machine.succeed(f"sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger {user} > /tmp/enroll-{user} 2>&1 < /dev/null &")
         send(f"SCAN {user}-id")
         machine.wait_until_succeeds(f"grep -q 'enroll-completed' /tmp/enroll-{user}")
         machine.succeed(f"test -d /var/lib/fprint/{user}")
@@ -67,9 +69,10 @@ pkgs.testers.runNixOSTest {
     assert "No fingerprints to delete on" in second, second
 
     send("REMOVE alice-id")
-    machine.wait_until_succeeds("journalctl -u fprintd --no-pager | grep -E 'alice-id.*not found in storage|not found in storage.*alice-id'")
     send("REMOVE bob-id")
-    machine.succeed("sleep 1")
+    # Opening the reader processes both queued commands.
+    machine.execute("timeout 5 ${pkgs.fprintd}/bin/fprintd-verify bob < /dev/null")
+    machine.wait_until_succeeds("journalctl -u fprintd --no-pager | grep -E 'alice-id.*not found in storage|not found in storage.*alice-id'")
     assert "bob-id" not in stored(), "bob's reader print was not removed by the control command"
     journal = machine.succeed("journalctl -u fprintd --no-pager")
     assert not any("bob-id" in line and "not found in storage" in line for line in journal.splitlines()), journal

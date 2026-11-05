@@ -770,7 +770,7 @@
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
           omasnap = final.callPackage ./pkgs/apps/omasnap.nix { };
 
-          # Omarchy 4.5's other default apps (#1572). Opt-in through
+          # Omarchy 4.5's other default apps (#1572). On by default through
           # programs.nixarchy.omarchyApps.enable.
           hype = final.callPackage ./pkgs/apps/hype.nix { };
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };
@@ -2720,6 +2720,14 @@
           # `installed`), and this fails when upstream adds or drops one. See
           # tests/etc-overlay.nix and #642.
           etc-overlay = import ./tests/etc-overlay.nix { pkgs = pkgsFor.${system}; };
+
+          # Upstream's sysctl values against the rendered file, and a user's
+          # own mkDefault against every key. See tests/etc-sysctl.nix and #1615.
+          etc-sysctl = import ./tests/etc-sysctl.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+            upstream = omarchy;
+          };
 
           # The reference initrd can mount a disk it was not built on, which is
           # a precondition for offline install stage 3. See

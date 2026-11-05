@@ -8,7 +8,7 @@ set -euo pipefail
 now=${EDGE_REPORT_NOW:-$(date +%s)}
 NOT_PUB="The Omarchy edge channel is not publishing"
 HELD_T="Omarchy quattro is held back"
-LISTED=" bin-ledger etc-overlay menu-actions menu-conditions menu-verbs omarchy-package-ledger skill-parity stale-scripts "
+LISTED=" bin-ledger etc-overlay etc-sysctl menu-actions menu-conditions menu-verbs omarchy-package-ledger skill-parity stale-scripts "
 
 # Captured first, then parsed: a failing command inside a pipe or a process
 # substitution is invisible (§4), and --jq renders null as nothing (§13).
@@ -59,7 +59,7 @@ report_held() {
     case "$LISTED" in *" $n "*) ;; *) known=false ;; esac
   done
   if [ "$known" = true ]; then
-    extra="Upstream's newest commit needs a classification row before edge can adopt it. Edge stays on its last good pin meanwhile."
+    extra="Upstream's newest commit needs a classification row or a recorded sysctl decision in data/etc-overlay.nix before edge can adopt it. Edge stays on its last good pin meanwhile."
   else
     extra="upstream candidate failed; investigate. Edge stays on its last good pin meanwhile."
   fi

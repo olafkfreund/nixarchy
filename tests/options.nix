@@ -446,7 +446,6 @@ let
     "hype"
     "monologue"
     "signed"
-    "omarchy-local-ai"
   ];
 
   hasPname = cfg: name: builtins.any (p: (p.pname or "") == name) cfg.environment.systemPackages;
@@ -1200,6 +1199,10 @@ let
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;
+    etcNativeCongestionControl = etcNative (
+      c: c.boot.kernel.sysctl."net.ipv4.tcp_congestion_control" or null
+    ) "bbr";
+    etcNativeQdisc = etcNative (c: c.boot.kernel.sysctl."net.core.default_qdisc" or null) "fq";
     etcNativeWifiPowersave = etcNative (c: c.networking.networkmanager.wifi.powersave) false;
     etcNativeUsbAutosuspend = etcNative (
       c: pkgs.lib.hasInfix "options usbcore autosuspend=-1" c.boot.extraModprobeConfig
@@ -1997,20 +2000,30 @@ let
     };
 
     # ---- #1572: Omarchy 4.5's default apps are one switch ----
-    # All seven rows with preinstall = true, by pname. The on half needs every
-    # one, so a row dropped from data/apps.nix fails here; the off half is a
-    # machine that never asked. The titlebars plugin rides on the session.
+    # All seven default rows, by pname. A dropped row fails on; off uses
+    # preinstalls = false. The titlebars plugin rides on the session.
     omarchyApps = {
       on =
-        let
-          cfg = configWith { omarchyApps.enable = true; };
-        in
-        builtins.all (hasPname cfg) omarchyAppPnames;
-      off =
-        let
-          cfg = configWith { };
-        in
-        builtins.any (hasPname cfg) omarchyAppPnames;
+        builtins.all (hasPname defaultMachine) omarchyAppPnames
+        && !builtins.any (hasPname defaultMachine) [
+          "obs-studio"
+          "kdenlive"
+          "xournalpp"
+          "omarchy-local-ai"
+        ];
+      off = builtins.any (hasPname (configWith {
+        preinstalls = false;
+      })) omarchyAppPnames;
+    };
+    omarchyAppsInertWhenDisabled = {
+      on = builtins.any (hasPname defaultMachine) omarchyAppPnames;
+      off = builtins.any (hasPname (configWith {
+        enable = false;
+      })) omarchyAppPnames;
+    };
+    omarchyAppOptOut = {
+      on = hasPname defaultMachine "hype";
+      off = hasPname (configWith { apps.hype.enable = false; }) "hype";
     };
 
     titlebarsPluginFollowsTheSession = {

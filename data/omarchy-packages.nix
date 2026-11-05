@@ -13,7 +13,7 @@
 #
 #   nix     the attribute path in pkgs (with the nixarchy overlay) that
 #           provides it, and nixarchy ships it: a runtime dependency, a
-#           systemPackages entry, a font, or an app behind
+#           systemPackages entry, a font, or an app on by default through
 #           programs.nixarchy.omarchyApps.enable.
 #   module  the NixOS option that provides it, which modules/*.nix sets.
 #   skip    a one-line reason it is knowingly absent. When unsure, say so here:

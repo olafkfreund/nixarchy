@@ -211,8 +211,6 @@ pkgs.testers.runNixOSTest {
 
       nixarchy = {
         enable = true;
-        # Omarchy 4.5's default apps (#1572), asserted below.
-        omarchyApps.enable = true;
         # Off by default; on here so the accent path is actually exercised.
         # Without it omarchy-theme-set-browser skips every policy directory
         # and the accent silently never applies -- which is what shipped.
@@ -397,6 +395,24 @@ pkgs.testers.runNixOSTest {
         print(reg + ": " + binfmt.splitlines()[0])
         assert "enabled" in binfmt, (
             "the " + reg + " binfmt registration is not enabled: " + binfmt)
+
+    # ---- the kernel runs what the sysctl file says (#1615) ---------------
+    # tcp_bbr and sch_fq are modules. One that cannot load leaves cubic and a
+    # single journal line, and every evaluated value still reads as right.
+    sysctl_conf = machine.succeed("cat /etc/sysctl.d/60-nixos.conf")
+    for sysctl_key in ("net.ipv4.tcp_congestion_control", "net.core.default_qdisc"):
+        sysctl_want = [
+            entry.split("=", 1)[1]
+            for entry in sysctl_conf.splitlines()
+            if entry.startswith(sysctl_key + "=")
+        ]
+        assert sysctl_want, sysctl_key + " is not in 60-nixos.conf:\n" + sysctl_conf
+        sysctl_running = machine.succeed(
+            "cat /proc/sys/" + sysctl_key.replace(".", "/")).strip()
+        print(sysctl_key + ": configured " + sysctl_want[0] + ", running " + sysctl_running)
+        assert sysctl_running == sysctl_want[0], (
+            sysctl_key + " is configured as " + sysctl_want[0]
+            + " and the kernel runs " + sysctl_running)
 
     # ---- the menu extension belongs to the user (#210) ------------------
     # Omarchy reads two menu files and merges the second over the first: the
@@ -1864,8 +1880,7 @@ pkgs.testers.runNixOSTest {
     # ---- every keybinding launches something that exists ------------------
     # A key bound to a missing program fails only when somebody presses it,
     # with a notification naming the program and nothing else. SUPER + SHIFT +
-    # ALT + M did that for cliamp, which had been in nixpkgs for a while by
-    # then, and SUPER + SHIFT + W still does for omawrite, which is not.
+    # ALT + M did that for cliamp.
     #
     # Checked in the VM rather than at build time on purpose: the answer is
     # what is on the session PATH, and a build sandbox cannot see the system
@@ -1891,22 +1906,19 @@ pkgs.testers.runNixOSTest {
     machine.succeed("chmod 0755 /tmp/bindprobe.sh")
     dead = machine.succeed(user % "bash /tmp/bindprobe.sh").split()
 
-    # Two are absent on purpose, and named rather than tolerated so either
+    # One is absent on purpose, and named rather than tolerated so it
     # surfaces the day it stops being true.
-    #
-    # omawrite is Omarchy's own writing application and is not in nixpkgs, so
-    # SUPER + SHIFT + W has nothing to launch on any machine.
     #
     # obsidian is unfree, so it is opt-in through apps.obsidian rather than
     # preinstalled -- an unfree package in the always-on set aborts the whole
     # rebuild rather than failing on its own. Its key works on a machine that
     # enables it; this one does not.
-    expected_absent = {"omawrite", "obsidian"}
+    expected_absent = {"obsidian"}
     dead = [d for d in dead if d not in expected_absent]
     assert not dead, (
         f"these keybindings launch something that does not exist: {dead}. "
         "Install it, or name it here with the reason.")
-    print("every keybinding launches something that exists (bar omawrite)")
+    print("every keybinding launches something that exists")
 
     # ---- every binary the seeded config names exists ----------------------
     # The probe above asks this of default/hypr/bindings. Nothing asked it of
@@ -1967,7 +1979,7 @@ pkgs.testers.runNixOSTest {
     # Empty since #204: tensaku-edit was the one entry, and imv's Ctrl+E now
     # names satty-edit, which the omarchy package ships. Kept as the escape
     # hatch the assertion below points at -- a name goes in here with its
-    # reason, the way omawrite is named in the sibling keybinding probe.
+    # reason, the way obsidian is named in the sibling keybinding probe.
     expected_absent = set()
     # Absent on nixos-26.05, where weekly.yml runs this check (#1199);
     # modules/nixos.nix leaves the picker out there on purpose.
@@ -1985,12 +1997,25 @@ pkgs.testers.runNixOSTest {
     print("every binary the seeded config names is on the session PATH")
 
     # ---- Omarchy 4.5's default apps and floating-workspace titlebars (#1572) --
-    # The apps come with programs.nixarchy.omarchyApps.enable, set above; dua is
-    # gone because upstream replaced Disk Usage with disktree.
+    # The apps come by default, following preinstalls; dua is gone because
+    # upstream replaced Disk Usage with disktree.
     # One name per call: `command -v a b` succeeds if ANY of them resolves.
-    for app in ["hype", "monologue", "signed", "disktree"]:
+    for app in ["hype", "signed", "monologue", "omacalc", "omacut", "omawrite", "aether", "disktree"]:
         machine.succeed(user % f"command -v {app}")
     machine.fail(user % "command -v dua")
+    # Left with Omarchy 4.5 (#1612). obs-studio's binary is obs.
+    for app in ["obs", "kdenlive", "xournalpp"]:
+        machine.fail(user % f"command -v {app}")
+    # The new apps claim these types (#1612); adding them must not move the handler.
+    # Markdown is not asserted: upstream sets no default for it.
+    for mime, want in [("application/pdf", "org.gnome.Evince.desktop"),
+                       ("video/mp4", "mpv.desktop"),
+                       ("text/plain", "nvim.desktop")]:
+        got = machine.succeed(user % (
+            "XDG_CURRENT_DESKTOP=Hyprland "
+            "XDG_DATA_DIRS=/run/current-system/sw/share:/etc/profiles/per-user/omarchy/share "
+            f"xdg-mime query default {mime}")).strip()
+        assert got == want, f"{mime} opens with {got!r}, not {want}"
     # LC_ALL and QT_QPA_PLATFORM only on this command (pkgs/AGENTS.md: a parsed
     # tool run in the C locale warns on stdout).
     machine.succeed(user % "LC_ALL=C.UTF-8 QT_QPA_PLATFORM=offscreen hype check --help")
@@ -2003,7 +2028,7 @@ pkgs.testers.runNixOSTest {
         on_desktop("hyprctl plugin list | grep hyprbars >/dev/null"), timeout=60)
     # Back to tiling, so what follows sees the layout it always saw.
     machine.succeed(on_desktop("omarchy-hyprland-workspace-layout-toggle"))
-    print("hype, monologue, signed and disktree are on PATH, dua is not, and a floating workspace loads hyprbars")
+    print("hype, signed, monologue, omacalc, omacut, omawrite, aether and disktree are on PATH; dua, obs, kdenlive and xournalpp are absent; PDF, MP4 and plain-text handlers are unchanged; a floating workspace loads hyprbars")
 
     # ---- the shell rc files know where they live --------------------------
     # All three opened with a fallback to /usr/share/omarchy for when

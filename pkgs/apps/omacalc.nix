@@ -21,9 +21,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   # Sibling of pkgs/apps/omawrite.nix, and the same reasoning: one of the four
   # applications Omarchy writes itself, none of which are in nixpkgs. Available
-  # through programs.nixarchy.apps.omacalc rather than added to the preinstalls,
-  # because upstream installing it by default is not a reason to put a
-  # calculator on a machine that did not ask for one.
+  # by default through omarchyApps.enable.
   nativeBuildInputs = [
     qt6.qmake
     qt6.wrapQtAppsHook

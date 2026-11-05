@@ -17,14 +17,9 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-kjbiI5Wo/vX9Fs3XnN1K3PWPOtOIX85ZLFOL1HBl6t0=";
   };
 
-  # One of the four applications Omarchy writes itself and installs as a
-  # preinstall. nixpkgs carries none of them, which is why modules/nixos.nix
-  # lists omawrite among the preinstalls it cannot reproduce. Built here so it
-  # is at least available to anyone who wants it.
-  #
-  # Not added to the preinstall set: upstream installs it by default, but a
-  # NixOS user who never asked for a Markdown editor should not get one from a
-  # desktop port. Enable programs.nixarchy.apps.omawrite for it.
+  # One of the four applications Omarchy writes itself and installs by default.
+  # nixpkgs carries none of them, so nixarchy builds them. They come through
+  # omarchyApps.enable.
   nativeBuildInputs = [
     qt6.qmake
     qt6.wrapQtAppsHook

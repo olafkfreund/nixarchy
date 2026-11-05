@@ -1787,8 +1787,13 @@ is worth an issue -- it probably belongs in the catalogue.
 
 Applications available through the Omarchy menu, as NixOS configuration.
 
-Every app is listed and every line is commented out. Uncomment what you
-want -- or pick it from the menu, which uncomments it for you -- then run
+Every app is listed and every line is commented out. A default-on row reads
+
+    # id.enable = false;  #@ id  # on by default
+
+Commenting it does not turn the app off, and a live `false` is not a selection.
+Anything reading live rows must say what it does with a `false`. Uncomment what
+you want -- or pick it from the menu, which uncomments it for you -- then run
 
     nixarchy-apply
 

@@ -126,6 +126,10 @@ let
       c: c.virtualisation.podman.enable && c.virtualisation.podman.dockerCompat
     ))
     (agentLocalCheck "nvidia-ctk-own" (c: !c.hardware.nvidia-container-toolkit.enable))
+    (agentLocalCheck "preinstalls-exclude-retired" (_: true))
+    (agentLocalCheck "xdg-mime-own-pdf" (
+      c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
+    ))
   ];
   opensshScripts = [
     (agentLocalCheck "openssh-on-reference" (
@@ -224,6 +228,26 @@ let
         esac
       '';
 
+  ownHypeScript =
+    let
+      c = configOf fixtures.systempkg-own-hype;
+      failing = builtins.filter (a: !a.assertion) c.assertions;
+    in
+    if failing != [ ] then
+      ''
+        echo ${shQuote "systempkg-own-hype: FAIL nixarchy assertion fired: ${lib.concatStringsSep "; " (map (a: a.message) failing)}"} >&2
+        fail=1
+      ''
+    else
+      ''
+        if grep -q own-hype-marker "${c.system.path}/bin/hype"; then
+          echo "systempkg-own-hype: ok"
+        else
+          echo "systempkg-own-hype: FAIL user's hype binary did not win" >&2
+          fail=1
+        fi
+      '';
+
   nmScript =
     if nmConnectivity.uri == "http://example.invalid/check" && nmConnectivity.enabled == false then
       ''
@@ -245,6 +269,7 @@ pkgs.runCommand "nixarchy-coexistence"
     fail=0
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
+    ${ownHypeScript}
     ${nmScript}
     ${hyprlandScript}
     ${chromiumScript}

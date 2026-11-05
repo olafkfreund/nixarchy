@@ -200,11 +200,14 @@ let
       cmd=''${1:-}
       [ -n "$cmd" ] || exit 127
 
-      # --top-level keeps the answer to attribute names somebody can actually
-      # write in apps.nix; --minimal drops everything but the name; --type x
-      # and s are executables and symlinks to them, which is what `bin/` holds.
-      hits=$(nix-locate --minimal --no-group --top-level \
-        --type x --type s --whole-name "bin/$cmd" 2>/dev/null | head -n 5 || true)
+      # Without --all, nix-locate shows packages from nix-env -qa; --minimal
+      # drops everything but the name. x and s cover executables and symlinks.
+      if ! hits=$(nix-locate --minimal --no-group \
+        --type x --type s --whole-name "bin/$cmd"); then
+        echo "$cmd: command not found; nix-locate failed (is its database available?)." >&2
+        exit 127
+      fi
+      hits=$(printf '%s\n' "$hits" | head -n 5 || true)
 
       if [ -z "$hits" ]; then
         echo "$cmd: command not found, and nothing in nixpkgs provides bin/$cmd." >&2

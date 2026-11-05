@@ -231,9 +231,10 @@ pkgs.runCommand "nixarchy-installer-answers"
       hostname=test username=user device=/dev/test disk_mode=whole timezone=UTC
       keymap=de-latin1 xkb_layout=de xkb_variant= encrypt=false recovery_hash=
       substitute_host_files
-      nix-instantiate --parse "$hostdir/configuration.nix" > /dev/null
-      grep -qF 'layout = "de";' "$hostdir/configuration.nix"
-      grep -qF 'variant = "";' "$hostdir/configuration.nix"
+      # && and not separate lines: this subshell is left of &&, so set -e does not apply in it.
+      nix-instantiate --parse "$hostdir/configuration.nix" > /dev/null &&
+        grep -qF 'layout = "de";' "$hostdir/configuration.nix" &&
+        grep -qF 'variant = "";' "$hostdir/configuration.nix"
     ) && ok "template writes the selected XKB layout and variant" || failed "template lost an XKB substitution"
 
     password_case() { # label, moved, dead, first answer, accepted answer, refusal count
@@ -274,6 +275,8 @@ pkgs.runCommand "nixarchy-installer-answers"
     password_case 'Norwegian moved characters' "$norwegian" "" 'a~' ab 1
     password_case 'Latvian dead keys' "" "$latvian" 'á' ab 1
     password_case 'Icelandic multibyte unaffected' "$icelandic" "" 'ä' 'ä' 0
+    # ° is C2 B0 and ± is C2 B1: only a byte-wise match refuses this one.
+    password_case 'Icelandic shares a byte with a moved character' "$icelandic" "" '±' '±' 0
     password_case 'Icelandic moved character' "$icelandic" "" '°' ab 1
     printable=""
     for ((i = 32; i <= 126; i++)); do

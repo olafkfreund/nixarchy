@@ -141,6 +141,12 @@ let
   # defaults this module sets for it are mkDefault.
   usingFcitx5 = config.i18n.inputMethod.enable && config.i18n.inputMethod.type == "fcitx5";
 
+  # Why: modules/AGENTS.md#default-environment-d-10-omarchy-fcitx-conf-plus-t
+  pinyinWithoutBrowser = pkgs.qt6Packages.fcitx5-chinese-addons.overrideAttrs (o: {
+    buildInputs = lib.remove pkgs.qt6Packages.qtwebengine o.buildInputs;
+    cmakeFlags = (o.cmakeFlags or [ ]) ++ [ "-DENABLE_BROWSER=OFF" ];
+  });
+
   # providedSessions has to match the .desktop basename or NixOS refuses it.
   #
   # The label is Nixarchy and the id stays `omarchy`, which is not an
@@ -2298,6 +2304,14 @@ in
 
     # Why: modules/AGENTS.md#fcitx5-says-this-itself-in-a-notification-on-every
     i18n.inputMethod.fcitx5.waylandFrontend = lib.mkIf usingFcitx5 (lib.mkDefault true);
+
+    i18n.inputMethod.fcitx5.addons = lib.mkIf usingFcitx5 [
+      pkgs.fcitx5-mozc
+      pkgs.fcitx5-hangul
+      pkgs.fcitx5-chewing
+      pkgs.fcitx5-table-extra
+      pinyinWithoutBrowser
+    ];
 
     # The two of upstream's four that the nixpkgs module does not set. It has
     # no opinion on either, and SDL applications and the older INPUT_METHOD

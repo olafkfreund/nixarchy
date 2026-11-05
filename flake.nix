@@ -2174,6 +2174,7 @@
             pkgs = pkgsFor.${system};
             menu = ./installer/brand/keymaps.txt;
             kbd = pkgsFor.${system}.kbd;
+            omarchy = omarchy;
           };
 
           # The doctor's GPU rules, against fixture machines. checks.install's

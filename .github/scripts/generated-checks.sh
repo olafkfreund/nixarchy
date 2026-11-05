@@ -39,7 +39,7 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # leaving it generated put a VM test in a job that cannot boot one. The
 # integration that added the check is what surfaced it.
 # sshd-login is a nixosTest and needs /dev/kvm, as wifi-hwsim.
-claimed="wifi-hwsim hibernate-resume boot-hang-detect sshd-login install free-space installer-refusal
+claimed="wifi-hwsim hibernate-resume boot-hang-detect sshd-login keyboard-boot install free-space installer-refusal
   install-encrypted install-iso install-iso-net iso-budget microvm-boot
   reinstall-vm
   box-boot box-template coexist coexistence dashboard-clock installer-ui
@@ -72,6 +72,7 @@ exempt="omarchy omarchy-runtime reference-unencrypted-toplevel"
 #                    two of those against a 90-minute job and that pair grazed
 #                    the timeout on 2026-09-03
 #   microvm-boot     a nested VM on the -tcg runner
+#   keyboard-boot    two desktop VMs that boot through LUKS and type at the greeter
 # reinstall-vm builds a SECOND full ISO and installs from it -- the same ~3h
 # shape as install-iso, and it arrived on main (#512) before it was claimed
 # here, which would have put a multi-hour build in the light job on every pull
@@ -79,7 +80,7 @@ exempt="omarchy omarchy-runtime reference-unencrypted-toplevel"
 #
 # It is also the list a keep-alive must never rebuild: a nightly that rebuilt
 # install-iso to refresh a proof would spend three hours doing it.
-nightly_only="install-iso iso-budget microvm-boot install-iso-net install-encrypted reinstall-vm"
+nightly_only="install-iso iso-budget microvm-boot install-iso-net install-encrypted keyboard-boot reinstall-vm"
 
 # Collapsed to single spaces before anything tests membership.
 # `case " $claimed " in *" $c "*)` wants a space on BOTH sides, and the lists

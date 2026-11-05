@@ -394,6 +394,7 @@ jobs:
           #                    already runs two of those against a 90-minute job
           #                    and that pair grazed the timeout on 2026-09-03
           #   microvm-boot     a nested VM on the -tcg runner
+          #   keyboard-boot    two desktop VMs that boot through LUKS and type at the greeter
           # reinstall-vm builds a SECOND full ISO and installs from it -- the
           # same ~3h shape as install-iso, and it arrived on main (#512)
           # before it was claimed here, which would have put a multi-hour

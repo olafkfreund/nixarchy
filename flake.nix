@@ -2864,6 +2864,11 @@
             image = images.archlinux;
           };
 
+          keyboard-boot = import ./tests/keyboard-boot.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The other disk mode, built so the cache has it: installer/cd.nix
           # bakes both onto the ISO, and an image built on a runner that has
           # only one of them compiles the difference from source.

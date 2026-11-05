@@ -523,8 +523,7 @@
   };
   "omarchy-remove-security-fingerprint" = {
     class = "patch";
-    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes, and the script exits 1 with the services.fprintd route before dropping packages or deleting the omarchy-lock file (#1304). quattro's remove_resume_hook deletes a /usr/lib sleep hook and an fprintd drop-in the build declares instead (#1288), so here it has nothing to remove.";
-    allow = "etc-write";
+    reason = "Upstream's PAM edits, lock-file rm, resume hook, lifecycle hook and pkg-drop are cut from the file, because all are wrong or inert on NixOS (#1304). What stays is what the row is named for: fprintd-delete, then rm of /var/lib/fprint/<user>, for the invoking account only, and a real fprintd failure stops before the rm, because the host's files are fprintd's only route to a reader's copy (#1620).";
   };
   "omarchy-remove-security-sshd" = {
     class = "vendor";

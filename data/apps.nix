@@ -344,13 +344,22 @@
     arch = "openai-codex-desktop";
   };
   amp-desktop = {
-    # New on quattro (upstream #17446). nixpkgs has amp-cli, the terminal agent,
-    # and not this Electron app; mapping the CLI would install a different thing.
+    # nixpkgs has amp-cli, the terminal agent, and not this Electron app;
+    # mapping the CLI would install a different thing.
     menuId = "install.ai.amp";
     label = "Amp Desktop";
     category = "AI";
     unavailable = "Amp Desktop is an AUR binary with no nixpkgs package; the Amp CLI is in nixpkgs as amp-cli.";
     arch = "amp-desktop-bin";
+  };
+  notion-desktop = {
+    # nixpkgs' notion-app builds only for aarch64-darwin, so there is nothing
+    # to map on NixOS. Install > Web App reaches Notion's site.
+    menuId = "install.service.notion";
+    label = "Notion";
+    category = "Utility";
+    unavailable = "Notion's desktop app has no Linux package in nixpkgs; its notion-app is macOS-only.";
+    arch = "notion-desktop";
   };
   # The terminal coding agents. Four entries that share one shape, so the
   # reasoning is here once rather than repeated four times.

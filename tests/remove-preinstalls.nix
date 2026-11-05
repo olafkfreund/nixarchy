@@ -40,6 +40,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     export XDG_CONFIG_HOME=$HOME/.config
     export XDG_CACHE_HOME=$HOME/.cache
     export OMARCHY_PATH=$tree
+    unset HYPRLAND_INSTANCE_SIGNATURE
 
     A=$HOME/.local/share/applications
     B=$HOME/.local/bin
@@ -48,9 +49,15 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
 
     # Stubs: record the call and succeed, except the two that must not.
     mkdir -p "$TMPDIR/stubs"
-    for n in gum hyprctl update-desktop-database mise; do
+    for n in gum update-desktop-database mise; do
       printf '#!%s\necho "%s $*" >> "$TMPDIR/calls"\nexit 0\n' "$shell" "$n" > "$TMPDIR/stubs/$n"
     done
+    printf '%s\n' \
+      "#!$shell" \
+      'echo "hyprctl $*" >> "$TMPDIR/calls"' \
+      'case " $* " in *" --instance "*) exit 0 ;; esac' \
+      'echo "HYPRLAND_INSTANCE_SIGNATURE not set! (is hyprland running?)" >&2' \
+      'exit 1' > "$TMPDIR/stubs/hyprctl"
     printf '#!%s\necho "omarchy-install-hermes-cli $*" >> "$TMPDIR/calls"\nexit 1\n' "$shell" > "$TMPDIR/stubs/omarchy-install-hermes-cli"
     printf '#!%s\necho "pacman: not on NixOS" >&2\nexit 1\n' "$shell" > "$TMPDIR/stubs/pacman"
     chmod +x "$TMPDIR"/stubs/*
@@ -134,6 +141,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     added=$(pick A delta | join)
     [ "$added" = "home/.local/state/omarchy/preinstalls-removed" ] || fail "wrote unexpected files: $added"
     [ ! -e "$real_home" ] || fail "wrote outside the fixture: $real_home"
+    if grep -qF 'HYPRLAND_INSTANCE_SIGNATURE not set!' remove.log; then fail "Remove called hyprctl without an instance"; fi
     if [ "''${#fails[@]}" -gt 0 ]; then cat remove.log >&2; fi
     report
     echo "remove: deleted only $(pick D delta | join)"
@@ -153,6 +161,8 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     odd=$(pick A delta | grep -v '^home/.local/share/applications/' | join || true)
     [ -z "$odd" ] || fail "Restore wrote unexpected files: $odd"
     [ ! -e "$real_home" ] || fail "wrote outside the fixture: $real_home"
+    if grep -qF 'HYPRLAND_INSTANCE_SIGNATURE not set!' restore.log; then fail "Restore called hyprctl without an instance"; fi
+    grep -qFx 'hyprctl --instance 0 reload' "$TMPDIR/calls" || fail "instance-targeted hyprctl reload was not called"
     if [ "''${#fails[@]}" -gt 0 ]; then cat restore.log >&2; fi
     report
     echo "restore: added $(pick A delta | wc -l) launchers, changed nothing"

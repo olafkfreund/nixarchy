@@ -335,6 +335,11 @@
     reason = "Writes N to zswap's enabled parameter so it cannot compete with zram. nixpkgs' kernels leave CONFIG_ZSWAP_DEFAULT_ON off and nothing here turns zswap on, so zram -- enabled in modules/nixos.nix -- is already the only compressed swap.";
   };
 
+  "udev/rules.d/60-omarchy-hp-zbook-ultra-g3a-usb.rules" = {
+    class = "divergent";
+    reason = "Disables a phantom USB2 port on the HP ZBook Ultra G3a, which stalls its fingerprint reader. It would act on that laptop only, through services.udev.extraRules since NixOS generates /etc/udev/rules.d, and is not adopted: no machine here can test it. A host with this laptop can carry the rule in that option itself.";
+  };
+
   "udev/rules.d/60-omarchy-io-scheduler.rules" = {
     class = "divergent";
     reason = "Kyber on every whole disk. Not ported: a udev rule cannot be mkDefault, so it would silently override a host's own scheduler (p620 runs bfq), which is a coexistence change needing its own design. Tracked in #1386.";

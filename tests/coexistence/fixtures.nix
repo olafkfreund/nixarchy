@@ -1,8 +1,8 @@
-# Plain NixOS modules a user might carry alongside nixarchy, with no
-# programs.nixarchy.* of their own. checks.coexistence (tests/coexistence/
-# default.nix) runs nixarchy's reference config through each and checks it
-# still works, per AGENTS.md#14. See #1162 -> #1163 for the worked example of
-# what a coexistence bug looks like without one of these.
+# Plain NixOS modules a user might carry alongside nixarchy, including an
+# existing programs.nixarchy.preinstallsExclude. checks.coexistence
+# (tests/coexistence/default.nix) runs nixarchy's reference config through
+# each and checks it still works, per AGENTS.md#14. See #1162 -> #1163
+# for the worked example of what a coexistence bug looks like without one.
 {
   # The commonest pattern: add a package to the merged graphics-drivers env.
   # Use nixarchy's selected package: its Mesa follows Hyprland's own nixpkgs,
@@ -44,6 +44,22 @@
     { pkgs, ... }:
     {
       environment.systemPackages = [ pkgs.ffmpeg-full ];
+    };
+
+  # #1612: a machine that already opted out of an app Omarchy 4.5 retired.
+  preinstalls-exclude-retired = {
+    programs.nixarchy.preinstallsExclude = [
+      "obs-studio"
+      "kdenlive"
+      "xournalpp"
+    ];
+  };
+
+  # #1612: the seven default apps are unasked, so a user's own binary wins.
+  systempkg-own-hype =
+    { pkgs, ... }:
+    {
+      environment.systemPackages = [ (pkgs.writeShellScriptBin "hype" "echo own-hype-marker") ];
     };
 
   # A user who swaps Hyprland (their own pin, a patched build). The titlebars

@@ -625,12 +625,13 @@ in
         omarchy-install-preinstalls restores and Remove > Preinstalls takes
         away. Upstream has these on a fresh machine, so they are on here too.
 
-        Six of upstream's thirteen cannot be here: obsidian is unfree, so it
-        would abort the whole rebuild rather than fail on its own -- enable
-        `apps.obsidian` for it instead -- and aether, omacut, omacalc and
-        omawrite are Omarchy's own applications, not packaged in nixpkgs.
-        cliamp is, and is included: it arrived after this was first written.
-        lazydocker is already a runtime dependency.
+        Omarchy's own applications (Hype, Signed, Monologue, Omacalc, Omacut,
+        Omawrite, Aether) come through `omarchyApps.enable`, which follows this
+        option. obsidian is unfree, so it would abort the whole rebuild rather
+        than fail on its own: enable `apps.obsidian` for it instead. cliamp is
+        included. lazydocker is already a runtime dependency. OBS Studio,
+        Kdenlive and Xournal++ left with Omarchy 4.5; `nixarchy pkg add` brings
+        any of them back.
 
         gliff, Omarchy's Hyprland remote desktop over ssh, is included: it is in
         upstream's base packages rather than its preinstalls, and lives here so
@@ -725,7 +726,8 @@ in
         one app rather than the group.
 
         Names that match nothing are an error rather than a typo you find by
-        noticing the app is still installed.
+        noticing the app is still installed. obs-studio, kdenlive and xournalpp
+        left with Omarchy 4.5; those names are still accepted and do nothing.
       '';
     };
 
@@ -1528,7 +1530,7 @@ in
             # -- pinta's is "Pinta", capitalised.
             lib.attrValues (
               lib.removeAttrs {
-                # omarchy-install-preinstalls, minus the six that cannot be here.
+                # omarchy-install-preinstalls, minus what cannot be here.
                 inherit (pkgs)
                   pinta
                   libreoffice

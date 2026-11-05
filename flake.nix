@@ -770,7 +770,7 @@
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
           omasnap = final.callPackage ./pkgs/apps/omasnap.nix { };
 
-          # Omarchy 4.5's other default apps (#1572). Opt-in through
+          # Omarchy 4.5's other default apps (#1572). On by default through
           # programs.nixarchy.omarchyApps.enable.
           hype = final.callPackage ./pkgs/apps/hype.nix { };
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };

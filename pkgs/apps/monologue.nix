@@ -20,7 +20,7 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-sQm/n0kHl13JQ3iOcOM5rZcP9xqrPpw6EKTVBLWha/I=";
   };
 
-  # Opt-in Omarchy 4.5 default app, built like pkgs/apps/omawrite.nix.
+  # Omarchy 4.5 default app, on through omarchyApps.enable, built like pkgs/apps/omawrite.nix.
   nativeBuildInputs = [
     qt6.qmake
     qt6.wrapQtAppsHook

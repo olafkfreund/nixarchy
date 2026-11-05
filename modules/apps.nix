@@ -134,7 +134,8 @@ let
 
   # ── The template ────────────────────────────────────────────────────────
   # Written fully populated and fully commented out, so enabling an app is
-  # uncommenting one line rather than knowing a nixpkgs attribute. The `#@ id`
+  # uncommenting one line rather than knowing a nixpkgs attribute. A default-on
+  # row reads `.enable = false`, so uncommenting it turns that app off. The `#@ id`
   # marker on each line is what nixarchy-app-enable matches on: it survives the
   # user reformatting, reordering or annotating the file, which a line-number
   # or label match would not.

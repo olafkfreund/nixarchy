@@ -3511,10 +3511,10 @@ let
   });
   defaultInstallTextWith =
     settings:
-    (pkgs.lib.findFirst (
-      p: (p.name or "") == "nixarchy-default-install"
-    ) (throw "no nixarchy-default-install in systemPackages") (configWith settings).environment.systemPackages)
-    .text;
+    (pkgs.lib.findFirst (p: (p.name or "") == "nixarchy-default-install")
+      (throw "no nixarchy-default-install in systemPackages")
+      (configWith settings).environment.systemPackages
+    ).text;
   defaultInstallUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (defaultInstallTextWith {
     allowUnfree = false;
   });

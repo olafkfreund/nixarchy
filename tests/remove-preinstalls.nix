@@ -171,7 +171,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     echo "restore: added $(pick A delta | wc -l) launchers, changed nothing"
 
     hermes_case() {
-      local name=$1 outcome=$2 before target='' rc=0
+      local name=$1 outcome=$2 before target= rc=0
       before=$(sha256sum <"$B/hermes")
       if [ -L "$B/hermes" ]; then
         target=$(readlink "$B/hermes")

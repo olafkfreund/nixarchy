@@ -2306,6 +2306,19 @@ in
       "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}"
     ];
 
+    # Without defaults, sorted mimeinfo.cache hands PDFs to the browser.
+    # mkDefault per key avoids conflicting strings when a user picks a handler.
+    xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) {
+      "application/pdf" = "org.gnome.Evince.desktop";
+      "video/mp4" = "mpv.desktop";
+      "video/x-matroska" = "mpv.desktop";
+      "video/quicktime" = "mpv.desktop";
+      "video/webm" = "mpv.desktop";
+      "video/x-msvideo" = "mpv.desktop";
+      "video/mpeg" = "mpv.desktop";
+      "text/plain" = "nvim.desktop";
+    };
+
     xdg.portal = {
       enable = lib.mkDefault true;
       # xdg-desktop-portal-gtk is in upstream's base.packages. A portal is

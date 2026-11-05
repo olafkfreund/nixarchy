@@ -126,6 +126,9 @@ let
     ))
     (agentLocalCheck "nvidia-ctk-own" (c: !c.hardware.nvidia-container-toolkit.enable))
     (agentLocalCheck "preinstalls-exclude-retired" (_: true))
+    (agentLocalCheck "xdg-mime-own-pdf" (
+      c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
+    ))
   ];
 
   shQuote = lib.escapeShellArg;

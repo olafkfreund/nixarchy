@@ -62,6 +62,11 @@
       environment.systemPackages = [ (pkgs.writeShellScriptBin "hype" "echo own-hype-marker") ];
     };
 
+  # #1612: a user's own PDF handler wins over nixarchy's default.
+  xdg-mime-own-pdf = {
+    xdg.mime.defaultApplications."application/pdf" = "own.desktop";
+  };
+
   # A user who swaps Hyprland (their own pin, a patched build). The titlebars
   # plugin loads into the session's compositor, so it must be built against
   # THAT one, not the flake's input (#1572). Only the pname changes, so the

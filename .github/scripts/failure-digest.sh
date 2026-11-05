@@ -12,10 +12,14 @@
 set -Eeuo pipefail
 trap 'echo "failure-digest.sh: could not build the digest (line $LINENO)"; exit 0' ERR
 
+names_mode=false
+if [ "${1:-}" = --names ]; then
+  names_mode=true
+  trap 'exit 0' ERR
+  shift
+fi
 log=${1:-${RUNNER_TEMP:-/tmp}/build.log}
 here=$(dirname "$0")
-out=$(mktemp)
-digest=""
 
 if [ -r "$log" ]; then
   # Captured, then split: a process substitution hides a failing awk (§4).
@@ -29,6 +33,18 @@ else
   rows=""
 fi
 
+if [ "$names_mode" = true ]; then
+  while IFS=$'\t' read -r kind drv; do
+    if [ "$kind" = R ]; then
+      b=${drv##*/}; b=${b#*-}; name=${b%.drv}
+      printf '%s\n' "${name#nixarchy-}"
+    fi
+  done <<<"$rows"
+  exit 0
+fi
+
+out=$(mktemp)
+digest=""
 roots=()
 cascades=0
 while IFS=$'\t' read -r kind drv; do
@@ -70,5 +86,11 @@ done <<<"$rows"
 cat "$out"
 cat "$out" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
 echo "digest=$(tr ' ' ',' <"$out.digest")" >>"${GITHUB_OUTPUT:-/dev/null}"
+{
+  delimiter=${out##*/}
+  printf 'report<<%s\n' "$delimiter"
+  tail -n 60 "$out" | cut -c 1-300
+  printf '%s\n' "$delimiter"
+} >>"${GITHUB_OUTPUT:-/dev/null}"
 rm -f "$out" "$out.digest"
 exit 0

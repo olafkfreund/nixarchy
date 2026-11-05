@@ -643,11 +643,13 @@ nixarchy channel omarchy stable        # back to the release
 
 **Edge** is a nixarchy branch that moves at most once a day, and only after
 that day's `quattro` has built with every NixOS patch and booted three
-desktops. When upstream breaks something, edge stays put, and an
-[`omarchy-edge`](https://github.com/olafkfreund/nixarchy/issues?q=label%3Aomarchy-edge)
-issue says why. **Dev** builds your checkout's committed work with
-nixarchy's patches applied. Both are independent of your nixpkgs channel
-(**Update ▸ Nixpkgs**).
+desktops. When edge refuses a new `quattro` commit, it keeps publishing `main`
+on the last good pin and an
+[`omarchy-edge-held`](https://github.com/olafkfreund/nixarchy/issues?q=label%3Aomarchy-edge-held)
+issue says why; [`omarchy-edge`](https://github.com/olafkfreund/nixarchy/issues?q=label%3Aomarchy-edge)
+means edge itself did not publish. **Dev** builds your checkout's committed
+work with nixarchy's patches applied. Both are independent of your nixpkgs
+channel (**Update ▸ Nixpkgs**).
 
 **With your own NixOS flake**, the channel is the `url` of your `nixarchy`
 input. Change it, then `nix flake update nixarchy` and rebuild:

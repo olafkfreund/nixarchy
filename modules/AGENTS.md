@@ -810,9 +810,11 @@ i18n.inputMethod = {
 
 default/environment.d/10-omarchy-fcitx.conf, plus the daemon that reads
 it -- fcitx5 was not installed at all. i18n.inputMethod rather than
-dropping fcitx5 into systemPackages: it is what builds fcitx5 with its
-addons, writes the Qt plugin path, and sets XMODIFIERS and the GTK/Qt IM
-modules. The unit that starts it is above.
+dropping fcitx5 into systemPackages: it builds fcitx5 with the addons in
+i18n.inputMethod.fcitx5.addons (enable alone installs none), writes the Qt
+plugin path, and sets XMODIFIERS and the GTK/Qt IM modules. The unit that
+starts it is above.
+
 Priority 1250, which is neither of the two names lib gives you, because
 this option is squeezed between them. GNOME's desktop-manager module sets
 type to "ibus" at mkDefault (1000) and two mkDefaults tie rather than
@@ -824,6 +826,13 @@ nullOr refuses to merge null with a value, so matching that ties in the
 other direction. Sitting between the two loses to anyone with a real
 opinion and still beats nixpkgs' placeholder, which is exactly the rule
 this module follows everywhere else: arrive beside what is installed.
+
+Pinyin (`qt6Packages.fcitx5-chinese-addons`) is overridden with
+`-DENABLE_BROWSER=OFF` and `qtwebengine` removed from `buildInputs`, saving
+422 MiB on every machine. This costs the online dictionary dialog in the
+configuration tool (importing a dictionary file still works) and one store
+path not on cache.nixos.org. `checks.input-methods` guards that `qtwebengine`
+stays out of the wrapper's closure (#1614).
 
 <a id="fcitx5-says-this-itself-in-a-notification-on-every"></a>
 

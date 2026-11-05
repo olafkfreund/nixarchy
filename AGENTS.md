@@ -1327,9 +1327,9 @@ thing and meant another. None of them was a bug in this repo.
   `grep -oE "from 'https://[^']*'" | sort | uniq -c` counts downloads per
   cache, and a cache at zero is a cache nobody asked.
 - **A workflow run named in an issue can 404, so the digest in the issue is
-  the evidence.** Failed `omarchy-edge.yml` runs have vanished while passing
-  runs from the same hours remain; nothing in this repo deletes runs, so the
-  cause is not established (#1602).
+  the evidence.** The owner deletes failed runs from the Actions view by hand, so
+  a missing run means nothing, and `gh run list` showing no failures is not
+  evidence that nothing failed (#1602).
   `edge-report.sh` puts the bounded `failure-digest.sh` excerpt in the issue
   body or comment so the failure reason survives when the run link is dead.
 

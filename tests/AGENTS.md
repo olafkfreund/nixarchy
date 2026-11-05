@@ -2070,3 +2070,41 @@ login in a VM. `sshd-enable` checks the menu script's key gate and row changes;
 row 23 reads `reference`'s script because the vm turns sshd on itself. Neither
 check reaches a real menu click in a floating terminal or a key sshd will not
 use because of `~/.ssh` permissions (§3).
+
+## `installer-keymaps` and `keyboard-boot`: what the comparison and the VM reach (#1619)
+
+`checks.installer-keymaps` runs `tests/installer-keymaps-compare.py` across all
+43 rows of `installer/brand/keymaps.txt`: for each row, it compares the kernel's
+compiled console table (`loadkeys --unicode --mktable`) against the first group
+of `xkbcli compile-keymap` across plain and Shift of the 48 password keys (the
+digit row, three letter rows, and key 86, the ISO key beside Left Shift), plus
+composed dead-key + letter pairs against libX11's `en_US.UTF-8/Compose`. Every
+character where the two emit different output — or where one side is a dead key
+and the other is a literal — must appear in column 4, and any row whose dead key
+composes to a different character than XKB's on the same letter must either list
+those composed characters in column 4 or carry the `dead` token in column 5.
+
+**What `installer-keymaps` cannot see:**
+
+- **AltGr (level 3/4).** The console leaves most AltGr + letter combinations as
+  the plain letter while XKB maps symbols to them (1,253 differences across the
+  43 rows), so putting AltGr in column 4 would refuse ordinary letters. Outcome
+  5 is narrowed to plain and Shift.
+- **A composed result under a locale other than `en_US.UTF-8`.** The comparison
+  reads `en_US.UTF-8/Compose`; Qt's greeter or a session under another locale's
+  compose table is not compared.
+- **Dead key plus space or plus a non-letter.** Only dead key + ASCII letter is
+  compared against `accent_table`; typing `^` on a dead-only key via dead key +
+  space on Estonian or Czech is unmeasured.
+
+**What `checks.keyboard-boot` reaches, and the real-hardware hole (§3):**
+
+`checks.keyboard-boot` (nightly) boots two LUKS-encrypted nodes with Plymouth on
+and autologin off (`de` with `de-latin1`/`de` and passphrase `zy`, `ru` with
+`ru`/`us,ru`, passphrase `omarchy` and password `abcй`), unlocking the disk,
+logging in at the weston greeter (including Left Alt + Right Alt on `ru`), and
+unlocking `omarchy-shell lock` on `de`. What no VM here can reach is a
+**physical ISO keyboard** (key 86 scancodes from real firmware/USB HID rather
+than QEMU's `send_chars` qcodes) and **Plymouth on a real KMS driver** on a
+non-US encrypted install, plus the offline ISO's network build path for a
+non-US layout (`off-whole-de` in `tests/install-matrix.py`).

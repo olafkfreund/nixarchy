@@ -504,6 +504,7 @@ connect_wifi() {
 offer_optional_wifi() {
   ui_screen "Wi-Fi, if you want it..."
   ui_left "This image installs without a network, so this is optional."
+  ui_left "A keyboard layout other than English (US) needs one."
   ui_left "\e[90mA network you join here is carried onto the installed machine, so it\e[0m"
   ui_left "\e[90mis already online at the first boot rather than asking again.\e[0m"
   echo

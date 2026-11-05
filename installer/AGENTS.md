@@ -93,6 +93,34 @@ The password follows the same rule for the same reason: it is a **file**
 (`/var/lib/nixarchy/password.hash`, `host.nix:181`), not an evaluation input,
 so two machines with different passwords are still the same closure.
 
+**The keyboard layout cannot follow that rule (#1619).** `console.keyMap` is
+baked into the initrd (`/etc/kbd/keymaps` and the initrd's `/etc/vconsole.conf`)
+and `services.xserver.xkb` is baked into the greeter's `weston.ini` and the
+system's `/etc/vconsole.conf`. Copying the US reference system onto a machine
+whose user answered `de-latin1` would ask for a password typed under `de` on a
+boot prompt and login screen running `us`. So `not_baked_reason` (`install.sh`)
+adds a non-US keyboard alongside `disk_mode=free` and `--from`: on the offline
+image it builds the chosen layout over the network, and without a network
+`preflight_build` / `keyboard_reachable` refuses before touching the disk.
+
+### Why `host.nix` writes `/etc/vconsole.conf` (#1619)
+
+Upstream's Hyprland session (`default/hypr/input.lua`) reads `XKBLAYOUT` and
+`XKBVARIANT` from `/etc/vconsole.conf`, while NixOS's `console.nix` writes only
+`KEYMAP=` and `FONT=`. `installer/host.nix` replaces `/etc/vconsole.conf` at
+`lib.mkOverride 90` (and sets `services.xserver.xkb.options` with
+`grp:alts_toggle` when `xkb.layout` has a comma, as in `us,ru`):
+
+- **In `installer/host.nix`, never `modules/nixos.nix`:** a Mode A machine does
+  not import `host.nix` and keeps its own layout (`options-files` asserts this).
+- **Only when `xkb.layout != "us" || xkb.variant != ""`:** a US install and
+  machines installed before #1619 keep the exact reference closure.
+- **`mkOverride 90`, not `mkForce`:** beats `console.nix`'s literal definition while
+  still yielding to a user's `mkForce` (`keyboard-own-vconsole` in
+  `checks.coexistence`).
+- **System `/etc` only:** the initrd's `/etc/vconsole.conf` comes from
+  `boot.initrd.systemd.contents` (`console.nix`) and stays `KEYMAP=` only.
+
 ### A runtime closure can carry a build input by accident
 
 Removing an app can break the offline install, even with nothing else changed.
@@ -126,9 +154,9 @@ the path. The seed lists are `installer/cd.nix` plus `tests/install.nix`,
 | `dashboard-clock` | a clock that goes backwards mid-install |
 | `try-preflight` | every refusal path of the `#try` front door |
 
-**Not covered:** an offline free-space or offline `--from` install that builds
-(#1078). That is the `off-free` cell of `tests/install-matrix.py`, run by
-hand; no PR boots it.
+**Not covered:** an offline free-space, non-US keyboard or `--from` install that
+builds (#1078, #1619). Those are the `off-free` and `off-whole-de` cells of
+`tests/install-matrix.py`, run by hand; no PR boots them.
 
 <a id="try-nixarchy-sh"></a>
 ## `try-nixarchy.sh` — the front door with no nix behind it

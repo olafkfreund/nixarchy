@@ -208,6 +208,9 @@ HASH = ("$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo."
         "yhxsVpM6bgkeTdCG9D91zOaGX9Bu/YsQTlWLwuQF1SrOL0DY8Bu/V/")
 
 # name -> (iso, disk_mode, encrypt, vnc display)
+# `off-whole-de` exercises the offline image's network-build path for a non-US
+# keyboard (#1619); a physical ISO keyboard and Plymouth on a real KMS driver
+# on a non-US encrypted install remain a manual/real-hardware check (tests/AGENTS.md).
 CELLS = {
     "off-whole-plain": (OFFLINE, "whole", False, 10),
     "off-whole-enc":   (OFFLINE, "whole", True,  11),

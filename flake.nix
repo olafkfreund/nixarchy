@@ -1851,6 +1851,7 @@
             # Boots the Omarchy session on a machine whose hyprland.lua belongs to
             # somebody else -- the case the session entry exists for.
             "coexist"
+            "command-not-found"
             # The other two halves of that PR body. Same shape, same reason: both
             # report on a release by grepping upstream's file layout, and a grep
             # that has stopped matching prints what a quiet release prints. See

@@ -126,6 +126,45 @@
       hardware.nvidia-container-toolkit.enable = false;
     };
 
+  # A user who chooses IBus outright (#1614): no fcitx5 addons or unit.
+  input-own-ibus = {
+    i18n.inputMethod.type = "ibus";
+  };
+
+  # Another module (e.g. GNOME) setting IBus at mkDefault beats nixarchy's
+  # mkOverride 1250 (#1614).
+  input-default-ibus =
+    { lib, ... }:
+    {
+      i18n.inputMethod.type = lib.mkDefault "ibus";
+    };
+
+  # Input methods turned off outright (#1614): no fcitx5 addons or unit.
+  input-disabled = {
+    i18n.inputMethod.enable = false;
+  };
+
+  # An extra fcitx5 addon merges with nixarchy's five (#1614).
+  input-own-addon =
+    { pkgs, ... }:
+    {
+      i18n.inputMethod.fcitx5.addons = [ pkgs.fcitx5-rime ];
+    };
+
+  # Shedding nixarchy's default addons with mkForce (#1614).
+  input-no-addons =
+    { lib, ... }:
+    {
+      i18n.inputMethod.fcitx5.addons = lib.mkForce [ ];
+    };
+
+  # Declarative fcitx5 profile settings skip the ExecStartPre alignment (#1614).
+  input-own-profile = {
+    i18n.inputMethod.fcitx5.settings.inputMethod = {
+      GroupOrder."0" = "Default";
+    };
+  };
+
   # The owner's razer (modules/common/networking.nix there): mkDefault on four,
   # plain on one. Its values equal ours, so this proves it evaluates, not who won.
   sysctl-razer =

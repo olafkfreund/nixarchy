@@ -2032,3 +2032,11 @@ on 26.05, and the test script is type-checked.
 **What neither check reaches:** `omarchy-edge.yml`'s wiring is asserted only by
 variable name in the `report` step (and whether a timed-out job keeps its step
 outputs cannot be tested locally). Its first real run is after merge.
+
+## OpenSSH menu and login (#1611)
+
+`sshd-login` checks key login and refusal of password and keyboard-interactive
+login in a VM. `sshd-enable` checks the menu script's key gate and row changes;
+row 23 reads `reference`'s script because the vm turns sshd on itself. Neither
+check reaches a real menu click in a floating terminal or a key sshd will not
+use because of `~/.ssh` permissions (§3).

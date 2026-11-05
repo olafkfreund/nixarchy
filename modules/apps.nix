@@ -218,7 +218,7 @@ let
   # Two shapes, because the catalogue has two kinds and the difference is the
   # whole point. A "bundled" entry writes the nixarchy option, because nixarchy
   # does something upstream does not. A "plain" entry writes the REAL upstream
-  # line -- `services.openssh.enable = true;` -- because there is nothing to
+  # line -- `services.flatpak.enable = true;` -- because there is nothing to
   # add, and a nixarchy alias for a one-line toggle would only be a second
   # vocabulary to unlearn the moment they read anyone else's configuration.
   serviceCatalogue = import ../data/services.nix;
@@ -1118,7 +1118,7 @@ let
                 "nixarchy-service-enable ${name}";
             # Dim when the marked line is live, which is the same question
             # nixarchy-service-enable asks. Not the app rows' test: a plain
-            # entry's line begins with services.openssh, not with the id, so
+            # entry's line begins with services.flatpak, not with the id, so
             # matching on the id would never fire.
             disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
             description = svc.note;
@@ -1942,7 +1942,7 @@ in
                   #
                   # Deliberately not the app scripts' test, which greps for
                   # `^[[:space:]]*<id>.enable` -- that cannot work here, because a
-                  # plain entry's line begins with services.openssh, not with the
+                  # plain entry's line begins with services.flatpak, not with the
                   # id. Asking whether the marked line is live is also the more
                   # honest question: it does not answer "yes" to `enable = false;`.
                   if grep -qE "$live_row" "$file"; then

@@ -3178,8 +3178,11 @@ pkgs.testers.runNixOSTest {
         unitctl + "show -p MainPID --value omarchy-fcitx5")).strip() == stale_pid, (
         "removing the drop-in unexpectedly restarted the stale daemon")
     input_driver("input", "mozc")
+    # fcitx5-remote -n is empty until something focused has an input context.
+    open_typing_terminal()
     machine.wait_until_succeeds(desktop_user(
-        "test $(fcitx5-remote -n) = mozc"), timeout=60)
+        'fcitx5-remote -s mozc && test "$(fcitx5-remote -n)" = mozc'), timeout=60)
+    machine.send_key("ctrl-d")
     print("#1614: picking Mozc replaces a stale addon-less unit")
 
     machine.succeed(desktop_user(unitctl + "stop omarchy-fcitx5"))

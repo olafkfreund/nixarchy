@@ -352,7 +352,7 @@ if [ -e /etc/systemd/user/omarchy-fcitx5.service ]; then
       esac
     done
     if [ -n "$fcitx_missing" ]; then
-      bad "fcitx5 engines missing" "${fcitx_missing# }"
+      hmm "fcitx5 engines missing" "${fcitx_missing# } (expected if i18n.inputMethod.fcitx5.addons was overridden)"
     else
       ok "fcitx5 engines" "mozc, hangul, pinyin, chewing, cangjie5"
     fi

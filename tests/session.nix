@@ -3128,10 +3128,10 @@ pkgs.testers.runNixOSTest {
     input_driver("stock-profile")
     machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
     machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
-    assert group()[0] == "de", "ExecStartPre did not align the stock profile to de: " + repr(group())
+    assert group()[1] == "de", "ExecStartPre did not align the stock profile to de: " + repr(group())
     input_driver("input", "hangul")
     machine.succeed(desktop_user("grep -qx Layout=us ~/.config/fcitx5/profile"))
-    type_keys("dkssud ", "안녕", "Hangul with profile alignment", "hangul")
+    type_keys("dkssud ", "안녕 ", "Hangul with profile alignment", "hangul")
     type_keys("dy", "요", "Hangul layout override on German keys", "hangul")
     print("#1614: a stock profile aligns to de and keeps Hangul on us")
 

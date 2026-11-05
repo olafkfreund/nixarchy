@@ -514,7 +514,7 @@
   };
   "omarchy-remove-preinstalls" = {
     class = "replace";
-    reason = "Upstream deletes every web app and TUI launcher and rm -f's named ~/.local/bin entries whoever made them. Deletes only an unmodified, regular-file seed of a shipped web app or TUI, and only an exact omarchy-mise-install stub (#1304).";
+    reason = "Upstream deletes every web app and TUI launcher and rm -f's named ~/.local/bin entries whoever made them. Deletes only an unmodified, regular-file seed of a shipped web app or TUI, and only an exact omarchy-mise-install stub and only the byte-exact Hermes wrapper upstream's installer generated (#1304, #1623).";
   };
   "omarchy-remove-security-fido2" = {
     class = "patch";

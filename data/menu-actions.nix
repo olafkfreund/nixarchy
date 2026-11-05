@@ -24,8 +24,6 @@
     "unreached: the pacman lines are the php and symfony arms, which the generator overrides; rails removes its own mise Ruby and ~/.gemrc, laravel its composer package (decision 3)";
   "remove.gaming.battlenet" =
     "owned: deletes its own prefix; GE-Proton and umu only after a confirm; pkg-drop is inert here (decision 10)";
-  "remove.preinstalls" =
-    "unreached: runs omarchy-install-hermes-cli --owns, which quattro's script answers with its usage error before the --now branch's user-unit stop (decision 2, checks.remove-preinstalls)";
   "remove.security.fido2" = "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";
   "remove.security.fingerprint" =
     "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";

@@ -255,6 +255,19 @@ Choosing one installs it declaratively — `nixarchy-pkg-add` and a rebuild —
 rather than fetching a binary into `~/.local` that nothing records. Antigravity
 is in the list because Google deprecated `gemini-cli` in its favour.
 
+Upstream's Claude entry also offers to install the Claude browser extension.
+Here that is a NixOS option:
+
+```nix
+programs.chromium.enable = true;
+programs.chromium.extensions = [ "fcoeoabgfenejglbffodgkkbkcdhcgfn" ];
+```
+
+This reaches Chromium, Chrome and Brave, but not Edge. Because `extensions`
+becomes `ExtensionInstallForcelist`, it force-installs the extension so the
+browser will not let you remove it; installing from the Web Store is the
+removable route.
+
 Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.

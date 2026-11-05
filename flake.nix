@@ -1008,6 +1008,8 @@
                   "@dashboard@"
                   "@tzdata@"
                   "@kbd@"
+                  "@kbdmodelmap@"
+                  "@nonlatin@"
                   "@reservedusers@"
                   "@initrdmodules@"
                   "@initrdforced@"
@@ -1027,6 +1029,12 @@
                   "${./installer/lib/dashboard.sh}"
                   "${pkgsFor.${system}.tzdata}"
                   "${pkgsFor.${system}.kbd}"
+                  "${pkgsFor.${system}.systemd}/share/systemd/kbd-model-map"
+                  (builtins.head (
+                    builtins.match ".*local non_latin_layouts =[[:space:]]*\"([^\"]*)\".*" (
+                      builtins.readFile "${omarchy}/default/hypr/input.lua"
+                    )
+                  ))
                   (
                     let
                       users = builtins.attrValues self.nixosConfigurations.reference.config.users.users;

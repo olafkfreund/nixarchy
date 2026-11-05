@@ -82,6 +82,8 @@ let
         disk_mode=${diskMode}
         timezone=UTC
         keymap=us
+        xkb_layout=us
+        xkb_variant=
         encrypt=${if encrypt then "true" else "false"}
         recovery_hash=${if recoverySecret then "rescue-me-hash-stub" else ""}
         substitute_host_files

@@ -2073,6 +2073,9 @@
           wifi-hwsim = import ./tests/wifi-hwsim.nix {
             pkgs = pkgsFor.${system};
           };
+          remove-fingerprint-vm = import ./tests/remove-fingerprint-vm.nix {
+            pkgs = pkgsFor.${system};
+          };
 
           # Why: tests/installer-failure-hints.nix
           installer-failure-hints = import ./tests/installer-failure-hints.nix {

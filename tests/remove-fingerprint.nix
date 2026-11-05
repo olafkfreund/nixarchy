@@ -26,7 +26,8 @@ pkgs.runCommand "nixarchy-remove-fingerprint"
     mkdir -p "$HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
     fix=$TMPDIR/prints
     log=$TMPDIR/calls
-    base=$PATH
+    # The script's helpers are found here; omarchy-cmd-present absent reads as "no fprintd".
+    base=${shipped}/share/omarchy/bin:$PATH
     mkdir -p "$TMPDIR/stubs" "$TMPDIR/reader" "$TMPDIR/no-reader" "$fix"
     export fix log
     fails=()

@@ -239,6 +239,12 @@ let
       # build input. Seeding a package by name gives you `out`, and that is not
       # the same thing.
       pkgs.kmod.dev
+
+      # dbus-1 and initrd-units, in the same per-machine initrd. Kdenlive's
+      # closure carried both by accident until #1612 retired it; without them
+      # the install walks back to the source bootstrap.
+      pkgs.libxslt.bin
+      pkgs.lndir
     ];
 
   version = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.omarchy.version;

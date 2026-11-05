@@ -93,6 +93,20 @@ The password follows the same rule for the same reason: it is a **file**
 (`/var/lib/nixarchy/password.hash`, `host.nix:181`), not an evaluation input,
 so two machines with different passwords are still the same closure.
 
+### A runtime closure can carry a build input by accident
+
+Removing an app can break the offline install, even with nothing else changed.
+#1612 retired Kdenlive, whose closure reached `qtbase-dev`, then `libxslt-bin` and
+`lndir`. `dbus-1` and `initrd-units` need those two, and every install rebuilds
+its own initrd. With them gone, the install built 536 derivations from stage0
+instead of 60 and died fetching a libssh2 patch.
+
+The symptom reads as a cache problem, and the test's message used to say so. To
+find what was lost, compare the two logs' `these N derivations will be built`
+counts, then ask `nix why-depends <main's reference toplevel> <path>` what carried
+the path. The seed lists are `installer/cd.nix` plus `tests/install.nix`,
+`free-space.nix`, `install-encrypted.nix` and `install-iso-net.nix`: change all five.
+
 ## Tests
 
 | check | covers |

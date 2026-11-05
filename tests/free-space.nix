@@ -314,6 +314,10 @@ pkgs.testers.runNixOSTest {
         pkgs.kmod.dev
         pkgs.libcap
         pkgs.nukeReferences
+        # dbus-1 and initrd-units, in the initrd every machine rebuilds. Kdenlive's
+        # closure carried both by accident until #1612 retired it.
+        pkgs.libxslt.bin
+        pkgs.lndir
       ]
       ++ inputPaths;
 

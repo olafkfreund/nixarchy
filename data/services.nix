@@ -37,6 +37,7 @@
 #              the field that does the teaching -- say what turning it on costs
 #              or opens, not what it is.
 #   unfree     Marks a service pulling unfree packages.
+#   terminal   The row asks a question, so the menu opens a terminal for it.
 # ## Not listed here, because they are already on
 #
 # modules/nixos.nix enables these for every nixarchy machine, at mkDefault, so
@@ -73,12 +74,9 @@
   openssh = {
     label = "OpenSSH server";
     category = "Network";
-    kind = "plain";
-    option = [
-      "services"
-      "openssh"
-    ];
-    note = "Remote login. Opens port 22 and NixOS defaults to keys only, not passwords.";
+    kind = "bundled";
+    terminal = true;
+    note = "Remote login. Opens port 22, takes keys only, and asks for your key first.";
   };
 
   # ── Hardware ────────────────────────────────────────────────────────────

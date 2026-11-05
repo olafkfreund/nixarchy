@@ -739,6 +739,15 @@
   "usage" = {
     skip = "Not installed by default.";
   };
+  "v4l2-relayd" = {
+    skip = "Upstream's Cam Link 4K relay. Not ported yet; an opt-in module would use boot.extraModulePackages and services.v4l2-relayd (#1610).";
+  };
+  "v4l2loopback-dkms" = {
+    skip = "Upstream's Cam Link 4K relay. Not ported yet; an opt-in module would use boot.extraModulePackages and services.v4l2-relayd (#1610).";
+  };
+  "v4l2loopback-utils" = {
+    skip = "Upstream's Cam Link 4K relay. Not ported yet; an opt-in module would use boot.extraModulePackages and services.v4l2-relayd (#1610).";
+  };
   "vi" = {
     skip = "Neovim provides vi/vim aliases where wanted.";
   };

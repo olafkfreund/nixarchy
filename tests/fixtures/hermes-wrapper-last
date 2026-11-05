@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Written by omarchy-install-hermes-cli.
+
+export UV_PYTHON="3.13"
+
+# Exported rather than set on the install line alone, so the version resolved
+# to run agrees with the one just installed. Hermes ships several times a week
+# and mise's cooldown would otherwise hold a new release back for days.
+export MISE_MINIMUM_RELEASE_AGE=0
+
+# mise up -- which omarchy update runs -- reinstalls without that pin, so this
+# asks which interpreter is actually there rather than whether anything is.
+if ! [[ -d "$(mise where 'pipx:hermes-agent[extras=all]' 2>/dev/null)/hermes-agent/lib/python3.13" ]]; then
+  echo "Installing Hermes on Python 3.13 (this takes a minute)..." >&2
+
+  # mise's pipx backend shells out to uv, which a stock Omarchy does not have.
+  # It is fetched here rather than when this stub was written, so setting up a
+  # machine that never runs Hermes costs nothing.
+  if omarchy-cmd-missing uv && ! mise where uv >/dev/null 2>&1; then
+    mise use -g --quiet uv@latest || exit 1
+  fi
+
+  mise use -g --quiet --force 'pipx:hermes-agent[extras=all]' || exit 1
+fi
+
+# The pin belongs to building Hermes, not to everything Hermes then runs.
+# Exported it would reach the agent and every command it shells out to, so a
+# uv in the user's own project would resolve 3.13 there too -- uv only warns
+# when that contradicts the project's requires-python, and builds it anyway.
+exec env -u UV_PYTHON mise x 'pipx:hermes-agent[extras=all]' -- hermes "$@"

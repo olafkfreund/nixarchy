@@ -29,6 +29,8 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     remove = "${shipped}/share/omarchy/bin/omarchy-remove-preinstalls";
     restore = "${shipped}/share/omarchy/bin/omarchy-install-preinstalls";
     shell = pkgs.runtimeShell;
+    hermesFirst = ./fixtures/hermes-wrapper-first;
+    hermesLast = ./fixtures/hermes-wrapper-last;
   }
   ''
     set -euo pipefail
@@ -91,6 +93,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     printf '#!/bin/bash\n# my wrapper\nmise use -g --quiet "gemini" || exit 1\nexec mise x "gemini" -- "gemini" --model x "$@"\n' > "$B/gemini"
     printf '#!/bin/bash\nexec /opt/gh "$@"\n' > "$B/gh"
     printf '#!/bin/bash\nexport MISE_MINIMUM_RELEASE_AGE=0\nmise use -g --quiet "foo" || exit 1\nexec mise x "foo" -- "bar" "$@"\n' > "$B/opencode"
+    cp --no-preserve=mode "$hermesLast" "$B/hermes"
 
     state() {
       (cd "$TMPDIR" && find home hm \( -type f -o -type l \) -print0 | sort -z) |
@@ -130,7 +133,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     compare before after > delta
 
     [ "$rc" -eq 0 ] || fail "remove exited $rc"
-    want=$(printf '%s\n' home/.local/bin/codex home/.local/share/applications/YouTube.desktop | sort)
+    want=$(printf '%s\n' home/.local/bin/codex home/.local/bin/hermes home/.local/share/applications/YouTube.desktop | sort)
     got=$(pick D delta)
     extra=$(comm -13 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | join)
     left=$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | join)
@@ -166,6 +169,46 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     if [ "''${#fails[@]}" -gt 0 ]; then cat restore.log >&2; fi
     report
     echo "restore: added $(pick A delta | wc -l) launchers, changed nothing"
+
+    hermes_case() {
+      local name=$1 outcome=$2 before target='' rc=0
+      before=$(sha256sum <"$B/hermes")
+      if [ -L "$B/hermes" ]; then
+        target=$(readlink "$B/hermes")
+      fi
+      bash "$remove" > hermes.log 2>&1 || rc=$?
+      [ "$rc" -eq 0 ] || fail "$name: Remove exited $rc"
+      if [ "$outcome" = deleted ]; then
+        [ ! -e "$B/hermes" ] && [ ! -L "$B/hermes" ] || fail "$name: wrapper was kept"
+      else
+        [ -e "$B/hermes" ] || fail "$name: file was deleted"
+        if [ -n "''${target:-}" ]; then
+          [ -L "$B/hermes" ] && [ "$(readlink "$B/hermes")" = "$target" ] || fail "$name: link changed"
+        else
+          [ ! -L "$B/hermes" ] || fail "$name: file became a link"
+        fi
+        [ "$(sha256sum <"$B/hermes")" = "$before" ] || fail "$name: bytes changed"
+        grep -qF "Kept    $B/hermes " hermes.log || fail "$name: Kept did not name Hermes"
+      fi
+    }
+
+    cp --no-preserve=mode "$hermesFirst" "$B/hermes"
+    hermes_case "older wrapper" deleted
+    cp --no-preserve=mode "$hermesLast" "$B/hermes"
+    printf '# user edit\n' >> "$B/hermes"
+    hermes_case "edited wrapper" kept
+    printf '#!/bin/bash\nexec /opt/hermes "$@"\n' > "$B/hermes"
+    hermes_case "user wrapper" kept
+    cp --no-preserve=mode "$hermesLast" "$HM/hermes"
+    rm -f "$B/hermes"
+    ln -s "$HM/hermes" "$B/hermes"
+    hermes_case "link" kept
+    rm -f "$B/hermes"
+    sed 's/^# Written by omarchy-install-hermes-cli\./ # Written by omarchy-install-hermes-cli./' "$hermesLast" > "$B/hermes"
+    hermes_case "near miss" kept
+    if grep -qF 'omarchy-install-hermes-cli' "$TMPDIR/calls"; then fail "Remove called omarchy-install-hermes-cli"; fi
+    if [ "''${#fails[@]}" -gt 0 ]; then cat hermes.log >&2; fi
+    report
 
     touch $out
   ''

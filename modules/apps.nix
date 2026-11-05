@@ -76,6 +76,8 @@ let
         default =
           if app.ours or false then
             inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.${app.attr}
+          else if app.attr == "opencode" then
+            import ../pkgs/opencode-hash-fixed.nix pkgs
           else
             pkgs.${app.attr};
         defaultText = lib.literalExpression (

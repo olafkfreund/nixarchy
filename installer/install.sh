@@ -734,6 +734,25 @@ validate_keymap() {
   return 1
 }
 
+# The first character of $1 the login screen would read differently, or fail.
+# C.UTF-8 because the columns hold multi-byte characters; byte by byte, one would match another's bytes.
+password_moved_char() {
+  local LC_ALL=C.UTF-8 i c
+  for ((i = 0; i < ${#keymap_moved}; i++)); do
+    c=${keymap_moved:i:1}
+    if [[ $1 == *"$c"* ]]; then
+      printf '%s' "$c"
+      return 0
+    fi
+  done
+  if [ "$keymap_dead" = dead ] && [[ $1 == *[![:ascii:]]* ]]; then
+    c=${1//[[:ascii:]]/}
+    printf '%s' "${c:0:1}"
+    return 0
+  fi
+  return 1
+}
+
 # The password, on its own.
 #
 # Split out of ask_identity because --from with a machine the repository
@@ -751,6 +770,11 @@ ask_password() {
     fi
     if [ -z "$pw" ]; then
       ui_left "\e[31mAn empty password would lock you out of sudo.\e[0m"
+      continue
+    fi
+    local moved
+    if moved=$(password_moved_char "$pw"); then
+      ui_left "\e[31mOn this layout, $moved types differently at the login screen. Choose a password without it.\e[0m"
       continue
     fi
     # One password for the user, root and the disk, as upstream does: the
@@ -815,6 +839,17 @@ ask_recovery() {
     unset pw pw2
     break
   done
+}
+
+load_repo_keymap() {
+  local found
+  found=$(sed -n 's/^[[:space:]]*console\.keyMap = "\([^"]*\)";.*/\1/;T;p;q' "$hostdir/configuration.nix" 2>/dev/null) || found=""
+  if [ -n "$found" ] && validate_keymap "$found" && loadkeys "$found" 2>/dev/null; then
+    ui_left "Typing with this machine's disk-prompt layout, $found. Its login screen uses"
+    ui_left "services.xserver.xkb, which may differ."
+    return 0
+  fi
+  ui_left "Typing with a US keyboard. If this machine uses another layout, pick a password that types the same in both."
 }
 
 ask_identity() {
@@ -3269,6 +3304,7 @@ main() {
     # repository then overrules, which is worse than not asking.
     ui_greeter
     ask_network
+    load_repo_keymap
     ask_password
     ask_recovery
   else

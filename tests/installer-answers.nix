@@ -28,6 +28,10 @@ pkgs.runCommand "nixarchy-installer-answers"
     done
     sed -n '/^subst()/,/^}/p' ${installScript} >> va.sh
     sed -n '/^substitute_host_files()/,/^}/p' ${installScript} >> va.sh
+    for fn in password_moved_char ask_password load_repo_keymap; do
+      sed -n "/^$fn()/,/^}/p" ${installScript} >> pw.sh
+      grep -q "^$fn()" pw.sh || { echo "$fn is not in install.sh any more" >&2; exit 1; }
+    done
     printf 'German\tde-latin1\tde\t\t\nSwedish\tfi\tse\t\t\n' > menu
     printf 'de de pc105 - -\nru ru pc105 winkeys -\nbg bg,us pc105 ,phonetic -\n' > model-map
 
@@ -231,6 +235,100 @@ pkgs.runCommand "nixarchy-installer-answers"
       grep -qF 'layout = "de";' "$hostdir/configuration.nix"
       grep -qF 'variant = "";' "$hostdir/configuration.nix"
     ) && ok "template writes the selected XKB layout and variant" || failed "template lost an XKB substitution"
+
+    password_case() { # label, moved, dead, first answer, accepted answer, refusal count
+      local label=$1 moved=$2 dead=$3 first=$4 accepted=$5 refusals=$6
+      printf '%s\n' "$first" "$first" > pw-input
+      if [ "$refusals" -ne 0 ]; then printf '%s\n' "$accepted" "$accepted" >> pw-input; fi
+      rm -f gum-argv mk-argv mk-stdin
+      (
+        . ./pw.sh
+        keymap_moved=$moved keymap_dead=$dead
+        printf '0\n' > gum-count
+        gum() {
+          printf '%s\n' "$*" >> gum-argv
+          gum_n=$(cat gum-count)
+          gum_n=$((gum_n + 1))
+          printf '%s\n' "$gum_n" > gum-count
+          sed -n "''${gum_n}p" pw-input
+        }
+        ui_gum_pad() { echo 0; }
+        ui_left() { printf '%s\n' "$*"; }
+        mkpasswd() { printf '%s\n' "$*" >> mk-argv; cat > mk-stdin; echo HASHED; }
+        ask_password
+        [ "$password_hash" = HASHED ] && [ "$luks_passphrase" = "$accepted" ]
+      ) > pw.out 2>&1 || { failed "$label did not accept the safe password"; return; }
+      if [ "$(grep -c 'types differently' pw.out || true)" -eq "$refusals" ] &&
+        [ "$(wc -l < gum-argv)" -eq $(((refusals + 1) * 2)) ] &&
+        [ "$(wc -l < mk-argv)" -eq 1 ] &&
+        [ "$(cat mk-stdin)" = "$accepted" ] &&
+        ! grep -qF "$first" gum-argv && ! grep -qF "$first" mk-argv &&
+        ! grep -qF "$accepted" gum-argv && ! grep -qF "$accepted" mk-argv &&
+        ! grep -qF 'types differently' gum-argv mk-argv; then
+        ok "$label password handling and argv"
+      else failed "$label password handling or argv"; fi
+    }
+    norwegian=$(grep -F $'\tno-latin1\t' ${../installer/brand/keymaps.txt} | cut -f4)
+    latvian=$(grep -F $'\tlv\t' ${../installer/brand/keymaps.txt} | cut -f5)
+    icelandic=$(grep -F $'\tis-latin1\t' ${../installer/brand/keymaps.txt} | cut -f4)
+    password_case 'Norwegian moved characters' "$norwegian" '' 'a~' ab 1
+    password_case 'Latvian dead keys' '' "$latvian" 'á' ab 1
+    password_case 'Icelandic multibyte unaffected' "$icelandic" '' 'ä' 'ä' 0
+    password_case 'Icelandic moved character' "$icelandic" '' '°' ab 1
+    printable=""
+    for ((i = 32; i <= 126; i++)); do
+      printf -v octal '\\%03o' "$i"
+      printf -v c '%b' "$octal"
+      printable+=$c
+    done
+    password_case 'US printable password' '' '' "$printable" "$printable" 0
+
+    mkdir -p repo-host
+    printf '  console.keyMap = "de-latin1";\n' > repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { [ "$1" = de-latin1 ]; }
+      loadkeys() { printf '%s\n' "$1" >> loaded; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-keymap.out
+    if [ "$(cat loaded)" = de-latin1 ] && grep -qF 'disk-prompt layout, de-latin1' repo-keymap.out; then
+      ok "repository keymap is loaded and named"
+    else failed "repository keymap was not loaded and named"; fi
+    rm -f loaded repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { return 1; }
+      loadkeys() { echo called >> loaded; return 1; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-missing.out
+    printf '  console.keyMap = "bad-map";\n' > repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { return 1; }
+      loadkeys() { echo called >> loaded; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-invalid.out
+    printf '  console.keyMap = "de-latin1";\n' > repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { :; }
+      loadkeys() { return 1; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-load-failed.out
+    if [ ! -e loaded ] &&
+      grep -qF 'Typing with a US keyboard' repo-missing.out &&
+      grep -qF 'Typing with a US keyboard' repo-invalid.out &&
+      grep -qF 'Typing with a US keyboard' repo-load-failed.out; then
+      ok "missing, invalid and unloadable repository keymaps warn"
+    else failed "repository keymap warning or validation"; fi
 
     # A read that refuses the file must not leave the fetched copy behind.
     rm -f fetched-path

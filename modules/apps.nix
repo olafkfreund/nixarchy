@@ -51,6 +51,9 @@ let
     );
 
   available = lib.filterAttrs (_: a: !(a ? unavailable)) apps;
+  preinstallIds = lib.attrNames (lib.filterAttrs (_: a: a.preinstall or false) available);
+  # Empty when the switch is off: there a commented row really does mean off.
+  defaultOnIds = lib.optionals cfg.omarchyApps.enable preinstallIds;
   unavailable = lib.filterAttrs (_: a: a ? unavailable) apps;
 
   # One submodule per app. `settings` only has somewhere to go when the app is
@@ -118,7 +121,10 @@ let
   # A value, not a structure, so this one may read config freely.
   appPackages = lib.concatLists (
     lib.mapAttrsToList (
-      name: app: lib.optional ((app ? attr) && cfg.apps.${name}.enable) cfg.apps.${name}.package
+      name: app:
+      lib.optional ((app ? attr) && cfg.apps.${name}.enable) (
+        (if app.preinstall or false then lib.lowPrio else lib.id) cfg.apps.${name}.package
+      )
     ) available
   );
 
@@ -128,7 +134,8 @@ let
 
   # ── The template ────────────────────────────────────────────────────────
   # Written fully populated and fully commented out, so enabling an app is
-  # uncommenting one line rather than knowing a nixpkgs attribute. The `#@ id`
+  # uncommenting one line rather than knowing a nixpkgs attribute. A default-on
+  # row reads `.enable = false`, so uncommenting it turns that app off. The `#@ id`
   # marker on each line is what nixarchy-app-enable matches on: it survives the
   # user reformatting, reordering or annotating the file, which a line-number
   # or label match would not.
@@ -137,7 +144,9 @@ let
   templateRow =
     name: app:
     let
+      on = builtins.elem name defaultOnIds;
       notes = lib.filter (s: s != "") [
+        (lib.optionalString on "on by default")
         (lib.optionalString (app.unfree or false) "unfree")
         # Collapsed to one line: a note with a newline in it would break out
         # of the `#` comment and make the generated file fail to parse.
@@ -145,8 +154,26 @@ let
       ];
       suffix = lib.optionalString (notes != [ ]) "  # ${lib.concatStringsSep " — " notes}";
     in
-    "    # ${name}.enable = true;  #@ ${name}${suffix}\n"
+    "    # ${name}.enable = ${if on then "false" else "true"};  #@ ${name}${suffix}\n"
     + lib.optionalString (app ? option) "    #   ${name}.settings = { };  #@ ${name}.settings\n";
+
+  insertMissingAppRow = ''
+    # apps.nix is seeded once, so an app added to the catalogue later
+    # has no row in it. Take the row from the current template and
+    # put it at the top of the apps block, still commented out.
+    if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+      row=$(grep -E "#@ $id([[:space:]]|\$)" "$tpl" 2>/dev/null | head -1 || true)
+      [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
+      grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
+        fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
+      tmp=$(mktemp "$file.XXXXXX")
+      awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
+        "$file" >"$tmp"
+      chmod --reference="$file" "$tmp"
+      mv "$tmp" "$file"
+      echo "added $id's row from the current catalogue to $file"
+    fi
+  '';
 
   templateCategory =
     cat:
@@ -218,7 +245,7 @@ let
   # Two shapes, because the catalogue has two kinds and the difference is the
   # whole point. A "bundled" entry writes the nixarchy option, because nixarchy
   # does something upstream does not. A "plain" entry writes the REAL upstream
-  # line -- `services.openssh.enable = true;` -- because there is nothing to
+  # line -- `services.flatpak.enable = true;` -- because there is nothing to
   # add, and a nixarchy alias for a one-line toggle would only be a second
   # vocabulary to unlearn the moment they read anyone else's configuration.
   serviceCatalogue = import ../data/services.nix;
@@ -229,6 +256,26 @@ let
       f = "${inputs.omarchy}/default/i18n/locales.json";
     in
     if builtins.pathExists f then builtins.readFile f else "{}"
+  );
+
+  # What only evaluation knows about keys sshd will read (#1611).
+  sshFacts = pkgs.writeText "nixarchy-ssh-facts.json" (
+    builtins.toJSON {
+      declaredUsers = lib.attrNames (
+        lib.filterAttrs (
+          _: u: u.openssh.authorizedKeys.keys != [ ] || u.openssh.authorizedKeys.keyFiles != [ ]
+        ) config.users.users
+      );
+      homeRead = config.services.openssh.authorizedKeysInHomedir;
+      # Every entry is the user's own: nixpkgs adds its two only with sshd on
+      # (sshd.nix:766,885), and the gate refuses that case before reading this.
+      otherSources =
+        lib.optional (
+          config.services.openssh.authorizedKeysCommand != "none"
+        ) config.services.openssh.authorizedKeysCommand
+        ++ config.services.openssh.authorizedKeysFiles;
+      sshdOn = config.services.openssh.enable;
+    }
   );
   flatpakCatalogue = import ../data/flatpaks.nix;
 
@@ -898,9 +945,9 @@ let
         # #1304: the catalogue's openssh route, in its rows' shape. Setup dims
         # rather than hides: a negated grep on a missing services.nix is true.
         "setup.security.sshd" = {
-          action = "nixarchy-service-enable openssh";
+          action = "omarchy-launch-floating-terminal-with-presentation 'nixarchy-service-enable openssh'";
           disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ openssh([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
-          description = "Turn on services.openssh in your services, then Apply changes";
+          description = "Add your key and turn on SSH with passwords off, then Apply changes";
         };
         "remove.security.sshd" = {
           action = "nixarchy-service-disable openssh";
@@ -1091,10 +1138,14 @@ let
           lib.nameValuePair (svc.menuId or "install.service.${name}") {
             icon = svc.icon or "󰒓";
             inherit (svc) label;
-            action = "nixarchy-service-enable ${name}";
+            action =
+              if svc.terminal or false then
+                "omarchy-launch-floating-terminal-with-presentation 'nixarchy-service-enable ${name}'"
+              else
+                "nixarchy-service-enable ${name}";
             # Dim when the marked line is live, which is the same question
             # nixarchy-service-enable asks. Not the app rows' test: a plain
-            # entry's line begins with services.openssh, not with the id, so
+            # entry's line begins with services.flatpak, not with the id, so
             # matching on the id would never fire.
             disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
             description = svc.note;
@@ -1357,7 +1408,12 @@ in
         }
       ) unavailable;
 
-    omarchyApps.enable = lib.mkEnableOption "Omarchy's own preinstalled applications (Omawrite, Omacalc, Omacut, Aether, Hype, Monologue, Signed), as defaults a line in apps.nix can still turn off";
+    omarchyApps.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg.preinstalls;
+      defaultText = lib.literalExpression "config.programs.nixarchy.preinstalls";
+      description = "Omarchy's own default applications (Hype, Signed, Monologue, Omacalc, Omacut, Omawrite, Aether). Follows `preinstalls`. A line in apps.nix still turns any one of them off.";
+    };
 
     # ---- the per-package escape (#530) --------------------------------
     #
@@ -1526,9 +1582,9 @@ in
       lib.mkMerge [
         appModuleConfig
         (lib.mkIf cfg.omarchyApps.enable {
-          programs.nixarchy.apps = lib.mapAttrs (_: _: { enable = lib.mkDefault true; }) (
-            lib.filterAttrs (_: a: a.preinstall or false) available
-          );
+          programs.nixarchy.apps = lib.genAttrs preinstallIds (_: {
+            enable = lib.mkDefault true;
+          });
         })
         (lib.mkIf cfg.apps.retroarch.enable {
           environment.pathsToLink = [
@@ -1572,8 +1628,8 @@ in
           };
 
           # lowPrio on every segment nixarchy brings unasked, so a user's own copy
-          # wins any binary it shares (#1167, as #809). appPackages, the user's own
-          # app picks, stays at normal priority.
+          # wins any binary it shares (#1167, as #809). Default apps in appPackages
+          # are lowPrio too, even when picked by hand; other picks stay normal.
           environment.systemPackages =
             map lib.lowPrio [
               # Why: modules/AGENTS.md#the-doctor-and-verify-which-until-now-were-flake-a
@@ -1768,6 +1824,11 @@ in
                   pkgs.gnused
                   pkgs.gnugrep
                   pkgs.coreutils
+                  pkgs.gum
+                  pkgs.openssh
+                  pkgs.curl
+                  pkgs.jq
+                  pkgs.gawk
                   cfg.package
                 ];
                 text = ''
@@ -1799,6 +1860,107 @@ in
 
                   [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
+                  live_row="^[[:space:]]*[^#[:space:]].*#@ $id([[:space:]]|\$)"
+
+                  # No terminal, a cancel and a refused prompt are all a non-zero gum, so all refuse.
+                  refuse() {
+                    echo "nixarchy: $1" >&2
+                    echo "  $file is unchanged." >&2
+                    exit 1
+                  }
+
+                  authorize_key() {
+                    # Called as an `if` condition, where set -e is off, so each step says so itself.
+                    ssh-keygen -lf /dev/stdin <<<"$1" >/dev/null 2>&1 || return 1
+                    mkdir -p "$HOME/.ssh" || return 1
+                    chmod 700 "$HOME/.ssh" || return 1
+                    touch "$HOME/.ssh/authorized_keys" || return 1
+                    chmod 600 "$HOME/.ssh/authorized_keys" || return 1
+                    if ! grep -qxF "$1" "$HOME/.ssh/authorized_keys"; then
+                      # A last line with no newline would swallow this key, and passwords are about to go off.
+                      if [ -s "$HOME/.ssh/authorized_keys" ] && [ -n "$(tail -c 1 "$HOME/.ssh/authorized_keys")" ]; then
+                        echo >>"$HOME/.ssh/authorized_keys" || return 1
+                      fi
+                      echo "$1" >>"$HOME/.ssh/authorized_keys" || return 1
+                    fi
+                  }
+
+                  openssh_gate() {
+                    local facts="''${NIXARCHY_SSH_FACTS:-${sshFacts}}"
+                    local keys="$HOME/.ssh/authorized_keys" me sshd_on home_read sources declared
+                    local github paste user key fetched added=0
+                    me=$(id -un) || refuse "cannot tell who is running this"
+                    sshd_on=$(jq -r .sshdOn "$facts") || refuse "cannot read $facts"
+                    home_read=$(jq -r .homeRead "$facts") || refuse "cannot read $facts"
+                    sources=$(jq -r '.otherSources | join(", ")' "$facts") || refuse "cannot read $facts"
+                    declared=$(jq -r --arg u "$me" '.declaredUsers | index($u) != null' "$facts") || refuse "cannot read $facts"
+
+                    # 1. The lockout case: other accounts may be logging in with passwords, and a
+                    # yes from this person cannot show that nobody loses access.
+                    if [ "$sshd_on" = true ]; then
+                      echo "sshd is already on, and not from this menu row." >&2
+                      echo "To turn passwords off, add these to your own config:" >&2
+                      echo "  services.openssh.settings.PasswordAuthentication = false;" >&2
+                      echo "  services.openssh.settings.KbdInteractiveAuthentication = false;" >&2
+                      refuse "if you just turned the row off, run nixarchy-apply first"
+                    fi
+
+                    echo "Passwords go off for every account, not only yours."
+
+                    # 2. First, because a forced authorizedKeysFiles may omit the two defaults.
+                    if [ -n "$sources" ]; then
+                      echo "sshd also reads keys from: $sources. This cannot see those."
+                      gum confirm "Do they hold a key for $me?" ||
+                        refuse "no key confirmed in $sources"
+                      return 0
+                    fi
+
+                    # 3. ssh-keygen and not -s: a comment-only file holds no key.
+                    if [ "$declared" = true ]; then
+                      echo "Using the key declared for $me in users.users.$me.openssh.authorizedKeys."
+                      return 0
+                    fi
+                    if [ "$home_read" = true ] && ssh-keygen -lf "$keys" >/dev/null 2>&1; then
+                      echo "Using the key in $keys."
+                      return 0
+                    fi
+
+                    # 4. A key written to the home file would not be read.
+                    if [ "$home_read" != true ]; then
+                      refuse "sshd does not read $keys here. Add a key to users.users.$me.openssh.authorizedKeys and run nixarchy-apply first"
+                    fi
+
+                    # 5. Ask, in upstream's order.
+                    echo "sshd needs a key from you first."
+                    github=$(omarchy-i18n sshd.keyFromGithub) || refuse "cannot read the prompts"
+                    paste=$(omarchy-i18n sshd.keyPaste) || refuse "cannot read the prompts"
+                    no_key="no key added. Keys go in $keys or users.users.$me.openssh.authorizedKeys. If you only want sshd's host key for sops, declare services.openssh yourself"
+                    case $(gum choose "$github" "$paste" --header "$(omarchy-i18n sshd.howToAddKey)" || true) in
+                      "$github")
+                        user=$(gum input --prompt "$(omarchy-i18n sshd.githubUserPrompt)" --placeholder "username") || refuse "$no_key"
+                        case "$user" in
+                          "" | -* | *[!A-Za-z0-9-]*) refuse "'$user' is not a GitHub username" ;;
+                        esac
+                        fetched=$(curl -fsSL "https://github.com/$user.keys") || refuse "could not fetch keys for '$user'"
+                        while IFS= read -r key; do
+                          [ -n "$key" ] || continue
+                          if authorize_key "$key"; then added=$((added + 1)); fi
+                        done <<<"$fetched"
+                        ;;
+                      "$paste")
+                        key=$(gum input --prompt "$(omarchy-i18n sshd.publicKeyPrompt)" --placeholder "ssh-ed25519 AAAA... you@host") || refuse "$no_key"
+                        if authorize_key "$key"; then added=1; fi
+                        ;;
+                      *) refuse "$no_key" ;;
+                    esac
+                    [ "$added" -gt 0 ] || refuse "$no_key"
+                    echo "Added $added key(s) to $keys."
+                  }
+
+                  if [ "$id" = openssh ] && ! grep -qE "$live_row" "$file"; then
+                    openssh_gate
+                  fi
+
                   # A services.nix written before this row existed does not have
                   # it; nothing regenerates the file, so add just that row from
                   # the template, where catalogue-diff puts rows (#843).
@@ -1816,12 +1978,31 @@ in
                   #
                   # Deliberately not the app scripts' test, which greps for
                   # `^[[:space:]]*<id>.enable` -- that cannot work here, because a
-                  # plain entry's line begins with services.openssh, not with the
+                  # plain entry's line begins with services.flatpak, not with the
                   # id. Asking whether the marked line is live is also the more
                   # honest question: it does not answer "yes" to `enable = false;`.
-                  if grep -qE "^[[:space:]]*[^#[:space:]].*#@ $id([[:space:]]|\$)" "$file"; then
+                  if grep -qE "$live_row" "$file"; then
                     echo "$id is already enabled; run nixarchy-apply to build it"
+                    if [ "$id" = openssh ] && grep -qE '^[[:space:]]*services[.]openssh[.]enable.*#@ openssh' "$file"; then
+                      echo "passwords are still on for this line; see the SSH section of the manual"
+                      echo "  (docs/manual/security.md) before changing it"
+                    fi
                     exit 0
+                  fi
+
+                  # An old file's row names the plain option and carries a false note (#1611).
+                  # Rewriting it here is why a menu pick hardens; a live row never reaches this.
+                  old='^[[:space:]]*#[[:space:]]*services[.]openssh[.]enable.*#@ openssh([[:space:]]|$)'
+                  if [ "$id" = openssh ] && grep -qE "$old" "$file"; then
+                    tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/services-template.nix"
+                    # Must not fall through: the plain line would turn sshd on with passwords.
+                    row=$(grep -m1 -E "#@ openssh([[:space:]]|\$)" "$tpl") || refuse "no openssh row in $tpl"
+                    tmp=""
+                    trap 'rm -f "$tmp"' EXIT
+                    tmp=$(mktemp "$file.XXXXXX")
+                    awk -v old="$old" -v row="$row" '$0 ~ old { print row; next } { print }' "$file" >"$tmp"
+                    chmod --reference="$file" "$tmp"
+                    mv "$tmp" "$file"
                   fi
 
                   sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
@@ -1948,6 +2129,7 @@ in
                 runtimeInputs = [
                   pkgs.gnused
                   pkgs.gnugrep
+                  pkgs.gawk
                   pkgs.coreutils
                   cfg.package # omarchy-notification-send
                 ];
@@ -1972,21 +2154,7 @@ in
 
                   [ -f "$file" ] || fail "no $file -- log in again to have it created"
 
-                  # apps.nix is seeded once, so an app added to the catalogue later
-                  # has no row in it. Take the row from the current template and
-                  # put it at the top of the apps block, still commented out.
-                  if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                    row=$(grep -E "#@ $id([[:space:]]|\$)" "$tpl" 2>/dev/null | head -1 || true)
-                    [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
-                    grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
-                      fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
-                    tmp=$(mktemp "$file.XXXXXX")
-                    awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
-                      "$file" >"$tmp"
-                    chmod --reference="$file" "$tmp"
-                    mv "$tmp" "$file"
-                    echo "added $id's row from the current catalogue to $file"
-                  fi
+                  ${insertMissingAppRow}
 
                   if grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
                     echo "$id is already enabled; run nixarchy-apply to build it"
@@ -2001,7 +2169,7 @@ in
                   # nowhere and the pick looks like it did nothing at all. Say so
                   # on the desktop instead. -r keeps repeated picks replacing one
                   # notification rather than stacking a wall of them.
-                  queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
+                  queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     # --exec makes the notification clickable: nothing is built
                     # until a rebuild runs, so the notification that says so is
@@ -2025,12 +2193,19 @@ in
                 runtimeInputs = [
                   pkgs.gnused
                   pkgs.gnugrep
+                  pkgs.gawk
                   pkgs.coreutils
                   cfg.package
                 ];
                 text = ''
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                  tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                   id="''${1:?usage: nixarchy-app-disable <app-id>}"
+
+                  fail() {
+                    echo "nixarchy: $1" >&2
+                    exit 1
+                  }
 
                   case "$id" in
                     *[!a-z0-9_-]* | "")
@@ -2041,20 +2216,35 @@ in
 
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
-                  if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                    echo "nixarchy: no app '$id' in $file" >&2
-                    exit 1
-                  fi
+                  default_on="${lib.concatStringsSep " " defaultOnIds}"
+                  case " $default_on " in
+                    *" $id "*)
+                      # On by default, so a commented row means on: only a live false turns it off.
+                      ${insertMissingAppRow}
+                      if grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*false([[:space:]]*;|[[:space:]]*$)" "$file"; then
+                        echo "$id is already off"
+                        exit 0
+                      fi
+                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
+                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)true/\1false/" "$file"
+                      ;;
+                    *)
+                      if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                        echo "nixarchy: no app '$id' in $file" >&2
+                        exit 1
+                      fi
 
-                  if ! grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
-                    echo "$id is not enabled"
-                    exit 0
-                  fi
+                      if ! grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
+                        echo "$id is not enabled"
+                        exit 0
+                      fi
 
-                  # Comment the line back out, preserving its indentation.
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                      # Comment the line back out, preserving its indentation.
+                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                      ;;
+                  esac
 
-                  queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
+                  queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "$id removed from your selection" \
@@ -2091,13 +2281,19 @@ in
                   # `|| continue`, not `&&`: this script runs under set -e, and a
                   # failing AND-list on a blank line would end it mid-collect.
                   entries=()
+                  default_on="${lib.concatStringsSep " " defaultOnIds}"
                   while IFS= read -r name; do
                     [ -n "$name" ] || continue
+                    case " $default_on " in *" $name "*) continue ;; esac
                     entries+=("app"$'\t'"$name")
                   done < <(
-                    grep -oE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" \
-                      | sed -E 's/[[:space:]]*//; s/\.enable//'
+                    grep -oE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" \
+                      | sed -E 's/^[[:space:]]*(programs\.nixarchy\.apps\.)?//; s/\.enable.*//'
                   )
+                  for id in ${lib.concatStringsSep " " defaultOnIds}; do
+                    grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*false([[:space:]]*;|[[:space:]]*\$)" "$file" && continue
+                    entries+=("app"$'\t'"$id")
+                  done
                   while IFS= read -r name; do
                     [ -n "$name" ] || continue
                     entries+=("pkg"$'\t'"$name")
@@ -3238,7 +3434,7 @@ in
                   mark_live() {
                     [ -r "$1" ] || return 0
                     sed -nE "s/^[[:space:]]*[^#[:space:]].*#@pkg ([A-Za-z0-9_.-]+)[[:space:]]*$/pkg\t\1/p" "$1"
-                    sed -nE "s/^[[:space:]]*[^#[:space:]].*#@ ([A-Za-z0-9_.-]+).*$/$2\t\1/p" "$1"
+                    sed -nE "/\.enable[[:space:]]*=[[:space:]]*false/! s/^[[:space:]]*[^#[:space:]].*#@ ([A-Za-z0-9_.-]+).*$/$2\t\1/p" "$1"
                   }
 
                   selected=$(mktemp)

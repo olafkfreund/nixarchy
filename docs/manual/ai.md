@@ -581,6 +581,24 @@ It is offered once as a notification after an agent is set up, and a
 configuration that is already committed and pushed marks itself done rather than
 asking again.
 
+## Copying subscription logins to another machine
+
+`omarchy agent account copy <host>` moves your Claude, Codex and Grok logins over
+SSH. The credentials travel on stdin, never in command arguments.
+
+It works to and from machines with `services.envfs` on, which is the default, and
+to Omarchy on Arch. The destination needs `services.openssh.enable`.
+
+With envfs off, or on a machine importing the module with `programs.nixarchy.enable`
+off, or on plain NixOS, it fails with `/bin/bash: No such file or directory` and
+writes nothing. The sender names `/bin/bash` and `/usr/bin/python3` because it can't
+know what the far end is, and only envfs makes those resolve on NixOS.
+
+Under envfs those paths resolve through `PATH`, so a `python3` in `~/bin` on the
+destination receives the stream. That crosses no privilege boundary: that code
+already runs as the account receiving the logins. If an import fails partway, the
+providers already copied stay copied.
+
 ## Giving an agent less than the whole machine
 
 Two things this desktop has that are worth knowing before you hand an agent a

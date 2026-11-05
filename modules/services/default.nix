@@ -74,6 +74,7 @@ inputs: {
     '')
     (import ./microvm.nix inputs)
     ./open-webui.nix
+    ./openssh.nix
     ./syncthing.nix
     ./tailscale.nix
   ];

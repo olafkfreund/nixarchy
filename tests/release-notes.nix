@@ -119,6 +119,7 @@ pkgs.runCommand "nixarchy-release-notes"
       services.printing.browsed.enable = lib.mkDefault false;
     }
     EOF
+    printf '%s\n' '  "net.core.default_qdisc" = "fq";' '  "org.gnome.x" = 1;' >> modules/nixos.nix
     commit "Omarchy 4.0.2, and a daemon that should not have been running (#902)"
 
     report=$(bash "$notes" v-old main) || {
@@ -165,6 +166,12 @@ pkgs.runCommand "nixarchy-release-notes"
     has 'now `services.printing.browsed.enable = lib.mkDefault false;`' \
       "the NixOS default this release turned off"
     has 'in `modules/nixos.nix`' "the module a changed default lives in"
+    has 'now `"net.core.default_qdisc" = "fq";`' "a sysctl default this release moved"
+    has 'To keep another value, set it in `boot.kernel.sysctl`' "how to keep another sysctl value"
+    <<<"$report" grep -q 'org.gnome.x' && {
+      echo "release-notes: a line that is not a sysctl was reported as a NixOS default" >&2
+      fail=1
+    }
 
     # 3. Packages. The one that moved, and not the one that did not.
     has '`once` 0.3.1 → 0.4.0' "the pinned package whose version moved"

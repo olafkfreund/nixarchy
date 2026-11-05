@@ -254,6 +254,10 @@ fi
 # [.] rather than \., because this pattern is handed to awk as well as to grep
 # and awk warns about the escape.
 mkdefault_body='[A-Za-z_][A-Za-z0-9_.-]*[[:space:]]*=[[:space:]]*(lib[.])?mk(Default|Force)'
+# Sysctl keys are quoted, and their priority is on the mapAttrs line, so the
+# pattern above cannot see them. Not added to the `present` guard: that asks
+# whether the mkDefault scan still matches.
+sysctl_body='"(net|vm|fs|kernel)[.][^"]+"[[:space:]]*='
 present=$(git grep -hE "$mkdefault_body" "$to_rev" -- modules | wc -l || true)
 [ "${present:-0}" -gt 0 ] || die \
   "no '= lib.mkDefault ...' line anywhere under modules/ at $to: the scan for the defaults this port sets has stopped matching, and reporting that none of them moved would be a lie"
@@ -268,7 +272,7 @@ present=$(git grep -hE "$mkdefault_body" "$to_rev" -- modules | wc -l || true)
 # find it. If that stops being true, the fix is to evaluate the two
 # configurations and diff them, not to teach awk about nesting.
 sysdefaults=$(git diff -U0 "$from_rev" "$to_rev" -- modules |
-  awk -v re="^[+-][ \t]*$mkdefault_body" '
+  awk -v re="^[+-][ \t]*($mkdefault_body|$sysctl_body)" '
     /^\+\+\+ b\// { file = substr($0, 7); next }
     $0 ~ re { printf "%s\t%s\t%s\n", substr($0, 1, 1), file, substr($0, 2) }
   ' || true)
@@ -282,6 +286,11 @@ if [ -n "$sysdefaults" ]; then
     { gsub(/^[ \t]+|[ \t]+$/, "", $3)
       printf "- %s `%s` in `%s`\n", ($1 == "+" ? "now" : "no longer"), $3, $2 }'
   echo
+  if [[ $sysdefaults =~ $sysctl_body ]]; then
+    echo "To keep another value, set it in \`boot.kernel.sysctl\`; a plain value or your own"
+    echo "\`mkDefault\` wins, and \`null\` leaves the key to the kernel."
+    echo
+  fi
 else
   echo "No NixOS default this port sets moved."
   echo

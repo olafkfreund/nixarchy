@@ -109,6 +109,44 @@ let
         patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1
       '';
 
+  # #1616: the real sender, ssh -T, sshd, a login shell, envfs and the receiver,
+  # with nothing rewritten. HOME moves only on the sending side; ssh finds its key
+  # through the passwd entry, so the far side is omarchy's real home.
+  accountCopyProbe = pkgs.writeShellScript "account-copy-probe" ''
+    set -euo pipefail
+    exec 2>&1
+    real=/home/omarchy
+    far=$real/.local/state/omarchy/agents/accounts
+    test ! -e "$far" || { echo "account state exists before the copy: $far"; exit 1; }
+    test ! -e "$real/.ssh/id_ed25519" || { echo "a key exists before the copy"; exit 1; }
+
+    # The sender passes no -i or host-key option, and with no terminal an
+    # unknown host key is a refusal.
+    install -d -m 700 "$real/.ssh"
+    ssh-keygen -q -t ed25519 -N "" -f "$real/.ssh/id_ed25519"
+    install -m 600 "$real/.ssh/id_ed25519.pub" "$real/.ssh/authorized_keys"
+    ssh-keyscan -t ed25519 localhost > "$real/.ssh/known_hosts"
+
+    tmp=$(mktemp -d)
+    export HOME=$tmp XDG_CONFIG_HOME=$tmp/.config XDG_DATA_HOME=$tmp/.local/share
+    export XDG_STATE_HOME=$tmp/.local/state XDG_CACHE_HOME=$tmp/.cache
+    pending=$(omarchy-agent-account-state begin claude work)
+    printf '%s\n' '{"oauthAccount":{"accountUuid":"u-1616","emailAddress":"copy@example.org"}}' > "$pending/.claude.json"
+    printf '%s\n' '{"claudeAiOauth":{"rateLimitTier":"","subscriptionType":"fake-1616"}}' > "$pending/.credentials.json"
+    omarchy-agent-account-state register claude work "$pending" > /dev/null
+
+    rc=0
+    out=$(omarchy-agent-account-copy localhost claude) || rc=$?
+    echo "$out"
+    test "$rc" -eq 0 || { echo "the copy exited $rc"; exit 1; }
+    [[ $out == *"Claude: copied"* ]] || { echo "the copy reported no account"; exit 1; }
+    grep -qF fake-1616 "$far/claude/work/.credentials.json"
+    for f in claude/work/.credentials.json claude/work/.claude.json; do
+      mode=$(stat -c %a "$far/$f")
+      test "$mode" = 600 || { echo "$f has mode $mode, wanted 600"; exit 1; }
+    done
+  '';
+
 in
 # Drives a real Omarchy session and reports what it logged.
 #
@@ -187,6 +225,8 @@ pkgs.testers.runNixOSTest {
         home.stateVersion = "25.05";
       };
     };
+
+    services.openssh.enable = true;
 
     users.users.omarchy = {
       isNormalUser = true;
@@ -2082,8 +2122,8 @@ pkgs.testers.runNixOSTest {
                "omarchy-remove-dictation-superwhisper",
                "omarchy-install-dictation-voxtype",
                "omarchy-install-hermes-cli", "omarchy-install-openclaw-cli",
-               # The /usr/bin/python3 here runs on the REMOTE machine an account
-               # is transferred to, not on this one.
+               # The /usr/bin/python3 here runs on the REMOTE machine an account is
+               # transferred to. The loopback copy below runs it for real (#1616).
                "omarchy-agent-account-transfer",
                # Upstream's Limine default-kernel switcher (#1423). Its one
                # caller, Update > Kernel, shows only when /usr/lib/modules/*/
@@ -2115,6 +2155,22 @@ pkgs.testers.runNixOSTest {
         + ". Either point them at what NixOS actually uses, or add them to the "
         "named exceptions with a command that explains itself.")
     print("no unexpected command reaches into /usr")
+
+    # ---- account copy, over a real sshd (#1616) ---------------------------
+    with subtest("account copy reaches a default destination (#1616)"):
+        machine.wait_for_unit("sshd.service")
+        rc, out = machine.execute(as_user("${accountCopyProbe}"))
+        print(out)
+        assert rc == 0, f"account copy over loopback ssh failed: {out}"
+        # The import starts this detached, and it writes under the state removed
+        # below. The brackets stop pgrep's own shell wrapper matching.
+        machine.wait_until_fails(
+            "pgrep -u omarchy -f '[o]marchy-agent-usage-update'", timeout=120)
+        machine.succeed(
+            "cd /home/omarchy && rm -rf .local/state/omarchy/agents/accounts "
+            ".local/state/omarchy/agents/usage .ssh/id_ed25519 "
+            ".ssh/id_ed25519.pub .ssh/authorized_keys .ssh/known_hosts")
+        print("an account copy over ssh reaches the far side, mode 600")
 
     # ---- the Network Speed Test reaches its packaged client (#1485) -------
     # The script execs ''${OMARCHY_SPEEDTEST_BINARY:-<path>}; on NixOS the

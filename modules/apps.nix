@@ -52,6 +52,8 @@ let
 
   available = lib.filterAttrs (_: a: !(a ? unavailable)) apps;
   preinstallIds = lib.attrNames (lib.filterAttrs (_: a: a.preinstall or false) available);
+  # Empty when the switch is off: there a commented row really does mean off.
+  defaultOnIds = lib.optionals cfg.omarchyApps.enable preinstallIds;
   unavailable = lib.filterAttrs (_: a: a ? unavailable) apps;
 
   # One submodule per app. `settings` only has somewhere to go when the app is
@@ -141,7 +143,9 @@ let
   templateRow =
     name: app:
     let
+      on = builtins.elem name defaultOnIds;
       notes = lib.filter (s: s != "") [
+        (lib.optionalString on "on by default")
         (lib.optionalString (app.unfree or false) "unfree")
         # Collapsed to one line: a note with a newline in it would break out
         # of the `#` comment and make the generated file fail to parse.
@@ -149,8 +153,26 @@ let
       ];
       suffix = lib.optionalString (notes != [ ]) "  # ${lib.concatStringsSep " — " notes}";
     in
-    "    # ${name}.enable = true;  #@ ${name}${suffix}\n"
+    "    # ${name}.enable = ${if on then "false" else "true"};  #@ ${name}${suffix}\n"
     + lib.optionalString (app ? option) "    #   ${name}.settings = { };  #@ ${name}.settings\n";
+
+  insertMissingAppRow = ''
+    # apps.nix is seeded once, so an app added to the catalogue later
+    # has no row in it. Take the row from the current template and
+    # put it at the top of the apps block, still commented out.
+    if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+      row=$(grep -E "#@ $id([[:space:]]|\$)" "$tpl" 2>/dev/null | head -1 || true)
+      [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
+      grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
+        fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
+      tmp=$(mktemp "$file.XXXXXX")
+      awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
+        "$file" >"$tmp"
+      chmod --reference="$file" "$tmp"
+      mv "$tmp" "$file"
+      echo "added $id's row from the current catalogue to $file"
+    fi
+  '';
 
   templateCategory =
     cat:
@@ -1957,6 +1979,7 @@ in
                 runtimeInputs = [
                   pkgs.gnused
                   pkgs.gnugrep
+                  pkgs.gawk
                   pkgs.coreutils
                   cfg.package # omarchy-notification-send
                 ];
@@ -1981,21 +2004,7 @@ in
 
                   [ -f "$file" ] || fail "no $file -- log in again to have it created"
 
-                  # apps.nix is seeded once, so an app added to the catalogue later
-                  # has no row in it. Take the row from the current template and
-                  # put it at the top of the apps block, still commented out.
-                  if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                    row=$(grep -E "#@ $id([[:space:]]|\$)" "$tpl" 2>/dev/null | head -1 || true)
-                    [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
-                    grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
-                      fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
-                    tmp=$(mktemp "$file.XXXXXX")
-                    awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
-                      "$file" >"$tmp"
-                    chmod --reference="$file" "$tmp"
-                    mv "$tmp" "$file"
-                    echo "added $id's row from the current catalogue to $file"
-                  fi
+                  ${insertMissingAppRow}
 
                   if grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
                     echo "$id is already enabled; run nixarchy-apply to build it"
@@ -2010,7 +2019,7 @@ in
                   # nowhere and the pick looks like it did nothing at all. Say so
                   # on the desktop instead. -r keeps repeated picks replacing one
                   # notification rather than stacking a wall of them.
-                  queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
+                  queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     # --exec makes the notification clickable: nothing is built
                     # until a rebuild runs, so the notification that says so is
@@ -2034,12 +2043,19 @@ in
                 runtimeInputs = [
                   pkgs.gnused
                   pkgs.gnugrep
+                  pkgs.gawk
                   pkgs.coreutils
                   cfg.package
                 ];
                 text = ''
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                  tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                   id="''${1:?usage: nixarchy-app-disable <app-id>}"
+
+                  fail() {
+                    echo "nixarchy: $1" >&2
+                    exit 1
+                  }
 
                   case "$id" in
                     *[!a-z0-9_-]* | "")
@@ -2050,20 +2066,35 @@ in
 
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
-                  if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                    echo "nixarchy: no app '$id' in $file" >&2
-                    exit 1
-                  fi
+                  default_on="${lib.concatStringsSep " " defaultOnIds}"
+                  case " $default_on " in
+                    *" $id "*)
+                      # On by default, so a commented row means on: only a live false turns it off.
+                      ${insertMissingAppRow}
+                      if grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*false([[:space:]]*;|[[:space:]]*$)" "$file"; then
+                        echo "$id is already off"
+                        exit 0
+                      fi
+                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
+                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)true/\1false/" "$file"
+                      ;;
+                    *)
+                      if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                        echo "nixarchy: no app '$id' in $file" >&2
+                        exit 1
+                      fi
 
-                  if ! grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
-                    echo "$id is not enabled"
-                    exit 0
-                  fi
+                      if ! grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
+                        echo "$id is not enabled"
+                        exit 0
+                      fi
 
-                  # Comment the line back out, preserving its indentation.
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                      # Comment the line back out, preserving its indentation.
+                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                      ;;
+                  esac
 
-                  queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
+                  queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "$id removed from your selection" \
@@ -2100,13 +2131,19 @@ in
                   # `|| continue`, not `&&`: this script runs under set -e, and a
                   # failing AND-list on a blank line would end it mid-collect.
                   entries=()
+                  default_on="${lib.concatStringsSep " " defaultOnIds}"
                   while IFS= read -r name; do
                     [ -n "$name" ] || continue
+                    case " $default_on " in *" $name "*) continue ;; esac
                     entries+=("app"$'\t'"$name")
                   done < <(
-                    grep -oE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" \
-                      | sed -E 's/[[:space:]]*//; s/\.enable//'
+                    grep -oE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" \
+                      | sed -E 's/^[[:space:]]*(programs\.nixarchy\.apps\.)?//; s/\.enable.*//'
                   )
+                  for id in ${lib.concatStringsSep " " defaultOnIds}; do
+                    grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*false([[:space:]]*;|[[:space:]]*\$)" "$file" && continue
+                    entries+=("app"$'\t'"$id")
+                  done
                   while IFS= read -r name; do
                     [ -n "$name" ] || continue
                     entries+=("pkg"$'\t'"$name")
@@ -3247,7 +3284,7 @@ in
                   mark_live() {
                     [ -r "$1" ] || return 0
                     sed -nE "s/^[[:space:]]*[^#[:space:]].*#@pkg ([A-Za-z0-9_.-]+)[[:space:]]*$/pkg\t\1/p" "$1"
-                    sed -nE "s/^[[:space:]]*[^#[:space:]].*#@ ([A-Za-z0-9_.-]+).*$/$2\t\1/p" "$1"
+                    sed -nE "/\.enable[[:space:]]*=[[:space:]]*false/! s/^[[:space:]]*[^#[:space:]].*#@ ([A-Za-z0-9_.-]+).*$/$2\t\1/p" "$1"
                   }
 
                   selected=$(mktemp)

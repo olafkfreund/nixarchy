@@ -4700,6 +4700,10 @@ in
                         echo "    nixarchy app remove                    take out what you just picked"
                         echo "    nh os switch $flake 2>&1 | nixarchy explain   what the error means"
                       fi
+                      if [ "$rc" -eq 0 ]; then
+                        PATH=/run/current-system/sw/bin:$PATH nixarchy-default-install --settle ||
+                          echo "A default you chose is still pending; the next 'nixarchy apply' tries again."
+                      fi
                       exit "$rc"
                       ;;
                     *) echo "Not switching. Run: nh os switch $flake" ;;

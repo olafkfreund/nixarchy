@@ -49,6 +49,13 @@ directory:
   mode with a username that is NOT `omarchy`. The scripted cells cannot see
   this class of bug and never will.
 
+  Input methods (#1614) split the same way: `checks.input-methods` and
+  `checks.session` cover the five fcitx5 engines (`mozc`, `hangul`, `pinyin`,
+  `chewing`, `cangjie5`) and terminal composition over virtual keys, while
+  physical 한/영 and 全角/半角 keys and composition in real GTK/Qt/browser
+  apps cannot be reached by QMP `send-key` and stay with `pkgs/verify.sh` and
+  a human.
+
 Environment: MATRIX_ISO_DIR (where the published .iso files are),
 MATRIX_OFFLINE_ISO / MATRIX_NET_ISO (override one image -- how a freshly
 built ISO gets tested), MATRIX_WORK (where disks live; not /tmp, which is

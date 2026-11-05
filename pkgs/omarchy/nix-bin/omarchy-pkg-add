@@ -71,6 +71,11 @@ for pkg in "$@"; do
   kind=$(printf '%s' "$row" | cut -f2)
   bin=$(printf '%s' "$row" | cut -f5)
 
+  case $pkg in fcitx5-*)
+    if omarchy-pkg-present "$pkg"; then present=$((present + 1)); else missing=$((missing + 1)); fi
+    continue ;;
+  esac
+
   # brave-bin provides `brave`; zen-browser-stable provides `zen-browser`.
   for candidate in "$bin" "$pkg" "${pkg%-bin}" "${pkg%-stable}"; do
     [ -n "$candidate" ] || continue

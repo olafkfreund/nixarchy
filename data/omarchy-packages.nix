@@ -342,25 +342,25 @@
     module = "i18n.inputMethod.enable";
   };
   "fcitx5-chewing" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-chinese-addons" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-gtk" = {
     module = "i18n.inputMethod.enable";
   };
   "fcitx5-hangul" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-mozc" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-qt" = {
     module = "i18n.inputMethod.enable";
   };
   "fcitx5-table-extra" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "gvfs-mtp" = {
     module = "services.gvfs.enable";

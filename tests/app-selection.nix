@@ -13,7 +13,9 @@ let
   pkgAdd = testLib.vmPackage "nixarchy-pkg-add";
   pkgRemove = testLib.vmPackage "nixarchy-pkg-remove";
   apply = testLib.vmPackage "nixarchy-apply";
+  defaultInstall = testLib.vmPackage "nixarchy-default-install";
   search = testLib.vmPackage "nixarchy-search";
+  shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
 in
 pkgs.runCommand "nixarchy-app-selection"
   {
@@ -45,6 +47,7 @@ pkgs.runCommand "nixarchy-app-selection"
     pkgadd=${pkgAdd}/bin/nixarchy-pkg-add
     pkgremove=${pkgRemove}/bin/nixarchy-pkg-remove
     apply=${apply}/bin/nixarchy-apply
+    definstall=${defaultInstall}/bin/nixarchy-default-install
 
     # A missing row is inserted, and the file keeps its mode. (Whether that
     # write was a rename is not visible here: enable's own sed -i replaces the
@@ -198,6 +201,162 @@ pkgs.runCommand "nixarchy-app-selection"
     kill "$holder" 2>/dev/null || true
     test "$rc" -eq 1 && grep -q 'another apply is running' lock.out ||
       bad "a --yes apply waited on (or ignored) a held lock: rc=$rc $(cat lock.out)"
+
+    # ---- nixarchy-default-install (#1623) ---------------------------------
+    defbin=$PWD/defbin
+    mkdir -p "$defbin"
+    ln -s "$enable" "$defbin/nixarchy-app-enable"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo apply >> "$APPLY_CALLS"' > "$defbin/nixarchy-apply"
+    chmod +x "$defbin/nixarchy-apply"
+    export APPLY_CALLS=$PWD/apply.calls
+
+    def_row() {
+      case "$1:$2" in
+        browser:chrome) echo chrome ;;
+        browser:brave) echo brave ;;
+        browser:edge) echo edge ;;
+        browser:firefox) echo firefox ;;
+        browser:zen) echo zen ;;
+        editor:code) echo vscode ;;
+        editor:cursor) echo cursor ;;
+        editor:zed) echo zed ;;
+        editor:helix) echo helix ;;
+        editor:vim) echo vim ;;
+        editor:emacs) echo emacs ;;
+        *) echo "" ;;
+      esac
+    }
+    def_refused() {
+      case "$1:$2" in
+        browser:brave-origin | browser:chromium | editor:sublime_text | editor:nvim) return 0 ;;
+        *) return 1 ;;
+      esac
+    }
+
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' \
+      '    # chrome.enable = true;  #@ chrome' \
+      '    # brave.enable = true;  #@ brave' \
+      '    # edge.enable = true;  #@ edge' \
+      '    # firefox.enable = true;  #@ firefox' \
+      '    # zen.enable = true;  #@ zen' \
+      '    # vscode.enable = true;  #@ vscode' \
+      '    # cursor.enable = true;  #@ cursor' \
+      '    # zed.enable = true;  #@ zed' \
+      '    # helix.enable = true;  #@ helix' \
+      '    # vim.enable = true;  #@ vim' \
+      '    # emacs.enable = true;  #@ emacs' \
+      '  };' '}' > "$templates/apps-template.nix"
+
+    for kind in browser editor; do
+      setter=${shipped}/share/omarchy/bin/omarchy-default-$kind
+      args=$(sed -n 's/^# omarchy:args=\[\(.*\)\]$/\1/p' "$setter" | tr '|' ' ')
+      test -n "$args" || { echo "omarchy-default-$kind has no omarchy:args line" >&2; exit 1; }
+      for sel in $args; do
+        if def_refused "$kind" "$sel"; then
+          continue
+        fi
+        row=$(def_row "$kind" "$sel")
+        if [ -z "$row" ]; then
+          bad "omarchy-default-$kind omarchy:args names '$sel', which is in neither the map nor the refused list"
+          continue
+        fi
+        cp "$templates/apps-template.nix" "$file"
+        rm -rf "$XDG_STATE_HOME/nixarchy"
+        : > "$APPLY_CALLS"
+        cmd="cmd-$sel"
+        rc=0; PATH=$defbin:$PATH "$definstall" "$kind" "$sel" "$cmd" > def.out 2>&1 || rc=$?
+        test "$rc" -eq 0 || bad "default-install $kind $sel exited $rc: $(cat def.out)"
+        grep -qE "^[[:space:]]*$row\.enable = true;  #@ $row" "$file" ||
+          bad "default-install $kind $sel did not enable $row"
+        pending=$XDG_STATE_HOME/nixarchy/pending-default-$kind
+        test -f "$pending" && test "$(cat "$pending")" = "$(printf '%s\n%s' "$sel" "$cmd")" ||
+          bad "default-install $kind $sel did not write pending-default-$kind"
+        test "$(wc -l < "$APPLY_CALLS")" -eq 1 ||
+          bad "default-install $kind $sel did not exec nixarchy-apply once"
+      done
+    done
+
+    refuse_case() {
+      local script=$1 kind=$2 sel=$3 reason=$4
+      cp "$templates/apps-template.nix" "$file"
+      rm -rf "$XDG_STATE_HOME/nixarchy"
+      : > "$APPLY_CALLS"
+      local before rc=0
+      before=$(sha256sum < "$file")
+      PATH=$defbin:$PATH "$script" "$kind" "$sel" "cmd-$sel" > refuse.out 2>&1 || rc=$?
+      test "$rc" -eq 1 || bad "default-install $kind $sel exited $rc (want 1)"
+      grep -qF "$reason" refuse.out || bad "default-install $kind $sel did not print '$reason': $(cat refuse.out)"
+      test "$(sha256sum < "$file")" = "$before" || bad "default-install $kind $sel changed apps.nix on refusal"
+      test ! -e "$XDG_STATE_HOME/nixarchy/pending-default-$kind" || bad "default-install $kind $sel wrote pending file on refusal"
+      test ! -s "$APPLY_CALLS" || bad "default-install $kind $sel called nixarchy-apply on refusal"
+    }
+
+    refuse_case "$definstall" browser brave-origin "AUR-only"
+    refuse_case "$definstall" editor sublime_text "sublimetext4 broken"
+    refuse_case "$definstall" browser chromium "already ships in the session"
+    refuse_case "$definstall" editor nvim "already ships in the session"
+
+    sed 's/allowunfree=true/allowunfree=false/' "$definstall" > "$PWD/definstall-nofree"
+    chmod +x "$PWD/definstall-nofree"
+    refuse_case "$PWD/definstall-nofree" browser chrome "needs programs.nixarchy.allowUnfree = true"
+    refuse_case "$PWD/definstall-nofree" editor code "needs programs.nixarchy.allowUnfree = true"
+
+    # --settle: command present and setter succeeds -> file gone (the setter removes it).
+    settlebin=$PWD/settlebin
+    mkdir -p "$settlebin"
+    for kind in browser editor; do
+      printf '%s\n' '#!${pkgs.bash}/bin/bash' \
+        'echo "'"$kind"' $*" >> "$SETTLE_CALLS"' \
+        'if [ "''${SETTLE_FAIL:-0}" = 1 ]; then exit 1; fi' \
+        'rm -f "$XDG_STATE_HOME/nixarchy/pending-default-'"$kind"'"' \
+        > "$settlebin/omarchy-default-$kind"
+      chmod +x "$settlebin/omarchy-default-$kind"
+    done
+    export SETTLE_CALLS=$PWD/settle.calls
+
+    mkdir -p "$XDG_STATE_HOME/nixarchy"
+    printf '%s\n' firefox firefox > "$XDG_STATE_HOME/nixarchy/pending-default-browser"
+    printf '%s\n' helix helix > "$XDG_STATE_HOME/nixarchy/pending-default-editor"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$settlebin/firefox"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$settlebin/hx"
+    chmod +x "$settlebin/firefox" "$settlebin/hx"
+    : > "$SETTLE_CALLS"
+    rc=0; PATH=$settlebin:$PATH "$definstall" --settle > settle.out 2>&1 || rc=$?
+    test "$rc" -eq 0 &&
+      test ! -e "$XDG_STATE_HOME/nixarchy/pending-default-browser" &&
+      test ! -e "$XDG_STATE_HOME/nixarchy/pending-default-editor" &&
+      grep -qFx 'browser firefox' "$SETTLE_CALLS" &&
+      grep -qFx 'editor helix' "$SETTLE_CALLS" ||
+      bad "--settle with commands present did not settle both defaults: rc=$rc $(cat settle.out) calls=$(cat "$SETTLE_CALLS")"
+
+    # Setter exits 1 -> file stays, says so, rc 1.
+    printf '%s\n' firefox firefox > "$XDG_STATE_HOME/nixarchy/pending-default-browser"
+    : > "$SETTLE_CALLS"
+    rc=0; SETTLE_FAIL=1 PATH=$settlebin:$PATH "$definstall" --settle > settle.out 2>&1 || rc=$?
+    test "$rc" -eq 1 &&
+      test -f "$XDG_STATE_HOME/nixarchy/pending-default-browser" &&
+      grep -qF 'remains pending' settle.out ||
+      bad "--settle when setter fails did not keep file and exit 1: rc=$rc $(cat settle.out)"
+
+    # Command missing -> setter not called, file gone, rc 0.
+    rm -f "$settlebin/firefox" "$settlebin/hx"
+    printf '%s\n' firefox firefox > "$XDG_STATE_HOME/nixarchy/pending-default-browser"
+    printf '%s\n' helix helix > "$XDG_STATE_HOME/nixarchy/pending-default-editor"
+    : > "$SETTLE_CALLS"
+    rc=0; PATH=$settlebin:$PATH "$definstall" --settle > settle.out 2>&1 || rc=$?
+    test "$rc" -eq 0 &&
+      test ! -e "$XDG_STATE_HOME/nixarchy/pending-default-browser" &&
+      test ! -e "$XDG_STATE_HOME/nixarchy/pending-default-editor" &&
+      test ! -s "$SETTLE_CALLS" &&
+      grep -qF 'did not provide firefox' settle.out &&
+      grep -qF 'did not provide helix' settle.out ||
+      bad "--settle with missing commands called setter or kept file: rc=$rc $(cat settle.out) calls=$(cat "$SETTLE_CALLS")"
+
+    # No file -> silent 0.
+    : > "$SETTLE_CALLS"
+    rc=0; PATH=$settlebin:$PATH "$definstall" --settle > settle.out 2>&1 || rc=$?
+    test "$rc" -eq 0 && test ! -s settle.out && test ! -s "$SETTLE_CALLS" ||
+      bad "--settle with no pending file was not silent 0: rc=$rc $(cat settle.out)"
 
     [ "$fails" = 0 ] || { echo "$fails case(s) failed (#1276)" >&2; exit 1; }
     echo "app-selection: every case passed"

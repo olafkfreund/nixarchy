@@ -3509,6 +3509,15 @@ let
   pkgAddUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (pkgAddTextWith {
     allowUnfree = false;
   });
+  defaultInstallTextWith =
+    settings:
+    (pkgs.lib.findFirst (
+      p: (p.name or "") == "nixarchy-default-install"
+    ) (throw "no nixarchy-default-install in systemPackages") (configWith settings).environment.systemPackages)
+    .text;
+  defaultInstallUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (defaultInstallTextWith {
+    allowUnfree = false;
+  });
 
   # otherChannel.config's DEFAULT, every value forced, on the usual machine:
   # allowUnfree and no predicate. `inherit (pkgs.config) allowUnfreePredicate`
@@ -3698,6 +3707,7 @@ pkgs.runCommand "nixarchy-options-files"
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     flatpakExplicitDisable = pkgs.lib.boolToString flatpakDisabled.services.flatpak.enable;
     pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
+    defaultInstallUnfreeOff = pkgs.lib.boolToString defaultInstallUnfreeOffBaked;
     inherit otherChannelConfigKeys;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
     fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
@@ -4851,6 +4861,12 @@ pkgs.runCommand "nixarchy-options-files"
         test "$pkgAddUnfreeOff" = true || {
           echo "with allowUnfree = false the built nixarchy-pkg-add does not carry allowunfree=false:" >&2
           echo "  the baked policy constant no longer follows the option, so the unfree help" >&2
+          echo "  fires never or always" >&2
+          exit 1
+        }
+        test "$defaultInstallUnfreeOff" = true || {
+          echo "with allowUnfree = false the built nixarchy-default-install does not carry allowunfree=false:" >&2
+          echo "  the baked policy constant no longer follows the option, so the unfree refusal" >&2
           echo "  fires never or always" >&2
           exit 1
         }

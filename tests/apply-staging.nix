@@ -27,6 +27,7 @@ let
   # command precisely so it can be run here: nothing in the suite drives QML,
   # so a state machine left in the panel would ship untested.
   rebuildState = testLib.vmPackage "nixarchy-rebuild-state";
+  defaultInstall = testLib.vmPackage "nixarchy-default-install";
 in
 pkgs.runCommand "nixarchy-apply-staging"
   {
@@ -369,6 +370,58 @@ pkgs.runCommand "nixarchy-apply-staging"
       ok "all three panel log actions use invocation-scoped apply --log"
     else
       bad "a panel log action still reads unscoped unit history"
+    fi
+
+    # ---- pending defaults settle after a switch (#1623) -------------------
+    export XDG_STATE_HOME=$HOME/.local/state
+    defbin=$PWD/defbin
+    mkdir -p "$defbin" "$XDG_STATE_HOME/nixarchy"
+    ln -s ${defaultInstall}/bin/nixarchy-default-install "$defbin/nixarchy-default-install"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$defbin/firefox"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' \
+      'echo "$*" >> "$SETTLE_CALLS"' \
+      'if [ "''${SETTLE_FAIL:-0}" = 1 ]; then exit 1; fi' \
+      'rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"' \
+      > "$defbin/omarchy-default-browser"
+    chmod +x "$defbin/firefox" "$defbin/omarchy-default-browser"
+    export SETTLE_CALLS=$PWD/settle.calls
+    pending=$XDG_STATE_HOME/nixarchy/pending-default-browser
+
+    printf '%s\n' firefox firefox > "$pending"
+    : > "$SETTLE_CALLS"; rc=0
+    PATH=$defbin:$PATH NIXARCHY_FLAKE=$PWD/root $apply --yes --no-preview </dev/null >"$PWD/settle-ok.out" 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && [ ! -e "$pending" ] && grep -qFx firefox "$SETTLE_CALLS"; then
+      ok "a successful switch settles a pending default"
+    else
+      bad "a successful switch did not settle the pending default (exit $rc): $(cat "$PWD/settle-ok.out")"
+    fi
+
+    printf '%s\n' firefox firefox > "$pending"
+    : > "$SETTLE_CALLS"; rc=0
+    PATH=$defbin:$PATH NIXARCHY_FLAKE=$PWD/root NH_STUB_RC=1 $apply --yes --no-preview </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 1 ] && [ -f "$pending" ] && [ ! -s "$SETTLE_CALLS" ]; then
+      ok "a failed switch leaves a pending default in place"
+    else
+      bad "a failed switch settled or removed a pending default (exit $rc)"
+    fi
+
+    printf '%s\n' firefox firefox > "$pending"
+    : > "$SETTLE_CALLS"; rc=0
+    PATH=$defbin:$PATH NIXARCHY_FLAKE=$PWD/root $apply --no-preview <<< n >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && [ -f "$pending" ] && [ ! -s "$SETTLE_CALLS" ]; then
+      ok "declining the switch leaves a pending default in place"
+    else
+      bad "declining the switch settled or removed a pending default (exit $rc)"
+    fi
+
+    printf '%s\n' firefox firefox > "$pending"
+    : > "$SETTLE_CALLS"; rc=0
+    SETTLE_FAIL=1 PATH=$defbin:$PATH NIXARCHY_FLAKE=$PWD/root $apply --yes --no-preview </dev/null >"$PWD/settle-fail.out" 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && [ -f "$pending" ] &&
+       grep -qF "A default you chose is still pending; the next 'nixarchy apply' tries again." "$PWD/settle-fail.out"; then
+      ok "a failing setter leaves apply exiting 0 and tells the user it stays pending"
+    else
+      bad "a failing setter broke apply or missed the pending line (exit $rc): $(cat "$PWD/settle-fail.out")"
     fi
 
     [ "$fails" -eq 0 ] || exit 1

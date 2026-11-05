@@ -78,7 +78,7 @@ pkgs.testers.runNixOSTest {
     send("REMOVE bob-id")
     # Opening the reader processes both queued commands.
     machine.execute("timeout 5 ${pkgs.fprintd}/bin/fprintd-verify bob < /dev/null")
-    machine.wait_until_succeeds("journalctl -u fprintd --no-pager | grep -E 'alice-id.*not found in storage|not found in storage.*alice-id'")
+    machine.wait_until_succeeds("journalctl -u fprintd --no-pager | grep -E 'alice-id.*not found in storage|not found in storage.*alice-id'", timeout=60)
     assert "bob-id" not in stored(), "bob's reader print was not removed by the control command"
     journal = machine.succeed("journalctl -u fprintd --no-pager")
     assert not any("bob-id" in line and "not found in storage" in line for line in journal.splitlines()), journal

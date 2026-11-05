@@ -11,6 +11,7 @@
 # - hyprland-own-package: the titlebars plugin follows programs.hyprland.package.
 # - podman-own-config, nvidia-ctk-own: agent-local yields to the user's podman
 #   and toolkit settings (#1577).
+# - openssh: the bundled option hardens sshd, while the user's settings win (#1611).
 # - systempkg-own-ffmpeg: environment.systemPackages' buildEnv sets
 #   ignoreCollisions = true, so a clash resolves silently by meta.priority
 #   then order. The user's own ffmpeg-full must win over nixarchy's ffmpeg.
@@ -130,6 +131,40 @@ let
       c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
     ))
   ];
+  opensshScripts = [
+    (agentLocalCheck "openssh-on-reference" (
+      c:
+      !c.services.openssh.settings.PasswordAuthentication
+      && !c.services.openssh.settings.KbdInteractiveAuthentication
+      && !c.security.pam.services.sshd.unixAuth
+    ))
+    (agentLocalCheck "openssh-own-passwords" (
+      c:
+      c.services.openssh.settings.PasswordAuthentication
+      && !c.services.openssh.settings.KbdInteractiveAuthentication
+    ))
+    (agentLocalCheck "openssh-own-null" (c: c.services.openssh.settings.PasswordAuthentication == null))
+    (agentLocalCheck "openssh-plain-line" (
+      c:
+      c.services.openssh.settings.PasswordAuthentication
+      && c.services.openssh.settings.KbdInteractiveAuthentication
+    ))
+  ];
+
+  opensshMkDefault =
+    let
+      r = builtins.tryEval (configOf fixtures.openssh-own-mkdefault)
+        .services.openssh.settings.PasswordAuthentication;
+    in
+    if r.success then
+      ''
+        echo "openssh-own-mkdefault: FAIL expected the mkDefault conflict: the module's priority changed" >&2
+        fail=1
+      ''
+    else
+      ''
+        echo "openssh-own-mkdefault: ok, a loud evaluation error"
+      '';
 
   shQuote = lib.escapeShellArg;
 
@@ -239,6 +274,8 @@ pkgs.runCommand "nixarchy-coexistence"
     ${hyprlandScript}
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}
+    ${lib.concatStrings opensshScripts}
+    ${opensshMkDefault}
     if [ "$fail" = 1 ]; then
       exit 1
     fi

@@ -1,8 +1,8 @@
-# Plain NixOS modules a user might carry alongside nixarchy, including an
-# existing programs.nixarchy.preinstallsExclude. checks.coexistence
-# (tests/coexistence/default.nix) runs nixarchy's reference config through
-# each and checks it still works, per AGENTS.md#14. See #1162 -> #1163
-# for the worked example of what a coexistence bug looks like without one.
+# Plain NixOS modules a user might carry alongside nixarchy, some with a
+# programs.nixarchy.* of their own. checks.coexistence (tests/coexistence/
+# default.nix) runs nixarchy's reference config through each and checks it
+# still works, per AGENTS.md#14. See #1162 -> #1163 for the worked example of
+# what a coexistence bug looks like without one of these.
 {
   # The commonest pattern: add a package to the merged graphics-drivers env.
   # Use nixarchy's selected package: its Mesa follows Hyprland's own nixpkgs,
@@ -124,5 +124,43 @@
       # nixpkgs' NVIDIA module asserts this is chosen, as a real machine does.
       hardware.nvidia.open = true;
       hardware.nvidia-container-toolkit.enable = false;
+    };
+
+  openssh-on-reference =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+    };
+
+  openssh-own-passwords =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+      services.openssh.settings.PasswordAuthentication = true;
+    };
+
+  openssh-own-null =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+      services.openssh.settings.PasswordAuthentication = null;
+    };
+
+  openssh-own-mkdefault =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+      services.openssh.settings.PasswordAuthentication = lib.mkDefault true;
+    };
+
+  openssh-plain-line =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      services.openssh.enable = true;
     };
 }

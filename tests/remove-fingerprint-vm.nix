@@ -24,7 +24,11 @@ pkgs.testers.runNixOSTest {
         environment.FP_VIRTUAL_DEVICE_STORAGE = "/run/fprintd-virt/sock";
         serviceConfig = {
           RuntimeDirectory = "fprintd-virt";
-          ExecStart = lib.mkForce "${pkgs.fprintd}/libexec/fprintd --no-timeout";
+          # The unit file has its own ExecStart, so the empty entry clears it first.
+          ExecStart = lib.mkForce [
+            ""
+            "${pkgs.fprintd}/libexec/fprintd --no-timeout"
+          ];
         };
       };
     };
@@ -33,7 +37,7 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_unit("multi-user.target")
     # The first D-Bus request activates fprintd.
     machine.execute("${pkgs.fprintd}/bin/fprintd-list alice")
-    machine.wait_until_succeeds("test -S /run/fprintd-virt/sock")
+    machine.wait_until_succeeds("test -S /run/fprintd-virt/sock", timeout=60)
 
     def send(command):
         machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket, sys; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall((sys.argv[1] + \"\\n\").encode()); s.close()' " + command)

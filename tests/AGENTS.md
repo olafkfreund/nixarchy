@@ -310,7 +310,7 @@ What IS covered:
   `/dev/dri/renderD128`, and gliff allocates capture buffers with GBM on it
   even on the CPU tier, so capture ends in ENOENT. Frames and the GPU tier are
   `pkgs/verify.sh`'s `gliff-probe` rows, on real hardware; the ssh hop is
-  ssh's, and the session VM runs no sshd.
+  ssh's.
 
 **A configured value that equals the platform's default cannot vary with the
 thing that sets it** (found probing hypr-rdp's headless output, which
@@ -324,6 +324,19 @@ cannot be driven in a sandbox either. It reads the hostname from
 and reports `localhost` -- measured, not assumed. That is why the decision and
 the write live in `pkgs/sops-policy-add.nix`, so the check runs the code the
 CLI runs rather than a copy of it.
+
+## The account-copy holes: one machine, default nixarchy only
+
+`checks.session` runs a real `omarchy agent account copy` over loopback sshd, and
+`checks.account-copy` pins the failures in a sandbox (#1616). Neither reaches: a
+real second machine; an Arch end in either direction; a real envfs-off machine
+over SSH (`account-copy`'s leg A is the same failure without sshd); Codex and Grok,
+which share the transport and differ only in which files they carry; or login shells
+other than the session user's.
+
+`OMARCHY_PATH` may arrive by two routes: PAM, and bash's `SSH_SOURCE_BASHRC` via
+`/etc/bashrc`. <Supervisor: replace this sentence with what the `UsePAM no` run in
+step 5 measured.>
 
 ## The stub-only one: `pkg-new` never runs a real nix-init here
 
@@ -2065,3 +2078,11 @@ on 26.05, and the test script is type-checked.
 **What neither check reaches:** `omarchy-edge.yml`'s wiring is asserted only by
 variable name in the `report` step (and whether a timed-out job keeps its step
 outputs cannot be tested locally). Its first real run is after merge.
+
+## OpenSSH menu and login (#1611)
+
+`sshd-login` checks key login and refusal of password and keyboard-interactive
+login in a VM. `sshd-enable` checks the menu script's key gate and row changes;
+row 23 reads `reference`'s script because the vm turns sshd on itself. Neither
+check reaches a real menu click in a floating terminal or a key sshd will not
+use because of `~/.ssh` permissions (§3).

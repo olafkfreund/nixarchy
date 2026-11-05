@@ -42,9 +42,11 @@ gliff is a client of a compositor that is already running.
 The steps below take two machines, called `desk` (the one you connect to) and
 your own, from nothing to a connected window.
 
-1. **On `desk`,** set `services.openssh.enable = true;`, rebuild, and log into
-   Hyprland there. gliff is already installed unless
-   `programs.nixarchy.preinstallsExclude` lists it.
+1. **On `desk`,** either use *Setup > Security > SSHD*, which asks for your key
+   and turns passwords off (then skip the copy in step 2), or set
+   `services.openssh.enable = true;`, which leaves passwords on so that
+   `ssh-copy-id` works. Rebuild, and log into Hyprland there. gliff is already
+   installed unless `programs.nixarchy.preinstallsExclude` lists it.
 2. **On the machine you sit at,** make a key if `~/.ssh/id_ed25519` does not
    exist (`ssh-keygen -t ed25519`), then copy it over with
    `ssh-copy-id you@desk`. This step is required: the widget checks each

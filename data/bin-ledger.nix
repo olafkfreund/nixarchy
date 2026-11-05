@@ -42,7 +42,8 @@
 # So a row may also carry `allow`, a space-separated list of the behaviour
 # groups .github/scripts/check-bin-ledger.py finds in the shipped script --
 # ufw, systemctl-system, systemctl-user, etc-write, boot-write, modprobe,
-# account-tools, kernel-ctl, initrd-boot, rfkill, nmcli-radio, ctl-set. Same
+# account-tools, kernel-ctl, initrd-boot, rfkill, nmcli-radio, ctl-set,
+# remote-exec. Same
 # biconditional as everything else here: a script matching a group with no
 # allowance fails, and an allowance the script no longer matches fails too, so
 # an upstream cleanup is reported rather than assumed.
@@ -130,6 +131,11 @@
   "omarchy-agent-account-exec" = {
     class = "patch";
     reason = "Its mise install fallback refuses with exit 127 instead: nixarchy installs claude, codex and grok through Nix, and one it did not install (unfree off) stays not installed (#1386).";
+  };
+  "omarchy-agent-account-copy" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Sends logins over ssh -T to a receiver command omarchy-agent-account-transfer generates naming /bin/bash and /usr/bin/python3, which must resolve on the far end, with OMARCHY_PATH set there. On nixarchy that takes envfs; checks.session runs it over a real sshd, and checks.account-copy pins the failures (#1616).";
+    allow = "remote-exec";
   };
   "omarchy-install-ai-chatgpt" = {
     class = "patch";
@@ -592,8 +598,8 @@
   };
   "omarchy-setup-security-sshd" = {
     class = "vendor";
-    reason = "Vendored unchanged. Since v4.5.0-rc3 it enables and (re)starts sshd.service only once a key is authorized, then runs `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach.";
-    allow = "systemctl-system ufw";
+    reason = "Vendored unchanged. Since v4.5.0-rc3 it enables and (re)starts sshd.service only once a key is authorized, then runs `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach. Its remote-exec match is a false positive: the echo at the end only prints the ssh command to connect with.";
+    allow = "remote-exec systemctl-system ufw";
   };
   "omarchy-setup-security-sudoless-docker" = {
     class = "patch";
@@ -628,6 +634,11 @@
   "omarchy-theme-set" = {
     class = "patch";
     reason = "Three edits: `cp -r` from $OMARCHY_THEMES_PATH preserves the store's read-only directory modes, so the next switch cannot clean up; omarchy-theme-set-zed is appended, which upstream has no equivalent of; and the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429) adds is_video_path and the staged-background lookups it needs, carried as a patch and deleted by the quattro bump with the rest of it.";
+  };
+  "omarchy-theme-set-herdr-machines" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Runs `bash -l -s` on each herdr machine from the far end's PATH, so no fixed path is involved and the far end may be any OS (#1616).";
+    allow = "remote-exec";
   };
   "omarchy-theme-set-browser-policy" = {
     class = "patch";

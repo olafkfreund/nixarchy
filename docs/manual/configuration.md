@@ -569,7 +569,7 @@ programs.nixarchy.apps._1password = {
 
 Services — Tailscale, Syncthing, OpenSSH — are the companion
 catalogue in `data/services.nix` and a file of their own. A service nixarchy
-only relays gets upstream's own line, `services.openssh.enable = true;`; one it
+only relays gets upstream's own line, `services.flatpak.enable = true;`; one it
 integrates gets an option, `programs.nixarchy.services.tailscale.enable`. There
 is no `settings` passthrough on those, because upstream's options are still
 upstream's and are written beside ours:
@@ -589,7 +589,7 @@ All eleven entries of `data/services.nix`:
 | 32-bit graphics | Hardware | `hardware.graphics.enable32Bit = true;` |
 | Sandboxes (MicroVMs) | Development | `programs.nixarchy.services.microvm.enable = true;` |
 | Open WebUI (local chat) | Desktop | `programs.nixarchy.services.open-webui.enable = true;` |
-| OpenSSH server | Network | `services.openssh.enable = true;` |
+| OpenSSH server | Network | `programs.nixarchy.services.openssh.enable = true;` |
 | Podman | Development | `virtualisation.podman.enable = true;` |
 | Syncthing | Desktop | `programs.nixarchy.services.syncthing.enable = true;` |
 | Tailscale | Network | `programs.nixarchy.services.tailscale.enable = true;` |

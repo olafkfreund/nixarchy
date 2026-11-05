@@ -2362,6 +2362,12 @@ let
       on = builtins.elem "ts0" tailscaleTrustIface.on;
       off = builtins.elem "ts0" tailscaleTrustIface.off;
     };
+    opensshPasswordsOff = {
+      on = !opensshMenu.PasswordAuthentication && !opensshMenu.KbdInteractiveAuthentication;
+      off =
+        !(opensshPlain.PasswordAuthentication && opensshPlain.KbdInteractiveAuthentication)
+        || !(opensshModeA.PasswordAuthentication && opensshModeA.KbdInteractiveAuthentication);
+    };
     fleetDelayBeside = {
       on = fleet.delayTheirs == "10min";
       off = fleet.on.system.autoUpgrade.randomizedDelaySec == "10min";
@@ -3280,6 +3286,19 @@ let
       }).networking.firewall.trustedInterfaces;
     off = defaultMachine.networking.firewall.trustedInterfaces;
   };
+  opensshMenu =
+    (configBeside { programs.nixarchy.services.openssh.enable = true; }).services.openssh.settings;
+  opensshPlain = (configBeside { services.openssh.enable = true; }).services.openssh.settings;
+  # programs.nixarchy.enable off: the option alone must change nothing (Mode A).
+  opensshModeA =
+    (modeAOff.extendModules {
+      modules = [
+        {
+          programs.nixarchy.services.openssh.enable = true;
+          services.openssh.enable = true;
+        }
+      ];
+    }).config.services.openssh.settings;
   localAiIpv6 = configBeside {
     programs.nixarchy.localAi = {
       enable = true;

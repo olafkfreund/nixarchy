@@ -1,4 +1,4 @@
-# Plain NixOS modules a user might carry alongside nixarchy, with no
+# Plain NixOS modules a user might carry alongside nixarchy, some with a
 # programs.nixarchy.* of their own. checks.coexistence (tests/coexistence/
 # default.nix) runs nixarchy's reference config through each and checks it
 # still works, per AGENTS.md#14. See #1162 -> #1163 for the worked example of
@@ -143,4 +143,42 @@
       GroupOrder."0" = "Default";
     };
   };
+
+  openssh-on-reference =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+    };
+
+  openssh-own-passwords =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+      services.openssh.settings.PasswordAuthentication = true;
+    };
+
+  openssh-own-null =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+      services.openssh.settings.PasswordAuthentication = null;
+    };
+
+  openssh-own-mkdefault =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.openssh.enable = true;
+      services.openssh.settings.PasswordAuthentication = lib.mkDefault true;
+    };
+
+  openssh-plain-line =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      services.openssh.enable = true;
+    };
 }

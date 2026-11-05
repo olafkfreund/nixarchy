@@ -447,14 +447,20 @@ sets the same value through the NixOS option that owns it, inside
 - **Options, not the files.** Installing `sysctl.d/99-omarchy-sysctl.conf`
   through `environment.etc` would also work -- and would override a machine's
   own `boot.kernel.sysctl`, since a `99-` file sorts after NixOS's `60-nixos`.
-  Through the option at `mkDefault`, the machine's value wins. The cost is that
-  an Omarchy release changing a value is no longer carried automatically;
-  `tests/etc-overlay.nix` still forces a decision when a file is added or
-  dropped, but not when one is edited.
-- **`mkDefault` on every scalar; plain assignment on the two merging types**
+  Through the option, the machine's value wins. The cost is that an Omarchy release changing
+  a value is no longer carried automatically. checks.etc-sysctl makes a sysctl edit fail, and
+  tests/etc-overlay.nix forces a decision when any file is added or dropped. An edit to any
+  other native row's file is still silent.
+- **mkDefault on every scalar except the sysctls; plain assignment on the two merging types**
   (`boot.extraModprobeConfig`, `security.sudo.extraConfig` are lines), per the
   rule in `modules/services/default.nix`. Opting out of the USB autosuspend
   line therefore means overriding the lines, not unsetting a default.
+- **The sysctls are at mkOverride 1250, which departs from that rule.**
+  boot.kernel.sysctl merges through mergeOneOption (nixpkgs nixos/modules/config/sysctl.nix),
+  so two definitions at one priority are an evaluation error even with equal values, and a
+  user's own mkDefault sits at 1000 like ours. Measured: the owner's razer sets the BBR keys
+  that way and would stop evaluating. 1250 is the priority this file already documents for
+  i18n.inputMethod; mkOptionDefault would tie with a user's mkOptionDefault.
 - **Verified by evaluation, not by the diff.** One of upstream's values was
   already on every NixOS machine: nixpkgs' `nixos/modules/config/sysctl.nix`
   sets `fs.inotify.max_user_watches = 524288` by default, and a second

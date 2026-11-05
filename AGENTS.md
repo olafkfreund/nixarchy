@@ -846,7 +846,9 @@ files carry the full reasoning and the failure history.
   `mkForce` never on anything a user would set. The two exceptions the tree
   carries are where the user asked for force through an option
   (`bootSplash = "force"`) and where it corrects nixpkgs' own literal that no
-  user chooses (the rootless Docker unit's `ConditionUser`).
+  user chooses (the rootless Docker unit's `ConditionUser`). One priority departs from
+  mkDefault: boot.kernel.sysctl is at mkOverride 1250, because it merges through
+  mergeOneOption and a user's own mkDefault would tie (modules/AGENTS.md, #1615).
 - **Mode A is real.** Someone importing `nixosModules.nixarchy` into a
   configuration they already run must be untouched by anything opt-in.
   `tests/options.nix` asserts every option in both states for this reason —

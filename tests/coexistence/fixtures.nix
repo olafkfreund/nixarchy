@@ -126,6 +126,39 @@
       hardware.nvidia-container-toolkit.enable = false;
     };
 
+  # The owner's razer (modules/common/networking.nix there): mkDefault on four,
+  # plain on one. Its values equal ours, so this proves it evaluates, not who won.
+  sysctl-razer =
+    { lib, ... }:
+    {
+      boot.kernel.sysctl = {
+        "net.core.default_qdisc" = lib.mkDefault "fq";
+        "net.ipv4.tcp_congestion_control" = lib.mkDefault "bbr";
+        "net.ipv4.tcp_notsent_lowat" = lib.mkDefault 16384;
+        "net.ipv4.tcp_mtu_probing" = 1;
+        "net.ipv4.tcp_fastopen" = lib.mkDefault 3;
+      };
+    };
+
+  # A user's own mkDefault with different values: only this sees who won.
+  sysctl-own-mkdefault =
+    { lib, ... }:
+    {
+      boot.kernel.sysctl = {
+        "net.core.default_qdisc" = lib.mkDefault "fq_codel";
+        "net.ipv4.tcp_congestion_control" = lib.mkDefault "cubic";
+        "vm.swappiness" = lib.mkDefault 10;
+      };
+    };
+
+  # The advice in pkgs/omarchy/skills/nixos-performance/SKILL.md.
+  sysctl-own-plain = {
+    boot.kernel.sysctl = {
+      "net.core.default_qdisc" = "cake";
+      "net.ipv4.tcp_congestion_control" = "cubic";
+    };
+  };
+
   openssh-on-reference =
     { lib, ... }:
     {

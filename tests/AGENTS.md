@@ -1000,6 +1000,23 @@ when upstream changes, and force it to be long enough to be checkable by a
 person — `etc-overlay` throws on a reason under 80 characters for that reason
 alone. Reasons go stale silently; the keys cannot.
 
+## etc-sysctl compares values; every other native row is still a name
+
+`checks.etc-sysctl` reads the three `sysctl.d` files upstream ships, compares each key with
+the rendered `60-nixos.conf`, and sweeps a sentinel `mkDefault` over every `native` key. A
+key that differs needs a `differs` entry on its row in `data/etc-overlay.nix`, and that entry
+goes red when upstream moves again or the configuration stops differing.
+
+The holes, by name:
+
+- the other `native` rows, including the `key=value` drop-ins for systemd, logind, oomd,
+  NetworkManager, sudo and Docker logs, map to differently shaped options and are classified
+  by name only, so an edit to one of those files stays silent;
+- a key upstream deletes is not noticed, because the rendered file also holds nixpkgs' keys
+  and the user's, so only upstream's keys are walked. A dropped file is still `etc-overlay`'s;
+- `session` reads `/proc/sys` for nixarchy's own kernel only, so a user's kernel without
+  `tcp_bbr` runs `cubic` with one journal line and nothing here sees it.
+
 ## A verb check is not an arity check
 
 `checks.menu-verbs` proves that every verb a menu row runs is one its CLI

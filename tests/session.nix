@@ -364,6 +364,24 @@ pkgs.testers.runNixOSTest {
         assert "enabled" in binfmt, (
             "the " + reg + " binfmt registration is not enabled: " + binfmt)
 
+    # ---- the kernel runs what the sysctl file says (#1615) ---------------
+    # tcp_bbr and sch_fq are modules. One that cannot load leaves cubic and a
+    # single journal line, and every evaluated value still reads as right.
+    sysctl_conf = machine.succeed("cat /etc/sysctl.d/60-nixos.conf")
+    for sysctl_key in ("net.ipv4.tcp_congestion_control", "net.core.default_qdisc"):
+        sysctl_want = [
+            entry.split("=", 1)[1]
+            for entry in sysctl_conf.splitlines()
+            if entry.startswith(sysctl_key + "=")
+        ]
+        assert sysctl_want, sysctl_key + " is not in 60-nixos.conf:\n" + sysctl_conf
+        sysctl_running = machine.succeed(
+            "cat /proc/sys/" + sysctl_key.replace(".", "/")).strip()
+        print(sysctl_key + ": configured " + sysctl_want[0] + ", running " + sysctl_running)
+        assert sysctl_running == sysctl_want[0], (
+            sysctl_key + " is configured as " + sysctl_want[0]
+            + " and the kernel runs " + sysctl_running)
+
     # ---- the menu extension belongs to the user (#210) ------------------
     # Omarchy reads two menu files and merges the second over the first: the
     # defaults in $OMARCHY_PATH, and ~/.config/omarchy/extensions. Nixarchy's

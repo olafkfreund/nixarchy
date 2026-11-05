@@ -11,6 +11,8 @@
 # - hyprland-own-package: the titlebars plugin follows programs.hyprland.package.
 # - podman-own-config, nvidia-ctk-own: agent-local yields to the user's podman
 #   and toolkit settings (#1577).
+# - sysctl-razer, sysctl-own-mkdefault, sysctl-own-plain: the user's kernel
+#   tuning evaluates and keeps its values beside nixarchy's defaults.
 # - openssh: the bundled option hardens sshd, while the user's settings win (#1611).
 # - systempkg-own-ffmpeg: environment.systemPackages' buildEnv sets
 #   ignoreCollisions = true, so a clash resolves silently by meta.priority
@@ -166,6 +168,47 @@ let
         echo "openssh-own-mkdefault: ok, a loud evaluation error"
       '';
 
+  # boot.kernel.sysctl merges through mergeOneOption, so a tie is a throw. Forced
+  # to a bool inside tryEval, so it names the fixture and doesn't abort the check.
+  sysctlCheck =
+    name: want:
+    let
+      sysctl = (configOf fixtures.${name}).boot.kernel.sysctl;
+      got = builtins.tryEval (lib.all (k: sysctl.${k} == want.${k}) (builtins.attrNames want));
+    in
+    if !got.success then
+      ''
+        echo ${shQuote "${name}: FAIL did not evaluate: two definitions tie at one priority"} >&2
+        fail=1
+      ''
+    else if got.value then
+      ''
+        echo ${shQuote "${name}: ok"}
+      ''
+    else
+      ''
+        echo ${shQuote "${name}: FAIL the user's own value did not stand"} >&2
+        fail=1
+      '';
+  sysctlScripts = [
+    (sysctlCheck "sysctl-razer" {
+      "net.core.default_qdisc" = "fq";
+      "net.ipv4.tcp_congestion_control" = "bbr";
+      "net.ipv4.tcp_notsent_lowat" = 16384;
+      "net.ipv4.tcp_mtu_probing" = 1;
+      "net.ipv4.tcp_fastopen" = 3;
+    })
+    (sysctlCheck "sysctl-own-mkdefault" {
+      "net.core.default_qdisc" = "fq_codel";
+      "net.ipv4.tcp_congestion_control" = "cubic";
+      "vm.swappiness" = 10;
+    })
+    (sysctlCheck "sysctl-own-plain" {
+      "net.core.default_qdisc" = "cake";
+      "net.ipv4.tcp_congestion_control" = "cubic";
+    })
+  ];
+
   shQuote = lib.escapeShellArg;
 
   hyprlandScript =
@@ -274,6 +317,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${hyprlandScript}
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}
+    ${lib.concatStrings sysctlScripts}
     ${lib.concatStrings opensshScripts}
     ${opensshMkDefault}
     if [ "$fail" = 1 ]; then

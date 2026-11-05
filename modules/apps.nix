@@ -1845,6 +1845,10 @@ in
                     touch "$HOME/.ssh/authorized_keys" || return 1
                     chmod 600 "$HOME/.ssh/authorized_keys" || return 1
                     if ! grep -qxF "$1" "$HOME/.ssh/authorized_keys"; then
+                      # A last line with no newline would swallow this key, and passwords are about to go off.
+                      if [ -s "$HOME/.ssh/authorized_keys" ] && [ -n "$(tail -c 1 "$HOME/.ssh/authorized_keys")" ]; then
+                        echo >>"$HOME/.ssh/authorized_keys" || return 1
+                      fi
                       echo "$1" >>"$HOME/.ssh/authorized_keys" || return 1
                     fi
                   }

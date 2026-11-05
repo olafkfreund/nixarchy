@@ -220,7 +220,19 @@ pkgs.runCommand "nixarchy-sshd-enable"
       [ -n "$baked" ] && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["homeRead"] is True and d["sshdOn"] is False and d["otherSources"] == []' "$baked"
     }
 
-    for n in $(seq 1 23); do run_case "$n" "case$n"; done
+    # An existing last line with no newline must not swallow the key (Codex, #1631).
+    case24() {
+      reset_case
+      mkdir -p "$HOME/.ssh"
+      printf '# no keys' > "$HOME/.ssh/authorized_keys"
+      gum() { if [ "$1" = choose ]; then echo sshd.keyPaste; else echo "$GOOD_KEY"; fi; }
+      export -f gum
+      run_enable
+      enabled && grep -qxF "$good" "$HOME/.ssh/authorized_keys" &&
+        grep -qxF '# no keys' "$HOME/.ssh/authorized_keys"
+    }
+
+    for n in $(seq 1 24); do run_case "$n" "case$n"; done
     [ "$fails" -eq 0 ]
     echo 'sshd-enable: every case passed'
     touch $out

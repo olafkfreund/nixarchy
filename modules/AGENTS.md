@@ -1733,6 +1733,23 @@ its documentation says.
 This file is yours. Nothing regenerates or overwrites it once created;
 the current full list is always at /etc/nixarchy/services-template.nix.
 
+<a id="openssh-from-the-menu"></a>
+
+### OpenSSH from the menu
+
+The OpenSSH row is bundled because nixpkgs defaults both
+`PasswordAuthentication` and `KbdInteractiveAuthentication` to `true` (measured).
+The menu writes `programs.nixarchy.services.openssh.enable`, while declaring
+`services.openssh.enable` yourself keeps the upstream option: a rebuild cannot
+tell two identical lines apart, and nothing regenerates `services.nix`. The
+gate first refuses when sshd is already on from the machine's own config,
+because turning passwords off could lock out other accounts. It then checks
+other authorized-key sources, the user's declared keys, and a usable home key;
+if sshd will not read home keys, it refuses before asking for a GitHub or pasted
+key. One old-file case is not guarded: a
+commented OpenSSH row keeps its false note until the menu rewrites that row,
+because nixarchy promises not to edit the user's `services.nix` on its own.
+
 <a id="anything-at-all"></a>
 
 ### Anything at all

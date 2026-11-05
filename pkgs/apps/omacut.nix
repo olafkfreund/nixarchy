@@ -19,8 +19,8 @@ stdenv.mkDerivation (finalAttrs: {
   };
 
   # Third of the four applications Omarchy writes itself; see
-  # pkgs/apps/omawrite.nix for why they are packaged here and why none of them
-  # joins programs.nixarchy.preinstalls.
+  # pkgs/apps/omawrite.nix for why they are packaged here. They come through
+  # omarchyApps.enable.
   nativeBuildInputs = [
     qt6.qmake
     qt6.wrapQtAppsHook

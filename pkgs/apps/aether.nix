@@ -61,9 +61,7 @@ buildGoModule {
 
   # Sibling of pkgs/apps/omawrite.nix, omacalc.nix and omacut.nix: the fourth
   # of the applications Omarchy writes itself, none of which nixpkgs carries.
-  # Available through programs.nixarchy.apps.aether rather than added to the
-  # preinstalls, because a Wails binary is not something to give every machine
-  # whether or not anyone asked for it.
+  # On by default through omarchyApps.enable.
   #
   # Unlike its three siblings this is not a shell script or a small Qt program:
   # a Go backend and a Svelte frontend compiled into one binary and rendered

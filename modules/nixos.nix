@@ -625,12 +625,13 @@ in
         omarchy-install-preinstalls restores and Remove > Preinstalls takes
         away. Upstream has these on a fresh machine, so they are on here too.
 
-        Six of upstream's thirteen cannot be here: obsidian is unfree, so it
-        would abort the whole rebuild rather than fail on its own -- enable
-        `apps.obsidian` for it instead -- and aether, omacut, omacalc and
-        omawrite are Omarchy's own applications, not packaged in nixpkgs.
-        cliamp is, and is included: it arrived after this was first written.
-        lazydocker is already a runtime dependency.
+        Omarchy's own applications (Hype, Signed, Monologue, Omacalc, Omacut,
+        Omawrite, Aether) come through `omarchyApps.enable`, which follows this
+        option. obsidian is unfree, so it would abort the whole rebuild rather
+        than fail on its own: enable `apps.obsidian` for it instead. cliamp is
+        included. lazydocker is already a runtime dependency. OBS Studio,
+        Kdenlive and Xournal++ left with Omarchy 4.5; `nixarchy pkg add` brings
+        any of them back.
 
         gliff, Omarchy's Hyprland remote desktop over ssh, is included: it is in
         upstream's base packages rather than its preinstalls, and lives here so
@@ -725,7 +726,8 @@ in
         one app rather than the group.
 
         Names that match nothing are an error rather than a typo you find by
-        noticing the app is still installed.
+        noticing the app is still installed. obs-studio, kdenlive and xournalpp
+        left with Omarchy 4.5; those names are still accepted and do nothing.
       '';
     };
 
@@ -945,45 +947,38 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
-      {
-        # removeAttrs ignores a name that is not there, so a typo would leave
-        # the app installed and the user hunting for why. Named here instead.
-        assertion =
-          let
-            known = [
-              "pinta"
-              "libreoffice"
-              "xournalpp"
-              "obs-studio"
-              "moonlight-qt"
-              "kdenlive"
-              "gnome-disk-utility"
-              "sushi"
-              "cliamp"
-              "gliff"
-            ];
-          in
-          lib.all (n: builtins.elem n known) cfg.preinstallsExclude;
-        message =
-          "programs.nixarchy.preinstallsExclude names something that is not a "
-          + "preinstalled application: "
-          + lib.concatStringsSep " " (
-            lib.subtractLists [
-              "pinta"
-              "libreoffice"
-              "xournalpp"
-              "obs-studio"
-              "moonlight-qt"
-              "kdenlive"
-              "gnome-disk-utility"
-              "sushi"
-              "cliamp"
-              "gliff"
-            ] cfg.preinstallsExclude
-          )
-          + ". The set is: pinta libreoffice xournalpp obs-studio moonlight-qt "
-          + "kdenlive gnome-disk-utility sushi cliamp gliff.";
-      }
+      (
+        let
+          # Left with Omarchy 4.5. Still accepted, and do nothing, so a machine that
+          # already opted out keeps evaluating.
+          retired = [
+            "xournalpp"
+            "obs-studio"
+            "kdenlive"
+          ];
+          current = [
+            "pinta"
+            "libreoffice"
+            "moonlight-qt"
+            "gnome-disk-utility"
+            "sushi"
+            "cliamp"
+            "gliff"
+          ];
+        in
+        {
+          # removeAttrs ignores a name that is not there, so a typo would leave
+          # the app installed and the user hunting for why. Named here instead.
+          assertion = lib.all (n: builtins.elem n (current ++ retired)) cfg.preinstallsExclude;
+          message =
+            "programs.nixarchy.preinstallsExclude names something that is not a "
+            + "preinstalled application: "
+            + lib.concatStringsSep " " (lib.subtractLists (current ++ retired) cfg.preinstallsExclude)
+            + ". The set is: "
+            + lib.concatStringsSep " " current
+            + ".";
+        }
+      )
       {
         # versionAtLeast, not string >=: Nix compares strings lexicographically,
         # so "0.100.0" >= "0.55" is false and the day Hyprland reaches 0.100
@@ -1535,15 +1530,12 @@ in
             # -- pinta's is "Pinta", capitalised.
             lib.attrValues (
               lib.removeAttrs {
-                # omarchy-install-preinstalls, minus the six that cannot be here.
+                # omarchy-install-preinstalls, minus what cannot be here.
                 inherit (pkgs)
                   pinta
                   libreoffice
-                  xournalpp
-                  obs-studio
                   moonlight-qt
                   ;
-                inherit (pkgs.kdePackages) kdenlive;
 
                 # install/omarchy-base.packages. The GUIs manual sends people to
                 # Disks for formatting and SMART, and sushi is what makes Space
@@ -2219,11 +2211,14 @@ in
         )
       );
 
-      # Upstream's sysctl.d, value for value. mkDefault on each, so a machine's
-      # own boot.kernel.sysctl wins.
+      # Upstream's sysctl.d, value for value. 1250 rather than mkDefault: these
+      # merge through mergeOneOption, so a user's own mkDefault would tie and
+      # refuse to evaluate. Their value wins either way.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
-      kernel.sysctl = lib.mapAttrs (_: lib.mkDefault) {
+      kernel.sysctl = lib.mapAttrs (_: lib.mkOverride 1250) {
         "net.ipv4.tcp_mtu_probing" = 1;
+        "net.core.default_qdisc" = "fq";
+        "net.ipv4.tcp_congestion_control" = "bbr";
         "vm.swappiness" = 150;
         "vm.vfs_cache_pressure" = 50;
         "vm.page-cluster" = 0;
@@ -2313,6 +2308,19 @@ in
     environment.sessionVariables.QML_IMPORT_PATH = lib.mkIf cfg.owe.enable [
       "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}"
     ];
+
+    # Without defaults, sorted mimeinfo.cache hands PDFs to the browser.
+    # mkDefault per key avoids conflicting strings when a user picks a handler.
+    xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) {
+      "application/pdf" = "org.gnome.Evince.desktop";
+      "video/mp4" = "mpv.desktop";
+      "video/x-matroska" = "mpv.desktop";
+      "video/quicktime" = "mpv.desktop";
+      "video/webm" = "mpv.desktop";
+      "video/x-msvideo" = "mpv.desktop";
+      "video/mpeg" = "mpv.desktop";
+      "text/plain" = "nvim.desktop";
+    };
 
     xdg.portal = {
       enable = lib.mkDefault true;

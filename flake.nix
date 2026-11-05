@@ -2272,6 +2272,13 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # #1616: what a destination does with the receiver the sender generates, when
+          # it has no envfs or no OMARCHY_PATH. checks.session has the working case.
+          account-copy = import ./tests/account-copy.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # `nixarchy pkg new` against stub nix-init and nix: the draft is
           # kept when its build fails, the placeholder hash is filled in from
           # the failed build, and a reshaped apps.nix is printed at rather

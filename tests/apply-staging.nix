@@ -373,6 +373,8 @@ pkgs.runCommand "nixarchy-apply-staging"
     fi
 
     # ---- pending defaults settle after a switch (#1623) -------------------
+    # The --log cases above stub exec; left exported, apply's `exec 9>` exits 0 here.
+    unset -f exec
     export XDG_STATE_HOME=$HOME/.local/state
     defbin=$PWD/defbin
     mkdir -p "$defbin" "$XDG_STATE_HOME/nixarchy"

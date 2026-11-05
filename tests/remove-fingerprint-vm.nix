@@ -50,8 +50,14 @@ pkgs.testers.runNixOSTest {
     for user in ("alice", "bob"):
         if user == "bob":
             machine.succeed(f"sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger {user} > /tmp/enroll-{user} 2>&1 < /dev/null &")
-        send(f"SCAN {user}-id")
-        machine.wait_until_succeeds(f"grep -q 'enroll-completed' /tmp/enroll-{user}", timeout=60)
+        # fprintd identifies first to catch a duplicate, which takes a scan of its own.
+        for _ in range(20):
+            send(f"SCAN {user}-id")
+            if machine.execute(f"grep -q enroll-completed /tmp/enroll-{user}")[0] == 0:
+                break
+            machine.sleep(1)
+        else:
+            raise Exception(machine.succeed(f"cat /tmp/enroll-{user}"))
         machine.succeed(f"test -d /var/lib/fprint/{user}")
     before = stored()
     assert "alice-id" in before and "bob-id" in before, before

@@ -571,8 +571,9 @@ seen failing:
     the accepted-agent parse found 0 ids; ... This check is refusing rather than passing.
 
 **What it cannot reach:** whether `openclaw` actually launches once installed,
-and whether the three llm-agents.nix attribute names (`cursor-agent`,
-`hermes-agent`, `muse-code`) are still correct. The second is a claim about
+and whether the six llm-agents.nix attribute names
+(`kimi-code`, `minimax-code`, `freebuff`, `command-code`, `ori`, `hermes-agent`)
+are still correct. The second is a claim about
 another repository printed to users, and nothing here notices when it goes
 stale -- a source of quietly wrong advice rather than a broken build.
 

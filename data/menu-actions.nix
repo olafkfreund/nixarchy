@@ -83,35 +83,35 @@
   "setup.default.agent.qwen" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.browser.brave" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.browser.brave-origin" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.browser.chrome" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.browser.chromium" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.browser.edge" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.browser.firefox" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.browser.zen" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.cursor" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.emacs" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.helix" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.neovim" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.sublime" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.vim" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.vscode" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.zed" =
-    "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.network.dns.cloudflare" =
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.network.dns.custom" =

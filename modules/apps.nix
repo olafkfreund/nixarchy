@@ -669,12 +669,6 @@ let
           description = "A bootable image that reinstalls this machine's system on new hardware. Not a backup: it carries none of your files";
         };
 
-        # Upstream gates these on Arch's binary names (#1303): nixpkgs' helix
-        # installs `hx`, nixarchy's Zen is the flake's `zen-beta`. The setter and
-        # launcher patches in pkgs/omarchy/default.nix name the same binaries.
-        "setup.default.editor.helix".when = "omarchy-cmd-present hx";
-        "setup.default.browser.zen".when = "omarchy-cmd-present zen-beta";
-
         "install.aur" = {
           when = "false";
         };

@@ -158,6 +158,10 @@ pkgs.runCommand "edge-report"
     has wording-unlisted 'upstream candidate failed; investigate'
     hasnt wording-unlisted 'needs a classification row'
     reset
+    go PROMOTED=true FALLBACK=true HELD_BY=etc-sysctl $HELD
+    ok0 wording-etc-sysctl
+    has wording-etc-sysctl 'a recorded sysctl decision'
+    reset
     go PROMOTED=true FALLBACK=true $HELD
     ok0 wording-none
     has wording-none 'upstream candidate failed; investigate'

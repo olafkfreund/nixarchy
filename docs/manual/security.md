@@ -109,6 +109,34 @@ or, for fingerprint, `services.fprintd.enable = true` plus
 `security.pam.services.sudo.fprintAuth = true` and the same for `polkit-1`.
 Rebuild, and the enrolled key or print is accepted.
 
+### Removing a fingerprint
+
+*Remove > Security > Fingerprint* deletes your prints: from the reader first, while fprintd
+can still reach it, and then your templates under `/var/lib/fprint`. Other accounts' prints
+stay, and it does not ask for confirmation beyond `sudo`. If you change your mind, enrol again.
+
+What it does not do:
+
+- **Turn fingerprint login off.** That is still your configuration: turn off `services.fprintd`
+  (`fprintAuth` follows it), then Apply changes.
+- **Reach a disk snapshot.** Snapshots taken since you enrolled hold a copy until they are
+  deleted. `sudo snapper -c root list` shows the boot snapshots.
+- **Reach a reader that is not there.** With no reader attached it removes the files, and any
+  copy on the reader itself stays there, with no way left to address it.
+- **Press on after a real failure.** If fprintd refuses, the files stay, because they are how
+  fprintd finds the reader's copy. Press Remove again.
+
+If you already turned `services.fprintd` off, your templates are still on disk:
+
+1. If the reader might store prints itself, or you are not sure, turn `services.fprintd` back on,
+   Apply changes, press Remove, turn it off, and Apply changes again. Removing the files first
+   leaves the reader's copy out of reach for good.
+2. Otherwise: `sudo rm -rf -- /var/lib/fprint/<user>`, with the account written out. `$USER` is
+   wrong in a root shell.
+
+A factory reset keeps fingerprint templates, in the `/var/lib` it sets aside, and the reader keeps
+its own, so run Remove first.
+
 ## Passwordless sudo
 
 Not a toggle here, on purpose. Upstream's `omarchy-sudo-passwordless`

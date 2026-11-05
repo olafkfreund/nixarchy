@@ -46,6 +46,19 @@
       environment.systemPackages = [ pkgs.ffmpeg-full ];
     };
 
+  systempkg-own-vi =
+    { pkgs, ... }:
+    {
+      environment.systemPackages = [ (pkgs.writeShellScriptBin "vi" "echo own-vi-marker") ];
+    };
+
+  neovim-vialias = {
+    programs.neovim = {
+      enable = true;
+      viAlias = true;
+    };
+  };
+
   # #1612: a machine that already opted out of an app Omarchy 4.5 retired.
   preinstalls-exclude-retired = {
     programs.nixarchy.preinstallsExclude = [

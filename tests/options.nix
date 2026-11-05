@@ -2237,6 +2237,17 @@ let
       off = (configWith { allowUnfree = false; }).nixpkgs.config.allowUnfree or false;
     };
 
+    viCommand =
+      let
+        hasVi = c: pkgs.lib.any (p: (p.name or "") == "vi") c.environment.systemPackages;
+      in
+      {
+        on = hasVi defaultMachine;
+        off = hasVi (configWith {
+          enable = false;
+        });
+      };
+
     browserThemeUser = {
       # null is the default, so this one reads the other way round: the rules
       # appear when a user is named.

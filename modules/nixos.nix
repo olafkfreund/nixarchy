@@ -1394,6 +1394,7 @@ in
         ++ map lib.lowPrio (
           builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
         )
+        ++ [ (lib.lowPrio (pkgs.writeShellScriptBin "vi" ''exec nvim "$@"'')) ]
         # sessionPackages alone does not populate
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.

@@ -77,8 +77,8 @@ users.users.you.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA... you@host" ]
 
 **A machine enabled from the menu before this change keeps its passwords.** First
 check you can log in with a key. Then replace `services.openssh.enable = true;` in
-`~/.config/nixarchy/services.nix` with the `programs.nixarchy` line above, and run
-`nixarchy-apply`.
+`~/.config/nixarchy/services.nix` with the
+`programs.nixarchy.services.openssh.enable` line above, and run `nixarchy-apply`.
 
 `services.openssh.openFirewall` defaults to `true`, so port 22 opens with it.
 Upstream rate-limits port 22 with `ufw limit`; nothing equivalent is set here.

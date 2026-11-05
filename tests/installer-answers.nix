@@ -251,7 +251,9 @@ pkgs.runCommand "nixarchy-installer-answers"
           gum_n=$(cat gum-count)
           gum_n=$((gum_n + 1))
           printf '%s\n' "$gum_n" > gum-count
-          sed -n "''${gum_n}p" pw-input
+          # Past the fixture's answers, a fixed one: an unexpected refusal must fail the case, not loop.
+          answer=$(sed -n "''${gum_n}p" pw-input)
+          printf '%s\n' "''${answer:-zz}"
         }
         ui_gum_pad() { echo 0; }
         ui_left() { printf '%s\n' "$*"; }

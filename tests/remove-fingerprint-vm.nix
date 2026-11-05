@@ -9,7 +9,6 @@ pkgs.testers.runNixOSTest {
     { lib, ... }:
     {
       services.fprintd.enable = true;
-      security.polkit.enable = true;
       users.users = {
         alice = {
           isNormalUser = true;
@@ -18,8 +17,11 @@ pkgs.testers.runNixOSTest {
         };
         bob.isNormalUser = true;
       };
-      security.sudo.wheelNeedsPassword = false;
-      security.pam.services.omarchy-lock-password = { };
+      security = {
+        polkit.enable = true;
+        sudo.wheelNeedsPassword = false;
+        pam.services.omarchy-lock-password = { };
+      };
       environment.systemPackages = [ pkgs.pamtester ];
       systemd.services.fprintd = {
         environment.FP_VIRTUAL_DEVICE_STORAGE = "/run/fprintd-virt/sock";

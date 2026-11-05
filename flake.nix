@@ -125,7 +125,7 @@
 
     # Why: docs/internals/flake.md#gliff-from-a-non-flake-input-pinned-to-a-tag
     gliff = {
-      url = "github:omacom/gliff/v0.4.1";
+      url = "github:omacom/gliff/v0.4.2";
       flake = false;
     };
 

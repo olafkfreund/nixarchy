@@ -2219,11 +2219,14 @@ in
         )
       );
 
-      # Upstream's sysctl.d, value for value. mkDefault on each, so a machine's
-      # own boot.kernel.sysctl wins.
+      # Upstream's sysctl.d, value for value. 1250 rather than mkDefault: these
+      # merge through mergeOneOption, so a user's own mkDefault would tie and
+      # refuse to evaluate. Their value wins either way.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
-      kernel.sysctl = lib.mapAttrs (_: lib.mkDefault) {
+      kernel.sysctl = lib.mapAttrs (_: lib.mkOverride 1250) {
         "net.ipv4.tcp_mtu_probing" = 1;
+        "net.core.default_qdisc" = "fq";
+        "net.ipv4.tcp_congestion_control" = "bbr";
         "vm.swappiness" = 150;
         "vm.vfs_cache_pressure" = 50;
         "vm.page-cluster" = 0;

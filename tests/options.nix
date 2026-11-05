@@ -2210,6 +2210,21 @@ let
         }).i18n.inputMethod.type == "fcitx5";
     };
 
+    # Mode A: the addon list is ours only while nixarchy is on.
+    inputMethodAddons = {
+      on =
+        pkgs.lib.all
+          (n: builtins.elem n (map (p: p.pname or "") defaultMachine.i18n.inputMethod.fcitx5.addons))
+          [
+            "fcitx5-mozc"
+            "fcitx5-hangul"
+            "fcitx5-chewing"
+            "fcitx5-table-extra"
+            "fcitx5-chinese-addons"
+          ];
+      off = (configWith { enable = false; }).i18n.inputMethod.fcitx5.addons != [ ];
+    };
+
     # nixarchy allows unfree because most of the Install menu is unfree. The
     # half worth testing is the other one: a user who wants nixpkgs' own policy
     # back must be able to have it.

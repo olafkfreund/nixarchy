@@ -3033,7 +3033,8 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds(desktop_user(unitctl + "is-active omarchy-fcitx5"), timeout=60)
     for engine, keys, expected in (
         ("mozc", "nihon ", "日本"),
-        ("hangul", "dkssud ", "안녕"),
+        # The space commits the syllable, and Hangul then types the space itself.
+        ("hangul", "dkssud ", "안녕 "),
         ("pinyin", "nihao ", "你好"),
         ("chewing", "su3cl3", "你好"),
         ("cangjie5", "a ", "日"),

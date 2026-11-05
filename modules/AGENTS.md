@@ -2441,11 +2441,13 @@ nixpkgs `9c4790e0e8` moved opencode to 2.2.5 with a wrong `node_modules` hash, a
 second, so every machine that pins opencode into Nixi fails to build, and a nixpkgs
 bump can't merge.
 
-The override in `modules/home.nix` sits on `services.nixi.package` and not in
-`nixpkgs.overlays`, because nixarchy sets no global overlay (the reason is in
-`modules/services/default.nix`). It applies only while nixpkgs has exactly the wrong
-hash, so it stops applying once the pin moves, and can then be deleted.
+The fix is `pkgs/opencode-hash-fixed.nix`, called at each place nixarchy names
+opencode: `services.nixi.package`, `apps.opencode`, `localAi.agents` and the
+`agent-claude` MicroVM template. It isn't in `nixpkgs.overlays`, because nixarchy sets no
+global overlay (the reason is in `modules/services/default.nix`). It applies only while
+nixpkgs has exactly the wrong hash, so it stops applying once the pin moves. Then delete
+the file and its four callers.
 
-**It covers Nixi only.** `programs.nixarchy.apps.opencode` and `localAi.agents` take
-`pkgs.opencode` directly, so choosing either fails the same way until the channel moves.
+**A user's own `pkgs.opencode` still fails** until the channel moves, including one a
+Mode A user names themselves. That's nixpkgs' bug, and only a global overlay could reach it.
 

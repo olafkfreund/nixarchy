@@ -147,6 +147,15 @@ let
     cmakeFlags = (o.cmakeFlags or [ ]) ++ [ "-DENABLE_BROWSER=OFF" ];
   });
 
+  # Env set here, not on the unit: Environment= and path would also reach the daemon.
+  # PATH appends so checks.input-methods can stub hyprctl.
+  fcitx5AlignProfile = pkgs.writeShellScript "omarchy-fcitx5-align-profile" ''
+    export OMARCHY_PATH=${cfg.package}/share/omarchy
+    export PYTHONPATH=$OMARCHY_PATH/default/input-methods
+    export PATH=$PATH:${config.programs.hyprland.package}/bin
+    exec ${pkgs.python3}/bin/python3 ${../pkgs/omarchy/fcitx5-align-profile.py}
+  '';
+
   # providedSessions has to match the .desktop basename or NixOS refuses it.
   #
   # The label is Nixarchy and the id stays `omarchy`, which is not an
@@ -2064,6 +2073,11 @@ in
             # its bus name, and a clean exit still leaves no input method.
             Restart = "always";
             RestartSec = 2;
+          }
+          // lib.optionalAttrs (config.i18n.inputMethod.fcitx5.settings.inputMethod == { }) {
+            # "-": a hyprctl that does not answer must not stop fcitx5.
+            # A profile in ~/.config would shadow the user's /etc/xdg/fcitx5/profile.
+            ExecStartPre = "-${fcitx5AlignProfile}";
           };
         };
       };

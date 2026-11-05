@@ -53,20 +53,35 @@ to opt into the root-owned daemon.
 
 ## SSH
 
-*Setup > Security > SSHD* in the menu is upstream's script, and it cannot
-finish here: its first step is `omarchy-pkg-add openssh`, which exits 1 by
-design (see [the philosophy](philosophy.md)), and the script runs under
-`set -e`. Declare it instead:
+*Setup > Security > SSHD* in the menu asks for your public key, from GitHub or
+pasted, and turns on SSH with password logins off for every account:
+
+```nix
+programs.nixarchy.services.openssh.enable = true;
+```
+
+It looks for a key in `~/.ssh/authorized_keys` and in
+`users.users.you.openssh.authorizedKeys`. It will not turn on without one, and
+it refuses on a machine whose own config already runs sshd, where it cannot see
+who would lose access.
+
+To declare it yourself, turn passwords off beside it. On its own,
+`services.openssh.enable = true;` accepts them:
 
 ```nix
 services.openssh.enable = true;
+services.openssh.settings.PasswordAuthentication = false;
+services.openssh.settings.KbdInteractiveAuthentication = false;
 users.users.you.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA... you@host" ];
 ```
 
+**A machine enabled from the menu before this change keeps its passwords.** First
+check you can log in with a key. Then replace `services.openssh.enable = true;` in
+`~/.config/nixarchy/services.nix` with the
+`programs.nixarchy.services.openssh.enable` line above, and run `nixarchy-apply`.
+
 `services.openssh.openFirewall` defaults to `true`, so port 22 opens with it.
-Upstream rate-limits port 22 with `ufw limit`; nothing equivalent is set here,
-so keep password authentication off (`settings.PasswordAuthentication =
-false`) rather than relying on rate limiting.
+Upstream rate-limits port 22 with `ufw limit`; nothing equivalent is set here.
 
 ## Remote desktop
 

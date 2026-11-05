@@ -2018,6 +2018,9 @@
             # tests/skill-parity.nix and #643.
             "skill-parity"
             "sops-evaluates"
+            "sshd-enable"
+            # A real ssh login against the menu's sshd, and the plain line as control (#1611). Needs KVM.
+            "sshd-login"
             "swap-guard"
             "switch-indicator"
             "try-nixarchy"
@@ -2265,6 +2268,13 @@
           # Edge carry (#1386): mise's [wrappers] route claude through the selected
           # account, and the exec refuses a mise install.
           agent-account-routing = import ./tests/agent-account-routing.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #1616: what a destination does with the receiver the sender generates, when
+          # it has no envfs or no OMARCHY_PATH. checks.session has the working case.
+          account-copy = import ./tests/account-copy.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };

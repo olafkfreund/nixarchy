@@ -13,6 +13,7 @@
 #   and toolkit settings (#1577).
 # - sysctl-razer, sysctl-own-mkdefault, sysctl-own-plain: the user's kernel
 #   tuning evaluates and keeps its values beside nixarchy's defaults.
+# - openssh: the bundled option hardens sshd, while the user's settings win (#1611).
 # - systempkg-own-ffmpeg: environment.systemPackages' buildEnv sets
 #   ignoreCollisions = true, so a clash resolves silently by meta.priority
 #   then order. The user's own ffmpeg-full must win over nixarchy's ffmpeg.
@@ -128,6 +129,40 @@ let
     ))
     (agentLocalCheck "nvidia-ctk-own" (c: !c.hardware.nvidia-container-toolkit.enable))
   ];
+  opensshScripts = [
+    (agentLocalCheck "openssh-on-reference" (
+      c:
+      !c.services.openssh.settings.PasswordAuthentication
+      && !c.services.openssh.settings.KbdInteractiveAuthentication
+      && !c.security.pam.services.sshd.unixAuth
+    ))
+    (agentLocalCheck "openssh-own-passwords" (
+      c:
+      c.services.openssh.settings.PasswordAuthentication
+      && !c.services.openssh.settings.KbdInteractiveAuthentication
+    ))
+    (agentLocalCheck "openssh-own-null" (c: c.services.openssh.settings.PasswordAuthentication == null))
+    (agentLocalCheck "openssh-plain-line" (
+      c:
+      c.services.openssh.settings.PasswordAuthentication
+      && c.services.openssh.settings.KbdInteractiveAuthentication
+    ))
+  ];
+
+  opensshMkDefault =
+    let
+      r = builtins.tryEval (configOf fixtures.openssh-own-mkdefault)
+        .services.openssh.settings.PasswordAuthentication;
+    in
+    if r.success then
+      ''
+        echo "openssh-own-mkdefault: FAIL expected the mkDefault conflict: the module's priority changed" >&2
+        fail=1
+      ''
+    else
+      ''
+        echo "openssh-own-mkdefault: ok, a loud evaluation error"
+      '';
 
   # boot.kernel.sysctl merges through mergeOneOption, so a tie is a throw. Forced
   # to a bool inside tryEval, so it names the fixture and doesn't abort the check.
@@ -258,6 +293,8 @@ pkgs.runCommand "nixarchy-coexistence"
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}
     ${lib.concatStrings sysctlScripts}
+    ${lib.concatStrings opensshScripts}
+    ${opensshMkDefault}
     if [ "$fail" = 1 ]; then
       exit 1
     fi

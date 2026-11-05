@@ -2049,6 +2049,11 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.boot-hang-detect
 
+      # checks.sshd-login is a nixosTest and needs the /dev/kvm set up above (#1611).
+      - name: The menu's sshd refuses passwords, and the plain line still takes them
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.sshd-login
+
       - name: Create a box offline, and pin what enter does without a network
         if: needs.gate.outputs.relevant == 'true'
         # checks.box-boot: the pinned image is preloaded from the store

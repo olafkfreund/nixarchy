@@ -118,61 +118,64 @@ pkgs.testers.runNixOSTest {
   # guard runs against a real absent /sys/firmware/efi, as root, the way it
   # would on a user's machine. Same answers file and a spare disk, so "refused
   # AND the disk is bare" is assertable the same way as above.
-  nodes.bios =
-    { pkgs, ... }:
-    {
-      environment = {
-        systemPackages = [
-          inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
-        ];
-        etc."nixarchy/answers".text = ''
-          device=/dev/vdb
-          encrypt=no
-          recovery_passphrase=rescue-me
-          hostname=installed
-          username=omarchy
-          password_hash=${passwordHash}
-          timezone=UTC
-          keymap=us
-        '';
-      };
-      virtualisation.emptyDiskImages = [
-        {
-          size = 32768;
-          driveConfig.deviceExtraOpts.serial = "nixarchy-bios-refusal-target";
-        }
-      ];
-    };
-
-  nodes.offlinede =
-    { pkgs, ... }:
-    {
-      environment = {
-        systemPackages = [
-          inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
-        ];
-        etc."nixarchy-iso".text = "";
-        etc."nixarchy/answers".text = ''
-          device=/dev/vdb
-          encrypt=no
-          recovery_passphrase=rescue-me
-          hostname=installed
-          username=omarchy
-          password_hash=${passwordHash}
-          timezone=UTC
-          keymap=de-latin1
-        '';
-      };
-      virtualisation = {
-        useEFIBoot = true;
-        emptyDiskImages = [
+  nodes = {
+    bios =
+      { pkgs, ... }:
+      {
+        environment = {
+          systemPackages = [
+            inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
+          ];
+          etc."nixarchy/answers".text = ''
+            device=/dev/vdb
+            encrypt=no
+            recovery_passphrase=rescue-me
+            hostname=installed
+            username=omarchy
+            password_hash=${passwordHash}
+            timezone=UTC
+            keymap=us
+          '';
+        };
+        virtualisation.emptyDiskImages = [
           {
             size = 32768;
-            driveConfig.deviceExtraOpts.serial = "nixarchy-offline-keyboard-target";
+            driveConfig.deviceExtraOpts.serial = "nixarchy-bios-refusal-target";
           }
         ];
       };
-    };
+
+    offlinede =
+      { pkgs, ... }:
+      {
+        environment = {
+          systemPackages = [
+            inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
+          ];
+          etc."nixarchy-iso".text = "";
+          etc."nixarchy/answers".text = ''
+            device=/dev/vdb
+            encrypt=no
+            recovery_passphrase=rescue-me
+            hostname=installed
+            username=omarchy
+            password_hash=${passwordHash}
+            timezone=UTC
+            keymap=de-latin1
+          '';
+        };
+        virtualisation = {
+          useEFIBoot = true;
+          emptyDiskImages = [
+            {
+              size = 32768;
+              driveConfig.deviceExtraOpts.serial = "nixarchy-offline-keyboard-target";
+            }
+          ];
+        };
+      };
+
+  };
 
   testScript = ''
     # The BIOS machine first: its whole test is one command, and a refusal

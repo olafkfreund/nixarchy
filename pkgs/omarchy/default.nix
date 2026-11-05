@@ -1332,6 +1332,14 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
                       --replace-fail 'command="zen-browser"' 'command="zen-beta"'
 
+                    # #1623: missing defaults are enabled declaratively, then set after rebuild.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
+                      --replace-fail 'omarchy-install-browser "$browser" || exit 1' 'exec nixarchy-default-install browser "$browser" "$command"' \
+                      --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
+                      --replace-fail "$(cat ${./default-editor-install.upstream.sh})" 'exec nixarchy-default-install editor "$selection" "$editor"' \
+                      --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
+
                     # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
                     substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
                       --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'

@@ -41,7 +41,7 @@ pkgs.testers.runNixOSTest {
         machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket, sys; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(sys.argv[1].encode()); s.close()' '" + command + "'")
 
     def stored():
-        return machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(b\"LIST\"); print(s.recv(4096).decode())'")
+        return machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(b\"LIST\"); print(b\"\".join(iter(lambda: s.recv(4096), b\"\")).decode())'")
 
     machine.succeed("sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger alice > /tmp/enroll-alice 2>&1 < /dev/null &")
     machine.wait_until_succeeds("test -S /run/fprintd-virt/sock", timeout=60)

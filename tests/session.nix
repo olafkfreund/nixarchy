@@ -109,6 +109,38 @@ let
         patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1
       '';
 
+  inputMethodDriver = pkgs.writeText "session-input-methods.py" ''
+    import json
+    from pathlib import Path
+    import subprocess
+    import sys
+    import typing_setup as t
+
+    action = sys.argv[1]
+    if action == "input":
+        group, layout, items = t.setup.live_group()
+        catalog, _ = t.input_catalog(items)
+        rows = t.picker_rows(catalog, [])
+        t.apply_selection("input", {"catalog": catalog, "overrides": dict(items)}, [rows[sys.argv[2]][1:]])
+    elif action == "keyboard":
+        catalog = t.keyboard_catalog()
+        t.apply_selection("keyboard", {"catalog": catalog}, [t.picker_rows(catalog, [])[sys.argv[2]][1:]])
+    elif action == "group":
+        print(json.dumps(t.setup.live_group()))
+    elif action == "stock-profile":
+        path = Path.home() / ".config/fcitx5/profile"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(t.setup.profile_text("us", "none"))
+    elif action == "terminal":
+        reply = subprocess.check_output([
+            "hyprctl", "dispatch",
+            "hl.dsp.exec_cmd(\"xdg-terminal-exec -e sh -c 'cat > /tmp/typed'\")"
+        ], text=True).strip()
+        assert reply == "ok", "terminal dispatch: " + reply
+    else:
+        raise SystemExit("unknown input-method probe: " + action)
+  '';
+
   # #1616: the real sender, ssh -T, sshd, a login shell, envfs and the receiver,
   # with nothing rewritten. HOME moves only on the sending side; ssh finds its key
   # through the passwd entry, so the far side is omarchy's real home.
@@ -3034,6 +3066,134 @@ pkgs.testers.runNixOSTest {
         "#1155: a panel, menu or overlay re-registered its IpcHandler across a "
         "restart (counts above) -- panelEntryModel should have kept its Loader:\n"
         + journal)
+
+    # ---- live input methods, through compositor keys (#1614) -------------
+    # export, not a prefix: a prefix reaches neither $(...), nor && and |, nor
+    # the command's own $OMARCHY_PATH.
+    def desktop_user(cmd):
+        return ("su omarchy -c 'export XDG_RUNTIME_DIR=/run/user/1000"
+                " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+                " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+                " OMARCHY_PATH=" + omarchy_path +
+                " PYTHONPATH=" + omarchy_path + "/default/input-methods; " + cmd + "'")
+
+    import re
+    picker_source = machine.succeed(desktop_user(
+        "cat $OMARCHY_PATH/default/input-methods/typing_setup.py"))
+    picker_interpreter = re.search(r'on_change = \["([^"]+)",', picker_source)
+    assert picker_interpreter, "the patched picker interpreter was not found"
+    interpreter = picker_interpreter.group(1)
+    assert interpreter.startswith("/nix/store/") and interpreter.endswith("/bin/python3"), (
+        "the patched picker interpreter is missing: " + repr(interpreter))
+
+    def input_driver(action, name=""):
+        return machine.succeed(desktop_user(
+            interpreter + " ${inputMethodDriver} " + action + (" " + name if name else "")))
+
+    def group():
+        return json.loads(input_driver("group"))
+
+    def open_typing_terminal():
+        machine.succeed("rm -f /tmp/typed")
+        input_driver("terminal")
+        machine.wait_for_file("/tmp/typed")
+
+    def finish_typing(keys, expected, label):
+        machine.send_chars(keys)
+        machine.send_key("ret")
+        machine.send_key("ctrl-d")
+        machine.send_key("ctrl-d")
+        typed = machine.wait_until_succeeds("test -s /tmp/typed && cat /tmp/typed", timeout=30)
+        assert typed.rstrip("\n") == expected, (
+            f"{label}: expected {expected!r}, got {typed.rstrip(chr(10))!r}")
+
+    def type_keys(keys, expected, label, method):
+        open_typing_terminal()
+        machine.succeed(desktop_user("fcitx5-remote -s " + method))
+        finish_typing(keys, expected, label)
+
+    unitctl = "systemctl --user "
+    machine.wait_until_succeeds(desktop_user(unitctl + "is-active omarchy-fcitx5"), timeout=60)
+    for engine, keys, expected in (
+        ("mozc", "nihon ", "日本"),
+        # The space commits the syllable, and Hangul then types the space itself.
+        ("hangul", "dkssud ", "안녕 "),
+        ("pinyin", "nihao ", "你好"),
+        ("chewing", "su3cl3", "你好"),
+        ("cangjie5", "a ", "日"),
+    ):
+        input_driver("input", engine)
+        type_keys(keys, expected, engine, engine)
+        print(f"#1614: {engine} composed {expected}")
+
+    # With the terminal focused, cycle through the shell's QML input reader.
+    input_driver("input", "mozc")
+    open_typing_terminal()
+    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    before = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
+    machine.succeed(desktop_user("omarchy-input-method cycle"))
+    machine.wait_until_succeeds(desktop_user(
+        "test $(fcitx5-remote -n) != " + before), timeout=30)
+    machine.send_key("ctrl-d")
+    print("#1614: the shell input reader cycles the focused terminal")
+
+    input_driver("keyboard", "de")
+    machine.wait_until_succeeds(desktop_user(
+        "hyprctl -j getoption input:kb_layout | grep de"), timeout=30)
+    type_keys("y", "z", "German keyboard picker", "keyboard-de")
+    open_typing_terminal()
+    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    active = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
+    machine.send_key("shift")
+    machine.wait_until_succeeds(desktop_user(
+        "test $(fcitx5-remote -n) != " + active), timeout=30)
+    finish_typing("y", "z", "German keys after leaving Mozc")
+    print("#1614: Shift returns from Mozc to German keyboard input")
+
+    # The daemon writes its profile on exit; seed a stock one only while stopped.
+    machine.succeed(desktop_user(unitctl + "stop omarchy-fcitx5"))
+    input_driver("stock-profile")
+    machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
+    machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    assert group()[1] == "de", "ExecStartPre did not align the stock profile to de: " + repr(group())
+    input_driver("input", "hangul")
+    machine.succeed(desktop_user("grep -qx Layout=us ~/.config/fcitx5/profile"))
+    type_keys("dkssud ", "안녕 ", "Hangul with profile alignment", "hangul")
+    type_keys("dy", "요", "Hangul layout override on German keys", "hangul")
+    print("#1614: a stock profile aligns to de and keeps Hangul on us")
+
+    # A rebuild changes PATH before it restarts this unit: reproduce that stale unit.
+    dropin = "/run/user/1000/systemd/user/omarchy-fcitx5.service.d"
+    machine.succeed("mkdir -p " + dropin)
+    machine.succeed("printf '%s\\n' '[Service]' 'ExecStart=' "
+        "'ExecStart=${pkgs.qt6Packages.fcitx5-with-addons}/bin/fcitx5 --disable notificationitem' "
+        "> " + dropin + "/stale.conf")
+    machine.succeed(desktop_user(unitctl + "daemon-reload && " + unitctl + "restart omarchy-fcitx5"))
+    machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    stale_exec = machine.succeed(desktop_user(unitctl + "show -p ExecStart --value omarchy-fcitx5"))
+    assert "${pkgs.qt6Packages.fcitx5-with-addons}/bin/fcitx5" in stale_exec, (
+        "the stale unit did not load the addon-less daemon: " + stale_exec)
+    stale_pid = machine.succeed(desktop_user(unitctl + "show -p MainPID --value omarchy-fcitx5")).strip()
+    machine.succeed("rm " + dropin + "/stale.conf && rmdir " + dropin)
+    machine.succeed(desktop_user(unitctl + "daemon-reload"))
+    assert machine.succeed(desktop_user(
+        unitctl + "show -p MainPID --value omarchy-fcitx5")).strip() == stale_pid, (
+        "removing the drop-in unexpectedly restarted the stale daemon")
+    input_driver("input", "mozc")
+    # fcitx5-remote -n is empty until something focused has an input context.
+    open_typing_terminal()
+    machine.wait_until_succeeds(desktop_user(
+        'fcitx5-remote -s mozc && test "$(fcitx5-remote -n)" = mozc'), timeout=60)
+    machine.send_key("ctrl-d")
+    print("#1614: picking Mozc replaces a stale addon-less unit")
+
+    machine.succeed(desktop_user(unitctl + "stop omarchy-fcitx5"))
+    machine.succeed(desktop_user("rm -f ~/.config/omarchy/keyboard-layouts"))
+    machine.succeed(desktop_user("hyprctl reload"))
+    input_driver("stock-profile")
+    machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
+    machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    print("#1614: keyboard and input-method state restored")
 
     # A QML engine that resolves a singleton to the wrong type (omarchy#14811,
     # Qt 6.12.0) leaves the shell running with every surface black or

@@ -864,6 +864,13 @@ stdenvNoCC.mkDerivation {
                   substituteInPlace $out/share/omarchy/bin/$f \
                     --replace-fail '/usr/bin/python3' '${python3}/bin/python3'
                 done
+                substituteInPlace $out/share/omarchy/default/input-methods/typing_setup.py \
+                  --replace-fail '/usr/share/systemd/kbd-model-map' '${systemd}/share/systemd/kbd-model-map' \
+                  --replace-fail '/usr/bin/python3' '${python3}/bin/python3'
+                substituteInPlace $out/share/omarchy/shell/Commons/InputMethodState.qml \
+                  --replace-fail '/usr/bin/python3' '${
+                    python3.withPackages (p: [ p.pygobject3 ])
+                  }/bin/python3'
                 # Setup > Language (#1289): a locale this system has not built is
                 # recorded for the next rebuild, never generated at runtime, and the
                 # script stops before LANG or the interface changes. The menu shows

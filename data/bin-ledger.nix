@@ -395,7 +395,7 @@
   };
   "omarchy-pkg-add" = {
     class = "replace";
-    reason = "Upstream runs `sudo pacman -S`. Nothing is installed imperatively here, so this prints the nixpkgs name from a build-time table plus the declarative route, and exits non-zero.";
+    reason = "Upstream runs `sudo pacman -S`. Nothing is installed imperatively here, so this prints the nixpkgs name from a build-time table plus the declarative route, and exits non-zero; an input-method engine is asked of omarchy-pkg-present, since it has no command.";
   };
   "omarchy-pkg-aur-add" = {
     class = "replace";
@@ -420,7 +420,7 @@
   };
   "omarchy-pkg-present" = {
     class = "replace";
-    reason = "Upstream asks `pacman -Q`. There is no package database here, so the closest honest answer is whether the command is runnable; menu rows needing exactness check the app selection themselves. The stock menu does not call this command: its guard batch defines a function of the same name, which #1301 makes answer by the same rule, inside the shell.";
+    reason = "Upstream asks `pacman -Q`. There is no package database here, so the closest honest answer is whether the command is runnable, and an engine in presets.json is present if the tree of the fcitx5 on PATH carries its .conf; menu rows needing exactness check the app selection themselves. The stock menu does not call this command: its guard batch defines a function of the same name, which #1301 makes answer by the same rule, inside the shell, and the menu's copy does not need the exception because no menu row names an engine.";
   };
   "omarchy-pkg-remove" = {
     class = "vendor";

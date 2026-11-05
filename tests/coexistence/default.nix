@@ -125,11 +125,41 @@ let
         echo ${shQuote "${name}: FAIL the user's own setting did not stand"} >&2
         fail=1
       '';
+  inputAddonPnames = [
+    "fcitx5-mozc"
+    "fcitx5-hangul"
+    "fcitx5-chewing"
+    "fcitx5-table-extra"
+    "fcitx5-chinese-addons"
+  ];
+
+  ibusHolds =
+    c:
+    c.i18n.inputMethod.fcitx5.addons == [ ]
+    && lib.hasPrefix "ibus" (lib.getName c.i18n.inputMethod.package)
+    && !(c.systemd.user.services ? omarchy-fcitx5);
+
   agentLocalScripts = [
     (agentLocalCheck "podman-own-config" (
       c: c.virtualisation.podman.enable && c.virtualisation.podman.dockerCompat
     ))
     (agentLocalCheck "nvidia-ctk-own" (c: !c.hardware.nvidia-container-toolkit.enable))
+    (agentLocalCheck "input-own-ibus" ibusHolds)
+    (agentLocalCheck "input-default-ibus" ibusHolds)
+    (agentLocalCheck "input-disabled" (
+      c: c.i18n.inputMethod.fcitx5.addons == [ ] && !(c.systemd.user.services ? omarchy-fcitx5)
+    ))
+    (agentLocalCheck "input-own-addon" (
+      c:
+      let
+        pnames = map (p: p.pname or "") c.i18n.inputMethod.fcitx5.addons;
+      in
+      lib.all (n: builtins.elem n pnames) ([ "fcitx5-rime" ] ++ inputAddonPnames)
+    ))
+    (agentLocalCheck "input-no-addons" (c: c.i18n.inputMethod.fcitx5.addons == [ ]))
+    (agentLocalCheck "input-own-profile" (
+      c: !(c.systemd.user.services.omarchy-fcitx5.serviceConfig ? ExecStartPre)
+    ))
     (agentLocalCheck "preinstalls-exclude-retired" (_: true))
     (agentLocalCheck "xdg-mime-own-pdf" (
       c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"

@@ -105,7 +105,8 @@ let
       lib.filterAttrs (k: _: lib.hasSuffix "weston.ini.drv" k) (builtins.getContext cmd)
     );
   keyboardCheck = name: condition: ''
-    if ${condition}; then
+    if ${condition}
+    then
       echo "${name}: ok"
     else
       echo "${name}: FAIL keyboard setting did not stand" >&2

@@ -222,6 +222,8 @@ pkgs.runCommand "nixarchy-installer-answers"
       work=$PWD/render hostdir=$PWD/render/hosts/test
       mkdir -p "$hostdir"
       cp ${../installer/template/host/configuration.nix} "$hostdir/configuration.nix"
+      chmod u+w "$hostdir/configuration.nix"
+      export NIX_STATE_DIR=$PWD/nix-state NIX_LOG_DIR=$PWD/nix-log
       hostname=test username=user device=/dev/test disk_mode=whole timezone=UTC
       keymap=de-latin1 xkb_layout=de xkb_variant= encrypt=false recovery_hash=
       substitute_host_files

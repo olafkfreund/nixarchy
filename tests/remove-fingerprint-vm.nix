@@ -67,8 +67,8 @@ pkgs.testers.runNixOSTest {
     send("REMOVE bob-id")
     machine.succeed("sleep 1")
     assert "bob-id" not in stored(), "bob's reader print was not removed by the control command"
-    log = machine.succeed("journalctl -u fprintd --no-pager")
-    assert not any("bob-id" in line and "not found in storage" in line for line in log.splitlines()), log
+    journal = machine.succeed("journalctl -u fprintd --no-pager")
+    assert not any("bob-id" in line and "not found in storage" in line for line in journal.splitlines()), journal
 
     for service in ("sudo", "omarchy-lock-password"):
         command = f"su - alice -c \"printf 'secret\\n' | pamtester {service} alice authenticate\""

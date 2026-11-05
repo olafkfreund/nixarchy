@@ -211,6 +211,7 @@ HASH = ("$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo."
 CELLS = {
     "off-whole-plain": (OFFLINE, "whole", False, 10),
     "off-whole-enc":   (OFFLINE, "whole", True,  11),
+    "off-whole-de":    (OFFLINE, "whole", False, 16),
     "off-free":        (OFFLINE, "free",  False, 12),
     "net-whole-plain": (NET,     "whole", False, 13),
     "net-whole-enc":   (NET,     "whole", True,  14),
@@ -237,6 +238,9 @@ step() {
 echo "DRIVE-STARTED-X" > /dev/ttyS0
 step INSTALL nixarchy-install --answers /a/answers
 step ESP test -d /mnt/boot/EFI
+if grep -qx 'keymap=de-latin1' /a/answers; then
+  step KEYBOARD nixos-enter --root /mnt -c 'grep -Fxq XKBLAYOUT=de /etc/vconsole.conf && weston=$(sed -n "s|.* -c \(/nix/store/[^ ]*-weston.ini\).*|\1|p" /etc/sddm.conf) && test -n "$weston" && grep -Fxq keymap_layout=de "$weston"'
+fi
 step NOHASH sh -c '! grep -rq "[$]6[$]" /mnt/etc/nixos'
 echo "DRIVE-DONE-X" > /dev/ttyS0
 '''
@@ -266,7 +270,7 @@ def make_disk(w, mode):
     return qcow
 
 
-def make_answers(w, mode, encrypt):
+def make_answers(w, mode, encrypt, name):
     d = f"{w}/a"
     os.makedirs(d, exist_ok=True)
     lines = [
@@ -277,7 +281,8 @@ def make_answers(w, mode, encrypt):
     if encrypt:
         lines.append("luks_passphrase=omarchytest")
     lines += ["hostname=nixarchy", f"username={USERNAME}",
-              f"password_hash={HASH}", "timezone=UTC", "keymap=us"]
+              f"password_hash={HASH}", "timezone=UTC",
+              f"keymap={'de-latin1' if name == 'off-whole-de' else 'us'}"]
     open(f"{d}/answers", "w").write("\n".join(lines) + "\n")
     open(f"{d}/drive", "w").write(DRIVE)
     img = f"{w}/answers.img"
@@ -319,7 +324,7 @@ def main():
           f"encrypt={encrypt}, username={USERNAME}, "
           f"network={'NONE' if NONET else 'user-mode NAT'}")
     disk = f"{w}/disk.qcow2" if boot_only else make_disk(w, mode)
-    answers = None if (manual or boot_only) else make_answers(w, mode, encrypt)
+    answers = None if (manual or boot_only) else make_answers(w, mode, encrypt, name)
     sh("cp", "-f", f"{OVMF}/OVMF_VARS.fd", vars_fd)
     sh("chmod", "u+w", vars_fd)
     for p in (serial, sock):
@@ -408,16 +413,20 @@ def main():
     finally:
         txt = open(serial, errors="replace").read()
         rc = "?"
+        keyboard_rc = "?"
         for ln in txt.splitlines():
             if "INSTALL-" in ln and ln.strip().endswith("-X"):
                 rc = ln.strip().split("INSTALL-")[-1].split("-X")[0]
-        print(f"== VERDICT {name}: INSTALL rc={rc}")
+            if "KEYBOARD-" in ln and ln.strip().endswith("-X"):
+                keyboard_rc = ln.strip().split("KEYBOARD-")[-1].split("-X")[0]
+        print(f"== VERDICT {name}: INSTALL rc={rc}" +
+              (f", KEYBOARD rc={keyboard_rc}" if name == "off-whole-de" else ""))
         vm.terminate()
         try:
             vm.wait(30)
         except Exception:
             vm.kill()
-    return 0 if rc == "0" else 1
+    return 0 if rc == "0" and (name != "off-whole-de" or keyboard_rc == "0") else 1
 
 
 if __name__ == "__main__":

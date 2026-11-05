@@ -2581,6 +2581,36 @@ on_net_image() { [ -f /etc/nixarchy-iso-net ]; }
 # offline image and change what a passing check is testing.
 on_offline_image() { [ -f /etc/nixarchy-iso ] && [ ! -f /etc/nixarchy-iso-net ]; }
 
+# A non-US answer is not the system this image carries: the initrd and the greeter hold the layout.
+# An existing --from host brings its own layout; a host --from adds takes this answer.
+keyboard_needs_network() {
+  on_offline_image && [ "$from_host_exists" != true ] && [ -n "$keymap" ] && [ "$keymap" != us ]
+}
+
+keyboard_refusal() {
+  echo "nixarchy-install: this image carries a US system, and you chose $keymap." >&2
+  echo "  A different keyboard has to be built, and that needs a network. Connect one and" >&2
+  echo "  try again, or choose English (US)." >&2
+  echo >&2
+  echo "  Nothing was written: the disk has not been touched." >&2
+}
+
+# Interactive: back to the questions, and the one chance to join a network.
+keyboard_reachable() {
+  keyboard_needs_network || return 0
+  network_ready && return 0
+  keyboard_refusal
+  if ls -d /sys/class/net/*/phy80211 >/dev/null 2>&1; then
+    # connect_wifi clears the screen, so the refusal has to be read before it.
+    gum confirm --padding "$(ui_gum_pad)" --affirmative "Join Wi-Fi" --negative "Back" "Join a network now?" || return 1
+    connect_wifi || true
+    network_ready && return 0
+    keyboard_refusal
+  fi
+  gum confirm --padding "$(ui_gum_pad)" --affirmative "Back" --negative "" "Back to the questions." || true
+  return 1
+}
+
 # Where the rescue records what the image could not supply, for
 # `omarchy bug-report` and for a person reading the installed machine later.
 RESCUE_REPORT=/var/log/nixarchy-image-incomplete.log
@@ -2825,7 +2855,18 @@ preflight_report_builds() {
 }
 
 preflight_build() {
-  on_net_image || return 0
+  if keyboard_needs_network; then
+    if ! network_ready; then
+      keyboard_refusal
+      return 1
+    fi
+    # What run_install and nixos-install then use; rescue_build's report would call this image broken.
+    SUBSTITUTERS=$RESCUE_SUBSTITUTERS
+    TRUSTED_KEYS=$RESCUE_TRUSTED_KEYS
+    SUBSTITUTE_FLAGS+=(--option extra-substituters "$SUBSTITUTERS" --option extra-trusted-public-keys "$TRUSTED_KEYS")
+  elif ! on_net_image; then
+    return 0
+  fi
 
   local sub
   for sub in https://cache.nixos.org $SUBSTITUTERS; do
@@ -2871,6 +2912,14 @@ preflight_build() {
   fi
   echo "  Nothing was written: the disk has not been touched." >&2
   return 1
+}
+
+not_baked_reason() {
+  local why=""
+  [ "$keymap" = us ] || why="the image's system types US, and this machine asked for $keymap"
+  [ "$disk_mode" = whole ] || why="a free-space install mounts partitions the image's system does not name (#1078)"
+  [ -z "$from_repo" ] || why="--from installs $from_repo's $hostname, not the image's reference machine"
+  printf '%s' "$why"
 }
 
 run_install() {
@@ -2981,7 +3030,7 @@ run_install() {
   #                  by-partlabel, so a toplevel built against /dev/vda is
   #                  byte-identical to one built against /dev/nvme0n1 --
   #                  measured, same drvPath.
-  #   the layout     whole-disk only; see why_not_baked below.
+  #   the layout     whole-disk and US keyboard only; see not_baked_reason below.
   #
   # What is DELIBERATELY not the same is the username and the detected
   # hardware-configuration.nix. Both are written to /mnt/etc/nixos and arrive
@@ -2997,8 +3046,7 @@ run_install() {
   # the template's host. A free-space install cuts other partitions, and one
   # that mounts labels it never created does not boot (#1078); --from installs
   # the repository's machine, not the reference.
-  [ "$disk_mode" = whole ] || why_not_baked="a free-space install mounts partitions the image's system does not name (#1078)"
-  [ -z "$from_repo" ] || why_not_baked="--from installs $from_repo's $hostname, not the image's reference machine"
+  why_not_baked=$(not_baked_reason)
   if [ -r "$baked" ] && [ -n "$why_not_baked" ]; then
     echo "nixarchy-install: building rather than copying the system this image carries: $why_not_baked."
     echo "nixarchy-install: on the offline image that is expected; if the image lacks something, the rescue below says so."
@@ -3329,7 +3377,7 @@ main() {
       ask_device
       ask_disk_mode
       ask_encrypt
-      confirm_summary && break
+      confirm_summary && keyboard_reachable && break
     done
   fi
 

@@ -19,6 +19,7 @@ pkgs.runCommand "nixarchy-installer-baked-guard"
     # function at one written here, and prove the rewrite landed.
     sed -n '/^run_install()/,/^}/p' ${installScript} > ri-orig.sh
     sed "s|/etc/nixarchy-reference-|$PWD/ref-|" ri-orig.sh > ri.sh
+    sed -n '/^not_baked_reason()/,/^}/p' ${installScript} >> ri.sh
     sed -n '/^ui_finished()/,/^}/p' ${dashboardScript} > finished.sh
     sed -n '/^main()/,/^}/p' ${installScript} > main.sh
     grep -Fq 'ui_finished "$elapsed" "$username" "''${installed_baked:-false}"' main.sh || {
@@ -28,7 +29,7 @@ pkgs.runCommand "nixarchy-installer-baked-guard"
     printf '%s\n' /nix/store/baked-system > ref-false
 
     fails=0
-    t() { # t <name> <want: baked|built> <disk_mode> <from_repo> [flag]
+    t() { # t <name> <want: baked|built> <disk_mode> <from_repo> [flag] [keymap]
       rm -f install-args
       (
         . ./ri.sh
@@ -37,7 +38,7 @@ pkgs.runCommand "nixarchy-installer-baked-guard"
         SUBSTITUTERS=""
         TRUSTED_KEYS=""
         build_store_choice=live hostname=h encrypt=false
-        disk_mode=$3 from_repo=$4
+        disk_mode=$3 from_repo=$4 keymap=''${6:-us}
         nix() {
           case "$*" in
             *path-info*) return 0 ;;
@@ -70,6 +71,7 @@ pkgs.runCommand "nixarchy-installer-baked-guard"
     t whole-disk baked whole ""
     t free-space built free ""
     t from-repo built whole file:///repo
+    t german-keyboard built whole "" true de-latin1
     INSTALL_RC=1 t failed-install baked whole "" false
     [ "$(cat result-failed-install)" = refused ] || { echo 'FAILED copied system marked installed after nixos-install failure'; fails=$((fails+1)); }
     (

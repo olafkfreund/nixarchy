@@ -196,4 +196,37 @@
       programs.nixarchy.user = lib.mkDefault "omarchy";
       services.openssh.enable = true;
     };
+
+  keyboard-own-xkb = {
+    services.xserver.xkb.layout = "fr";
+  };
+
+  keyboard-own-options = {
+    services.xserver.xkb = {
+      layout = "us,ru";
+      options = "grp:caps_toggle";
+    };
+  };
+
+  keyboard-own-vconsole =
+    { lib, ... }:
+    {
+      services.xserver.xkb.layout = "de";
+      environment.etc."vconsole.conf".text = lib.mkForce "KEYMAP=own\n";
+    };
+
+  keyboard-xkb-console = {
+    console.useXkbConfig = true;
+    services.xserver.xkb.layout = "de";
+  };
+
+  keyboard-imperative = {
+    i18n.imperativeLocale = true;
+    services.xserver.xkb.layout = "de";
+  };
+
+  keyboard-kwin-greeter = {
+    services.displayManager.sddm.wayland.compositor = "kwin";
+    services.xserver.xkb.layout = "de";
+  };
 }

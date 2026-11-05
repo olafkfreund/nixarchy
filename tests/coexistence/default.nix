@@ -86,6 +86,65 @@ let
   nmConnectivity =
     (configOf fixtures.nm-connectivity-own).networking.networkmanager.settings.connectivity;
 
+  keyboardOwnXkb = configOf fixtures.keyboard-own-xkb;
+  keyboardOwnOptions = configOf fixtures.keyboard-own-options;
+  keyboardOwnVconsole = configOf fixtures.keyboard-own-vconsole;
+  keyboardXkbConsole = configOf fixtures.keyboard-xkb-console;
+  keyboardImperative = configOf fixtures.keyboard-imperative;
+  keyboardKwinGreeter = configOf fixtures.keyboard-kwin-greeter;
+
+  vconsoleOf = c: c.environment.etc."vconsole.conf".source;
+  westonIniOf =
+    c:
+    let
+      cmd = c.services.displayManager.sddm.wayland.compositorCommand;
+      path = builtins.head (builtins.match ".* -c (/nix/store/[^ ]+-weston.ini)" cmd);
+    in
+    # Keep only the ini derivation, not weston's closure from the command.
+    builtins.appendContext path (
+      lib.filterAttrs (k: _: lib.hasSuffix "weston.ini.drv" k) (builtins.getContext cmd)
+    );
+  keyboardCheck = name: condition: ''
+    if ${condition}; then
+      echo "${name}: ok"
+    else
+      echo "${name}: FAIL keyboard setting did not stand" >&2
+      fail=1
+    fi
+  '';
+  keyboardScripts = [
+    (keyboardCheck "keyboard-own-xkb" ''
+      grep -Fxq 'XKBLAYOUT=fr' ${shQuote (vconsoleOf keyboardOwnXkb)} &&
+      grep -Fxq 'keymap_layout=fr' ${shQuote (westonIniOf keyboardOwnXkb)}
+    '')
+    (keyboardCheck "keyboard-own-options" ''
+      grep -Fxq 'keymap_options=grp:caps_toggle' ${shQuote (westonIniOf keyboardOwnOptions)}
+    '')
+    (keyboardCheck "keyboard-own-vconsole" ''
+      grep -Fxq 'KEYMAP=own' ${shQuote (vconsoleOf keyboardOwnVconsole)}
+    '')
+    (keyboardCheck "keyboard-xkb-console" ''
+      grep -Eq '^KEYMAP=.*xkb-console-keymap' ${shQuote (vconsoleOf keyboardXkbConsole)} &&
+      grep -Fxq 'XKBLAYOUT=de' ${shQuote (vconsoleOf keyboardXkbConsole)}
+    '')
+    (keyboardCheck "keyboard-imperative" (
+      if keyboardImperative.environment.etc ? "vconsole.conf" then "false" else "true"
+    ))
+    (keyboardCheck "keyboard-kwin-greeter" (
+      (
+        if
+          lib.hasInfix "kwin" (
+            builtins.unsafeDiscardStringContext keyboardKwinGreeter.services.displayManager.sddm.wayland.compositorCommand
+          )
+        then
+          "true"
+        else
+          "false"
+      )
+      + "&& grep -Fxq 'XKBLAYOUT=de' ${shQuote (vconsoleOf keyboardKwinGreeter)}"
+    ))
+  ];
+
   chromiumEtc = (configOf fixtures.chromium-own-policy).environment.etc;
   chromiumScript =
     if
@@ -320,6 +379,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${lib.concatStrings sysctlScripts}
     ${lib.concatStrings opensshScripts}
     ${opensshMkDefault}
+    ${lib.concatStrings keyboardScripts}
     if [ "$fail" = 1 ]; then
       exit 1
     fi

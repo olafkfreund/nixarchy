@@ -125,7 +125,7 @@
 
     # Why: docs/internals/flake.md#gliff-from-a-non-flake-input-pinned-to-a-tag
     gliff = {
-      url = "github:omacom/gliff/v0.4.1";
+      url = "github:omacom/gliff/v0.4.2";
       flake = false;
     };
 
@@ -770,7 +770,7 @@
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
           omasnap = final.callPackage ./pkgs/apps/omasnap.nix { };
 
-          # Omarchy 4.5's other default apps (#1572). Opt-in through
+          # Omarchy 4.5's other default apps (#1572). On by default through
           # programs.nixarchy.omarchyApps.enable.
           hype = final.callPackage ./pkgs/apps/hype.nix { };
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };
@@ -2018,6 +2018,9 @@
             # tests/skill-parity.nix and #643.
             "skill-parity"
             "sops-evaluates"
+            "sshd-enable"
+            # A real ssh login against the menu's sshd, and the plain line as control (#1611). Needs KVM.
+            "sshd-login"
             "swap-guard"
             "switch-indicator"
             "try-nixarchy"
@@ -2265,6 +2268,13 @@
           # Edge carry (#1386): mise's [wrappers] route claude through the selected
           # account, and the exec refuses a mise install.
           agent-account-routing = import ./tests/agent-account-routing.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #1616: what a destination does with the receiver the sender generates, when
+          # it has no envfs or no OMARCHY_PATH. checks.session has the working case.
+          account-copy = import ./tests/account-copy.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };
@@ -2710,6 +2720,14 @@
           # `installed`), and this fails when upstream adds or drops one. See
           # tests/etc-overlay.nix and #642.
           etc-overlay = import ./tests/etc-overlay.nix { pkgs = pkgsFor.${system}; };
+
+          # Upstream's sysctl values against the rendered file, and a user's
+          # own mkDefault against every key. See tests/etc-sysctl.nix and #1615.
+          etc-sysctl = import ./tests/etc-sysctl.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+            upstream = omarchy;
+          };
 
           # The reference initrd can mount a disk it was not built on, which is
           # a precondition for offline install stage 3. See

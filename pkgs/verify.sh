@@ -1202,7 +1202,7 @@ else
   hmm "RetroArch not installed" "enable apps.retroarch to test this"
 fi
 
-for app in nautilus pinta gnome-disks xournalpp; do
+for app in nautilus pinta gnome-disks signed; do
   if command -v "$app" >/dev/null 2>&1; then
     ok "$app" "on PATH"
   else

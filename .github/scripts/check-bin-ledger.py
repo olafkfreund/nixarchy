@@ -106,6 +106,11 @@ PATTERNS = {
     "rfkill": r"\brfkill\b",
     "nmcli-radio": r"\bnmcli\s+radio\b",
     "ctl-set": r"\b(?:timedatectl|hostnamectl|localectl|loginctl)\s+set-",
+    # Runs on a machine other than the one that built it, so nothing here can
+    # say what resolves at the far end. Not watertight: a bare `ssh laptop`, or
+    # an ssh built up in a variable, escapes it. The lookbehind skips
+    # GIT_SSH_COMMAND's `:-ssh -oBatchMode`.
+    "remote-exec": r"""(?<![-\w])ssh\s+[-"'$]|["']ssh["']\s*,""",
 }
 PATTERNS = {group: re.compile(rx) for group, rx in PATTERNS.items()}
 

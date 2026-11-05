@@ -145,4 +145,27 @@
     kind = "package";
     binary = "disktree";
   };
+
+  # ── Input methods ───────────────────────────────────────────────────────
+  # Fcitx5 addons must be wrapped into i18n.inputMethod.fcitx5.addons, not environment.systemPackages (#1614).
+  fcitx5-chewing = {
+    attr = "i18n.inputMethod.fcitx5.addons = [ pkgs.fcitx5-chewing ]";
+    kind = "nixos-option";
+  };
+  fcitx5-chinese-addons = {
+    attr = "i18n.inputMethod.fcitx5.addons = [ pkgs.qt6Packages.fcitx5-chinese-addons ]";
+    kind = "nixos-option";
+  };
+  fcitx5-hangul = {
+    attr = "i18n.inputMethod.fcitx5.addons = [ pkgs.fcitx5-hangul ]";
+    kind = "nixos-option";
+  };
+  fcitx5-mozc = {
+    attr = "i18n.inputMethod.fcitx5.addons = [ pkgs.fcitx5-mozc ]";
+    kind = "nixos-option";
+  };
+  fcitx5-table-extra = {
+    attr = "i18n.inputMethod.fcitx5.addons = [ pkgs.fcitx5-table-extra ]";
+    kind = "nixos-option";
+  };
 }

@@ -2018,6 +2018,8 @@
             # tests/skill-parity.nix and #643.
             "skill-parity"
             "sops-evaluates"
+            # A real ssh login against the menu's sshd, and the plain line as control (#1611). Needs KVM.
+            "sshd-login"
             "swap-guard"
             "switch-indicator"
             "try-nixarchy"

@@ -281,7 +281,7 @@ pkgs.runCommand "nixarchy-installer-answers"
       printf -v c '%b' "$octal"
       printable+=$c
     done
-    password_case 'US printable password' "" '' "$printable" "$printable" 0
+    password_case 'US printable password' "" "" "$printable" "$printable" 0
 
     mkdir -p repo-host
     printf '  console.keyMap = "de-latin1";\n' > repo-host/configuration.nix

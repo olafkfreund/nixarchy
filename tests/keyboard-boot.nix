@@ -42,7 +42,6 @@ pkgs.testers.runNixOSTest {
 
         boot.loader.systemd-boot.enable = true;
         boot.plymouth.enable = true;
-        boot.initrd.systemd.enable = true;
         virtualisation = {
           emptyDiskImages = [ 512 ];
           useBootLoader = true;
@@ -81,7 +80,7 @@ pkgs.testers.runNixOSTest {
         else:
             machine.send_console(keys + "\n")
         machine.wait_for_unit("display-manager.service")
-        machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")
+        machine.wait_until_succeeds("loginctl list-sessions | grep greeter >/dev/null")
         machine.succeed("test -b /dev/mapper/cryptroot")
 
     def session_cmd(cmd):

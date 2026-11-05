@@ -368,6 +368,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
     rm -f curl-called nix-called wipefs-called
     if (
       on_offline_image() { return 0; }
+      on_net_image() { return 1; }
       keymap=$key from_host_exists=$host NETWORK_OK=$network CURL_OK=$curlok NIX_OK=1
       preflight_build || exit $?
       printf '%s\n' "''${SUBSTITUTE_FLAGS[*]}" >flags

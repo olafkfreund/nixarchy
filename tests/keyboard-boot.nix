@@ -91,7 +91,7 @@ pkgs.testers.runNixOSTest {
 
     encrypted_boot(de, "zy", "yz")
     de.send_chars("yz\n")
-    de.wait_until_succeeds("journalctl -b -u display-manager --no-pager | grep -q 'Authentication for user .*omarchy.* successful'")
+    de.wait_until_succeeds("journalctl -b -u display-manager --no-pager | grep 'Authentication for user .*omarchy.* successful' >/dev/null")
     de.wait_until_succeeds("pgrep -u 1000 -f Hyprland")
     de.succeed(session_cmd('hyprctl dispatch exec "foot -e ${pkgs.writeShellScript "keyboard-capture" "cat >/tmp/typed"}"'))
     de.send_chars("yz\n")
@@ -119,8 +119,8 @@ pkgs.testers.runNixOSTest {
     ru.send_chars("abc")
     ru.send_key("alt-alt_r")
     ru.send_chars("q\n")
-    ru.wait_until_succeeds("journalctl -b -u display-manager --no-pager | grep -q 'Authentication for user .*omarchy.* successful'")
+    ru.wait_until_succeeds("journalctl -b -u display-manager --no-pager | grep 'Authentication for user .*omarchy.* successful' >/dev/null")
     ru.wait_until_succeeds("pgrep -u 1000 -f Hyprland")
-    ru.succeed(session_cmd('hyprctl devices | grep -q "us,ru"'))
+    ru.succeed(session_cmd('hyprctl devices | grep "us,ru" >/dev/null'))
   '';
 }

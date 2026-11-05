@@ -271,17 +271,17 @@ pkgs.runCommand "nixarchy-installer-answers"
     norwegian=$(grep -F $'\tno-latin1\t' ${../installer/brand/keymaps.txt} | cut -f4)
     latvian=$(grep -F $'\tlv\t' ${../installer/brand/keymaps.txt} | cut -f5)
     icelandic=$(grep -F $'\tis-latin1\t' ${../installer/brand/keymaps.txt} | cut -f4)
-    password_case 'Norwegian moved characters' "$norwegian" '' 'a~' ab 1
-    password_case 'Latvian dead keys' '' "$latvian" 'á' ab 1
-    password_case 'Icelandic multibyte unaffected' "$icelandic" '' 'ä' 'ä' 0
-    password_case 'Icelandic moved character' "$icelandic" '' '°' ab 1
+    password_case 'Norwegian moved characters' "$norwegian" "" 'a~' ab 1
+    password_case 'Latvian dead keys' "" "$latvian" 'á' ab 1
+    password_case 'Icelandic multibyte unaffected' "$icelandic" "" 'ä' 'ä' 0
+    password_case 'Icelandic moved character' "$icelandic" "" '°' ab 1
     printable=""
     for ((i = 32; i <= 126; i++)); do
       printf -v octal '\\%03o' "$i"
       printf -v c '%b' "$octal"
       printable+=$c
     done
-    password_case 'US printable password' '' '' "$printable" "$printable" 0
+    password_case 'US printable password' "" '' "$printable" "$printable" 0
 
     mkdir -p repo-host
     printf '  console.keyMap = "de-latin1";\n' > repo-host/configuration.nix

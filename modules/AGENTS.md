@@ -2431,3 +2431,21 @@ itself had been beating our `0750` all along, with nothing to notice it. Our
 key is now `09-nixarchy-microvm`, and `checks.microvm-tmpfiles-order` fails if
 any earlier key declares one of its paths. A nixarchy tmpfiles entry that has
 to beat upstream's sorts first, and it needs a check, because the loss is silent.
+
+<a id="opencode-hash-until-the-channel-catches-up"></a>
+
+## opencode's hash, until the channel catches up
+
+nixpkgs `9c4790e0e8` moved opencode to 2.2.5 with a wrong `node_modules` hash, and
+`c399e1b7fb` corrected it. `nixos-unstable` at `1d060086` has the first and not the
+second, so every machine that pins opencode into Nixi fails to build, and a nixpkgs
+bump can't merge.
+
+The override in `modules/home.nix` sits on `services.nixi.package` and not in
+`nixpkgs.overlays`, because nixarchy sets no global overlay (the reason is in
+`modules/services/default.nix`). It applies only while nixpkgs has exactly the wrong
+hash, so it stops applying once the pin moves, and can then be deleted.
+
+**It covers Nixi only.** `programs.nixarchy.apps.opencode` and `localAi.agents` take
+`pkgs.opencode` directly, so choosing either fails the same way until the channel moves.
+

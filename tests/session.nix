@@ -1971,6 +1971,8 @@ pkgs.testers.runNixOSTest {
     for app in ["hype", "signed", "monologue", "omacalc", "omacut", "omawrite", "aether", "disktree"]:
         machine.succeed(user % f"command -v {app}")
     machine.fail(user % "command -v dua")
+    machine.succeed(user % "vi --version > /tmp/vi-version")
+    machine.succeed("grep -q NVIM /tmp/vi-version")
     # Left with Omarchy 4.5 (#1612). obs-studio's binary is obs.
     for app in ["obs", "kdenlive", "xournalpp"]:
         machine.fail(user % f"command -v {app}")

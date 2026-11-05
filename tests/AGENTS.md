@@ -1394,7 +1394,8 @@ cache.
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,
 `installer-store-space`, `try-preflight`, `doctor-graphics`, `dashboard-clock`,
-`options`, `review-pins`, `patched-files`, `doc-options`, `explain`.
+`options`, `review-pins`, `patched-files`, `doc-options`, `explain`,
+`input-methods`.
 
 These are `runCommand`s that finish in seconds and drive one decision with a
 stubbed environment. Prefer one of these over extending a VM test: they are the
@@ -1444,6 +1445,38 @@ the real handler runs) and reads state over IPC.
 
 `checks.menu-model-merge` is the cheap sibling: node over the built
 `MenuModel.js`, for the partial-override merge.
+
+## The input-method one: physical keys and real toolkit apps are hardware-only (#1614)
+
+`fcitx5` runs in a build sandbox, so `checks.input-methods` carries the daemon
+assertions (`AvailableInputMethods`, `omarchy-setup-input`, `typing_setup.py`'s
+first save after a rebuild and `seed-language`, `indicator.py`,
+`keyboard_catalog()`, and `omarchy-fcitx5`'s `ExecStartPre` profile alignment)
+without a VM. A session bus can activate `org.fcitx.Fcitx5` by itself through
+`XDG_DATA_DIRS`, which would start the real daemon behind a row testing the
+addon-less one, so that check starts `dbus-run-session` with an empty
+`XDG_DATA_DIRS` and every row runs only the daemon it started.
+
+`checks.session` drives compositor keys into a focused terminal for all five
+engines (`mozc`, `hangul`, `pinyin`, `chewing`, `cangjie5`), cycles the
+indicator with `omarchy-input-method cycle`, applies `de` through the keyboard
+picker, and checks the `ExecStartPre` alignment and stale-unit replacement. On
+`de` with `mozc` selected, tapping Shift flips `fcitx5-remote` back to Latin
+input and types `y` as `z`: the flip itself has a break (removing
+`Hotkey/AltTriggerKeys`), while the German output after the flip has no break
+in our code and is a report of what Fcitx does rather than a check.
+
+What stays hardware-only: physical 한/영 (`Hangul`) and 全角/半角
+(`Zenkaku_Hankaku`) keys, and composition inside real GTK, Qt and Electron
+toolkit apps. `pkgs/verify.sh` checks that the running `fcitx5` daemon lists
+all five engines in `AvailableInputMethods`. By hand on real hardware:
+
+```sh
+nixarchy verify                  # fcitx5 engines: mozc, hangul, pinyin, chewing, cangjie5
+omarchy setup input mozc         # or pick under Setup > Typing > Input Methods
+# press Super+I (or physical 全角/半角 / 한/영) and compose in a browser, a GTK app and a Qt app
+# tap Shift alone to flip to Latin input and back
+```
 
 ## Working here
 

@@ -11,6 +11,16 @@
 # The menu rows nixarchy overrides carry their own check against the app
 # selection and never reach this; this is the fallback for anything else.
 for pkg in "$@"; do
+  # An engine has no command; it is present if the daemon on PATH carries its file.
+  case $pkg in fcitx5-*)
+    engine=$(jq -r --arg p "$pkg" 'to_entries[] | select(.value.packages | index($p)) | .key' \
+      "${OMARCHY_PATH:-}/default/input-methods/presets.json" 2>/dev/null)
+    if [ -n "$engine" ]; then
+      fcitx5=$(readlink -f "$(command -v fcitx5)")
+      [ -e "${fcitx5%/bin/fcitx5}/share/fcitx5/inputmethod/$engine.conf" ] || exit 1
+      continue
+    fi ;;
+  esac
   candidate=${pkg%-bin}
   candidate=${candidate%-stable}
   command -v "$pkg" >/dev/null 2>&1 || command -v "$candidate" >/dev/null 2>&1 || exit 1

@@ -51,6 +51,7 @@ let
     );
 
   available = lib.filterAttrs (_: a: !(a ? unavailable)) apps;
+  preinstallIds = lib.attrNames (lib.filterAttrs (_: a: a.preinstall or false) available);
   unavailable = lib.filterAttrs (_: a: a ? unavailable) apps;
 
   # One submodule per app. `settings` only has somewhere to go when the app is
@@ -118,7 +119,10 @@ let
   # A value, not a structure, so this one may read config freely.
   appPackages = lib.concatLists (
     lib.mapAttrsToList (
-      name: app: lib.optional ((app ? attr) && cfg.apps.${name}.enable) cfg.apps.${name}.package
+      name: app:
+      lib.optional ((app ? attr) && cfg.apps.${name}.enable) (
+        (if app.preinstall or false then lib.lowPrio else lib.id) cfg.apps.${name}.package
+      )
     ) available
   );
 
@@ -1357,7 +1361,12 @@ in
         }
       ) unavailable;
 
-    omarchyApps.enable = lib.mkEnableOption "Omarchy's own preinstalled applications (Omawrite, Omacalc, Omacut, Aether, Hype, Monologue, Signed), as defaults a line in apps.nix can still turn off";
+    omarchyApps.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg.preinstalls;
+      defaultText = lib.literalExpression "config.programs.nixarchy.preinstalls";
+      description = "Omarchy's own default applications (Hype, Signed, Monologue, Omacalc, Omacut, Omawrite, Aether). Follows `preinstalls`. A line in apps.nix still turns any one of them off.";
+    };
 
     # ---- the per-package escape (#530) --------------------------------
     #
@@ -1526,9 +1535,9 @@ in
       lib.mkMerge [
         appModuleConfig
         (lib.mkIf cfg.omarchyApps.enable {
-          programs.nixarchy.apps = lib.mapAttrs (_: _: { enable = lib.mkDefault true; }) (
-            lib.filterAttrs (_: a: a.preinstall or false) available
-          );
+          programs.nixarchy.apps = lib.genAttrs preinstallIds (_: {
+            enable = lib.mkDefault true;
+          });
         })
         (lib.mkIf cfg.apps.retroarch.enable {
           environment.pathsToLink = [
@@ -1572,8 +1581,8 @@ in
           };
 
           # lowPrio on every segment nixarchy brings unasked, so a user's own copy
-          # wins any binary it shares (#1167, as #809). appPackages, the user's own
-          # app picks, stays at normal priority.
+          # wins any binary it shares (#1167, as #809). Default apps in appPackages
+          # are lowPrio too, even when picked by hand; other picks stay normal.
           environment.systemPackages =
             map lib.lowPrio [
               # Why: modules/AGENTS.md#the-doctor-and-verify-which-until-now-were-flake-a

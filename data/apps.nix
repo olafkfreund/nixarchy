@@ -569,7 +569,6 @@
     category = "Utility";
     attr = "omarchy-local-ai";
     ours = true;
-    preinstall = true;
     arch = "omarchy-local-ai";
   };
   signed = {

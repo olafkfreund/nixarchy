@@ -945,45 +945,38 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
-      {
-        # removeAttrs ignores a name that is not there, so a typo would leave
-        # the app installed and the user hunting for why. Named here instead.
-        assertion =
-          let
-            known = [
-              "pinta"
-              "libreoffice"
-              "xournalpp"
-              "obs-studio"
-              "moonlight-qt"
-              "kdenlive"
-              "gnome-disk-utility"
-              "sushi"
-              "cliamp"
-              "gliff"
-            ];
-          in
-          lib.all (n: builtins.elem n known) cfg.preinstallsExclude;
-        message =
-          "programs.nixarchy.preinstallsExclude names something that is not a "
-          + "preinstalled application: "
-          + lib.concatStringsSep " " (
-            lib.subtractLists [
-              "pinta"
-              "libreoffice"
-              "xournalpp"
-              "obs-studio"
-              "moonlight-qt"
-              "kdenlive"
-              "gnome-disk-utility"
-              "sushi"
-              "cliamp"
-              "gliff"
-            ] cfg.preinstallsExclude
-          )
-          + ". The set is: pinta libreoffice xournalpp obs-studio moonlight-qt "
-          + "kdenlive gnome-disk-utility sushi cliamp gliff.";
-      }
+      (
+        let
+          # Left with Omarchy 4.5. Still accepted, and do nothing, so a machine that
+          # already opted out keeps evaluating.
+          retired = [
+            "xournalpp"
+            "obs-studio"
+            "kdenlive"
+          ];
+          current = [
+            "pinta"
+            "libreoffice"
+            "moonlight-qt"
+            "gnome-disk-utility"
+            "sushi"
+            "cliamp"
+            "gliff"
+          ];
+        in
+        {
+          # removeAttrs ignores a name that is not there, so a typo would leave
+          # the app installed and the user hunting for why. Named here instead.
+          assertion = lib.all (n: builtins.elem n (current ++ retired)) cfg.preinstallsExclude;
+          message =
+            "programs.nixarchy.preinstallsExclude names something that is not a "
+            + "preinstalled application: "
+            + lib.concatStringsSep " " (lib.subtractLists (current ++ retired) cfg.preinstallsExclude)
+            + ". The set is: "
+            + lib.concatStringsSep " " current
+            + ".";
+        }
+      )
       {
         # versionAtLeast, not string >=: Nix compares strings lexicographically,
         # so "0.100.0" >= "0.55" is false and the day Hyprland reaches 0.100
@@ -1539,11 +1532,8 @@ in
                 inherit (pkgs)
                   pinta
                   libreoffice
-                  xournalpp
-                  obs-studio
                   moonlight-qt
                   ;
-                inherit (pkgs.kdePackages) kdenlive;
 
                 # install/omarchy-base.packages. The GUIs manual sends people to
                 # Disks for formatting and SMART, and sushi is what makes Space

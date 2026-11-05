@@ -770,6 +770,11 @@
     reason = "Vendored unchanged. Disables voxtype.service, a user unit installed under the user's own tree.";
     allow = "systemctl-user";
   };
+  "omarchy-remove-service-dropbox" = {
+    class = "vendor";
+    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
+    pacman = "`pacman -Qqtt libappindicator` only asks whether nothing else needs that library before dropping it. There is no pacman here, so the test is false and the extra drop never runs; Dropbox itself goes through omarchy-pkg-drop.";
+  };
   "omarchy-remove-service-ssh-agent" = {
     class = "vendor";
     reason = "Vendored unchanged. Disables the gcr-ssh-agent socket for this user; the enable symlink lives in the user's own tree, as on Arch.";

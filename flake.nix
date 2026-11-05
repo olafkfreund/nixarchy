@@ -2799,6 +2799,10 @@
             pkgs = pkgsFor.${system};
             reference = self.nixosConfigurations.reference;
           };
+          input-methods = import ./tests/input-methods.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+          };
 
           # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
           # for what that can and cannot prove. Costs about what reference-toplevel

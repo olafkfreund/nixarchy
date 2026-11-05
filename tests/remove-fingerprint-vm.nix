@@ -38,10 +38,10 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_unit("multi-user.target")
 
     def send(command):
-        machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket, sys; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall((sys.argv[1] + \"\\n\").encode()); s.close()' " + command)
+        machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket, sys; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(sys.argv[1].encode()); s.close()' '" + command + "'")
 
     def stored():
-        return machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(b\"LIST\\n\"); print(s.recv(4096).decode())'")
+        return machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(b\"LIST\"); print(s.recv(4096).decode())'")
 
     machine.succeed("sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger alice > /tmp/enroll-alice 2>&1 < /dev/null &")
     machine.wait_until_succeeds("test -S /run/fprintd-virt/sock", timeout=60)
@@ -51,7 +51,7 @@ pkgs.testers.runNixOSTest {
         if user == "bob":
             machine.succeed(f"sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger {user} > /tmp/enroll-{user} 2>&1 < /dev/null &")
         send(f"SCAN {user}-id")
-        machine.wait_until_succeeds(f"grep -q 'enroll-completed' /tmp/enroll-{user}")
+        machine.wait_until_succeeds(f"grep -q 'enroll-completed' /tmp/enroll-{user}", timeout=60)
         machine.succeed(f"test -d /var/lib/fprint/{user}")
     before = stored()
     assert "alice-id" in before and "bob-id" in before, before

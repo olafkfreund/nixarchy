@@ -11,7 +11,7 @@
 #
 #   kind = "plain"     A one-to-one toggle. nixarchy has nothing to add, so it
 #                      adds nothing: the generated file gets the real upstream
-#                      line, `services.openssh.enable = true;`, and there is no
+#                      line, `services.flatpak.enable = true;`, and there is no
 #                      nixarchy option at all. That line is what every wiki
 #                      page, forum answer and tutorial will show them, and a
 #                      second vocabulary is a thing to unlearn later.
@@ -37,6 +37,7 @@
 #              the field that does the teaching -- say what turning it on costs
 #              or opens, not what it is.
 #   unfree     Marks a service pulling unfree packages.
+#   terminal   The row asks a question, so the menu opens a terminal for it.
 # ## Not listed here, because they are already on
 #
 # modules/nixos.nix enables these for every nixarchy machine, at mkDefault, so
@@ -73,12 +74,9 @@
   openssh = {
     label = "OpenSSH server";
     category = "Network";
-    kind = "plain";
-    option = [
-      "services"
-      "openssh"
-    ];
-    note = "Remote login. Opens port 22 and NixOS defaults to keys only, not passwords.";
+    kind = "bundled";
+    terminal = true;
+    note = "Remote login. Opens port 22, takes keys only, and asks for your key first.";
   };
 
   # ── Hardware ────────────────────────────────────────────────────────────
@@ -164,7 +162,7 @@
     # half of tests/coverage.py rejects an id upstream does not ship -- an
     # install.development.devenv was tried first and failed there, correctly:
     # Omarchy has no such row to override. So this takes the generated
-    # install.service.devenv, the way openssh and syncthing do.
+    # install.service.devenv, the way syncthing does.
     note = "Per-project development environments that activate when you cd in. Bundled because it is a package plus an activation hook in each of bash, zsh and fish, and a cache to keep the first use from being a compile.";
   };
 

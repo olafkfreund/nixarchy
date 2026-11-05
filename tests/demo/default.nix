@@ -969,7 +969,7 @@ let
           ("nautilus ~", "app-files", 15, "nautilus"),
           ("pinta", "app-pinta", 20, "Pinta"),
           ("gnome-disks", "app-disks", 15, "gnome-disks"),
-          ("xournalpp", "app-xournalpp", 20, "xournalpp"),
+          ("omawrite", "app-omawrite", 20, "omawrite"),
       ]
       for cmd, label, settle, proc in apps:
           user(f"setsid {cmd} >/dev/null 2>&1 &", timeout=20)

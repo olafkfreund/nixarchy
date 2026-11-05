@@ -1200,6 +1200,10 @@ let
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;
+    etcNativeCongestionControl = etcNative (
+      c: c.boot.kernel.sysctl."net.ipv4.tcp_congestion_control" or null
+    ) "bbr";
+    etcNativeQdisc = etcNative (c: c.boot.kernel.sysctl."net.core.default_qdisc" or null) "fq";
     etcNativeWifiPowersave = etcNative (c: c.networking.networkmanager.wifi.powersave) false;
     etcNativeUsbAutosuspend = etcNative (
       c: pkgs.lib.hasInfix "options usbcore autosuspend=-1" c.boot.extraModprobeConfig

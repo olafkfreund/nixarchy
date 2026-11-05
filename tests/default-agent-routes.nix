@@ -87,7 +87,8 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
     IFS=: read -r id attr <<< "$pair"
     run_case "$id" --install "$TMPDIR/mise-bin"
     [ "$rc" -eq 0 ] || fail "$id attr: exited $rc"
-    has "$log" "pkg-add $attr" "$id attr"
+    # Whole line: "pkg-add kilo" is a prefix of the retired kilocode-cli.
+    "$grep_bin" -Fxq -- "pkg-add $attr" "$log" || fail "$id attr: missing pkg-add $attr"
     has "$log" "apply $id" "$id attr"
   done
 

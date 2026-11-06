@@ -1,10 +1,15 @@
 { pkgs, ... }:
 # Exercise the bar command with a local lock and a fake remote; no network.
+let
+  shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
+in
 pkgs.runCommand "nixarchy-update-available"
   {
     nativeBuildInputs = [
       pkgs.bash
       pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.gnused
       pkgs.jq
       pkgs.shellcheck
     ];
@@ -120,6 +125,23 @@ pkgs.runCommand "nixarchy-update-available"
     check 'other repository' 1 0
     jq '.nodes.nixarchy.locked.rev = "short"' base.lock > flake/flake.lock
     check 'invalid installed SHA' 1 0
+
+    sed -n '/^update_pending() {$/,/^}$/p' ${shipped}/share/omarchy/install/user/first-run/wifi.sh > pending.sh
+    grep -qF omarchy-update-available pending.sh || {
+      echo 'update_pending no longer calls omarchy-update-available' >&2
+      exit 1
+    }
+    mkdir -p pend-bin
+    for want in 0 1; do
+      printf '%s\n' '#!${pkgs.bash}/bin/bash' "exit $want" > pend-bin/omarchy-update-available
+      chmod +x pend-bin/omarchy-update-available
+      rc=0
+      env -i PATH=$PWD/pend-bin OMARCHY_PATH=${shipped}/share/omarchy ${pkgs.bash}/bin/bash -c '. ./pending.sh; update_pending' || rc=$?
+      if [ "$rc" -ne "$want" ]; then
+        echo "update_pending exited $rc with omarchy-update-available exit $want" >&2
+        exit 1
+      fi
+    done
 
     touch "$out"
   ''

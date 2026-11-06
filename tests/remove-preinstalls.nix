@@ -29,6 +29,8 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     remove = "${shipped}/share/omarchy/bin/omarchy-remove-preinstalls";
     restore = "${shipped}/share/omarchy/bin/omarchy-install-preinstalls";
     shell = pkgs.runtimeShell;
+    hermesFirst = ./fixtures/hermes-wrapper-first;
+    hermesLast = ./fixtures/hermes-wrapper-last;
   }
   ''
     set -euo pipefail
@@ -40,6 +42,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     export XDG_CONFIG_HOME=$HOME/.config
     export XDG_CACHE_HOME=$HOME/.cache
     export OMARCHY_PATH=$tree
+    unset HYPRLAND_INSTANCE_SIGNATURE
 
     A=$HOME/.local/share/applications
     B=$HOME/.local/bin
@@ -48,9 +51,15 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
 
     # Stubs: record the call and succeed, except the two that must not.
     mkdir -p "$TMPDIR/stubs"
-    for n in gum hyprctl update-desktop-database mise; do
+    for n in gum update-desktop-database mise; do
       printf '#!%s\necho "%s $*" >> "$TMPDIR/calls"\nexit 0\n' "$shell" "$n" > "$TMPDIR/stubs/$n"
     done
+    printf '%s\n' \
+      "#!$shell" \
+      'echo "hyprctl $*" >> "$TMPDIR/calls"' \
+      'case " $* " in *" --instance "*) exit 0 ;; esac' \
+      'echo "HYPRLAND_INSTANCE_SIGNATURE not set! (is hyprland running?)" >&2' \
+      'exit 1' > "$TMPDIR/stubs/hyprctl"
     printf '#!%s\necho "omarchy-install-hermes-cli $*" >> "$TMPDIR/calls"\nexit 1\n' "$shell" > "$TMPDIR/stubs/omarchy-install-hermes-cli"
     printf '#!%s\necho "pacman: not on NixOS" >&2\nexit 1\n' "$shell" > "$TMPDIR/stubs/pacman"
     chmod +x "$TMPDIR"/stubs/*
@@ -84,6 +93,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     printf '#!/bin/bash\n# my wrapper\nmise use -g --quiet "gemini" || exit 1\nexec mise x "gemini" -- "gemini" --model x "$@"\n' > "$B/gemini"
     printf '#!/bin/bash\nexec /opt/gh "$@"\n' > "$B/gh"
     printf '#!/bin/bash\nexport MISE_MINIMUM_RELEASE_AGE=0\nmise use -g --quiet "foo" || exit 1\nexec mise x "foo" -- "bar" "$@"\n' > "$B/opencode"
+    cp --no-preserve=mode "$hermesLast" "$B/hermes"
 
     state() {
       (cd "$TMPDIR" && find home hm \( -type f -o -type l \) -print0 | sort -z) |
@@ -123,7 +133,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     compare before after > delta
 
     [ "$rc" -eq 0 ] || fail "remove exited $rc"
-    want=$(printf '%s\n' home/.local/bin/codex home/.local/share/applications/YouTube.desktop | sort)
+    want=$(printf '%s\n' home/.local/bin/codex home/.local/bin/hermes home/.local/share/applications/YouTube.desktop | sort)
     got=$(pick D delta)
     extra=$(comm -13 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | join)
     left=$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | join)
@@ -134,6 +144,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     added=$(pick A delta | join)
     [ "$added" = "home/.local/state/omarchy/preinstalls-removed" ] || fail "wrote unexpected files: $added"
     [ ! -e "$real_home" ] || fail "wrote outside the fixture: $real_home"
+    if grep -qF 'HYPRLAND_INSTANCE_SIGNATURE not set!' remove.log; then fail "Remove called hyprctl without an instance"; fi
     if [ "''${#fails[@]}" -gt 0 ]; then cat remove.log >&2; fi
     report
     echo "remove: deleted only $(pick D delta | join)"
@@ -153,9 +164,51 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     odd=$(pick A delta | grep -v '^home/.local/share/applications/' | join || true)
     [ -z "$odd" ] || fail "Restore wrote unexpected files: $odd"
     [ ! -e "$real_home" ] || fail "wrote outside the fixture: $real_home"
+    if grep -qF 'HYPRLAND_INSTANCE_SIGNATURE not set!' restore.log; then fail "Restore called hyprctl without an instance"; fi
+    grep -qFx 'hyprctl --instance 0 reload' "$TMPDIR/calls" || fail "instance-targeted hyprctl reload was not called"
     if [ "''${#fails[@]}" -gt 0 ]; then cat restore.log >&2; fi
     report
     echo "restore: added $(pick A delta | wc -l) launchers, changed nothing"
+
+    hermes_case() {
+      local name=$1 outcome=$2 before target= rc=0
+      before=$(sha256sum <"$B/hermes")
+      if [ -L "$B/hermes" ]; then
+        target=$(readlink "$B/hermes")
+      fi
+      bash "$remove" > hermes.log 2>&1 || rc=$?
+      [ "$rc" -eq 0 ] || fail "$name: Remove exited $rc"
+      if [ "$outcome" = deleted ]; then
+        [ ! -e "$B/hermes" ] && [ ! -L "$B/hermes" ] || fail "$name: wrapper was kept"
+      else
+        [ -e "$B/hermes" ] || fail "$name: file was deleted"
+        if [ -n "''${target:-}" ]; then
+          [ -L "$B/hermes" ] && [ "$(readlink "$B/hermes")" = "$target" ] || fail "$name: link changed"
+        else
+          [ ! -L "$B/hermes" ] || fail "$name: file became a link"
+        fi
+        [ "$(sha256sum <"$B/hermes")" = "$before" ] || fail "$name: bytes changed"
+        grep -qF "Kept    $B/hermes " hermes.log || fail "$name: Kept did not name Hermes"
+      fi
+    }
+
+    cp --no-preserve=mode "$hermesFirst" "$B/hermes"
+    hermes_case "older wrapper" deleted
+    cp --no-preserve=mode "$hermesLast" "$B/hermes"
+    printf '# user edit\n' >> "$B/hermes"
+    hermes_case "edited wrapper" kept
+    printf '#!/bin/bash\nexec /opt/hermes "$@"\n' > "$B/hermes"
+    hermes_case "user wrapper" kept
+    cp --no-preserve=mode "$hermesLast" "$HM/hermes"
+    rm -f "$B/hermes"
+    ln -s "$HM/hermes" "$B/hermes"
+    hermes_case "link" kept
+    rm -f "$B/hermes"
+    sed 's/^# Written by omarchy-install-hermes-cli\./ # Written by omarchy-install-hermes-cli./' "$hermesLast" > "$B/hermes"
+    hermes_case "near miss" kept
+    if grep -qF 'omarchy-install-hermes-cli' "$TMPDIR/calls"; then fail "Remove called omarchy-install-hermes-cli"; fi
+    if [ "''${#fails[@]}" -gt 0 ]; then cat hermes.log >&2; fi
+    report
 
     touch $out
   ''

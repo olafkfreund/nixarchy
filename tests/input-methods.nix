@@ -3,6 +3,12 @@ let
   tree = reference.config.programs.nixarchy.package;
   real = reference.config.i18n.inputMethod.package;
   bare = pkgs.qt6Packages.fcitx5-with-addons;
+  # The real list and the real package, not reference's system.path: that is every desktop package.
+  linked = pkgs.buildEnv {
+    name = "input-methods-linked";
+    paths = [ real ];
+    inherit (reference.config.environment) pathsToLink;
+  };
   python = pkgs.python3.withPackages (p: [ p.pygobject3 ]);
   ledger = pkgs.writeText "input-method-ledger.json" (
     builtins.toJSON (import ../data/omarchy-packages.nix)
@@ -333,5 +339,7 @@ pkgs.runCommand "nixarchy-input-methods"
       dbus-run-session --config-file=${pkgs.dbus}/share/dbus-1/session.conf -- \
       ${python}/bin/python3 ${driver} ${tree} ${real} ${bare} ${ledger} \
       ${pkgs.closureInfo { rootPaths = [ real ]; }}/store-paths ${pre} ${python}
+    test -e ${linked}/share/fcitx5/themes/default/prev.svg || { echo "input-methods: FAIL themes are not linked"; exit 1; }
+    test ! -e ${linked}/share/fcitx5/addon || { echo "input-methods: FAIL addon files are linked"; exit 1; }
     touch $out
   ''

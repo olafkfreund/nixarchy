@@ -28,7 +28,7 @@ package itself as well as the function check after changing its shell source.
 |---|---|---|
 | `install` | the installer's output boots — a real disk, real bootloader | self-hosted |
 | `install-encrypted` | the LUKS path, unlocked over the serial console | self-hosted |
-| `install-iso` / `-net` | the real published image, installing with no network | self-hosted |
+| `install-iso-net` | the published image installs through a substituter | self-hosted |
 | `free-space` | installing beside an existing OS without eating it | self-hosted |
 | `session` | a booted desktop; **does not run locally**, CI only | self-hosted |
 | `microvm-boot` | a guest actually boots, not just builds | `-tcg` runner |
@@ -36,22 +36,26 @@ package itself as well as the function check after changing its shell source.
 VM tests run from `/mnt/data/vmtest`, never `/tmp` — `/tmp` is a 32G tmpfs and
 a VM test that runs out of room does not fail cleanly, it wedges.
 
+No check installs a personal network image end to end. `install-iso-net` boots
+the stock image; `reinstall-iso` exercises the personal-image preflights with
+stubs. `install-matrix.py` also uses the published stock image. A personal
+image must be built and installed manually to cover that path.
+
 `checks.coexistence` (`tests/coexistence/`, AGENTS.md §14) proves nixarchy's
 own fixtures still build and don't get silently shadowed — it cannot see
 fonts (no known failing case) or a real host config, only what a fixture
 names.
 
-## The one nothing here can prove: a username that is not `omarchy`
+## The manual username case
 
 `tests/install-matrix.py` is not a check. It boots a **published** `.iso` in
 real qemu and installs it every way a person can — scripted, driven by hand
 through the greeter, and then re-booted from its own disk to prove the result
 starts.
 
-It exists because of a hole every check above shares. All of them install as
-username **`omarchy`**, which is the name the ISO's reference closure is baked
-for — the one username that cannot diverge from it. On 2026-09-07 the full
-matrix ran 6/6 green against the published `v4.0.2-8` offline image; the same
+It exists because the automated checks install as username **`omarchy`**.
+On 2026-09-07 the full
+matrix ran 6/6 green against the published `v4.0.2-8` image; the same
 file, driven by hand with the username `olaf`, died in the source bootstrap:
 
 ```
@@ -59,34 +63,24 @@ hm_hmfontconfigfonts.xml -> libxml2+py -> doxygen -> cmake
   -> libarchive -> attr -> download.savannah.gnu.org
 ```
 
-home-manager's per-user fontconfig file is in no baked closure, and the offline
+home-manager's per-user fontconfig file was in no baked closure, and that
 image had `substituters = lib.mkForce [ ]`, so it could not fetch that path and
 had to build it — and building anything with no compiler on the medium is the
 stdenv bootstrap. Two users hit the same bootstrap by a different route, an
-Intel NPU. #384 gave both images substituters; the same cells against an image
-built from that fix installed and booted clean.
-
-`installer/cd.nix` bakes `inputDerivation` for `toplevel`, `initialRamdisk` and
-`etc`. home-manager is a fourth per-machine thing and is not in that list.
+Intel NPU. #384 gave the images published then substituters; the same cells
+against an image built from that fix installed and booted clean.
 
 So, when changing what the ISO carries or how the installer writes a machine:
 
 ```
-MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py off-free manual
+MATRIX_NET_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py net-free manual
 ```
 
 and **type a username that is not `omarchy`**.
 
-**Partly closed since.** `checks.install-iso` now installs as `lovelace`, so
-one automated cell finally varies this — offline, nightly, already paying for a
-full image build, so a per-user rebuild costs wall clock nobody waits on.
-`checks.install` keeps `omarchy` deliberately: it is PR-gated and its seeded
-store is the thing under test there.
-
 What is still uncovered, and worth typing by hand: a name with a **hyphen or a
 digit**, which also stresses systemd unit naming (`home-manager-<user>.service`)
-and home-manager's own paths. `install-iso` varies one variable on purpose —
-a compound change makes a failure unattributable.
+and home-manager's own paths.
 
 ## The other one nothing here can prove: a disk that is not virtio
 
@@ -106,12 +100,12 @@ the framework with raw `qemu.options` and creating the image yourself, inside a
 So it lives in the harness instead, which drives real qemu directly:
 
 ```
-MATRIX_NVME=1 MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso \
-  python3 tests/install-matrix.py off-whole-plain
+MATRIX_NVME=1 MATRIX_NET_ISO=result/iso/nixarchy-*.iso \
+  python3 tests/install-matrix.py net-whole-plain
 ```
 
 Run it when changing anything that builds a partition name, mounts by path, or
-touches `installer/disk-config.nix`. Both an online and an offline whole-disk
+touches `installer/disk-config.nix`. Both an online and a former offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
@@ -468,11 +462,13 @@ nothing.
 
 `tests/session.nix`'s #1153 probe sets a real video background and locks
 with one set, and proves the wiring end to end: `owed` starts, `owe status`
-reports a video source with a live renderer, the desktop and the lock
-screen's feed both visibly move, and the background plugin comes back once
-the still returns. **None of that reaches the two questions a VM genuinely
-cannot answer**, for the same reason the Graphics section of `pkgs/verify.sh`
-exists at all:
+reports a video source with a live renderer, the desktop video visibly moves,
+the lock screen holds still, and the background plugin comes back once the
+still returns. The lock assertion can miss playback more than 1.6 times too
+slow, or a screenshot stall that aliases with the video loop for one run; a
+handoff one shot later still fails and prints the readings. **None of that
+reaches the two questions a VM genuinely cannot answer**, for the same reason
+the Graphics section of `pkgs/verify.sh` exists at all:
 
 - **hardware decode.** Every VM here renders on llvmpipe, so `owe
   render-status`'s `hwdec` field is always `"no"` on this renderer whether
@@ -571,8 +567,9 @@ seen failing:
     the accepted-agent parse found 0 ids; ... This check is refusing rather than passing.
 
 **What it cannot reach:** whether `openclaw` actually launches once installed,
-and whether the three llm-agents.nix attribute names (`cursor-agent`,
-`hermes-agent`, `muse-code`) are still correct. The second is a claim about
+and whether the six llm-agents.nix attribute names
+(`kimi-code`, `minimax-code`, `freebuff`, `command-code`, `ori`, `hermes-agent`)
+are still correct. The second is a claim about
 another repository printed to users, and nothing here notices when it goes
 stale -- a source of quietly wrong advice rather than a broken build.
 
@@ -938,8 +935,8 @@ cannot fetch an unfree or locally built path — cannot be produced by any
 layer here. What IS covered: the prediction's classification against real
 `nix path-info` shapes (`substitutable`), the build-machine verdict wiring
 (`reinstall-iso`), and the target-side plan report with plans nix really
-prints (`installer-store-space`). What is not: a real `reinstall-iso-net`
-image, booted against real caches, missing a real unfree package. That run
+prints (`installer-store-space`). What is not: a personal network image,
+booted against real caches, missing a real unfree package. That run
 needs a human with vscode in their closure and a machine to lose; until one
 reports back, the prediction is tested and the event it predicts is not.
 
@@ -1893,6 +1890,8 @@ Holes, named rather than closed:
 - systemd's EFI `HibernateLocation` path is not booted by any VM.
 - Zen is supported for the shipped beta package only: another variant of the
   package hides the row by design.
+- Nothing rebuilds a machine to install a missing default browser or editor and
+  read `xdg-settings` back; the chain is proved in parts (#1623).
 
 ## menu-actions proves classification, not safety (#1304)
 
@@ -1960,19 +1959,37 @@ journal line names the process `(.quickshell-wra)`, with a leading dot, so an
 exact match such as coredumpctl's `COMM=quickshell-wra` misses it.
 
 <a id="provision-launchers-runs-two-calls-not-provisioning"></a>
-## provision-launchers runs two calls, not provisioning (#1319)
+## provision-launchers runs one call, not provisioning (#1319)
 
-`checks.provision-launchers` runs `install/user/mise.sh` the way `all.sh:18`
-runs it, then `omarchy-refresh-applications` (`omarchy-provision-user:118`),
-twice on a dirty home and once on a clean one.
+`checks.provision-launchers` runs `omarchy-refresh-applications`
+(`omarchy-provision-user:118`) twice on a dirty home and once on a clean one,
+and asserts `install/user/all.sh` no longer names `user/mise.sh` (#1625) and
+that every `OMARCHY_INSTALL/...` path it names exists in the shipped tree.
 
-Quattro's `mise.sh` reshims instead of writing launchers into `~/.local/bin`, so
-the check asserts the `mise reshim --system` call, not stub files (#1398).
-
-- **Hole 1.** It does not run the whole of `omarchy-provision-user`, so a third
+- **Hole 1.** It does not run the whole of `omarchy-provision-user`, so another
   writer added upstream to `all.sh` or to provision-user is not seen.
 - **Hole 2.** No check runs a real Home Manager activation followed by a real
   first login, in that order. Only a VM with Home Manager could.
+
+<a id="mise-free"></a>
+## mise-free scans shipped code per line (#1625)
+
+`checks.mise-free` runs `.github/scripts/check-mise-free.py` over the reference
+configuration's `programs.nixarchy.tree` (`bin`, `default`, `install`, `shell`,
+`config`, `applications`, minus `default/i18n` where French says "mise à jour"),
+plus `pkgs/omarchy/zsh-rc`, `pkgs/omarchy/fish-rc` and `modules/*.nix`. It
+also sources the shipped bash, zsh and fish rcs twice with a logging `mise` stub
+first on PATH and asserts the log stays empty and `$OMARCHY_PATH/agent-dispatch`
+appears on PATH once, and asserts no `mise/` row in `data/etc-overlay.nix` is
+`installed`.
+
+The allowlist (`data/mise-allow.nix`) records exact `#`-stripped lines per file
+with a reason, rather than whole files: a per-file allowlist would let an
+already-listed script gain a real `mise` call on a bump and stay green. Both
+directions fail — an unrecorded match and a recorded line that no longer
+matches — so a new upstream call or a stale row after an upstream cleanup is
+answered in `data/mise-allow.nix` or by a patch, on edge (`edge-candidate`)
+too.
 
 **`cp -f` writes through a destination symlink whose target is writable.** It
 unlinks the link only when the target refuses the write (coreutils 9.11). So a
@@ -2132,3 +2149,10 @@ login in a VM. `sshd-enable` checks the menu script's key gate and row changes;
 row 23 reads `reference`'s script because the vm turns sshd on itself. Neither
 check reaches a real menu click in a floating terminal or a key sshd will not
 use because of `~/.ssh` permissions (§3).
+
+## A build that is not reproducible keeps its path
+
+Found on 2026-11-06, when `installer-refusal` failed with `curl` exit 60 on a pull request that had not touched it. Its stub certificate came from `openssl req` in a `runCommand`, so each build made a new key under the same store path. A garbage collection removed that path, the next build made a new certificate there, and the CA bundles already built from the old one stayed in the shared store and went on trusting only the old one. Nothing in the derivation graph can see that, so every run on that host fails until those bundles are collected too.
+
+A test's key or certificate is a committed fixture. So is anything else that another derivation embeds by content and that a rebuild would change. It is test-only and trusted only inside that VM.
+

@@ -253,7 +253,24 @@ when you switch.
 
 Choosing one installs it declaratively — `nixarchy-pkg-add` and a rebuild —
 rather than fetching a binary into `~/.local` that nothing records. Antigravity
-is in the list because Google deprecated `gemini-cli` in its favour.
+is in the list because Google deprecated `gemini-cli` in its favour. Kimi,
+MiniMax Code, Freebuff, Command Code, Ori and Hermes are not in nixpkgs: their
+rows say so, name their package in `numtide/llm-agents.nix`, and leave your
+current default alone. A row opens a terminal whenever it has something to tell
+you.
+
+Upstream's Claude entry also offers to install the Claude browser extension.
+Here that is a NixOS option:
+
+```nix
+programs.chromium.enable = true;
+programs.chromium.extensions = [ "fcoeoabgfenejglbffodgkkbkcdhcgfn" ];
+```
+
+This reaches Chromium, Chrome and Brave, but not Edge. Because `extensions`
+becomes `ExtensionInstallForcelist`, it force-installs the extension so the
+browser will not let you remove it; installing from the Web Store is the
+removable route.
 
 Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
@@ -348,7 +365,7 @@ are 651 MiB of a public 5 GB cache, for two packages that are fetched rather
 than built. A machine that does not use Claude should not carry them.
 
 The gap is a machine that uses Claude **without installing it through Nix** —
-from mise, npm, or the official installer into `~/.local/bin`. Nothing in the
+from your own mise, npm, or the official installer into `~/.local/bin`. Nothing in the
 configuration records that, because the choice lives in
 `~/.config/omarchy/defaults/agent`, which is written at runtime. Both halves of
 the condition read false, no adapter is pinned, and the first sign of it is

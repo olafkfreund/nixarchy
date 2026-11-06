@@ -30,7 +30,7 @@
 # virtio NIC. There is nowhere in the suite this could have been caught by
 # running something -- only by asking the configuration what it says.
 let
-  c = inputs.self.nixosConfigurations.iso.config;
+  c = inputs.self.nixosConfigurations.iso-net.config;
   b = v: if v then "true" else "false";
 in
 pkgs.runCommand "nixarchy-iso-wifi" { } ''

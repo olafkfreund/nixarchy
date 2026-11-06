@@ -3,8 +3,8 @@
 # omarchy:summary=Ensure default application launchers are installed.
 
 # Upstream's cp -f replaced an edited launcher or a home-manager link, and its
-# second mise.sh run deleted a home-manager ~/.local/bin entry (#1319).
-# Provisioning runs mise.sh itself (all.sh). This only adds missing launchers.
+# second mise.sh run deleted a home-manager ~/.local/bin entry (#1319, #1625).
+# This only adds missing launchers and runs no mise.sh.
 set -uo pipefail
 
 apps="$HOME/.local/share/applications"

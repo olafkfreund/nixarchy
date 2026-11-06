@@ -325,36 +325,21 @@ and answer seven questions.
 
 **[Releases](https://github.com/olafkfreund/nixarchy/releases)** carry prebuilt
 images from `v4.0.1-3` onward, built and install-tested by CI on the machine
-that runs the nightly checks. The large one is split, because GitHub will not
-take a single file that size:
+that runs the nightly checks. Download the network image and write it to a stick:
 
 ```
-cat nixarchy-v*.iso.part-* > nixarchy.iso     # the ~7 GB image only
-sha256sum -c --ignore-missing SHA256SUMS
-sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
+sha256sum -c SHA256SUMS
+sudo dd if=nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-`--ignore-missing` because one `SHA256SUMS` covers both images and nobody
-downloads both.
-
-There are two images, and the difference is what they carry:
-
-| | Size | Needs a network | |
-|---|---|---|---|
-| `#iso` | about 7 GB | no | carries the desktop; installs by copying |
-| `#iso-net` | about 2 GB | yes | downloads the desktop as it installs |
-
-Take `#iso` unless the download is the thing you mind. It is the one the tests
-boot every night, it works on a machine that has never had a network, and it is
-faster once you have it. `#iso-net` is a quarter of the download and asks you
-to get online first — its first screen offers Wi-Fi if there is no cable.
+`#iso-net` is about 2 GB and downloads the desktop as it installs. The target
+needs a network; the first screen offers Wi-Fi if there is no cable.
 
 Boot it: no boot menu, no login prompt, the installer is what comes up. The
 questions, one by one, are in
 [Getting started](https://olafkfreund.github.io/nixarchy/manual/getting-started).
-Writing the stick from Windows or macOS (and why Rufus' recommended answer is
-the wrong one), Secure Boot, Ventoy, answering the questions from a file, and
-what the installer leaves in `/etc/nixos`:
+Writing the stick from Windows or macOS, Secure Boot, Ventoy, answering the
+questions from a file, and what the installer leaves in `/etc/nixos`:
 [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso).
 Keeping Windows on the same disk:
 [dual boot](https://olafkfreund.github.io/nixarchy/manual/dual-boot-install).
@@ -366,13 +351,11 @@ installer ISO a release ships, in a local UEFI VM, and you answer the wizard
 yourself:
 
 ```sh
-nix run github:olafkfreund/nixarchy#try            # offline image, ~7 GB download
-nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~2 GB download
+nix run github:olafkfreund/nixarchy#try            # network image, ~2 GB download
 ```
 
-The offline image installs with no network at all; the network image fetches
-the rest from binary caches during the install. Both write to a
-`nixarchy-try.qcow2` in the current directory (up to 32 GB), and when the
+The image fetches the desktop from binary caches during the install. It writes
+to `nixarchy-try.qcow2` in the current directory (up to 32 GB), and when the
 install finishes, `-- --boot` starts the installed system from that disk;
 `-- --fresh` wipes it and installs again. `-- --help` lists the rest.
 
@@ -828,7 +811,7 @@ scrolling past it:
 | | |
 |---|---|
 | [Configuring nixarchy](https://olafkfreund.github.io/nixarchy/manual/configuration) | every option worth a decision: shell functions, plugins, RetroArch cores, the binary cache, Neovim, the boot splash, and what defers to a configuration you already have |
-| [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) | writing the stick, the two images, the answers file, and the caveats |
+| [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) | writing the stick, the network image, the answers file, and the caveats |
 | [Design notes, status, and what running it found](docs/internals/design.md) | each bug that shipped and is now guarded by CI; what proves every claim in *What works*; the AI measurements; the screencast and the development checks |
 | [How this is tested](https://olafkfreund.github.io/nixarchy/manual/how-this-is-tested) | what CI runs, when, and what each check does not prove |
 

@@ -48,11 +48,10 @@
 # No row is `seed`: modules/home.nix seeds `config/` and `default/`, never
 # `etc/`. Two files here (fastfetch and kitty) are the system half of a pair
 # whose user half IS seeded, and both were `divergent` until #649 made them
-# `installed`; mise's alias went with them. Those three were the user-visible
-# symptoms -- a stub config pointing at a file that did not exist, an About
-# screen in fastfetch's stock layout, a `mise use` that could not resolve --
-# and a file whose program reads it by path is the same shape of change: turn
-# the row's class, and modules/nixos.nix installs it.
+# `installed`. Those two were the user-visible symptoms -- a stub config
+# pointing at a file that did not exist, an About screen in fastfetch's stock
+# layout -- and a file whose program reads it by path is the same shape of
+# change: turn the row's class, and modules/nixos.nix installs it.
 #
 # ## What a reason is for
 #
@@ -110,18 +109,18 @@
   };
 
   "mise/conf.d/omarchy-agent-accounts.toml" = {
-    class = "installed";
-    reason = "mise `[wrappers]` routing claude, codex and grok through `omarchy-agent-account-exec`, so `omarchy agent account use` reaches a CLI started in an activated shell. nixpkgs' mise reads `[wrappers]` (2026.10.3, measured). The launchers resolve the account themselves. The exec's mise install fallback is patched to refuse (#1386).";
+    class = "divergent";
+    reason = "Not installed: nixarchy ships no mise (#1625). Inert under share/omarchy/etc so checks.etc-overlay still sees upstream.";
   };
 
   "mise/conf.d/omarchy-tools.toml" = {
     class = "divergent";
-    reason = "Lazy mise installs of about 22 tools (node, gh, claude, codex and more). Deliberately not adopted: it would put mise downloads ahead of the Nix builds, which is what data/apps.nix and #707 exist to prevent.";
+    reason = "Lazy mise installs of about 22 tools (node, gh, claude, codex and more). Deliberately not adopted: nixarchy ships no mise (#1625), and it would put mise downloads ahead of the Nix builds, which is what data/apps.nix exists to prevent.";
   };
 
   "mise/conf.d/omarchy.toml" = {
-    class = "installed";
-    reason = "A mise tool_alias so `mise use -g cursor-agent` resolves, which is how upstream's omarchy-mise-install wrapper installs the Cursor CLI. mise reads /etc/mise/conf.d, and this is the shipped file at that path, so that agent installs like the others. #649.";
+    class = "divergent";
+    reason = "Not installed: nixarchy ships no mise (#1625). Inert under share/omarchy/etc so checks.etc-overlay still sees upstream.";
   };
 
   "mkinitcpio.conf.d/00-omarchy-hooks.conf" = {

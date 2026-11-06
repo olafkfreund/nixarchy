@@ -172,7 +172,7 @@
     nix = "man-db";
   };
   "mise-bin" = {
-    nix = "mise";
+    skip = "nixarchy does not ship mise (#1625). A person who wants it adds pkgs.mise to their own configuration.";
   };
   "monologue" = {
     nix = "nixarchy-apps.monologue";
@@ -773,7 +773,7 @@
     skip = "Upstream's Cam Link 4K relay. Not ported yet; an opt-in module would use boot.extraModulePackages and services.v4l2-relayd (#1610).";
   };
   "vi" = {
-    skip = "Neovim provides vi/vim aliases where wanted.";
+    module = "environment.systemPackages"; # lowPrio wrapper to nvim in modules/nixos.nix (#1623)
   };
   "whois" = {
     skip = "Not installed by default.";

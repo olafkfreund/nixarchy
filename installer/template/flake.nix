@@ -105,11 +105,11 @@
         }
       );
 
-      # `nixarchy reinstall iso` builds this: a bootable image carrying THIS
-      # machine, so it can be rebuilt on new hardware after a disk is lost.
+      # `nixarchy reinstall iso` builds this: a bootable network image for
+      # reinstalling this machine after a disk is lost.
       #
       # Read the honesty in the command before you rely on it. The image
-      # carries the system closure and this repository; it carries no /home,
+      # carries this repository's inputs; it carries no /home,
       # no service state and no secrets, and booting it ERASES the target
       # disk. Files come back from your backups, not from here.
       #
@@ -120,17 +120,17 @@
       packages.x86_64-linux =
         let
           image =
-            offline: host:
+            host:
             nixarchy.lib.mkUserIso {
-              inherit host offline;
+              inherit host;
               flake = self;
             };
           # The bare names, for the common case of one machine. With several,
           # the command names the one it means.
           only =
-            offline: suffix:
+            suffix:
             if lib.length hosts == 1 then
-              image offline (lib.head hosts)
+              image (lib.head hosts)
             else
               throw ''
                 This repository has ${toString (lib.length hosts)} machines, so
@@ -138,15 +138,11 @@
                 ${lib.concatStringsSep "\n" (map (h: "  nix build .#${h}${suffix}") hosts)}
               '';
         in
-        lib.genAttrs hosts (image true)
-        # The -net twins fetch the closure at install time instead of carrying
-        # it: ~1.5 GB, a network on the target, and only honest when the
-        # caches hold this system -- which `nixarchy reinstall iso --net`
-        # checks before offering the build.
-        // lib.listToAttrs (map (name: lib.nameValuePair "${name}-net" (image false name)) hosts)
+        lib.genAttrs hosts image
+        // lib.listToAttrs (map (name: lib.nameValuePair "${name}-net" (image name)) hosts)
         // {
-          reinstall-iso = only true "";
-          reinstall-iso-net = only false "-net";
+          reinstall-iso = only "";
+          reinstall-iso-net = only "-net";
         };
     };
 }

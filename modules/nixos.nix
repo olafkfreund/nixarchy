@@ -687,10 +687,9 @@ in
         activation: the configuration is the source of truth, and a menu click
         that outlived a rebuild would be a second, invisible one.
 
-        The ids match `omarchy-default-agent`'s. Absent from the list are `pi`,
-        `omp` and `antigravity`, which nixpkgs has no package for -- that
-        command falls back to mise for those, and an imperative install is not
-        something an option should promise to reproduce.
+        The ids match `omarchy-default-agent`'s. This option installs these
+        seven. The menu installs more of them from nixpkgs, such as `pi` and
+        `omp`, and names where the ones nixpkgs lacks are packaged.
       '';
     };
 
@@ -757,7 +756,7 @@ in
 
         Three of upstream's five rc files are portable and are sourced as-is.
         The two that are genuinely bash (shopt and BASH_COMPLETION internals;
-        `mise activate bash`, `starship init bash`, fzf's bash key bindings)
+        `starship init bash`, fzf's bash key bindings)
         are done against the same tools' zsh support instead. bash-specific
         completions and the readline inputrc are left alone: zsh has compinit
         and ZLE, and a half-ported version of either is worse than neither.
@@ -1163,7 +1162,7 @@ in
         withUWSM = true;
       };
 
-      # Why: modules/AGENTS.md#mise-is-in-omarchys-base-packages-and-its-dev-env-
+      # Why: modules/AGENTS.md#nix-ld-stays-for-downloaded-binaries
       nix-ld = {
         enable = lib.mkDefault true;
 
@@ -1396,7 +1395,10 @@ in
         "/share/hypr"
       ]
       # workspace-modes.lua loads the plugin from /run/current-system/sw/lib (#1572).
-      ++ lib.optional cfg.session "/lib/omarchy-hyprland-titlebars";
+      ++ lib.optional cfg.session "/lib/omarchy-hyprland-titlebars"
+      # omarchy-theme-set-fcitx5 links the stock theme's glyphs through the system profile.
+      # Themes only: all of share/fcitx5 would put addon files on XDG_DATA_DIRS.
+      ++ lib.optional usingFcitx5 "/share/fcitx5/themes";
 
       # Omarchy's scripts are unwrapped by design (wrapping breaks the CLI's
       # metadata scan), so their dependencies have to be on the session PATH.
@@ -1409,6 +1411,7 @@ in
         ++ map lib.lowPrio (
           builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
         )
+        ++ [ (lib.lowPrio (pkgs.writeShellScriptBin "vi" ''exec nvim "$@"'')) ]
         # sessionPackages alone does not populate
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.
@@ -1733,7 +1736,7 @@ in
       # `installed`: the file itself, at the path Omarchy's Arch package puts
       # it, so a source bump carries upstream's edits. tests/options.nix names
       # each one in both states.
-      # Why: modules/AGENTS.md#three-files-from-upstreams-etc-overlay-installed-as-themselves
+      # Why: modules/AGENTS.md#two-files-from-upstreams-etc-overlay-installed-as-themselves
       // lib.genAttrs installedEtc (name: {
         source = "${cfg.package}/share/omarchy/etc/${name}";
       })

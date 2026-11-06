@@ -21,7 +21,7 @@ Three modes, and each exists because the one before it missed something:
                             "the machine boots" are different claims, and the
                             hardware reports are about the second one.
 
-The cells cross the two published images with the three disk modes. `free`
+The cells cross the published network image with the three disk modes. `free`
 gets a disk shaped like a machine that already has Windows on it -- a 512 MiB
 ESP, a 40 GiB data partition, and 59.5 GiB of free space after them -- because
 the installer refuses `free` under 32 GiB and a blank disk therefore tests
@@ -47,7 +47,8 @@ directory:
 
   So: when changing anything about what the ISO carries, run the `manual`
   mode with a username that is NOT `omarchy`. The scripted cells cannot see
-  this class of bug and never will.
+  this class of bug and never will. No check installs a personal network
+  image end to end; this matrix also uses the stock published image.
 
   Input methods (#1614) split the same way: `checks.input-methods` and
   `checks.session` cover the five fcitx5 engines (`mozc`, `hangul`, `pinyin`,
@@ -57,8 +58,8 @@ directory:
   a human.
 
 Environment: MATRIX_ISO_DIR (where the published .iso files are),
-MATRIX_OFFLINE_ISO / MATRIX_NET_ISO (override one image -- how a freshly
-built ISO gets tested), MATRIX_WORK (where disks live; not /tmp, which is
+MATRIX_NET_ISO (override the image -- how a freshly built ISO gets tested),
+MATRIX_WORK (where disks live; not /tmp, which is
 tmpfs here), MATRIX_OVMF (firmware, resolved from nixpkgs otherwise).
 
 Every VM is watchable on VNC throughout; the port is printed at startup.
@@ -164,29 +165,17 @@ def wait_for(path, needle, timeout, label=None):
 
 ISOS = os.environ.get("MATRIX_ISO_DIR", "/mnt/data/vmtest/isos")
 WORK = os.environ.get("MATRIX_WORK", "/mnt/data/vmtest")
-# Overridable so the same cells can be re-run against a freshly BUILT image
-# rather than the published one. The published v4.0.2-8 offline image cannot
-# fetch anything (substituters = mkForce [ ]), so any divergence from the baked
-# reference -- a username that is not `omarchy`, an Intel NPU -- has to be
-# built, which is the stdenv source bootstrap. #384 fixed that on main; this is
-# how the fix gets tested on the path that found the bug.
-OFFLINE = os.environ.get("MATRIX_OFFLINE_ISO", f"{ISOS}/nixarchy-v4.0.2-8.iso")
+# Overridable so the cells can be re-run against a freshly built image.
 NET = os.environ.get("MATRIX_NET_ISO", f"{ISOS}/nixarchy-v4.0.2-8-net.iso")
 # Resolved rather than pinned: a hardcoded store path is a time bomb the first
 # time the pin moves and the file is garbage-collected.
 OVMF = os.environ.get("MATRIX_OVMF") or (
     subprocess.run(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#OVMF.fd"],
                    capture_output=True, text=True, check=True).stdout.strip() + "/FV")
-# NOT `omarchy` by default here would break the boot/manual modes' comparison
-# with the baked reference, so the default matches what every other check uses
-# -- and the whole point of the variable is that you are supposed to change it.
-# See the module docstring: `omarchy` is the one username that cannot diverge.
+# Change this when manually checking a non-default username.
 USERNAME = os.environ.get("MATRIX_USERNAME", "omarchy")
 
-# No network at all, not merely no substituters. `offline` in installer/cd.nix
-# means the store is pre-populated; this asks the harder question -- can a
-# machine with no cable install from this image without needing to build
-# something it has no compiler for.
+# Use only when checking the network refusal path.
 NONET = os.environ.get("MATRIX_NONET") == "1"
 
 # An emulated NVMe controller instead of virtio-blk, and the target device name
@@ -216,9 +205,6 @@ HASH = ("$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo."
 
 # name -> (iso, disk_mode, encrypt, vnc display)
 CELLS = {
-    "off-whole-plain": (OFFLINE, "whole", False, 10),
-    "off-whole-enc":   (OFFLINE, "whole", True,  11),
-    "off-free":        (OFFLINE, "free",  False, 12),
     "net-whole-plain": (NET,     "whole", False, 13),
     "net-whole-enc":   (NET,     "whole", True,  14),
     "net-free":        (NET,     "free",  False, 15),

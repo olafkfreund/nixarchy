@@ -180,13 +180,14 @@ system:
 | OCaml | `ocaml` | |
 | Python | `python3` | Already present as a dependency of Omarchy's own scripts; select it anyway so your configuration says so |
 
-PHP and Symfony are rows too. Ruby on Rails, Laravel and Phoenix have no row
-of their own because upstream's `omarchy install dev-env` scripts still drive
-mise and `omarchy-pkg-add` for them.
+PHP and Symfony are rows too. Ruby on Rails, Laravel and Phoenix are dimmed in
+the menu, pointing at `languages.ruby`, `languages.php` and `languages.elixir`
+in a project's `devenv.nix`.
 
-mise itself is still installed, and `programs.nix-ld` is enabled so that its
-downloads can run. It is fine for a tool that is not in the table; it is the
-wrong place for a compiler your project depends on.
+nixarchy does not ship or activate mise. If you want mise yourself, add
+`pkgs.mise` to your configuration and `eval "$(mise activate zsh)"` (or `bash`,
+`fish`) to your own rc; without nixarchy's `/etc/mise/conf.d` files it has no
+`upgrade.auto_prune = false` setting and no `cursor-agent` alias.
 
 ### Per-project environments: `nix develop`
 
@@ -383,11 +384,7 @@ databases — and none of it is Arch-specific.
 
 ## GitHub CLI
 
-Upstream wires `gh` and `ghui` as lazy-loading mise stubs, and those stubs
-are what you get here too: the first `gh` downloads it through mise into
-`~/.local/share/mise`. That works, thanks to nix-ld, but it is the same
-imperative state as any other mise install. If you want `gh` on every machine
-you build from this flake, add `pkgs.gh` to `environment.systemPackages` and
-it takes precedence over the stub.
+`gh` comes from Nix, not from a lazy-loading mise stub: add `pkgs.gh` to
+`environment.systemPackages` (or `nixarchy-pkg-add gh` and `nixarchy-apply`).
 
 `gh auth login`, `gh repo clone org/repo` and lazygit are as upstream.

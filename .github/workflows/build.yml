@@ -386,18 +386,13 @@ jobs:
           # shipped straight through it, green.
           #
           # These stay there deliberately, and the cost is the reason:
-          #   install-iso  builds a 6 GB image and installs it -- ~3h
-          #   iso-budget   measures that same image, so pays the same build
-          #   install-iso-net  the same image build plus a closure fetch
+          #   iso-budget   measures the network image, so pays for its build
+          #   install-iso-net  builds that image and installs through a cache
           #   install-encrypted  an install-class VM with the same 85-minute
           #                    driver budget as checks.install; install-check.yml
           #                    already runs two of those against a 90-minute job
           #                    and that pair grazed the timeout on 2026-09-03
           #   microvm-boot     a nested VM on the -tcg runner
-          # reinstall-vm builds a SECOND full ISO and installs from it -- the
-          # same ~3h shape as install-iso, and it arrived on main (#512)
-          # before it was claimed here, which would have put a multi-hour
-          # build in the light job on every pull request.
           # Ask Nix, do not parse the file -- and the implausible-count floor
           # that goes with it. Both moved into generated-checks.sh with the
           # reasoning; see its header.
@@ -1134,13 +1129,17 @@ jobs:
           missing=""
           for cmd in xdg-terminal-exec uwsm-app foot hyprctl quickshell jq gum \
                      wl-copy grim slurp brightnessctl pactl wpctl nmcli \
-                     bluetoothctl notify-send mise nvim gtk-launch udiskie \
+                     bluetoothctl notify-send nvim gtk-launch udiskie \
                      git less man unzip pamixer imv magick rg zbarimg \
                      inotifywait starship zoxide eza lazygit; do
             [ -x "result/bin/$cmd" ] || missing="$missing $cmd"
           done
           if [ -n "$missing" ]; then
             echo "::error::runtimeDeps does not provide:$missing"
+            exit 1
+          fi
+          if [ -e result/bin/mise ]; then
+            echo "::error::runtimeDeps provides mise again (#1625)"
             exit 1
           fi
           echo "all checked runtime commands resolve ($(ls result/bin | wc -l) binaries)"

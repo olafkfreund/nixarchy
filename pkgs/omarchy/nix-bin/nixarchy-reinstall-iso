@@ -9,30 +9,29 @@
 # snapshots cover files on the same disk, the two git repos cover dotfiles and
 # /etc/nixos off-disk -- and none of them survives losing the disk entirely.
 # This builds a bootable image from THIS machine's own configuration, so the
-# machine can be rebuilt on new hardware.
+# machine can be rebuilt on new hardware with a network connection.
 #
 # ## It is NOT a backup, and every string here says so
 #
-# The image carries the system closure and /etc/nixos. It carries no /home,
+# The image carries /etc/nixos. It carries no /home,
 # no service state, no secrets, no browser profiles -- and booting it ERASES
 # the target disk. A menu row called "Backup" would be a trap: someone loses
 # a disk, boots the "backup", and gets a clean machine with none of their
 # files. Your files come back from your backups, not from this.
 #
-# ## The preflights (#482), each refusing with a sentence
+# ## The preflights (#482), each giving a clear verdict
 #
-# Space: the image is 6-10+ GB and the build wants roughly 2x the closure in
-# transient disk. This repo has had ENOSPC deaths that surfaced three levels
-# from the cause; check before starting.
+# Space: the image needs a few GB of transient disk. This repo has had ENOSPC
+# deaths that surfaced three levels from the cause; check before starting.
 #
 # Committed: the embedded flake pins by commit, and installer/mkFlake.nix
 # refuses a tree without self.rev -- `git add` is not enough. Refuse here,
 # where the sentence can say what to do, rather than minutes in.
 #
 # Drift: /run/current-system can differ from what /etc/nixos evaluates to --
-# uncommitted edits, un-switched changes. Baking a system that differs from
-# the flake embedded beside it is silently wrong: warn and ask, never
-# silently proceed. Warn rather than refuse, because building the image of
+# uncommitted edits, un-switched changes. Building an image for a system that
+# differs from the flake embedded beside it is silently wrong: warn and ask,
+# never silently proceed. Warn rather than refuse, because building the image of
 # what the CONFIG says (not what happens to be running) is a legitimate
 # thing to want -- it just must not happen without being said.
 
@@ -40,20 +39,9 @@ set -euo pipefail
 
 FLAKE="${NIXARCHY_FLAKE:-/etc/nixos}"
 
-# The flake output that builds the image. #480 parameterises installer/cd.nix
-# over a foreign flake's machines and the generated flake grows an output
-# exposing it; until that lands this attribute does not exist, and the build
-# step fails with nix's own "does not provide attribute" -- after every
-# preflight above it has had its say. Overridable for the day the output is
-# named differently, and for the tests.
-REINSTALL_ATTR="${NIXARCHY_REINSTALL_ATTR:-$FLAKE#reinstall-iso}"
-
-# The network twin (#483): ~1.5 GB, fetching the closure at install time
-# instead of carrying it. Same seam, same reasons -- and only offered after
-# the preflight below has said whether the caches can actually supply this
-# machine, because an image that boots and then cannot fetch is the failure
-# a warm-store CI never sees.
-REINSTALL_NET_ATTR="${NIXARCHY_REINSTALL_NET_ATTR:-$FLAKE#reinstall-iso-net}"
+# The generated flake's network image output. Keep the override for tests and
+# configurations that name the output differently.
+REINSTALL_ATTR="${NIXARCHY_REINSTALL_ATTR:-$FLAKE#reinstall-iso-net}"
 
 red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
 dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
@@ -61,9 +49,8 @@ bold() { printf "\033[1m%s\033[0m\n" "$1"; }
 
 usage() {
   echo "Usage: nixarchy-reinstall-iso [--check|--net]"
-  echo "  (no argument)  build the image, after the preflights"
-  echo "  --net          the ~1.5 GB variant that fetches the system over the"
-  echo "                 network as it installs, instead of carrying it"
+  echo "  (no argument)  build the network image, after the preflights"
+  echo "  --net          same as no argument"
   echo "  --check        exit 0 if this machine is one nixarchy installed. Prints nothing."
 }
 
@@ -165,25 +152,12 @@ substitutable_script() {
   printf '%s\n' "$src/installer/substitutable.sh"
 }
 
-# Closure size of the running system in MB, empty when it cannot be read.
-closure_mb() {
-  local bytes
-  bytes=$(nix path-info -S /run/current-system 2>/dev/null | awk '{ print $2 }' | head -1 || :)
-  case "$bytes" in
-    '' | *[!0-9]*) echo "" ;;
-    *) echo $((bytes / 1048576)) ;;
-  esac
-}
-
 # ---------------------------------------------------------------------------
 # Flags
 # ---------------------------------------------------------------------------
 
-net=false
-
 case "${1:-}" in
-  "") ;;
-  --net) net=true ;;
+  "" | --net) ;;
   --check)
     installed_by_nixarchy || exit 1
     exit 0
@@ -215,9 +189,9 @@ fi
 
 bold "A reinstall image for this machine"
 echo
-echo "A bootable image carrying this machine's system and its /etc/nixos,"
+echo "A bootable image carrying this machine's /etc/nixos,"
 echo "so the machine can be reinstalled exactly -- on this hardware or on a"
-echo "replacement -- after a total disk loss."
+echo "replacement -- after a total disk loss, with a network connection."
 echo
 red "It is NOT a backup."
 echo "  It carries no /home, no service state, no secrets, no browser"
@@ -228,40 +202,19 @@ echo
 dim "It also goes stale: rebuild it after meaningful configuration changes."
 echo
 
-if [ "$net" = true ]; then
-  echo "The NETWORK variant: about 1.5 GB instead of 6-10, because it fetches"
-  echo "the system from the caches as it installs instead of carrying it."
-  echo "That needs a network on the target -- and it is only honest if the"
-  echo "caches actually hold this system, which is checked below."
-  echo
-fi
+echo "The image is about 1.5 GB. It fetches the system as it installs, so"
+echo "the target needs a network. Cache availability is checked below; paths"
+echo "no cache holds must be compiled during installation or will fail."
+echo
 
 # ---------------------------------------------------------------------------
-# Preflight 1: space. ~1x the closure for the image, ~2x transient in /nix.
+# Preflight 1: space for the network image and its transient build files.
 # ---------------------------------------------------------------------------
 
-closure=$(closure_mb)
-if [ "$net" = true ]; then
-  # No closure on the image, so no closure in the math: the live environment
-  # squashfs is the bulk of it, and the number barely varies per machine.
-  dim "The network image is about 1.5 GB; the build wants a few GB of"
-  dim "transient disk, and the image itself lands in /nix/store."
-  echo
-  check_disk /nix/store 6000 "building the image" || exit 1
-elif [ -n "$closure" ]; then
-  need=$((closure * 2))
-  dim "The running system's closure is ${closure} MB; the build wants roughly"
-  dim "twice that in transient disk, and the image itself lands in /nix/store."
-  echo
-  check_disk /nix/store "$need" "building the image" || exit 1
-else
-  # Cannot measure, so no invented refusal -- but say so, because a silent
-  # skip reads as a check that passed.
-  dim "Could not read the running system's closure size, so free space was"
-  dim "not checked. The build needs 12 GB or more; ENOSPC mid-build fails"
-  dim "with errors that name none of this."
-  echo
-fi
+dim "The network image is about 1.5 GB; the build wants a few GB of"
+dim "transient disk, and the image itself lands in /nix/store."
+echo
+check_disk /nix/store 6000 "building the image" || exit 1
 
 # ---------------------------------------------------------------------------
 # Preflight 2: a committed tree. The generated flake pins by commit and
@@ -338,9 +291,8 @@ case "$(drift_verdict "$running" "$evaluated")" in
 esac
 
 # ---------------------------------------------------------------------------
-# Preflight 4, --net only: what the target could NOT fetch (#483, the whole
-# scope of the network variant). cache.nixos.org builds no unfree packages
-# at all, nixarchy.cachix.org holds the reference closure rather than this
+# Preflight 4: what the target could NOT fetch (#483). cache.nixos.org builds
+# no unfree packages; nixarchy.cachix.org holds the reference closure, not this
 # machine's app selection, and anything built here is in no cache anywhere.
 # The local store already knows which paths no cache vouched for --
 # installer/substitutable.sh explains why it is asked instead of the caches
@@ -348,50 +300,54 @@ esac
 # this question exists to prevent.
 # ---------------------------------------------------------------------------
 
-if [ "$net" = true ]; then
+echo
+bold "What a fresh machine could fetch, and what it could not"
+top=${evaluated:-$running}
+case "$(substitutable_verdict "${NIXARCHY_SUBSTITUTABLE:-$(substitutable_script)}" "$top")" in
+  fetchable)
+    dim "Every path in this system can be fetched from a cache."
+    ;;
+  build)
+    echo
+    red "Some of this system is in NO cache."
+    echo "  The paths above would be COMPILED on the target, mid-install,"
+    echo "  over the network image's live session -- unfree packages are"
+    echo "  not in cache.nixos.org by policy, and locally built ones are in"
+    echo "  no cache by definition. Compilation may fail."
+    echo
+    printf "Build the network image anyway? [y/N] "
+    read -r reply
+    case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
+    ;;
+  unknown)
+    red "Whether the target could fetch this system could not be answered."
+    echo "  Do not read that as 'it can all be fetched' -- that is the"
+    echo "  answer that strands an installer on a machine it cannot finish."
+    echo
+    printf "Build the network image anyway? [y/N] "
+    read -r reply
+    case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
+    ;;
+esac
+
+# Until #1649: the image does not name this machine, so booting it would erase
+# a disk and install a stock system. The preflights above still run.
+refuse_stock_image() {
   echo
-  bold "What a fresh machine could fetch, and what it could not"
-  top=${evaluated:-$running}
-  case "$(substitutable_verdict "${NIXARCHY_SUBSTITUTABLE:-$(substitutable_script)}" "$top")" in
-    fetchable)
-      dim "Every path in this system can be fetched from a cache; the network"
-      dim "image is honest for this machine."
-      ;;
-    build)
-      echo
-      red "Some of this system is in NO cache."
-      echo "  The paths above would be COMPILED on the target, mid-install,"
-      echo "  over the network image's live session -- unfree packages are"
-      echo "  not in cache.nixos.org by policy, and locally built ones are in"
-      echo "  no cache by definition. The offline image carries all of them"
-      echo "  instead:"
-      echo
-      bold "    nixarchy reinstall iso"
-      echo
-      printf "Build the network image anyway? [y/N] "
-      read -r reply
-      case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
-      ;;
-    unknown)
-      red "Whether the target could fetch this system could not be answered."
-      echo "  Do not read that as 'it can all be fetched' -- that is the"
-      echo "  answer that strands an installer on a machine it cannot finish."
-      echo "  The offline image needs no answer: nixarchy reinstall iso."
-      echo
-      printf "Build the network image anyway? [y/N] "
-      read -r reply
-      case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
-      ;;
-  esac
-fi
+  red "This image cannot reinstall this machine yet, so nothing was built."
+  echo "  It would erase the target disk and install a stock nixarchy instead"
+  echo "  of this configuration. Tracked in #1649."
+  echo
+  echo "  To get this machine back now, boot the published network image with"
+  echo "  nixarchy.from=<your config repo> nixarchy.host=<this machine's name>"
+  echo "  on its kernel command line."
+  exit 1
+}
+refuse_stock_image
 
 # ---------------------------------------------------------------------------
 # Confirm, build, report.
 # ---------------------------------------------------------------------------
-
-if [ "$net" = true ]; then
-  REINSTALL_ATTR=$REINSTALL_NET_ATTR
-fi
 
 echo
 printf "Build the image? It takes tens of minutes. [y/N] "
@@ -399,7 +355,6 @@ read -r reply
 case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
 
 outlink="$HOME/.local/share/nixarchy/reinstall-iso"
-[ "$net" = true ] && outlink="$outlink-net"
 mkdir -p "$(dirname "$outlink")"
 
 echo
@@ -427,14 +382,8 @@ echo "Write it to a USB stick (this ERASES the stick):"
 dim "  sudo dd if=$iso of=/dev/sdX bs=4M status=progress oflag=sync"
 echo
 echo "Keep it OFF this machine -- an image on the disk it exists to replace"
-echo "protects nothing. And keep it private: it contains your /etc/nixos"
-if [ "$net" = true ]; then
-  echo "(the system itself is fetched at install time, so a network on the"
-  echo "target is part of the deal)."
-else
-  echo "and any unfree packages your system uses, which are yours to keep"
-  echo "and not yours to publish."
-fi
+echo "protects nothing. And keep it private: it contains your /etc/nixos."
+echo "The system is fetched at install time, so the target needs a network."
 echo
 red "Remember what it is not: booting it erases the target disk and brings"
 red "back the system, not your files. Files come back from your backups."

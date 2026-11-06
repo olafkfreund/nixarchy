@@ -1894,6 +1894,8 @@ Holes, named rather than closed:
 - systemd's EFI `HibernateLocation` path is not booted by any VM.
 - Zen is supported for the shipped beta package only: another variant of the
   package hides the row by design.
+- Nothing rebuilds a machine to install a missing default browser or editor and
+  read `xdg-settings` back; the chain is proved in parts (#1623).
 
 ## menu-actions proves classification, not safety (#1304)
 

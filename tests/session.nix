@@ -2003,6 +2003,8 @@ pkgs.testers.runNixOSTest {
     for app in ["hype", "signed", "monologue", "omacalc", "omacut", "omawrite", "aether", "disktree"]:
         machine.succeed(user % f"command -v {app}")
     machine.fail(user % "command -v dua")
+    # This machine has real vim, whose vi beats the wrapper; checks.coexistence holds the wrapper.
+    machine.succeed(user % "vi --version > /dev/null")
     # Left with Omarchy 4.5 (#1612). obs-studio's binary is obs.
     for app in ["obs", "kdenlive", "xournalpp"]:
         machine.fail(user % f"command -v {app}")

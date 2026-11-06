@@ -800,25 +800,7 @@ stdenvNoCC.mkDerivation {
                   --replace-fail 'ExecStart=/usr/bin/pipewire' \
                   'ExecStart=/run/current-system/sw/bin/pipewire'
 
-                # omarchy-apply-lock resets PATH when it runs as root, and the
-                # value it resets to is empty on NixOS.
-                #
-                # Upstream's reasoning is sound and worth keeping: an install
-                # or upgrade may start this helper as root, and it does not
-                # want optional commands resolving out of a user-writable
-                # directory. On Arch the answer is /usr/bin and friends. Here
-                # those hold nothing, so the script would lose `tee`, `getent`
-                # and everything else it shells out to -- it writes PAM files
-                # for the lock screen, so the failure would be a lock screen
-                # that cannot authenticate, discovered at the worst moment.
-                #
-                # /run/wrappers/bin first, then the system profile: the same
-                # two directories a root login gets here, both root-owned,
-                # which is exactly the property upstream is reaching for.
-                #
-                # New in 4.0.3, and checks.session caught it -- that check
-                # scans every shipped command for /usr and is the reason this
-                # is a patch rather than a surprise on somebody's laptop.
+                # Why: pkgs/AGENTS.md#omarchy-apply-lock-resets-path-to-nothing
                 substituteInPlace $out/share/omarchy/bin/omarchy-apply-lock \
                   --replace-fail \
                   'export PATH=/usr/share/omarchy/bin:/usr/local/bin:/usr/bin:/bin' \
@@ -1338,6 +1320,18 @@ stdenvNoCC.mkDerivation {
                       --replace-fail 'if omarchy-cmd-missing "$editor"; then' 'if omarchy-cmd-missing "$([[ $editor == helix ]] && echo hx || echo "$editor")"; then'
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
                       --replace-fail 'command="zen-browser"' 'command="zen-beta"'
+
+                    # #1623: missing defaults are enabled declaratively, then set after rebuild.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
+                      --replace-fail 'omarchy-install-browser "$browser" || exit 1' 'exec nixarchy-default-install browser "$browser" "$command"' \
+                      --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
+                      --replace-fail "$(cat ${./default-editor-install.upstream.sh})" 'exec nixarchy-default-install editor "$selection" "$editor"' \
+                      --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
+
+                    # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
+                    substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
+                      --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
 
                     # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-editor \

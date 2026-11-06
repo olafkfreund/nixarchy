@@ -64,9 +64,12 @@
   "install.gaming.retro-launcher" = "needs a hand; documented in the README.";
   "install.gaming.xbox-cloud" = "a web app: omarchy-webapp-install, nothing to package.";
   "install.development.docker-dbs" = "a compose stack, not a package.";
-  "install.development.elixir.phoenix" = "a framework scaffold, not a package.";
-  "install.development.php.laravel" = "a framework scaffold, not a package.";
-  "install.development.rails" = "a framework scaffold, not a package.";
+  "install.development.elixir.phoenix" =
+    "a framework scaffold with no package; dimmed and pointing at devenv's languages.* (#1625).";
+  "install.development.php.laravel" =
+    "a framework scaffold with no package; dimmed and pointing at devenv's languages.* (#1625).";
+  "install.development.rails" =
+    "a framework scaffold with no package; dimmed and pointing at devenv's languages.* (#1625).";
 
   # New in Omarchy 4.0.3.
   "install.ai.hermes" =

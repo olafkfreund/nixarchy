@@ -16,12 +16,7 @@
     "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
   "learn.keybindings" =
     "unreached: omarchy-menu-keybindings runs omarchy-language with no argument, which only prints the language; its shell restart is the set branch";
-  "remove.development.elixir.phoenix" =
-    "hidden: its elixir|phoenix arm removes Elixir and Erlang (decision 3)";
-  "remove.development.php.laravel" =
-    "unreached: the pacman lines are the php and symfony arms, which the generator overrides; rails removes its own mise Ruby and ~/.gemrc, laravel its composer package (decision 3)";
-  "remove.development.rails" =
-    "unreached: the pacman lines are the php and symfony arms, which the generator overrides; rails removes its own mise Ruby and ~/.gemrc, laravel its composer package (decision 3)";
+  "remove.development.elixir.phoenix" = "hidden: there is nothing to remove (#1625)";
   "remove.gaming.battlenet" =
     "owned: deletes its own prefix; GE-Proton and umu only after a confirm; pkg-drop is inert here (decision 10)";
   "remove.preinstalls" =

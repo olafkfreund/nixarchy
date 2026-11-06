@@ -756,7 +756,7 @@ in
 
         Three of upstream's five rc files are portable and are sourced as-is.
         The two that are genuinely bash (shopt and BASH_COMPLETION internals;
-        `mise activate bash`, `starship init bash`, fzf's bash key bindings)
+        `starship init bash`, fzf's bash key bindings)
         are done against the same tools' zsh support instead. bash-specific
         completions and the readline inputrc are left alone: zsh has compinit
         and ZLE, and a half-ported version of either is worse than neither.

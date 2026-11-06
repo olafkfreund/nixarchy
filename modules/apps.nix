@@ -387,6 +387,12 @@ let
 
     # Offered by the Omarchy menu but with no nixpkgs equivalent:
     ${unavailableNote}'';
+  # summon would run upstream's action otherwise (omacom/omarchy#15742)
+  devenvRow = lang: {
+    disabled = "true";
+    action = "true";
+    description = "Not available on NixOS — use `languages.${lang}` in a project's devenv.nix";
+  };
   # Why: modules/AGENTS.md#the-menu-defaults
   overrideSpec = pkgs.writeText "nixarchy-menu-overrides.json" (
     builtins.toJSON (
@@ -931,9 +937,13 @@ let
           when = "nixarchy-vm --check && ! nixarchy-plugin --enabled nixarchy.microvm";
           description = "The panel is off: what you have created, in a terminal";
         };
-        # #1304: hidden. Its omarchy-remove-dev-env arm is `elixir|phoenix`, so
-        # removing Phoenix uninstalls Elixir and Erlang with it.
+        # #1304: hidden. There is nothing to remove: upstream's arm was `elixir|phoenix`.
         "remove.development.elixir.phoenix".when = "false";
+        "install.development.rails" = devenvRow "ruby";
+        "install.development.php.laravel" = devenvRow "php";
+        "install.development.elixir.phoenix" = devenvRow "elixir";
+        "remove.development.rails" = devenvRow "ruby" // { when = "true"; };
+        "remove.development.php.laravel" = devenvRow "php" // { when = "true"; };
         # #1304: omarchy-dns now explains instead of switching, and these
         # three ran with no terminal to show it in.
         "setup.network.dns.dhcp".action =

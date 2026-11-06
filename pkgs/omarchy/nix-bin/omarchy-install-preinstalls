@@ -2,8 +2,8 @@
 
 # omarchy:summary=Restore the preinstalled Omarchy applications (web apps, TUIs, and selected packages).
 
-# Upstream reseeds through mise stubs and then exits on omarchy-pkg-add, so the
-# marker never cleared (#1304). Launchers come from nix-bin's
+# Upstream reseeds through mise.sh and then exits on omarchy-pkg-add, so the
+# marker never cleared (#1304, #1625). Launchers come from nix-bin's
 # omarchy-refresh-applications, which adds only missing ones (#1319).
 set -uo pipefail
 

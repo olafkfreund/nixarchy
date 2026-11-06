@@ -10,22 +10,6 @@ set -uo pipefail
 apps="$HOME/.local/share/applications"
 bindir="$HOME/.local/bin"
 
-# Exactly the four lines omarchy-mise-install writes for this command name,
-# and nothing else: same package on lines 3 and 4, and the file's own name as
-# the binary (its bin defaults to the command).
-is_mise_stub() {
-  local f=$1 cmd=$2 pkg
-  local -a l
-  [[ -f $f && ! -L $f ]] || return 1
-  mapfile -t -n 5 l <"$f"
-  ((${#l[@]} == 4)) || return 1
-  [[ ${l[0]} == '#!/bin/bash' && ${l[1]} == 'export MISE_MINIMUM_RELEASE_AGE=0' ]] || return 1
-  [[ ${l[2]} == 'mise use -g --quiet '*' || exit 1' ]] || return 1
-  pkg=${l[2]#mise use -g --quiet }
-  pkg=${pkg% || exit 1}
-  [[ ${l[3]} == "exec mise x $pkg -- \"$cmd\" \"\$@\"" ]]
-}
-
 if gum confirm "Are you sure you want to remove all preinstalled web apps, TUI wrappers, and desktop applications?"; then
   echo -e "Removing preinstalled Omarchy applications...\n"
   removed=()
@@ -45,17 +29,6 @@ if gum confirm "Are you sure you want to remove all preinstalled web apps, TUI w
   mkdir -p ~/.local/state/omarchy
   touch ~/.local/state/omarchy/preinstalls-removed
   hyprctl reload
-
-  for cmd in codex claude gemini copilot gh opencode playwright playwright-cli \
-    pi omp grok crush ghui hunk cursor-agent muse; do
-    f=$bindir/$cmd
-    [[ -e $f || -L $f ]] || continue
-    if is_mise_stub "$f" "$cmd"; then
-      rm -f "$f" && removed+=("$f")
-    else
-      kept+=("$f (not an Omarchy mise launcher)")
-    fi
-  done
 
   # Only the wrapper omarchy-install-hermes-cli wrote is a preinstall.
   if omarchy-install-hermes-cli --owns; then

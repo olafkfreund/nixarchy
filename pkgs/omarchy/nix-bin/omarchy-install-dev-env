@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=Install a supported development environment
+# omarchy:name=dev-env
+# omarchy:args=<ruby|node|bun|deno|go|laravel|symfony|php|python|elixir|phoenix|rust|java|zig|ocaml|dotnet|clojure|scala>
+# omarchy:examples=omarchy install dev-env ruby | omarchy install dev-env node
+
+echo "nixarchy does not install languages this way. For a machine: Install > Development. For a project: nixarchy dev init <lang>." >&2
+exit 1

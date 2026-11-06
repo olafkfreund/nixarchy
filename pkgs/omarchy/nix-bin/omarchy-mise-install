@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=Install a small mise-backed wrapper for a given tool.
+# omarchy:args=<package> [command-name [bin-name]]
+# omarchy:hidden=true
+
+echo "nixarchy does not ship mise." >&2
+exit 1

@@ -64,7 +64,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
     # Units below GiB are parsed too, or a small overflow reads as no overflow.
     t refuse  "120 MiB needed, 100 MiB free"  $((100 * 1048576)) \
       'these 12 paths will be fetched (40.2 MiB download, 120.5 MiB unpacked):'
-    # The normal install: the image carries the closure, nothing is fetched.
+    # No fetch is needed when all paths are already in the store.
     t proceed "nothing to fetch"              8371830784        'these 0 derivations will be built'
     # Tolerance. This exists to name a failure that already happens; a plan it
     # cannot read must not become a new way to refuse an install that would work.
@@ -589,7 +589,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
   for fn in format_disk partition_free_space verify_subvolume_mounts \
     generate_hardware_config reuse_baked_initrd write_hardware_modules \
     install_flake_dir write_password_hash write_hostname run_install \
-    rescue_build check_store_space chown_flake_dir carry_network_profiles \
+    check_store_space chown_flake_dir carry_network_profiles \
     take_factory_snapshot; do
     sed -n "/^$fn()/,/^}/p" ${installScript} > lint-fn.sh
     [ -s lint-fn.sh ] || { echo "$fn is not in install.sh any more" >&2; exit 1; }

@@ -104,7 +104,7 @@ pkgs.runCommand "nixarchy-patched-files"
     cp --no-preserve=mode ${patchChanged} patch-changed.txt
     patch_paths=$(grep '^+++ b/' root/pkgs/omarchy/1625-no-mise.patch | sed 's|^+++ b/||')
     printf '%s\n' "$patch_paths" >> patch-changed.txt
-    patch_report=$(bash "$script" patch-changed.txt patch-root)
+    patch_report=$(bash "$script" patch-changed.txt patch-root ${attrib} v4.0.1 v4.0.2)
     <<<"$patch_report" grep -q '^10 files changed' || {
       echo "patched files: patch fixture changed-file total is wrong" >&2
       fail=1

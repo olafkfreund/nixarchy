@@ -1954,6 +1954,8 @@
             "menu-verbs"
             # The menu scripts patched to explain and exit 1 call no writer (#1304).
             "menu-guidance"
+            # Removal asks fprintd first, then removes only the invoking account's files (#1620).
+            "remove-fingerprint"
             # A font row run with no terminal reopens itself in one, when the font is missing (#1304).
             "install-font-terminal"
             # Every visible menu row's action, followed into its scripts (#1304).
@@ -2077,6 +2079,9 @@
           # --answers, which is exactly how #133 shipped.
           # Why: tests/wifi-hwsim.nix
           wifi-hwsim = import ./tests/wifi-hwsim.nix {
+            pkgs = pkgsFor.${system};
+          };
+          remove-fingerprint-vm = import ./tests/remove-fingerprint-vm.nix {
             pkgs = pkgsFor.${system};
           };
 

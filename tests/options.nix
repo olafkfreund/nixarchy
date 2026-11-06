@@ -1197,6 +1197,54 @@ let
         off = kept != "10s";
       };
 
+    # #1620: deleting prints leaves a machine as one that never enrolled, so a stack with a
+    # password must still reach it past pam_fprintd, and the fingerprint one must have none.
+    # Auth lines only: pam_unix is in account, password and session whatever auth does.
+    fprintdPamFallback =
+      let
+        withFprintd =
+          machine: extra:
+          (machine.extendModules {
+            modules = [ { services.fprintd.enable = true; } ] ++ extra;
+          }).config;
+        authLines =
+          c: name:
+          builtins.filter (pkgs.lib.hasPrefix "auth ") (
+            pkgs.lib.splitString "\n" c.security.pam.services.${name}.text
+          );
+        authOf = c: name: pkgs.lib.concatStringsSep "\n" (authLines c name);
+        # sufficient, or no-prints stops there; and pam_unix before pam_deny, or it is never reached.
+        fallsBack =
+          c: name:
+          let
+            parts = pkgs.lib.splitString "pam_fprintd" (authOf c name);
+          in
+          builtins.any (l: pkgs.lib.hasPrefix "auth sufficient " l && pkgs.lib.hasInfix "pam_fprintd" l) (
+            authLines c name
+          )
+          && pkgs.lib.hasInfix "pam_unix" (
+            builtins.head (pkgs.lib.splitString "pam_deny" (pkgs.lib.last parts))
+          );
+        has = c: name: c.security.pam.services ? ${name};
+        on = withFprintd adopter [ ];
+        modeA = withFprintd modeAOff [ ];
+      in
+      {
+        on =
+          builtins.all (fallsBack on) [
+            "sudo"
+            "polkit-1"
+            "login"
+            "omarchy-lock-password"
+          ]
+          && pkgs.lib.hasInfix "pam_fprintd" (authOf on "omarchy-lock-fingerprint")
+          && !pkgs.lib.hasInfix "pam_unix" (authOf on "omarchy-lock-fingerprint");
+        off =
+          has adopter.config "omarchy-lock-fingerprint"
+          || has modeA "omarchy-lock-fingerprint"
+          || has modeA "omarchy-lock-password";
+      };
+
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;

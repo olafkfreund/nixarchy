@@ -2050,6 +2050,11 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.boot-hang-detect
 
+      # checks.remove-fingerprint-vm is a nixosTest and needs the /dev/kvm set up above (#1620).
+      - name: A fingerprint removed through real fprintd and a virtual reader is gone
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.remove-fingerprint-vm
+
       # checks.sshd-login is a nixosTest and needs the /dev/kvm set up above (#1611).
       - name: The menu's sshd refuses passwords, and the plain line still takes them
         if: needs.gate.outputs.relevant == 'true'

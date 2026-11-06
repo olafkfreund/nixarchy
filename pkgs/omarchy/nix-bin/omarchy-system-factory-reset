@@ -260,6 +260,10 @@ echo
 echo "    So this is not a wipe. For a machine you are selling, wipe the disk"
 echo "    from the ISO rather than trusting this."
 echo
+echo "    Fingerprints stay too: any templates are in that /var/lib, and a reader"
+echo "    that stores prints keeps them where wiping the disk cannot reach."
+echo "    Remove > Security > Fingerprint, run first, clears yours from both."
+echo
 
 # ---------------------------------------------------------------------------
 # The system half, offered rather than pretended.

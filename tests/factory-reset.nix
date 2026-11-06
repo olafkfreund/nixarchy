@@ -294,8 +294,18 @@ pkgs.testers.runNixOSTest {
     old()
     machine.succeed("chattr -i /var/lib")
 
-    # 7: the real kernel refuses the baseline query to an unprivileged user.
+    # 7: the failed reset marker blocks --force until it is dismissed.
     machine.fail("runuser -u omarchy -- btrfs subvolume list -r /")
+    status, output = machine.execute("omarchy-system-factory-reset --force 2>&1")
+    assert status == 1 and "/var/lib/nixarchy/factory-reset.failed" in output, (status, output)
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
+    machine.succeed("rm /var/lib/nixarchy/factory-reset.failed")
+    machine.succeed("omarchy-system-factory-reset --force")
+    machine.succeed("test -e /var/lib/nixarchy/factory-reset.request")
+    boot()
+    unit_ran("success")
+    assert "phase=done" in journal()
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
 
     # 5: the second exchange and rollback both fail; run the printed repair.
     clean()
@@ -344,8 +354,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed("runuser -u omarchy -- git -C /etc/nixos -c user.name=Test -c user.email=test@example.invalid commit -m initial")
     machine.succeed("mkdir -p /test-control/fake-bin")
     machine.succeed("printf '#!/bin/sh\\ntouch /tmp/factory-reset-fake-gum\\nexit 1\\n' > /test-control/fake-bin/gum && chmod +x /test-control/fake-bin/gum")
-    status, output = machine.execute("runuser -u omarchy -- sh -c 'PATH=/test-control/fake-bin:/run/wrappers/bin:/run/current-system/sw/bin omarchy-system-factory-reset' 2>&1")
-    assert status == 0 and "Factory reset" in output and "first commit" in output, (status, output)
+    status, output = machine.execute("runuser -u omarchy -- sh -c 'PATH=/test-control/fake-bin:/run/wrappers/bin:/run/current-system/sw/bin omarchy-system-factory-reset' </dev/null 2>&1")
+    assert status == 0 and "Factory reset" in output and "/etc/nixos's first commit is the configuration" in output, (status, output)
+    assert "there is no first commit" not in output and "Nothing has been changed." in output, output
     machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
     machine.fail("test -e /tmp/factory-reset-fake-gum")
     machine.succeed("install -m755 /run/current-system/sw/bin/omarchy-system-factory-reset /tmp/factory-reset-copy")

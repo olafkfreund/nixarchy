@@ -2160,8 +2160,10 @@ plus unprivileged `btrfs subvolume list -r /` failing with `EPERM`), takes
   printed repair commands with `/home` mounted restores it across a reboot and
   clears the marker. Case 12: the first exchange fails and `remove_staged`
   deletes both `$oldvar` and the `$oldhome` subvolume.
-- **Command (`omarchy-system-factory-reset`).** Case 7: unprivileged
-  `btrfs subvolume list -r /` fails on the real kernel. Case 10: as `omarchy`,
+- **Command (`omarchy-system-factory-reset`).** Case 7: after the kernel refuses
+  an unprivileged baseline query, `--force` as root refuses case 4's failure
+  marker; removing it permits a new request and a successful reset on reboot.
+  Case 10: as `omarchy`,
   the command elevates via `sudo` before reading the `0600` `.failed` marker,
   prints its contents (or the empty-file crash guidance when truncated), and
   exits 1 without writing a request; `--check` never prints the marker. Case 8:

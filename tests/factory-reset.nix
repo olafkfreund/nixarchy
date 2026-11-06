@@ -321,7 +321,7 @@ pkgs.testers.runNixOSTest {
     untop()
     repair = report.split("To repair:\n", 1)[1].split("Then @home-before", 1)[0].splitlines()
     for command in repair:
-        if command.strip() == "systemctl reboot":
+        if command.strip() == "sudo systemctl reboot":
             break
         machine.succeed(command.strip().split("    #", 1)[0])
     boot()

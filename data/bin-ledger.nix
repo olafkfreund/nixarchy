@@ -102,7 +102,7 @@
   };
   "nixarchy-reinstall-iso" = {
     class = "new";
-    reason = "Not in upstream, whose recovery story is snapper snapshots on the same disk. Builds a bootable image from this machine's own configuration -- the system closure and /etc/nixos, never /home or secrets -- after refusing on low disk, an uncommitted tree, or a running system that drifted from the flake.";
+    reason = "Not in upstream, whose recovery story is snapper snapshots on the same disk. Builds a network reinstall image carrying this machine's /etc/nixos, never /home or secrets. Installation needs a network; uncached packages compile or fail. Checks disk space and the committed tree, warns on drift, and reports what caches cannot supply.";
   };
   "nixarchy-rollback" = {
     class = "new";

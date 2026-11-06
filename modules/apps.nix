@@ -942,8 +942,12 @@ let
         "install.development.rails" = devenvRow "ruby";
         "install.development.php.laravel" = devenvRow "php";
         "install.development.elixir.phoenix" = devenvRow "elixir";
-        "remove.development.rails" = devenvRow "ruby" // { when = "true"; };
-        "remove.development.php.laravel" = devenvRow "php" // { when = "true"; };
+        "remove.development.rails" = devenvRow "ruby" // {
+          when = "true";
+        };
+        "remove.development.php.laravel" = devenvRow "php" // {
+          when = "true";
+        };
         # #1304: omarchy-dns now explains instead of switching, and these
         # three ran with no terminal to show it in.
         "setup.network.dns.dhcp".action =

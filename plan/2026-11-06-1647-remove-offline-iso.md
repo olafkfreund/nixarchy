@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1647
 spec: spec/2026-11-06-1647-remove-offline-iso.md
 coders:

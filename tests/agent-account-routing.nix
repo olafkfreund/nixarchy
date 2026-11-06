@@ -33,7 +33,7 @@ pkgs.runCommand "nixarchy-agent-account-routing"
           printf '%s\n' '#!/bin/sh' 'printf "%s %s\n" "''${0##*/}" "$*" >> "$PWD/terminal-calls"' > stub/$n
         done
         printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$*" >> "$PWD/notifications"' > stub/omarchy-notification-send
-        printf '%s\n' '#!/bin/sh' 'echo claude' > stub/omarchy-default-agent
+        printf '%s\n' '#!/bin/sh' 'cat "$HOME/.config/omarchy/defaults/agent" 2>/dev/null || echo claude' > stub/omarchy-default-agent
         printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$*" >> "$PWD/mise-calls"' > stub/mise
         printf '%s\n' '#!/bin/sh' 'if [ "''${1:-}" = --spawn-codex ]; then codex; exit; fi' \
           'if [ "''${1:-}" = auth ] && [ "''${2:-}" = login ]; then printf "CFG=%s PIN=%s\n" "''${CLAUDE_CONFIG_DIR-unset}" "''${OMARCHY_AGENT_CLAUDE_HOME-unset}" > "$PWD/login"; exit; fi' \
@@ -125,8 +125,8 @@ pkgs.runCommand "nixarchy-agent-account-routing"
         test "$got" = 'PIN=' || bad "case 12: got '$got'"
 
         # Case 13: the usage probe ignores dispatch, but accepts a real binary.
-        mkdir -p empty-codex
-        CODEX_HOME=$PWD/empty-codex PATH=$D:$base python3 -c '
+        mkdir -p empty-codex # the home for the real-binary run; the dispatch run's must not exist
+        CODEX_HOME=$PWD/no-codex-home PATH=$D:$base python3 -c '
     import importlib.machinery, importlib.util
     loader = importlib.machinery.SourceFileLoader("usage", "${omarchy}/share/omarchy/bin/omarchy-agent-usage-codex")
     spec = importlib.util.spec_from_loader(loader.name, loader)

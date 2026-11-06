@@ -27,7 +27,8 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "launcher %s\n" "$*" >> "$log"' > "$TMPDIR/stubs/omarchy-launch-floating-terminal-with-presentation"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo mise >> "$log"' > "$TMPDIR/mise-bin/mise"
   chmod +x "$TMPDIR"/stubs/* "$TMPDIR/mise-bin/mise"
-  cp ${../pkgs/omarchy/nix-bin/omarchy-agent-real-path} "$TMPDIR/stubs/omarchy-agent-real-path"
+  # The package patches this shebang at install. A sandbox has no /usr/bin/env.
+  { printf '#!%s\n' ${pkgs.bash}/bin/bash; tail -n +2 ${../pkgs/omarchy/nix-bin/omarchy-agent-real-path}; } > "$TMPDIR/stubs/omarchy-agent-real-path"
   chmod +x "$TMPDIR/stubs/omarchy-agent-real-path"
 
   make_agent() {

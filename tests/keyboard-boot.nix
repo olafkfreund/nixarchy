@@ -91,7 +91,8 @@ pkgs.testers.runNixOSTest {
               machine.send_chars(keys + "\n")
           else:
               machine.send_console(keys + "\n")
-          machine.wait_for_unit("display-manager.service")
+          # A rejected passphrase re-prompts for ever: without a limit it fails only at globalTimeout.
+          machine.wait_for_unit("display-manager.service", timeout=600)
           machine.wait_until_succeeds("loginctl list-sessions | grep greeter >/dev/null")
           machine.succeed("test -b /dev/mapper/cryptroot")
 

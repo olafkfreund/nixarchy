@@ -365,7 +365,7 @@ are 651 MiB of a public 5 GB cache, for two packages that are fetched rather
 than built. A machine that does not use Claude should not carry them.
 
 The gap is a machine that uses Claude **without installing it through Nix** —
-from mise, npm, or the official installer into `~/.local/bin`. Nothing in the
+from your own mise, npm, or the official installer into `~/.local/bin`. Nothing in the
 configuration records that, because the choice lives in
 `~/.config/omarchy/defaults/agent`, which is written at runtime. Both halves of
 the condition read false, no adapter is pinned, and the first sign of it is

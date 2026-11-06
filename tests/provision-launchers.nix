@@ -1,12 +1,12 @@
 { pkgs, ... }:
-# First login adds only missing launchers and stubs; it replaces nothing (#1319).
+# First login adds only missing launchers; it replaces nothing (#1319).
 #
-# Two paths wrote over a user's files: install/user/mise.sh (all.sh:14), and
-# omarchy-provision-user:126 -> omarchy-refresh-applications, which cp -f'd the
-# launchers and ran mise.sh again. A copy at the store's 444 once left files the
-# next run could not rewrite, which aborted provisioning under set -euo pipefail
-# before finalize-user was marked. The fix is to skip existing files, and this
-# check runs both calls twice. See tests/AGENTS.md#provision-launchers-runs-two-calls-not-provisioning.
+# Upstream's omarchy-provision-user:126 -> omarchy-refresh-applications cp -f'd the
+# launchers and ran install/user/mise.sh (also in all.sh:14, removed in #1625). A copy
+# at the store's 444 once left files the next run could not rewrite, which aborted
+# provisioning under set -euo pipefail before finalize-user was marked. The fix is to
+# skip existing files, and this check runs the refresh call twice. See
+# tests/AGENTS.md#provision-launchers-runs-two-calls-not-provisioning.
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
 in
@@ -44,7 +44,7 @@ pkgs.runCommand "nixarchy-provision-launchers"
     # Stubs: record the call and succeed. alacritty makes omarchy-cmd-present
     # true, so the Alacritty.desktop branch runs.
     mkdir -p "$TMPDIR/stubs"
-    for n in mise update-desktop-database omarchy-install-hermes-cli alacritty; do
+    for n in update-desktop-database omarchy-install-hermes-cli alacritty; do
       printf '#!%s\necho "%s $*" >> "$TMPDIR/calls"\nexit 0\n' "$shell" "$n" > "$TMPDIR/stubs/$n"
     done
     chmod +x "$TMPDIR"/stubs/*
@@ -92,18 +92,22 @@ pkgs.runCommand "nixarchy-provision-launchers"
       fi
     }
 
-    # First login's two writers, in provision-user's order; $1 labels the logs.
+    # First login's writer, in provision-user's order; $1 labels the logs.
     provision() {
       local rc=0 line
-      bash -eE -c 'source "$1"' bash "$tree/install/user/mise.sh" > "$1-mise.log" 2>&1 || rc=$?
-      [ "$rc" -eq 0 ] || fail "mise.sh exited $rc ($1)"
-      rc=0
       bash "$refresh" > "$1-refresh.log" 2>&1 || rc=$?
       [ "$rc" -eq 0 ] || fail "refresh exited $rc ($1)"
       # The script has no set -e and ends in an if, so its status hides a failed cp.
       line=$(grep -E 'cp:|Permission denied' "$1-refresh.log" | head -n1 || true)
       [ -z "$line" ] || fail "refresh printed a copy error ($1): $line"
     }
+
+    if command -v mise >/dev/null; then fail "a mise is on this check's PATH"; fi
+    if grep -q 'user/mise\.sh' "$tree/install/user/all.sh"; then fail "all.sh still runs mise.sh"; fi
+    names=$(grep -o 'OMARCHY_INSTALL/[^"]*' "$tree/install/user/all.sh") || fail "all.sh names nothing"
+    while IFS= read -r n; do
+      [ -e "$tree/install/''${n#OMARCHY_INSTALL/}" ] || fail "all.sh names a missing file: $n"
+    done <<<"$names"
 
     # ---- Dirty home, first run ----
     state > before
@@ -136,7 +140,6 @@ pkgs.runCommand "nixarchy-provision-launchers"
     [ -z "$missing" ] || fail "not seeded: $missing"
     [ -z "$extra" ] || fail "wrote unexpected files: $extra"
 
-    grep -qx 'mise reshim --system' "$TMPDIR/calls" || fail "mise.sh did not reshim"
     for f in "$tree"/applications/*.desktop; do
       n=''${f##*/}
       case $n in Basecamp.desktop | Zoom.desktop | YouTube.desktop) continue ;; esac
@@ -167,7 +170,7 @@ pkgs.runCommand "nixarchy-provision-launchers"
     done
 
     [ ! -e "$real_home" ] || fail "wrote outside the fixture: $real_home"
-    for l in first-refresh.log second-refresh.log clean-refresh.log first-mise.log; do
+    for l in first-refresh.log second-refresh.log clean-refresh.log; do
       if [ "''${#fails[@]}" -gt 0 ]; then echo "--- $l" >&2; cat "$l" >&2; fi
     done
     report

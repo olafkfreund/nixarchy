@@ -51,7 +51,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
 
     # Stubs: record the call and succeed, except the two that must not.
     mkdir -p "$TMPDIR/stubs"
-    for n in gum update-desktop-database mise; do
+    for n in gum update-desktop-database; do
       printf '#!%s\necho "%s $*" >> "$TMPDIR/calls"\nexit 0\n' "$shell" "$n" > "$TMPDIR/stubs/$n"
     done
     printf '%s\n' \
@@ -65,19 +65,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     chmod +x "$TMPDIR"/stubs/*
     export PATH=$TMPDIR/stubs:$tree/bin:$PATH
 
-    # Pin the stub shape the replacement recognises.
-    sed -n '/<<EOF$/,/^EOF$/p' "$tree/bin/omarchy-mise-install" | sed '1d;$d' > "$TMPDIR/stub-shape"
-    printf '%s\n' \
-      '#!/bin/bash' \
-      'export MISE_MINIMUM_RELEASE_AGE=0' \
-      'mise use -g --quiet $package_arg || exit 1' \
-      'exec mise x $package_arg -- $bin_arg "\$@"' > "$TMPDIR/stub-want"
-    if ! cmp -s "$TMPDIR/stub-shape" "$TMPDIR/stub-want"; then
-      echo "omarchy-mise-install's stub shape changed; update is_mise_stub in nix-bin/omarchy-remove-preinstalls" >&2
-      exit 1
-    fi
-
-    # Fixture. Seeds Omarchy wrote, and things it did not.
+    # Fixture. Seeds Omarchy wrote, and things it did not (including home/.local/bin/gh).
     cp --no-preserve=mode "$tree/applications/YouTube.desktop" "$A/"
     cp --no-preserve=mode "$tree/applications/mpv.desktop" "$A/"
     sed 's|https://launchpad.37signals.com|https://example.org/bc|' "$tree/applications/Basecamp.desktop" > "$A/Basecamp.desktop"
@@ -86,13 +74,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     cp --no-preserve=mode "$tree/applications/Zoom.desktop" "$HM/Zoom.desktop"
     ln -s "$HM/Zoom.desktop" "$A/Zoom.desktop"
 
-    stub() { printf '#!/bin/bash\nexport MISE_MINIMUM_RELEASE_AGE=0\nmise use -g --quiet "%s" || exit 1\nexec mise x "%s" -- "%s" "$@"\n' "$1" "$1" "$1"; }
-    stub claude > "$HM/claude"
-    ln -s "$HM/claude" "$B/claude"
-    stub codex > "$B/codex"
-    printf '#!/bin/bash\n# my wrapper\nmise use -g --quiet "gemini" || exit 1\nexec mise x "gemini" -- "gemini" --model x "$@"\n' > "$B/gemini"
     printf '#!/bin/bash\nexec /opt/gh "$@"\n' > "$B/gh"
-    printf '#!/bin/bash\nexport MISE_MINIMUM_RELEASE_AGE=0\nmise use -g --quiet "foo" || exit 1\nexec mise x "foo" -- "bar" "$@"\n' > "$B/opencode"
     cp --no-preserve=mode "$hermesLast" "$B/hermes"
 
     state() {
@@ -133,7 +115,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
     compare before after > delta
 
     [ "$rc" -eq 0 ] || fail "remove exited $rc"
-    want=$(printf '%s\n' home/.local/bin/codex home/.local/bin/hermes home/.local/share/applications/YouTube.desktop | sort)
+    want=$(printf '%s\n' home/.local/bin/hermes home/.local/share/applications/YouTube.desktop | sort)
     got=$(pick D delta)
     extra=$(comm -13 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | join)
     left=$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | join)

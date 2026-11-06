@@ -2,12 +2,13 @@
 # The "files this port patches that upstream changed" section of every Omarchy
 # bump PR.
 #
-# The script derives that set from four statements the repo already makes --
+# The script derives that set from six statements the repo already makes --
 # pkgs/omarchy/nix-bin/*, substituteInPlace paths in pkgs/omarchy/default.nix,
-# ${src}/ paths in the same file, and seed_dir in modules/home.nix -- rather
+# sed -i and ${src}/ paths in the same file, seed_dir in modules/home.nix,
+# and +++ b/PATH lines in pkgs/omarchy/*.patch -- rather
 # than from a list somebody keeps by hand. Which trades one failure for
 # another: a hand-kept list goes stale loudly the first time somebody reads it,
-# while four greps go stale in perfect silence and report "none of the 167
+# while six derivations go stale in perfect silence and report "none of the 167
 # files upstream changed is one we touch" forever.
 #
 # So this runs the real greps against the real repo files, not fixtures of
@@ -34,6 +35,10 @@ let
     README.md
   '';
 
+  patchChanged = builtins.toFile "patch-changed.txt" ''
+    bin/omarchy-theme-bg-next
+  '';
+
   attrib = builtins.toFile "attrib.txt" ''
     bin/omarchy-plymouth-set	Merge pull request #8934 from ErikMelton/security/plymouth-publication-race
     bin/omarchy-refresh-sddm	Merge pull request #8934 from ErikMelton/security/plymouth-publication-race
@@ -58,6 +63,7 @@ pkgs.runCommand "nixarchy-patched-files"
     mkdir -p root/pkgs/omarchy root/modules
     cp -r ${../pkgs/omarchy/nix-bin} root/pkgs/omarchy/nix-bin
     cp ${../pkgs/omarchy/default.nix} root/pkgs/omarchy/default.nix
+    cp ${../pkgs/omarchy}/*.patch root/pkgs/omarchy/
     cp ${../modules/home.nix} root/modules/home.nix
     chmod -R u+w root
 
@@ -89,6 +95,30 @@ pkgs.runCommand "nixarchy-patched-files"
       echo "patched files: a seeded config file is not described as seeded" >&2
       fail=1
     }
+
+    # A patch-only path must join the derived set, with its own changed list
+    # so the main fixture's exact count remains a useful assertion.
+    cp -r root patch-root
+    printf '%s\n' '--- a/bin/omarchy-theme-bg-next' '+++ b/bin/omarchy-theme-bg-next' \
+      > patch-root/pkgs/omarchy/fixture.patch
+    cp --no-preserve=mode ${patchChanged} patch-changed.txt
+    patch_paths=$(grep '^+++ b/' root/pkgs/omarchy/1625-no-mise.patch | sed 's|^+++ b/||')
+    printf '%s\n' "$patch_paths" >> patch-changed.txt
+    patch_report=$(bash "$script" patch-changed.txt patch-root ${attrib} v4.0.1 v4.0.2)
+    <<<"$patch_report" grep -q '^10 files changed' || {
+      echo "patched files: patch fixture changed-file total is wrong" >&2
+      fail=1
+    }
+    <<<"$patch_report" grep -q 'omarchy-theme-bg-next.*pkgs/omarchy/.*patch' || {
+      echo "patched files: a patch-only path was not reported as patched" >&2
+      fail=1
+    }
+    while IFS= read -r path; do
+      <<<"$patch_report" grep -Fq "\`$path\` — patched by \`pkgs/omarchy/*.patch\`" || {
+        echo "patched files: $path was not reported as patched by the new patch" >&2
+        fail=1
+      }
+    done <<<"$patch_paths"
 
     # The other half, and the one that decides whether this is readable at
     # all. `substituteInPlace $out/share/omarchy/bin/$f` inside a loop would
@@ -128,13 +158,13 @@ pkgs.runCommand "nixarchy-patched-files"
       fail=1
     }
 
-    # The guard. Four greps against files that move; if any of them finds
+    # The guard. Six derivations against files that move; if any finds
     # nothing, the intersection is empty for a reason that has nothing to do
     # with the release, and an empty intersection reads as "nothing to see".
     mkdir -p empty/pkgs/omarchy/nix-bin empty/modules
     touch empty/pkgs/omarchy/default.nix empty/modules/home.nix
     if bash "$script" ${changed} empty > empty.out 2>&1; then
-      echo "patched files: a repo stating none of the four was accepted" >&2
+      echo "patched files: a repo stating none of the six was accepted" >&2
       cat empty.out >&2
       fail=1
     else

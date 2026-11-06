@@ -2195,6 +2195,8 @@ demand (§3). Whether a machine with no `@home` subvolume (from the pre-#1621
 code failing after moving `@home` aside) stops in emergency mode with root
 locked is inferred from `/home` having no `nofail` and `tests/install.nix:818-820`,
 not booted.
+
+Two traps from writing it. **Real `gum` does not fail with no terminal:** it waits for ever, even with stdin closed, so a case that reaches a prompt has to bound the wait and expect 124. **`ConditionResult` cannot say whether a one-shot ran:** `local-fs.target` re-queues the unit after its request file has gone, so the field reads `no` after a successful run too. Read the journal instead.
 ## A build that is not reproducible keeps its path
 
 Found on 2026-11-06, when `installer-refusal` failed with `curl` exit 60 on a pull request that had not touched it. Its stub certificate came from `openssl req` in a `runCommand`, so each build made a new key under the same store path. A garbage collection removed that path, the next build made a new certificate there, and the CA bundles already built from the old one stayed in the shared store and went on trusting only the old one. Nothing in the derivation graph can see that, so every run on that host fails until those bundles are collected too.

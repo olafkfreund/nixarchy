@@ -756,7 +756,7 @@ in
 
         Three of upstream's five rc files are portable and are sourced as-is.
         The two that are genuinely bash (shopt and BASH_COMPLETION internals;
-        `mise activate bash`, `starship init bash`, fzf's bash key bindings)
+        `starship init bash`, fzf's bash key bindings)
         are done against the same tools' zsh support instead. bash-specific
         completions and the readline inputrc are left alone: zsh has compinit
         and ZLE, and a half-ported version of either is worse than neither.
@@ -1162,7 +1162,7 @@ in
         withUWSM = true;
       };
 
-      # Why: modules/AGENTS.md#mise-is-in-omarchys-base-packages-and-its-dev-env-
+      # Why: modules/AGENTS.md#nix-ld-stays-for-downloaded-binaries
       nix-ld = {
         enable = lib.mkDefault true;
 
@@ -1736,7 +1736,7 @@ in
       # `installed`: the file itself, at the path Omarchy's Arch package puts
       # it, so a source bump carries upstream's edits. tests/options.nix names
       # each one in both states.
-      # Why: modules/AGENTS.md#three-files-from-upstreams-etc-overlay-installed-as-themselves
+      # Why: modules/AGENTS.md#two-files-from-upstreams-etc-overlay-installed-as-themselves
       // lib.genAttrs installedEtc (name: {
         source = "${cfg.package}/share/omarchy/etc/${name}";
       })

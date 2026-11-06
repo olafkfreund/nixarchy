@@ -46,6 +46,18 @@
       environment.systemPackages = [ pkgs.ffmpeg-full ];
     };
 
+  # A person's own mise and a file at the path nixarchy used to own (#1625).
+  mise-own =
+    { pkgs, ... }:
+    {
+      environment.systemPackages = [
+        (pkgs.mise.overrideAttrs (o: {
+          pname = o.pname + "-coexist";
+        }))
+      ];
+      environment.etc."mise/conf.d/omarchy.toml".text = "# theirs\n";
+    };
+
   systempkg-own-vi =
     { pkgs, ... }:
     {

@@ -1959,19 +1959,37 @@ journal line names the process `(.quickshell-wra)`, with a leading dot, so an
 exact match such as coredumpctl's `COMM=quickshell-wra` misses it.
 
 <a id="provision-launchers-runs-two-calls-not-provisioning"></a>
-## provision-launchers runs two calls, not provisioning (#1319)
+## provision-launchers runs one call, not provisioning (#1319)
 
-`checks.provision-launchers` runs `install/user/mise.sh` the way `all.sh:18`
-runs it, then `omarchy-refresh-applications` (`omarchy-provision-user:118`),
-twice on a dirty home and once on a clean one.
+`checks.provision-launchers` runs `omarchy-refresh-applications`
+(`omarchy-provision-user:118`) twice on a dirty home and once on a clean one,
+and asserts `install/user/all.sh` no longer names `user/mise.sh` (#1625) and
+that every `OMARCHY_INSTALL/...` path it names exists in the shipped tree.
 
-Quattro's `mise.sh` reshims instead of writing launchers into `~/.local/bin`, so
-the check asserts the `mise reshim --system` call, not stub files (#1398).
-
-- **Hole 1.** It does not run the whole of `omarchy-provision-user`, so a third
+- **Hole 1.** It does not run the whole of `omarchy-provision-user`, so another
   writer added upstream to `all.sh` or to provision-user is not seen.
 - **Hole 2.** No check runs a real Home Manager activation followed by a real
   first login, in that order. Only a VM with Home Manager could.
+
+<a id="mise-free"></a>
+## mise-free scans shipped code per line (#1625)
+
+`checks.mise-free` runs `.github/scripts/check-mise-free.py` over the reference
+configuration's `programs.nixarchy.tree` (`bin`, `default`, `install`, `shell`,
+`config`, `applications`, minus `default/i18n` where French says "mise à jour"),
+plus `pkgs/omarchy/zsh-rc`, `pkgs/omarchy/fish-rc` and `modules/*.nix`. It
+also sources the shipped bash, zsh and fish rcs twice with a logging `mise` stub
+first on PATH and asserts the log stays empty and `$OMARCHY_PATH/agent-dispatch`
+appears on PATH once, and asserts no `mise/` row in `data/etc-overlay.nix` is
+`installed`.
+
+The allowlist (`data/mise-allow.nix`) records exact `#`-stripped lines per file
+with a reason, rather than whole files: a per-file allowlist would let an
+already-listed script gain a real `mise` call on a bump and stay green. Both
+directions fail — an unrecorded match and a recorded line that no longer
+matches — so a new upstream call or a stale row after an upstream cleanup is
+answered in `data/mise-allow.nix` or by a patch, on edge (`edge-candidate`)
+too.
 
 **`cp -f` writes through a destination symlink whose target is writable.** It
 unlinks the link only when the target refuses the write (coreutils 9.11). So a

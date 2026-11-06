@@ -1838,6 +1838,7 @@
             "menu-conditions"
             # The menu's guards through its own model, absent and present (#1301).
             "menu-guards"
+            "mise-free"
             # And the same idea aimed at the menu: every action string checked
             # against the subcommands the CLI it invokes actually has. See
             # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.
@@ -2156,8 +2157,8 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
-          # Edge carry (#1386): mise's [wrappers] route claude through the selected
-          # account, and the exec refuses a mise install.
+          # Typed agents and their children route through Nix dispatch;
+          # absent CLIs refuse without invoking mise.
           agent-account-routing = import ./tests/agent-account-routing.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

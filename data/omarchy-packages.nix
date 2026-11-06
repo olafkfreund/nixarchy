@@ -172,7 +172,7 @@
     nix = "man-db";
   };
   "mise-bin" = {
-    nix = "mise";
+    skip = "nixarchy does not ship mise (#1625). A person who wants it adds pkgs.mise to their own configuration.";
   };
   "monologue" = {
     nix = "nixarchy-apps.monologue";

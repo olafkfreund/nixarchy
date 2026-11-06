@@ -11,7 +11,7 @@
 # keep tracking upstream rather than being forked.
 #
 # The other two are genuinely bash: `shell` uses shopt and BASH_COMPLETION
-# internals, `init` asks mise, starship and zoxide for *bash* integration and
+# internals, `init` asks starship and zoxide for *bash* integration and
 # loads fzf's bash key bindings. Those are reimplemented here against the same
 # tools' zsh support -- which is the same feature, not an approximation.
 #
@@ -32,17 +32,17 @@ source "$OMARCHY_PATH/default/bash/functions"
 # --- the bash-only half, in zsh -------------------------------------------
 
 # default/bash/shell. Same intent: keep history, share it, and stop hashing
-# commands so mise's shims are picked up after it rewrites them.
+# commands so newly installed tools are found without restarting the shell.
 HISTSIZE=32768
 SAVEHIST=$HISTSIZE
 setopt APPEND_HISTORY INC_APPEND_HISTORY
 setopt HIST_IGNORE_SPACE HIST_IGNORE_ALL_DUPS
 unsetopt HASH_CMDS
 
-# default/bash/init, asking each tool for zsh instead of bash. Same guards as
-# upstream: only when the tool exists, and only interactively for the prompt.
-if command -v mise &>/dev/null; then
-  eval "$(mise activate zsh)"
+# default/bash/init: add agent dispatch, then ask each tool for zsh support.
+# Tool guards match upstream: only when present, and interactively for the prompt.
+if [[ :$PATH: != *":$OMARCHY_PATH/agent-dispatch:"* ]]; then
+  PATH="$OMARCHY_PATH/agent-dispatch:$PATH"
 fi
 
 if [[ -o interactive ]] && [[ ${TERM:-} != "dumb" ]] && command -v starship &>/dev/null; then

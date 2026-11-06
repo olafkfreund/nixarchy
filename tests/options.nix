@@ -1111,18 +1111,30 @@ let
     # The About screen omarchy-launch-about renders, and the file the OS-line
     # patch in pkgs/omarchy/default.nix is applied to.
     etcFastfetch = etcInstalled "fastfetch/config.jsonc";
-    # The tool_alias `mise use -g cursor-agent` resolves through.
-    etcMise = etcInstalled "mise/conf.d/omarchy.toml";
-    # The [wrappers] that route claude, codex and grok through the selected
-    # account (#1386).
-    etcMiseAccounts = etcInstalled "mise/conf.d/omarchy-agent-accounts.toml";
-    # Upstream builds the wrapper links with `mise reshim`; nothing else here
-    # does, so without this the installed toml routes nothing (#1386).
-    agentWrappersReshim = {
-      on = pkgs.lib.hasInfix "mise reshim" defaultHomeOn.home.activation.nixarchyAgentWrappers.data;
-      # The step is unconditional in the home module (its guard is the file at
-      # run time), so there is no configured-off home to ask.
+    # Negative: nixarchy ships no mise (#1625). `off` is constant, so these say nothing
+    # about Mode A, which omarchyRcChain and the etc cases below answer.
+    etcMise = {
+      on = !(adopter.config.environment.etc ? "mise/conf.d/omarchy.toml");
       off = false;
+    };
+    etcMiseAccounts = {
+      on = !(adopter.config.environment.etc ? "mise/conf.d/omarchy-agent-accounts.toml");
+      off = false;
+    };
+    agentWrappersReshim = {
+      on = !(defaultHomeOn.home.activation ? nixarchyAgentWrappers);
+      off = false;
+    };
+    # The dispatch line lives in package files, so it reaches a machine only through
+    # this source line. Mode A is asserted here.
+    omarchyRcChain = {
+      on = pkgs.lib.hasInfix "default/bash/rc" adopter.config.programs.bash.interactiveShellInit;
+      off = pkgs.lib.hasInfix "default/bash/rc" loaderOff.programs.bash.interactiveShellInit;
+    };
+    miseNoticeHook = {
+      # .enable, not ?: the entry exists either way, and enable is what writes the file.
+      on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
+      off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
     };
 
     # ---- upstream's /etc overlay, the rows carried as NixOS options ----

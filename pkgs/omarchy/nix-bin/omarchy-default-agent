@@ -148,7 +148,7 @@ fi
 # than against a package database: what matters is whether omarchy-agent will
 # find it, and that is the same question.
 agent_cmd=$agent
-if command -v "$agent_cmd" &>/dev/null; then
+if PATH=$(omarchy-agent-real-path) command -v "$agent_cmd" &>/dev/null; then
   record
   exec omarchy-agent
 fi

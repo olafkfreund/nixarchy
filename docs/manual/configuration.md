@@ -379,6 +379,62 @@ accepted. It adds one locale through `i18n.extraLocales`, next to any you add
 yourself, and leaves `i18n.defaultLocale` alone: `LANG` stays a per-user
 setting, as it is upstream.
 
+## Typing Japanese, Korean and Chinese
+
+All five input-method engines Omarchy offers under **Setup ▸ Typing ▸ Input
+Methods** are installed by default on `i18n.inputMethod.fcitx5.addons`:
+
+| Choice in the menu | Engine | Package |
+|---|---|---|
+| Japanese (Mozc) | `mozc` | `pkgs.fcitx5-mozc` |
+| Korean (Hangul) | `hangul` | `pkgs.fcitx5-hangul` |
+| Simplified Chinese (Pinyin) | `pinyin` | `pkgs.qt6Packages.fcitx5-chinese-addons` |
+| Taiwanese (Zhuyin / Chewing) | `chewing` | `pkgs.fcitx5-chewing` |
+| Hong Kong (Cangjie 5) | `cangjie5` | `pkgs.fcitx5-table-extra` |
+
+Pick one from **Setup ▸ Typing ▸ Input Methods**, from **Setup ▸ Language**
+(which enables the matching engine for Japanese, Korean or Chinese when you
+do not already have one), or from a terminal:
+
+```sh
+omarchy setup input mozc
+```
+
+No rebuild is needed. **Super+I** and the bar indicator cycle between your
+keyboard layout and the active engine. When Fcitx5 starts with a stock US
+profile on a non-US Latin keyboard layout, `omarchy-fcitx5` aligns the group's
+default layout to Hyprland's once so position-based engines (`hangul`,
+`chewing`, `cangjie5`) keep their expected keys.
+
+On a fresh home, tapping **Shift** alone flips between the active engine and
+Latin input. Existing machines keep their `~/.config/fcitx5/config` untouched;
+to add the Shift toggle there, add these two lines to
+`~/.config/fcitx5/config` and run `omarchy-restart-xcompose`:
+
+```ini
+[Hotkey/AltTriggerKeys]
+0=Shift_L
+```
+
+`i18n.inputMethod.fcitx5.addons` is a normal merging list, so another addon in
+your configuration (such as `pkgs.fcitx5-rime`) joins these five. Pinyin is
+built with `-DENABLE_BROWSER=OFF` to keep `qtwebengine` out of every machine's
+closure; that drops only the configuration tool's online dictionary browser
+(importing a dictionary file still works). To shed the default engines, or to
+use the stock `fcitx5-chinese-addons` and get that dialog back, replace the
+list with `lib.mkForce`:
+
+```nix
+# Shed all five default engines:
+i18n.inputMethod.fcitx5.addons = lib.mkForce [ ];
+
+# Or keep only Mozc and the stock Pinyin (with the online dictionary dialog):
+i18n.inputMethod.fcitx5.addons = lib.mkForce [
+  pkgs.fcitx5-mozc
+  pkgs.qt6Packages.fcitx5-chinese-addons
+];
+```
+
 ## The boot splash and the login screen
 
 Two different screens, with two very different answers.
@@ -513,7 +569,7 @@ programs.nixarchy.apps._1password = {
 
 Services — Tailscale, Syncthing, OpenSSH — are the companion
 catalogue in `data/services.nix` and a file of their own. A service nixarchy
-only relays gets upstream's own line, `services.openssh.enable = true;`; one it
+only relays gets upstream's own line, `services.flatpak.enable = true;`; one it
 integrates gets an option, `programs.nixarchy.services.tailscale.enable`. There
 is no `settings` passthrough on those, because upstream's options are still
 upstream's and are written beside ours:
@@ -533,7 +589,7 @@ All eleven entries of `data/services.nix`:
 | 32-bit graphics | Hardware | `hardware.graphics.enable32Bit = true;` |
 | Sandboxes (MicroVMs) | Development | `programs.nixarchy.services.microvm.enable = true;` |
 | Open WebUI (local chat) | Desktop | `programs.nixarchy.services.open-webui.enable = true;` |
-| OpenSSH server | Network | `services.openssh.enable = true;` |
+| OpenSSH server | Network | `programs.nixarchy.services.openssh.enable = true;` |
 | Podman | Development | `virtualisation.podman.enable = true;` |
 | Syncthing | Desktop | `programs.nixarchy.services.syncthing.enable = true;` |
 | Tailscale | Network | `programs.nixarchy.services.tailscale.enable = true;` |

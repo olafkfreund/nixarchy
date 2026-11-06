@@ -13,7 +13,7 @@
 #
 #   nix     the attribute path in pkgs (with the nixarchy overlay) that
 #           provides it, and nixarchy ships it: a runtime dependency, a
-#           systemPackages entry, a font, or an app behind
+#           systemPackages entry, a font, or an app on by default through
 #           programs.nixarchy.omarchyApps.enable.
 #   module  the NixOS option that provides it, which modules/*.nix sets.
 #   skip    a one-line reason it is knowingly absent. When unsure, say so here:
@@ -348,25 +348,25 @@
     module = "i18n.inputMethod.enable";
   };
   "fcitx5-chewing" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-chinese-addons" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-gtk" = {
     module = "i18n.inputMethod.enable";
   };
   "fcitx5-hangul" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-mozc" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "fcitx5-qt" = {
     module = "i18n.inputMethod.enable";
   };
   "fcitx5-table-extra" = {
-    module = "i18n.inputMethod.enable";
+    module = "i18n.inputMethod.fcitx5.addons";
   };
   "gvfs-mtp" = {
     module = "services.gvfs.enable";

@@ -239,6 +239,12 @@ let
       # build input. Seeding a package by name gives you `out`, and that is not
       # the same thing.
       pkgs.kmod.dev
+
+      # dbus-1 and initrd-units, in the same per-machine initrd. Kdenlive's
+      # closure carried both by accident until #1612 retired it; without them
+      # the install walks back to the source bootstrap.
+      pkgs.libxslt.bin
+      pkgs.lndir
     ];
 
   version = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.omarchy.version;
@@ -629,14 +635,16 @@ in
     #                       release.yml, which splits the image above and
     #                       ships this one whole.
     #
-    # ## No apps on the image, deliberately
+    # ## Only the default apps on the image
     #
-    # The reference host enables no programs.nixarchy.apps.*, and should not
-    # start. The 52 selectable apps are a post-install concern, reached
-    # through the Install menu once the machine is the user's: several are
-    # unfree, several are hundreds of megabytes each, and baking even the free
-    # half would roughly double an image for apps most people never pick. The
-    # base desktop is what everyone gets and therefore what is worth carrying.
+    # The reference host enables no selectable app beyond the seven
+    # omarchyApps defaults, which cost about 80 MiB against the 1,559 MiB the
+    # three retired apps gave back. Other selectable apps are a post-install
+    # concern, reached through the Install menu once the machine is the user's:
+    # several are unfree, several are hundreds of megabytes each, and baking
+    # even the free half would roughly double an image for apps most people
+    # never pick. The base desktop is what everyone gets and therefore what is
+    # worth carrying.
     #
     # ## Compression: nothing to tune here
     #

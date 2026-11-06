@@ -11,6 +11,9 @@
 # - hyprland-own-package: the titlebars plugin follows programs.hyprland.package.
 # - podman-own-config, nvidia-ctk-own: agent-local yields to the user's podman
 #   and toolkit settings (#1577).
+# - sysctl-razer, sysctl-own-mkdefault, sysctl-own-plain: the user's kernel
+#   tuning evaluates and keeps its values beside nixarchy's defaults.
+# - openssh: the bundled option hardens sshd, while the user's settings win (#1611).
 # - systempkg-own-ffmpeg: environment.systemPackages' buildEnv sets
 #   ignoreCollisions = true, so a clash resolves silently by meta.priority
 #   then order. The user's own ffmpeg-full must win over nixarchy's ffmpeg.
@@ -120,11 +123,120 @@ let
         echo ${shQuote "${name}: FAIL the user's own setting did not stand"} >&2
         fail=1
       '';
+  inputAddonPnames = [
+    "fcitx5-mozc"
+    "fcitx5-hangul"
+    "fcitx5-chewing"
+    "fcitx5-table-extra"
+    "fcitx5-chinese-addons"
+  ];
+
+  ibusHolds =
+    c:
+    c.i18n.inputMethod.fcitx5.addons == [ ]
+    && lib.hasPrefix "ibus" (lib.getName c.i18n.inputMethod.package)
+    && !(c.systemd.user.services ? omarchy-fcitx5);
+
   agentLocalScripts = [
     (agentLocalCheck "podman-own-config" (
       c: c.virtualisation.podman.enable && c.virtualisation.podman.dockerCompat
     ))
     (agentLocalCheck "nvidia-ctk-own" (c: !c.hardware.nvidia-container-toolkit.enable))
+    (agentLocalCheck "input-own-ibus" ibusHolds)
+    (agentLocalCheck "input-default-ibus" ibusHolds)
+    (agentLocalCheck "input-disabled" (
+      c: c.i18n.inputMethod.fcitx5.addons == [ ] && !(c.systemd.user.services ? omarchy-fcitx5)
+    ))
+    (agentLocalCheck "input-own-addon" (
+      c:
+      let
+        pnames = map (p: p.pname or "") c.i18n.inputMethod.fcitx5.addons;
+      in
+      lib.all (n: builtins.elem n pnames) ([ "fcitx5-rime" ] ++ inputAddonPnames)
+    ))
+    (agentLocalCheck "input-no-addons" (c: c.i18n.inputMethod.fcitx5.addons == [ ]))
+    (agentLocalCheck "input-own-profile" (
+      c: !(c.systemd.user.services.omarchy-fcitx5.serviceConfig ? ExecStartPre)
+    ))
+    (agentLocalCheck "preinstalls-exclude-retired" (_: true))
+    (agentLocalCheck "xdg-mime-own-pdf" (
+      c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
+    ))
+  ];
+  opensshScripts = [
+    (agentLocalCheck "openssh-on-reference" (
+      c:
+      !c.services.openssh.settings.PasswordAuthentication
+      && !c.services.openssh.settings.KbdInteractiveAuthentication
+      && !c.security.pam.services.sshd.unixAuth
+    ))
+    (agentLocalCheck "openssh-own-passwords" (
+      c:
+      c.services.openssh.settings.PasswordAuthentication
+      && !c.services.openssh.settings.KbdInteractiveAuthentication
+    ))
+    (agentLocalCheck "openssh-own-null" (c: c.services.openssh.settings.PasswordAuthentication == null))
+    (agentLocalCheck "openssh-plain-line" (
+      c:
+      c.services.openssh.settings.PasswordAuthentication
+      && c.services.openssh.settings.KbdInteractiveAuthentication
+    ))
+  ];
+
+  opensshMkDefault =
+    let
+      r = builtins.tryEval (configOf fixtures.openssh-own-mkdefault)
+        .services.openssh.settings.PasswordAuthentication;
+    in
+    if r.success then
+      ''
+        echo "openssh-own-mkdefault: FAIL expected the mkDefault conflict: the module's priority changed" >&2
+        fail=1
+      ''
+    else
+      ''
+        echo "openssh-own-mkdefault: ok, a loud evaluation error"
+      '';
+
+  # boot.kernel.sysctl merges through mergeOneOption, so a tie is a throw. Forced
+  # to a bool inside tryEval, so it names the fixture and doesn't abort the check.
+  sysctlCheck =
+    name: want:
+    let
+      sysctl = (configOf fixtures.${name}).boot.kernel.sysctl;
+      got = builtins.tryEval (lib.all (k: sysctl.${k} == want.${k}) (builtins.attrNames want));
+    in
+    if !got.success then
+      ''
+        echo ${shQuote "${name}: FAIL did not evaluate: two definitions tie at one priority"} >&2
+        fail=1
+      ''
+    else if got.value then
+      ''
+        echo ${shQuote "${name}: ok"}
+      ''
+    else
+      ''
+        echo ${shQuote "${name}: FAIL the user's own value did not stand"} >&2
+        fail=1
+      '';
+  sysctlScripts = [
+    (sysctlCheck "sysctl-razer" {
+      "net.core.default_qdisc" = "fq";
+      "net.ipv4.tcp_congestion_control" = "bbr";
+      "net.ipv4.tcp_notsent_lowat" = 16384;
+      "net.ipv4.tcp_mtu_probing" = 1;
+      "net.ipv4.tcp_fastopen" = 3;
+    })
+    (sysctlCheck "sysctl-own-mkdefault" {
+      "net.core.default_qdisc" = "fq_codel";
+      "net.ipv4.tcp_congestion_control" = "cubic";
+      "vm.swappiness" = 10;
+    })
+    (sysctlCheck "sysctl-own-plain" {
+      "net.core.default_qdisc" = "cake";
+      "net.ipv4.tcp_congestion_control" = "cubic";
+    })
   ];
 
   shQuote = lib.escapeShellArg;
@@ -189,6 +301,26 @@ let
         esac
       '';
 
+  ownHypeScript =
+    let
+      c = configOf fixtures.systempkg-own-hype;
+      failing = builtins.filter (a: !a.assertion) c.assertions;
+    in
+    if failing != [ ] then
+      ''
+        echo ${shQuote "systempkg-own-hype: FAIL nixarchy assertion fired: ${lib.concatStringsSep "; " (map (a: a.message) failing)}"} >&2
+        fail=1
+      ''
+    else
+      ''
+        if grep -q own-hype-marker "${c.system.path}/bin/hype"; then
+          echo "systempkg-own-hype: ok"
+        else
+          echo "systempkg-own-hype: FAIL user's hype binary did not win" >&2
+          fail=1
+        fi
+      '';
+
   nmScript =
     if nmConnectivity.uri == "http://example.invalid/check" && nmConnectivity.enabled == false then
       ''
@@ -210,10 +342,14 @@ pkgs.runCommand "nixarchy-coexistence"
     fail=0
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
+    ${ownHypeScript}
     ${nmScript}
     ${hyprlandScript}
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}
+    ${lib.concatStrings sysctlScripts}
+    ${lib.concatStrings opensshScripts}
+    ${opensshMkDefault}
     if [ "$fail" = 1 ]; then
       exit 1
     fi

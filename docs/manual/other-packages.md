@@ -21,10 +21,11 @@ and 5 have no equivalent and say so in the menu.
 
 Picking a row does not install anything. It uncomments one line in
 `~/.config/nixarchy/apps.nix`, which is a file nixarchy writes for you, fully
-populated with every app and every line commented out. Pick five rows and you
-have five uncommented lines. Then _Install > Apply changes_ opens the rebuild
-panel, which says what it is about to do and starts only when you press
-_Rebuild now_: it copies that file to `nixarchy-apps.nix` in your flake
+populated with every app and every line commented out. The seven apps on by
+default have `.enable = false` rows, because uncommenting one turns that app
+off. Pick five rows and you have five uncommented lines. Then _Install > Apply
+changes_ opens the rebuild panel, which says what it is about to do and starts
+only when you press _Rebuild now_: it copies that file to `nixarchy-apps.nix` in your flake
 directory and runs `nh os switch <flake>`.
 
 The panel is only a view of the rebuild. It shows how long it has taken and the
@@ -56,21 +57,26 @@ system partly changed.
 
 ## Omarchy's own apps
 
-Omarchy installs seven applications of its own on every machine: Omawrite,
-Omacalc, Omacut, Aether, and, since 4.5, Hype (Markdown presentations),
-Monologue (a webcam recorder) and Signed (sign and fill PDFs). nixpkgs carries
-none of them, so nixarchy builds them, and they stay off until you ask:
+Omarchy installs seven applications of its own on every machine: Omawrite, Omacalc,
+Omacut, Aether, Hype (Markdown presentations), Monologue (a webcam recorder) and
+Signed (sign and fill PDFs). nixpkgs carries none of them, so nixarchy builds them,
+and they come by default.
 
-```nix
-programs.nixarchy.omarchyApps.enable = true;
+To leave one out, use _Remove > App / package_, or add `hype.enable = false;` to
+`apps.nix`. `programs.nixarchy.omarchyApps.enable = false` leaves out all seven, and
+`programs.nixarchy.preinstalls = false` leaves out those and the rest of the
+preinstalled set.
+
+OBS Studio, Kdenlive and Xournal++ are no longer installed, following Omarchy 4.5.
+To keep any of them:
+
+```sh
+nixarchy pkg add obs-studio kdePackages.kdenlive xournalpp
+nixarchy apply
 ```
 
-That turns on all seven as defaults. A line in `apps.nix` still turns any one of
-them off, and any one can be turned on alone with `programs.nixarchy.apps.hype.enable`.
-
-Two things from 4.5 come without asking: Disktree, which replaces the Disk Usage
-launcher, and the titlebars on floating workspaces. Both are part of the
-session itself.
+Disktree, which replaces the Disk Usage launcher, and the titlebars on floating
+workspaces are part of the session itself.
 
 ## Finding it in the first place
 
@@ -276,11 +282,12 @@ you onward.
 ## Removing
 
 _Remove > App / package_ runs `nixarchy-app-remove`, a picker over everything
-the Install picker has written into `apps.nix`: enabled apps, packages added
-with `nixarchy pkg add`, and options the Search picker set or scaffolded. It
-only ever deselects; then `nixarchy-apply` rebuilds without them. Files go
-away when the old generation is garbage-collected, and config under
-`~/.config` stays, as on any system.
+the Install picker has written into `apps.nix`: enabled apps, apps on by default,
+packages added with `nixarchy pkg add`, and options the Search picker set or
+scaffolded. For an app on by default it writes `hype.enable = false;` rather
+than commenting the row. It only ever deselects; then `nixarchy-apply` rebuilds
+without them. Files go away when the old generation is garbage-collected, and
+config under `~/.config` stays, as on any system.
 
 `nixarchy pkg remove <attr>` does the package half from a terminal, and with
 no argument opens the same fuzzy picker over just the added packages.

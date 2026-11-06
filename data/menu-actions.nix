@@ -29,8 +29,6 @@
   "remove.preinstalls" =
     "unreached: runs omarchy-install-hermes-cli --owns, which quattro's script answers with its usage error before the --now branch's user-unit stop (decision 2, checks.remove-preinstalls)";
   "remove.security.fido2" = "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";
-  "remove.security.fingerprint" =
-    "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";
   "remove.security.sudoless-docker" =
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
   "remove.service.ssh-agent" =

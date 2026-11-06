@@ -22,6 +22,10 @@
 # editing this file alone -- the same argument data/bin-ledger.nix makes about
 # classification, applied to an inventory.
 #
+# A sysctl.d row may also carry differs."<key>" = { upstream = "<value>"; reason = "..."; };
+# when this port deliberately sets another value. tests/etc-sysctl.nix accepts it only
+# while upstream still says <value> and the configuration still differs.
+#
 # ## The classes
 #
 #   native      a NixOS option in modules/ declares the equivalent
@@ -227,7 +231,7 @@
 
   "sysctl.d/90-omarchy-arp.conf" = {
     class = "native";
-    reason = "arp_ignore=1 and arp_announce=2 on all and default, so Wi-Fi does not answer ARP for a dock's Ethernet address. modules/nixos.nix sets the four keys through boot.kernel.sysctl at mkDefault, so a machine's own value wins.";
+    reason = "arp_ignore=1 and arp_announce=2 on all and default, so Wi-Fi does not answer ARP for a dock's Ethernet address. modules/nixos.nix sets the four keys through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included.";
   };
 
   "sysctl.d/90-omarchy-file-watchers.conf" = {
@@ -237,7 +241,7 @@
 
   "sysctl.d/99-omarchy-sysctl.conf" = {
     class = "native";
-    reason = "Desktop memory and writeback tuning, value for value: tcp_mtu_probing, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at mkDefault, so a machine's own value wins.";
+    reason = "BBR and fq, plus desktop memory and writeback tuning, value for value: tcp_mtu_probing, default_qdisc fq, tcp_congestion_control bbr, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included. checks.etc-sysctl compares each with upstream's file.";
   };
 
   "sysusers.d/omarchy-cups-browsed.conf" = {
@@ -342,7 +346,7 @@
 
   "udev/rules.d/60-omarchy-io-scheduler.rules" = {
     class = "divergent";
-    reason = "Kyber on every whole disk. Not ported: a udev rule cannot be mkDefault, so it would silently override a host's own scheduler (p620 runs bfq), which is a coexistence change needing its own design. Tracked in #1386.";
+    reason = "Kyber on every whole disk. Not ported: a udev rule cannot be mkDefault, so it would silently override a host's own scheduler (p620 runs bfq). The owner declined it on 2026-10-20, recorded in #1386.";
   };
 
   "xdg/kitty/kitty.conf" = {

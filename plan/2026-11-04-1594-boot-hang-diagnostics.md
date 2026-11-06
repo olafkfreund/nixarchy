@@ -181,3 +181,12 @@ new check and its claim and step go with it.
 - **`boot-diagnostics.py` gained** a stub `full_console_log`, a stub
   `send_monitor_command`, and case 4, the silence detector against stubs,
   which is red with the silence deadline removed (`timeout 30` → 124).
+
+## Follow-up found by the first real hang (2026-11-06)
+
+**Step follow-up (codex).** #1637's install hung and its dump reached the log as blank lines, because QEMU's monitor ends each line with `\r\n` and a Nix build log prints a line ending in `\r` as empty (measured with a `runCommand`). The Python string still held the text, so `boot-hang-detect`'s `"IP=" in monitor_dump` stayed green.
+
+- `tests/vm-cleanup.py`, `sample_monitor`: `response = machine.send_monitor_command(command).replace("\r", "")`. It stays inside the `try`.
+- `tests/boot-diagnostics.py`: `Stub.send_monitor_command` returns `"CPU#0\r\nEIP=000ebd8b\r\n"`. Where `"EIP="` is asserted in `raised.monitor_dump`, also fail if `"\r"` is in `raised.monitor_dump` or in the captured stdout from `run`.
+- Check: `checks.boot-diagnostics`, cheap. Break: remove `.replace` and it must go red. `boot-hang-detect` is a VM check, by section 6's tier.
+

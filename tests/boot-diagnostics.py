@@ -18,7 +18,7 @@ class Stub:
         self.full_console_log = []
 
     def send_monitor_command(self, command):
-        return "CPU#0\nEIP=000ebd8b"
+        return "CPU#0\r\nEIP=000ebd8b\r\n"
 
     def wait_for_console_text(self, pattern, timeout):
         self._console()
@@ -92,6 +92,8 @@ if not isinstance(raised, ns["BootHang"]) or "console silent" not in str(raised)
     fail(f"silence was not detected: {raised!r}")
 if "EIP=" not in raised.monitor_dump:
     fail("the monitor dump was not attached")
+if "\r" in raised.monitor_dump or "\r" in out:
+    fail("the monitor dump contains carriage returns")
 if elapsed >= 15:
     fail(f"silence took {elapsed:.1f} s to fire")
 print(f"PASS 4: silence detected with registers ({elapsed:.1f} s)")

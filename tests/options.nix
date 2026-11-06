@@ -1196,6 +1196,24 @@ let
         off = kept != "10s";
       };
 
+    # #1624: on a Mode A machine that turns fcitx5 on itself. loaderOff has no input method,
+    # so it could not see the entry leave cfg.enable.
+    fcitx5ThemesLinked = {
+      on = builtins.elem "/share/fcitx5/themes" adopter.config.environment.pathsToLink;
+      off =
+        builtins.elem "/share/fcitx5/themes"
+          (modeAOff.extendModules {
+            modules = [
+              {
+                i18n.inputMethod = {
+                  enable = true;
+                  type = "fcitx5";
+                };
+              }
+            ];
+          }).config.environment.pathsToLink;
+    };
+
     # #1620: deleting prints leaves a machine as one that never enrolled, so a stack with a
     # password must still reach it past pam_fprintd, and the fingerprint one must have none.
     # Auth lines only: pam_unix is in account, password and session whatever auth does.

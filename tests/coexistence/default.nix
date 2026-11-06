@@ -137,7 +137,8 @@ let
     c:
     c.i18n.inputMethod.fcitx5.addons == [ ]
     && lib.hasPrefix "ibus" (lib.getName c.i18n.inputMethod.package)
-    && !(c.systemd.user.services ? omarchy-fcitx5);
+    && !(c.systemd.user.services ? omarchy-fcitx5)
+    && !(builtins.elem "/share/fcitx5/themes" c.environment.pathsToLink);
 
   agentLocalScripts = [
     (agentLocalCheck "podman-own-config" (
@@ -147,7 +148,10 @@ let
     (agentLocalCheck "input-own-ibus" ibusHolds)
     (agentLocalCheck "input-default-ibus" ibusHolds)
     (agentLocalCheck "input-disabled" (
-      c: c.i18n.inputMethod.fcitx5.addons == [ ] && !(c.systemd.user.services ? omarchy-fcitx5)
+      c:
+      c.i18n.inputMethod.fcitx5.addons == [ ]
+      && !(c.systemd.user.services ? omarchy-fcitx5)
+      && !(builtins.elem "/share/fcitx5/themes" c.environment.pathsToLink)
     ))
     (agentLocalCheck "input-own-addon" (
       c:

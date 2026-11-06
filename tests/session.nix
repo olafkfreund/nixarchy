@@ -3193,6 +3193,11 @@ pkgs.testers.runNixOSTest {
     input_driver("stock-profile")
     machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
     machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    machine.succeed(desktop_user("rm -f ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    machine.succeed(desktop_user("omarchy-theme-set-fcitx5 --activate"))
+    # -e follows the link, so a dangling one fails.
+    machine.succeed(desktop_user("test -e ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    print("#1624: the candidate window's theme has its glyphs")
     print("#1614: keyboard and input-method state restored")
 
     # A QML engine that resolves a singleton to the wrong type (omarchy#14811,

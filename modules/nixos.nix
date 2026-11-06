@@ -1395,7 +1395,10 @@ in
         "/share/hypr"
       ]
       # workspace-modes.lua loads the plugin from /run/current-system/sw/lib (#1572).
-      ++ lib.optional cfg.session "/lib/omarchy-hyprland-titlebars";
+      ++ lib.optional cfg.session "/lib/omarchy-hyprland-titlebars"
+      # omarchy-theme-set-fcitx5 links the stock theme's glyphs through the system profile.
+      # Themes only: all of share/fcitx5 would put addon files on XDG_DATA_DIRS.
+      ++ lib.optional usingFcitx5 "/share/fcitx5/themes";
 
       # Omarchy's scripts are unwrapped by design (wrapping breaks the CLI's
       # metadata scan), so their dependencies have to be on the session PATH.

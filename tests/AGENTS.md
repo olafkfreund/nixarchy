@@ -1798,6 +1798,35 @@ Two fixes ported from Omarchy `quattro` have parts no layer here can show:
   call. By hand: boot with a Thunderbolt dock whose display comes up late
   and watch the logo and the passphrase field land in the middle of it.
 
+## Removing a fingerprint: what each layer sees, and the hole (#1620)
+
+`checks.remove-fingerprint` runs the shipped script with two paths rewritten, and every writer
+stubbed. A green run proves the deletion was **asked for**, in the right order, of the right
+account, and that the row said the right thing. It proves nothing was erased only on a rewritten
+copy. `checks.options` holds the PAM stacks by evaluation.
+
+`checks.remove-fingerprint-vm` (`tests/remove-fingerprint-vm.nix`) runs the shipped script in a VM
+against real `fprintd`, libfprint's `virtual_device_storage` driver, and `pamtester`. It enrols
+`alice` (`alice-id`) and `bob` (`bob-id`), runs the shipped script as `alice`, and proves: exit 0
+with `Deleted alice's saved fingerprints`, `/var/lib/fprint/alice` gone while `/var/lib/fprint/bob`
+stays, `fprintd-list alice` reporting `has no fingers enrolled`, a second `fprintd-delete alice`
+printing `No fingerprints to delete on`, `REMOVE alice-id` warning `not found in storage` while
+the `REMOVE bob-id` control succeeds without that warning, and `pamtester` on `sudo` and
+`omarchy-lock-password` accepting `alice`'s password and rejecting a wrong one. Getting the
+virtual reader to run took: clearing the upstream unit's `ExecStart` with `""` before passing
+`--no-timeout` (and keeping `RuntimeDirectory = "fprintd-virt"` for the socket under
+`ProtectSystem=strict`), `security.polkit.enable = true`, `SET_KEEP_ALIVE 1` so the socket
+outlives a device close, repeated `SCAN`s during enrolment because `fprintd` identifies first to
+catch duplicates, and opening the reader once more (`fprintd-verify`) because queued socket
+commands are only processed on the reader's next use.
+
+Nothing here can show a physical chip obeying. By hand, on a match-on-chip reader: enrol, press
+Remove, `sudo ls /var/lib/fprint`, confirm the finger no longer verifies at `sudo`, then that the
+password does. Nobody working on this has one.
+
+Boot snapshots keeping templates indefinitely is read from `systemd-helper.cc:125`, not observed.
+The row claims no retention period, so nothing depends on it.
+
 ## menu-tree: reachable by browsing, and what it cannot see (#1302)
 
 `tests/menu-tree.py` applies `MenuModel.js`'s rules to the generated menu

@@ -101,15 +101,24 @@ pkgs.runCommand "nixarchy-patched-files"
     cp -r root patch-root
     printf '%s\n' '--- a/bin/omarchy-theme-bg-next' '+++ b/bin/omarchy-theme-bg-next' \
       > patch-root/pkgs/omarchy/fixture.patch
-    patch_report=$(bash "$script" ${patchChanged} patch-root)
-    <<<"$patch_report" grep -q '^1 files changed' || {
+    cp ${patchChanged} patch-changed.txt
+    patch_paths=$(grep '^+++ b/' root/pkgs/omarchy/1625-no-mise.patch | sed 's|^+++ b/||')
+    printf '%s\n' "$patch_paths" >> patch-changed.txt
+    patch_report=$(bash "$script" patch-changed.txt patch-root)
+    <<<"$patch_report" grep -q '^10 files changed' || {
       echo "patched files: patch fixture changed-file total is wrong" >&2
       fail=1
     }
-    <<<"$patch_report" grep 'omarchy-theme-bg-next' | grep -q 'pkgs/omarchy/.*patch' || {
+    <<<"$patch_report" grep -q 'omarchy-theme-bg-next.*pkgs/omarchy/.*patch' || {
       echo "patched files: a patch-only path was not reported as patched" >&2
       fail=1
     }
+    while IFS= read -r path; do
+      <<<"$patch_report" grep -Fq "\`$path\` — patched by \`pkgs/omarchy/*.patch\`" || {
+        echo "patched files: $path was not reported as patched by the new patch" >&2
+        fail=1
+      }
+    done <<<"$patch_paths"
 
     # The other half, and the one that decides whether this is readable at
     # all. `substituteInPlace $out/share/omarchy/bin/$f` inside a loop would

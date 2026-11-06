@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1647
 author: x
 ---
@@ -40,13 +40,10 @@ What it costs:
 - A changed default a user might rely on is announced (§14).
 - `v4.5.0-1` is not tagged until this lands, so that release does not publish a 7 GB image.
 
-## Open questions
+## Decisions
 
-**1. Does `nixarchy reinstall iso` keep its offline image?** This is the one decision that sets the size of the job.
+The owner approved this on 2026-11-06, choosing option B.
 
-`nixarchy reinstall iso` builds a personal image on the person's own machine, from their configuration, with their system on it, using the same `offline` machinery in `installer/cd.nix`. `docs/manual/reinstall-image.md` calls it the only way back that survives losing the disk. It is never published, so it costs no download, and `reinstall-vm` tests it in the nightly. `--net` already exists as the smaller variant.
+**1. The offline machinery goes entirely.** Not only the published image: the `offline` parameter in `installer/cd.nix`, and the installer's baked-closure branches. `nixarchy reinstall iso` becomes network-only, so it fetches the system from caches at reinstall time, and a personal package no cache holds cannot come back. That changes what a recovery feature promises, so `docs/manual/reinstall-image.md` and the release note say so. #1619's gate, which refuses a non-US layout on an image with no network, goes with it.
 
-- **A, recommended: remove only the published image.** Keep the `offline` parameter and the installer's offline branch for the personal image. It removes everything listed above. It does not remove `cd.nix`'s offline half or the installer's offline branches, so #1619's gate stays as it is and keeps being tested by `reinstall-vm`.
-- **B: remove the offline machinery entirely.** `nixarchy reinstall iso` becomes `--net` only, which fetches the system from caches at reinstall time, so a personal package no cache holds cannot come back. It removes about 200 more lines of `cd.nix`, the baked-closure branches in `install.sh`, and #1619's gate. It changes what a recovery feature promises.
-
-**2. Does the image's name change?** With one image, `#iso-net` and its marker are misnamed. *Recommend not now:* a rename touches the installer's marker and every doc for no saving. If #1646 goes ahead, it changes this anyway.
+**2. The image's name stays `#iso-net` for now.** A rename touches the installer's marker and every doc for no saving, and #1646 may change it anyway.

@@ -122,7 +122,7 @@
   };
   "omarchy-agent" = {
     class = "patch";
-    reason = "Two edits: mise's shims are prepended to PATH, because the menu launches through `bash -c` which sources no rc; and an `antigravity` case is added, which upstream's launcher has no arm for.";
+    reason = "Three edits: the launch carries the agent dispatch directory, because the menu's `bash -c` sources no rc; a missing agent also sends a notification, because a keypress has no terminal; and an `antigravity` case is added, which upstream's launcher has no arm for.";
   };
   "omarchy-agent-real-path" = {
     class = "new";
@@ -134,7 +134,15 @@
   };
   "omarchy-agent-account-exec" = {
     class = "patch";
-    reason = "Its mise install fallback refuses with exit 127 instead: nixarchy installs claude, codex and grok through Nix, and one it did not install (unfree off) stays not installed (#1386).";
+    reason = "Finds the real CLI by dropping every dispatch directory from PATH itself, restores this generation's for an agent's subprocesses, and refuses with exit 127 instead of a mise install (#1386, #1625).";
+  };
+  "omarchy-agent-account-add" = {
+    class = "patch";
+    reason = "Checks for the real CLI without dispatch on PATH and refuses with the Nix install route instead of running mise.";
+  };
+  "omarchy-agent-usage-codex" = {
+    class = "patch";
+    reason = "Skips agent dispatch entries when probing for Codex, so a dispatcher does not count as an installed CLI or get run by the usage probe.";
   };
   "omarchy-agent-account-copy" = {
     class = "vendor";
@@ -297,8 +305,8 @@
     allow = "account-tools etc-write modprobe";
   };
   "omarchy-install-hermes-cli" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service only after a --now set-up, before re-running the theme setter; stopping a user unit is session state and carries no configuration.";
+    class = "patch";
+    reason = "Retires Omarchy's Hermes wrapper without running mise or removing the environment it built; stopping omarchy-hermes-theme.service after --now remains session state.";
     allow = "systemctl-user";
   };
   "omarchy-install-openclaw-cli" = {

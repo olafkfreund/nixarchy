@@ -1,0 +1,201 @@
+--- a/default/bash/init
++++ b/default/bash/init
+@@ -1,5 +1,5 @@
+-if command -v mise &> /dev/null; then
+-  eval "$(mise activate bash)"
++if [[ :$PATH: != *":$OMARCHY_PATH/agent-dispatch:"* ]]; then
++  PATH="$OMARCHY_PATH/agent-dispatch:$PATH"
+ fi
+ 
+ if [[ $- == *i* ]] && [[ ${TERM:-} != "dumb" ]] && command -v starship &> /dev/null; then
+--- a/default/bash/aliases
++++ b/default/bash/aliases
+@@ -54,7 +54,6 @@
+ alias ic='tdl c'
+ alias ix='tdl cx'
+ alias icx='tdl c cx'
+-alias mup='MISE_MINIMUM_RELEASE_AGE=0 mise up'
+ n() { if [ "$#" -eq 0 ]; then command nvim . ; else command nvim "$@"; fi; }
+ 
+ # Git
+--- a/default/bash/fns/worktrees
++++ b/default/bash/fns/worktrees
+@@ -10,7 +10,6 @@
+   local wt_path="../${base}--${branch}"
+ 
+   git worktree add -b "$branch" "$wt_path"
+-  mise trust "$wt_path"
+   cd "$wt_path"
+ }
+ 
+--- a/install/user/all.sh
++++ b/install/user/all.sh
+@@ -15,6 +15,5 @@
+ run_logged "$OMARCHY_INSTALL/user/hardware/vm-no-animations.sh"
+ 
+ run_logged "$OMARCHY_INSTALL/user/default-keyring.sh"
+-run_logged "$OMARCHY_INSTALL/user/mise.sh"
+ 
+ run_logged "$OMARCHY_INSTALL/user/platform-setup.sh"
+--- a/bin/omarchy-agent-account-exec
++++ b/bin/omarchy-agent-account-exec
+@@ -19,10 +19,10 @@
+ provider=$1
+ shift
+ 
+-# mise removes its wrapper dispatch directories before calling us, so exec
+-# finds the real CLI (or its first-run installer) rather than this wrapper.
+-# Pin the resolved home for children, including an implicit Main account.
+-# Explicit provider homes still take precedence.
++# Every generation's dispatch directory is dropped, so the lookup below finds the
++# real CLI rather than this script. Pin the resolved home for children, including an
++# implicit Main account. Explicit provider homes still take precedence.
++real_path=$(omarchy-agent-real-path)
+ if [[ -z ${!account_env:-} ]]; then
+   account_home=$(omarchy-agent-account-home "$provider")
+   export "OMARCHY_AGENT_${provider^^}_HOME=$account_home"
+@@ -31,26 +31,11 @@
+   fi
+ fi
+ 
+-# Resolve before restoring dispatch on PATH: mise removes the wrapper paths to
+-# avoid recursion, but the agent's subprocesses need them for other providers.
+-if ! agent_binary=$(type -P "$provider"); then
+-  # A mise dispatcher can exist before its CLI or first-run installer does.
+-  # Omarchy declares these agents, so installing one leaves the user's config
+-  # alone. A user who removed the preinstalls selects it in their own config.
+-  export MISE_MINIMUM_RELEASE_AGE=0
+-  if omarchy-mise-default-tools declares "$provider"; then
+-    mise install --quiet "$provider"
+-  else
+-    mise use -g --quiet "$provider"
+-  fi
+-  agent_binary=$(mise which "$provider")
+-fi
+-# mise also drops its shims, leaving only the tools installed at launch. A
+-# long-lived agent needs them back to find tools installed after it started.
+-mise_data_dir=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}
+-PATH="$mise_data_dir/command-wrappers/bin:$PATH"
+-if [[ :$PATH: != *":$mise_data_dir/shims:"* ]]; then
+-  PATH="$PATH:$mise_data_dir/shims"
++if ! agent_binary=$(PATH=$real_path; type -P "$provider"); then
++  echo "$provider is not installed. nixarchy installs it through Nix: omarchy default agent $provider" >&2
++  exit 127
+ fi
++# This generation's dispatch goes back, so an agent's subprocesses are routed too.
++PATH="@omarchyDispatch@:$real_path"
+ export PATH
+ exec "$agent_binary" "$@"
+--- a/bin/omarchy-agent-account-add
++++ b/bin/omarchy-agent-account-add
+@@ -116,13 +116,8 @@
+   wait $!
+ }
+ 
+-if omarchy-cmd-missing "$provider"; then
+-  say "$(omarchy-i18n agents.installingCli "$name")"
+-  if [[ $events == "true" ]]; then
+-    mise use -g "$package" >/dev/null 2>&1 || fail "$(omarchy-i18n agents.installCliFailed "$name")"
+-  else
+-    mise use -g "$package" || exit 1
+-  fi
++if PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$provider"; then
++  fail "$name is not installed. Install it with: omarchy default agent $provider"
+ fi
+ 
+ # Your main browser is almost certainly signed in to the account you already
+--- a/bin/omarchy-agent
++++ b/bin/omarchy-agent
+@@ -48,8 +48,9 @@
+ 
+ # OpenClaw's launcher sets OpenClaw up when the package became the seed before
+ # this user's OpenClaw moved, so with the package a missing command is its to fix.
+-if omarchy-cmd-missing "$agent" && ! { [[ $agent == "openclaw" ]] && omarchy-pkg-present openclaw; }; then
++if PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$agent" && ! { [[ $agent == "openclaw" ]] && omarchy-pkg-present openclaw; }; then
+   echo "$agent is not installed. Choose an installed agent with: omarchy default agent <name>" >&2
++  omarchy-notification-send -u normal "$agent is not installed" "Choose an installed agent with: omarchy default agent <name>" || true
+   exit 1
+ fi
+ 
+@@ -258,6 +259,10 @@
+   fi
+ fi
+ 
++# The menu's bash -c sources no rc, and a terminal started through uwsm does not
++# inherit its environment, so the launch carries dispatch itself.
++command=(env "PATH=@omarchyDispatch@:$PATH" "${command[@]}")
++
+ if [[ $inline == "true" ]]; then
+   exec "${command[@]}"
+ else
+--- a/bin/omarchy-agent-usage-codex
++++ b/bin/omarchy-agent-usage-codex
+@@ -95,6 +95,8 @@
+ 
+ 
+ def is_lazy_launcher(path):
++  if os.path.basename(os.path.dirname(os.path.abspath(path))) == "agent-dispatch":
++    return True
+   # omarchy-mise-install writes a regular file whose first step is `mise use
+   # -g`, and mise's shims exec `mise x`; running either installs the tool it
+   # wraps. A shim is a symlink to the mise binary itself, so the symlink
+@@ -793,8 +795,7 @@
+ # Only then is a missing sign-in or binary worth saying.
+ def codex_in_use(stats):
+   return (
+-    bool(find_command("codex"))
+-    or bool(find_codex_binary())
++    bool(find_codex_binary())
+     or codex_home().exists()
+     or bool(ENV.get("CODEX_ACCESS_TOKEN"))
+     or number(stats.get("totalSessions")) > 0
+--- a/bin/omarchy-install-hermes-cli
++++ b/bin/omarchy-install-hermes-cli
+@@ -87,36 +87,9 @@
+   return 1
+ }
+ 
+-# Gone means neither installed nor still asked for in the global config, where
+-# `mise up` would build it again. `mise rm -g` exits 0 whether or not it removed
+-# anything, so the listing is read instead, and a listing that cannot be read
+-# -- mise broken, or not there to read it -- is not an answer. The key carries
+-# the backend and name, with or without the options.
+-mise_retired() {
+-  local requested
+-  requested=$(mise ls -g --json 2>/dev/null) || return 1
+-  ! mise where "$legacy_tool" >/dev/null 2>&1 && ! grep -qE '"pipx:hermes-agent(\[|")' <<<"$requested"
+-}
+-
+-# Removes the environment the retired wrapper built, judged by what is left
+-# rather than by what the commands claimed. Only for a caller that has proved
+-# it Omarchy's.
++# nixarchy ships no mise, so the environment stays where mise built it.
+ retire_mise() {
+-  if mise_retired; then
+-    return 0
+-  fi
+-  mise rm -g "$legacy_tool" >/dev/null 2>&1 || true
+-  mise uninstall --all "$legacy_tool" >/dev/null 2>&1 || true
+-  if mise_retired; then
+-    return 0
+-  fi
+-  echo "Could not remove the Hermes that mise built. Finish by hand:" >&2
+-  if omarchy-cmd-missing mise; then
+-    echo "  omarchy pkg add mise" >&2
+-  fi
+-  echo "  mise rm -g '$legacy_tool'" >&2
+-  echo "  mise uninstall --all '$legacy_tool'" >&2
+-  return 1
++  echo "The Hermes that mise built stays in ~/.local/share/mise." >&2
+ }
+ 
+ # Once the environment is gone the proof has done its work. Left behind it
+@@ -227,7 +200,7 @@
+ # what the default agent would run instead.
+ settle_path() {
+   if legacy_owned; then
+-    echo "Removing the Hermes that mise built; Hermes now updates itself..."
++    echo "Retiring the Hermes wrapper; Hermes now updates itself..."
+     retire_mise || return 1
+     forget_legacy
+   fi

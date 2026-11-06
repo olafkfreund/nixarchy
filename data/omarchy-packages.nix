@@ -749,7 +749,7 @@
     skip = "Upstream's Cam Link 4K relay. Not ported yet; an opt-in module would use boot.extraModulePackages and services.v4l2-relayd (#1610).";
   };
   "vi" = {
-    skip = "Neovim provides vi/vim aliases where wanted.";
+    module = "environment.systemPackages"; # lowPrio wrapper to nvim in modules/nixos.nix (#1623)
   };
   "whois" = {
     skip = "Not installed by default.";

@@ -17,6 +17,8 @@
 # - systempkg-own-ffmpeg: environment.systemPackages' buildEnv sets
 #   ignoreCollisions = true, so a clash resolves silently by meta.priority
 #   then order. The user's own ffmpeg-full must win over nixarchy's ffmpeg.
+# - systempkg-own-vi, neovim-vialias: a user's vi wins; otherwise nixarchy's
+#   wrapper reaches nvim from PATH.
 let
   inherit (pkgs) lib;
 
@@ -135,7 +137,8 @@ let
     c:
     c.i18n.inputMethod.fcitx5.addons == [ ]
     && lib.hasPrefix "ibus" (lib.getName c.i18n.inputMethod.package)
-    && !(c.systemd.user.services ? omarchy-fcitx5);
+    && !(c.systemd.user.services ? omarchy-fcitx5)
+    && !(builtins.elem "/share/fcitx5/themes" c.environment.pathsToLink);
 
   agentLocalScripts = [
     (agentLocalCheck "podman-own-config" (
@@ -145,7 +148,10 @@ let
     (agentLocalCheck "input-own-ibus" ibusHolds)
     (agentLocalCheck "input-default-ibus" ibusHolds)
     (agentLocalCheck "input-disabled" (
-      c: c.i18n.inputMethod.fcitx5.addons == [ ] && !(c.systemd.user.services ? omarchy-fcitx5)
+      c:
+      c.i18n.inputMethod.fcitx5.addons == [ ]
+      && !(c.systemd.user.services ? omarchy-fcitx5)
+      && !(builtins.elem "/share/fcitx5/themes" c.environment.pathsToLink)
     ))
     (agentLocalCheck "input-own-addon" (
       c:
@@ -301,6 +307,31 @@ let
         esac
       '';
 
+  viScript =
+    name: c: needle: present:
+    let
+      failing = builtins.filter (a: !a.assertion) c.assertions;
+    in
+    if failing != [ ] then
+      ''
+        echo ${shQuote "${name}: FAIL nixarchy assertion fired: ${lib.concatStringsSep "; " (map (a: a.message) failing)}"} >&2
+        fail=1
+      ''
+    else
+      ''
+        if ${if present then "" else "!"} grep -qF ${shQuote needle} "${c.system.path}/bin/vi"; then
+          echo ${shQuote "${name}: ok"}
+        else
+          echo ${shQuote "${name}: FAIL bin/vi has the wrong content"} >&2
+          fail=1
+        fi
+      '';
+  viScripts = [
+    (viScript "systempkg-own-vi" (configOf fixtures.systempkg-own-vi) "own-vi-marker" true)
+    (viScript "neovim-vialias" (configOf fixtures.neovim-vialias) "exec nvim" false)
+    (viScript "reference-vi" reference.config "exec nvim" true)
+  ];
+
   ownHypeScript =
     let
       c = configOf fixtures.systempkg-own-hype;
@@ -342,6 +373,7 @@ pkgs.runCommand "nixarchy-coexistence"
     fail=0
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
+    ${lib.concatStrings viScripts}
     ${ownHypeScript}
     ${nmScript}
     ${hyprlandScript}

@@ -35,13 +35,10 @@
 let
   # One self-signed cert, used as the server cert and trusted as a CA: enough
   # for `curl -sfI https://cache.nixos.org/nix-cache-info` to say 200.
-  cert = pkgs.runCommand "refusal-stub-cert" { nativeBuildInputs = [ pkgs.openssl ]; } ''
-    mkdir $out
-    openssl req -x509 -newkey rsa:2048 -nodes -days 36500 \
-      -keyout $out/key.pem -out $out/cert.pem \
-      -subj "/CN=cache.nixos.org" \
-      -addext "subjectAltName=DNS:cache.nixos.org"
-  '';
+  # Committed, not generated: a derivation that makes a new key each build keeps
+  # its store path, so after a GC the CA bundles built from the old one stop
+  # trusting it. Why: tests/AGENTS.md#a-build-that-is-not-reproducible-keeps-its-path
+  cert = ./fixtures/refusal-stub-cert;
 
   # The same test-only hash tests/install.nix uses; validate_answers wants a
   # crypt string, not a placeholder.

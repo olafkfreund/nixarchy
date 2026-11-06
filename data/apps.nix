@@ -113,7 +113,7 @@
     # nixpkgs marks sublimetext4 broken -- "Packages, including core ones, do
     # not run without plug-in host depending on insecure OpenSSL" -- and
     # enabling it aborts the whole rebuild rather than failing on its own.
-    unavailable = "nixpkgs marks sublimetext4 broken over an insecure OpenSSL dependency; enabling it fails the rebuild.";
+    unavailable = "nixpkgs marks sublimetext4 broken over an insecure OpenSSL dependency; enabling it fails the rebuild. Zed and VSCode are in the catalogue.";
     arch = "sublime-text-4";
   };
 

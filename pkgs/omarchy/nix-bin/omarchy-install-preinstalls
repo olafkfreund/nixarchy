@@ -14,5 +14,5 @@ if gum confirm "Are you sure you want to restore all preinstalled web apps, TUI 
   echo "The agent CLIs and the preinstalled packages are part of your app"
   echo "selection here: add them under Install, then Apply changes."
   rm -f ~/.local/state/omarchy/preinstalls-removed
-  hyprctl reload
+  omarchy-restart-hyprctl
 fi

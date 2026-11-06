@@ -468,11 +468,13 @@ nothing.
 
 `tests/session.nix`'s #1153 probe sets a real video background and locks
 with one set, and proves the wiring end to end: `owed` starts, `owe status`
-reports a video source with a live renderer, the desktop and the lock
-screen's feed both visibly move, and the background plugin comes back once
-the still returns. **None of that reaches the two questions a VM genuinely
-cannot answer**, for the same reason the Graphics section of `pkgs/verify.sh`
-exists at all:
+reports a video source with a live renderer, the desktop video visibly moves,
+the lock screen holds still, and the background plugin comes back once the
+still returns. The lock assertion can miss playback more than 1.6 times too
+slow, or a screenshot stall that aliases with the video loop for one run; a
+handoff one shot later still fails and prints the readings. **None of that
+reaches the two questions a VM genuinely cannot answer**, for the same reason
+the Graphics section of `pkgs/verify.sh` exists at all:
 
 - **hardware decode.** Every VM here renders on llvmpipe, so `owe
   render-status`'s `hwdec` field is always `"no"` on this renderer whether
@@ -1894,6 +1896,8 @@ Holes, named rather than closed:
 - systemd's EFI `HibernateLocation` path is not booted by any VM.
 - Zen is supported for the shipped beta package only: another variant of the
   package hides the row by design.
+- Nothing rebuilds a machine to install a missing default browser or editor and
+  read `xdg-settings` back; the chain is proved in parts (#1623).
 
 ## menu-actions proves classification, not safety (#1304)
 
@@ -2133,3 +2137,10 @@ login in a VM. `sshd-enable` checks the menu script's key gate and row changes;
 row 23 reads `reference`'s script because the vm turns sshd on itself. Neither
 check reaches a real menu click in a floating terminal or a key sshd will not
 use because of `~/.ssh` permissions (§3).
+
+## A build that is not reproducible keeps its path
+
+Found on 2026-11-06, when `installer-refusal` failed with `curl` exit 60 on a pull request that had not touched it. Its stub certificate came from `openssl req` in a `runCommand`, so each build made a new key under the same store path. A garbage collection removed that path, the next build made a new certificate there, and the CA bundles already built from the old one stayed in the shared store and went on trusting only the old one. Nothing in the derivation graph can see that, so every run on that host fails until those bundles are collected too.
+
+A test's key or certificate is a committed fixture. So is anything else that another derivation embeds by content and that a rebuild would change. It is test-only and trusted only inside that VM.
+

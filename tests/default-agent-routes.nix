@@ -27,6 +27,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "launcher %s\n" "$*" >> "$log"' > "$TMPDIR/stubs/omarchy-launch-floating-terminal-with-presentation"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo mise >> "$log"' > "$TMPDIR/mise-bin/mise"
   chmod +x "$TMPDIR"/stubs/* "$TMPDIR/mise-bin/mise"
+  ln -s ${../pkgs/omarchy/nix-bin/omarchy-agent-real-path} "$TMPDIR/stubs/omarchy-agent-real-path"
 
   make_agent() {
     mkdir -p "$1"

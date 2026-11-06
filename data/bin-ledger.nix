@@ -124,6 +124,10 @@
     class = "patch";
     reason = "Two edits: mise's shims are prepended to PATH, because the menu launches through `bash -c` which sources no rc; and an `antigravity` case is added, which upstream's launcher has no arm for.";
   };
+  "omarchy-agent-real-path" = {
+    class = "new";
+    reason = "Not in upstream. PATH without any generation's agent-dispatch directory, so a dispatch entry never reads as the installed CLI and the exec cannot recurse (#1625).";
+  };
   "omarchy-agent-crash" = {
     class = "patch";
     reason = "The prompt is retargeted from `this Omarchy machine` and `reporting upstream to Omarchy` to Nixarchy or Omarchy, so the agent does not reach reporting.md already pointed at Basecamp.";

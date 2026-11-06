@@ -3416,7 +3416,7 @@ let
   # ---- and the factory-reset unit, the same question in its sharpest form ---
   #
   # nixarchy-factory-reset.service renames a person's entire home directory.
-  # It lives in installer/host.nix rather than in the module precisely so that
+  # It lives in installer/factory-reset.nix rather than in the module precisely so that
   # a Mode A machine cannot have it -- there is no @factory on a disk nixarchy
   # did not lay out, and a unit that goes looking for one on somebody else's
   # filesystem is the worst thing in this repository to get wrong.
@@ -5127,11 +5127,11 @@ pkgs.runCommand "nixarchy-options-files"
           echo "  That unit renames the whole of @home. A machine nixarchy did not" >&2
           echo "  install has no @factory to return to and no business carrying a" >&2
           echo "  unit that goes looking for one on somebody else's filesystem." >&2
-          echo "  It belongs in installer/host.nix, which only generated flakes import." >&2
+          echo "  It belongs in installer/factory-reset.nix, which only generated flakes import." >&2
           exit 1
         }
 
-        # And the other way: the reference host imports installer/host.nix, so
+        # And the other way: the reference host imports installer/factory-reset.nix, so
         # it must have it. Without the unit the reset stages a request file
         # nothing ever reads and reboots into an unchanged machine -- which
         # looks exactly like a reset that decided not to.

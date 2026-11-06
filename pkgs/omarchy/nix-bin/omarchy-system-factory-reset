@@ -35,7 +35,7 @@
 #   The reset itself, from this process. /home is mounted and in use by the
 #   session you typed this into. This writes a request and reboots; the work
 #   is done by nixarchy-factory-reset.service before /home is mounted on the
-#   next boot. See installer/host.nix for why that is the only honest order.
+#   next boot. See installer/factory-reset.nix for why that is the only honest order.
 #
 # Upstream reached the same conclusion and ships the same shape --
 # omarchy-system-factory-reset-finish, a first-boot worker ordered before

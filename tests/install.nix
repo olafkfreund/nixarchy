@@ -550,7 +550,7 @@ pkgs.testers.runNixOSTest {
     # snapshot was never taken" and "the snapshot did not survive the boot"
     # are different bugs. The subvolumes are at the btrfs top level, which
     # nothing mounts, so the top level is mounted to look -- exactly what
-    # installer/host.nix's unit does when it uses them.
+    # installer/factory-reset.nix's unit does when it uses them.
     installer.succeed("mkdir -p /run/toplevel")
     installer.succeed(
         "mount -o subvol=/ $(findmnt -no SOURCE /mnt | sed 's/\\[.*\\]//')"

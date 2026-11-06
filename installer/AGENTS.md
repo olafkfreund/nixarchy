@@ -20,6 +20,7 @@ the bugs have been. The README and the Pages docs say so to users.
 | `mkFlake.nix` | assembles the flake and lock written to the target |
 | `template/` | that flake, with its `@tokens@` still in place |
 | `host.nix` | the installed machine's own configuration |
+| `factory-reset.nix` | `nixarchy-factory-reset.service` — restores `/home` and `/var/lib` from `@factory` on boot, imported only by `host.nix` |
 | `lib/ui.sh`, `lib/dashboard.sh` | the screens; no gum widget without a pty |
 | `try.sh` | `nix run …#try` — boots the real ISO in a local VM |
 | `try-nixarchy.sh` | the same, for a machine with no nix — see below |

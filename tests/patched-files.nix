@@ -101,7 +101,7 @@ pkgs.runCommand "nixarchy-patched-files"
     cp -r root patch-root
     printf '%s\n' '--- a/bin/omarchy-theme-bg-next' '+++ b/bin/omarchy-theme-bg-next' \
       > patch-root/pkgs/omarchy/fixture.patch
-    cp ${patchChanged} patch-changed.txt
+    cp --no-preserve=mode ${patchChanged} patch-changed.txt
     patch_paths=$(grep '^+++ b/' root/pkgs/omarchy/1625-no-mise.patch | sed 's|^+++ b/||')
     printf '%s\n' "$patch_paths" >> patch-changed.txt
     patch_report=$(bash "$script" patch-changed.txt patch-root)

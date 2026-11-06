@@ -1132,8 +1132,9 @@ let
       off = pkgs.lib.hasInfix "default/bash/rc" loaderOff.programs.bash.interactiveShellInit;
     };
     miseNoticeHook = {
-      on = defaultHomeOn.xdg.configFile ? "omarchy/hooks/post-boot.d/mise-notice";
-      off = fixtureNixarchyOff.xdg.configFile ? "omarchy/hooks/post-boot.d/mise-notice";
+      # .enable, not ?: the entry exists either way, and enable is what writes the file.
+      on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
+      off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
     };
 
     # ---- upstream's /etc overlay, the rows carried as NixOS options ----

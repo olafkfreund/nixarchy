@@ -1365,6 +1365,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test -s /home/omarchy/.config/starship.toml")
     machine.succeed("test -s /home/omarchy/.config/tmux/tmux.conf")
     machine.succeed("test -s /home/omarchy/.config/foot/foot.ini")
+    machine.succeed("su - omarchy -c '! command -v mise'")
+    machine.succeed("test ! -e /etc/mise")
+    closure = machine.succeed("nix-store -qR /run/current-system")
+    assert "-mise-" not in closure, "mise is in the closure"
 
     # Agent skills, linked into all four agent homes by the activation script
     # in modules/home.nix rather than by omarchy-provision-user.

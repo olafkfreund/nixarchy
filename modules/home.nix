@@ -2444,6 +2444,7 @@ in
       # #1625: activation's stdout lands in the journal under the NixOS module, so this
       # is what a person actually sees.
       "omarchy/hooks/post-boot.d/mise-notice" = {
+        enable = osConfig.programs.nixarchy.enable or false;
         executable = true;
         text = ''
           #!/usr/bin/env bash

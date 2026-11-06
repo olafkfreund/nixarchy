@@ -60,6 +60,18 @@ pkgs.runCommand "nixarchy-mise-launchers"
     "${omarchy}/bin/omarchy-mise-unshadow" > empty.log
     [ ! -e "$notice" ]
 
+    rmdir "$bin"
+    mkdir -p "$TMPDIR/hm/external-bin"
+    ln -s "$TMPDIR/hm/external-bin" "$bin"
+    launcher quiet pkg:external external > "$bin/external"
+    state > before
+    "${omarchy}/bin/omarchy-mise-unshadow" > linked-bin.log
+    state > after
+    changes before after ""
+    [ ! -s linked-bin.log ] && [ ! -e "$notice" ]
+    rm "$bin"
+    mkdir "$bin"
+
     for form in quiet cooldown-export bail-on-failure mise-exec bare-exec; do
       ! command -v "$form" >/dev/null
       launcher "$form" "pkg:$form" "$form" > "$bin/$form"

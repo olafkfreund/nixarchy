@@ -10,8 +10,25 @@ import tempfile
 from pathlib import Path
 
 PATTERN = re.compile(r"\bmise\b|MISE_")
-COMMENT = re.compile(r"(^|\s)#.*")
 TREE_DIRS = ("bin", "default", "install", "shell", "config", "applications")
+
+
+def strip_comment(line):
+    quote = None
+    escaped = False
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote:
+            escaped = True
+        elif char in ("'", '"'):
+            if quote == char:
+                quote = None
+            elif quote is None:
+                quote = char
+        elif char == "#" and quote is None and (index == 0 or line[index - 1].isspace()):
+            return line[:index].strip()
+    return line.strip()
 
 
 def files(label, root):
@@ -56,7 +73,7 @@ def scan(roots, allow):
                 problems.append(f"{key}: {error}")
                 continue
             for number, line in enumerate(lines, 1):
-                clean = COMMENT.sub("", line).strip()
+                clean = strip_comment(line)
                 if not PATTERN.search(clean):
                     continue
                 if clean in allow.get(key, {}).get("lines", []):
@@ -86,6 +103,12 @@ def self_test():
         allowed = {key: {"reason": "self-test", "lines": ["mise use -g foo"]}}
         if not scan(roots, allowed)[1]:
             raise SystemExit("mise-free: self-test missed a new line in an allowed file")
+        path.write_text('# mise install foo\necho ok # mise install foo\n')
+        if scan(roots, {})[1]:
+            raise SystemExit("mise-free: self-test matched comments")
+        path.write_text('echo " #"; mise install foo\n')
+        if not scan(roots, {})[1]:
+            raise SystemExit("mise-free: self-test missed a command after a quoted hash")
 
 
 def main():

@@ -23,6 +23,8 @@ if [[ ${1:-} == --notify ]]; then
   exit 0
 fi
 
+[[ ! -L $bin ]] || exit 0
+
 template() {
   case $1 in
     quiet) printf '#!/bin/bash\nexport MISE_MINIMUM_RELEASE_AGE=0\nmise use -g --quiet "%s" || exit 1\nexec mise x "%s" -- "%s" "$@"\n' "$2" "$2" "$3" ;;

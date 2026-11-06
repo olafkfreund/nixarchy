@@ -2172,8 +2172,8 @@ pkgs.testers.runNixOSTest {
                "omarchy-launch-browser", "omarchy-launch-webapp",
                # Arch installers for apps that are mapped, excepted or absent
                # here: Claude Desktop (data/menu-exceptions.nix), its Chromium
-               # extension, Superwhisper, and the hermes/openclaw CLIs, which
-               # omarchy-default-agent reaches through nixpkgs or mise instead.
+               # extension, Superwhisper, and the hermes/openclaw CLIs: omarchy-default-agent
+               # installs openclaw from nixpkgs and declines hermes.
                "omarchy-install-ai-claude", "omarchy-install-chromium-claude",
                "omarchy-install-dictation-superwhisper",
                "omarchy-remove-dictation-superwhisper",

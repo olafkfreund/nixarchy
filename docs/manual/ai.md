@@ -253,7 +253,11 @@ when you switch.
 
 Choosing one installs it declaratively — `nixarchy-pkg-add` and a rebuild —
 rather than fetching a binary into `~/.local` that nothing records. Antigravity
-is in the list because Google deprecated `gemini-cli` in its favour.
+is in the list because Google deprecated `gemini-cli` in its favour. Kimi,
+MiniMax Code, Freebuff, Command Code, Ori and Hermes are not in nixpkgs: their
+rows say so, name their package in `numtide/llm-agents.nix`, and leave your
+current default alone. A row opens a terminal whenever it has something to tell
+you.
 
 Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;

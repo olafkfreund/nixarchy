@@ -2112,6 +2112,16 @@
           # omarchy-default-agent's nixpkgs mapping, against this nixpkgs (#1452).
           agent-attrs = import ./tests/agent-attrs.nix { pkgs = pkgsFor.${system}; };
 
+          # Every menu row's route in omarchy-default-agent, with no mise (#1622).
+          default-agent-routes = import ./tests/default-agent-routes.nix {
+            pkgs = pkgsFor.${system};
+            omarchySrc = self.packages.${system}.omarchy.src;
+          };
+
+          # pi and omp start with no node on PATH. Its own check because their closures
+          # are 2.4 GiB, and a proof keeps those off every script edit's run (#1622).
+          agent-no-node = import ./tests/agent-no-node.nix { pkgs = pkgsFor.${system}; };
+
           # nixarchy-reinstall-iso's preflights, with a df, git and eval that
           # lie -- plus the #478 honesty strings. See tests/reinstall-iso.nix.
           reinstall-iso = import ./tests/reinstall-iso.nix {

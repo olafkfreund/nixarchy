@@ -687,10 +687,9 @@ in
         activation: the configuration is the source of truth, and a menu click
         that outlived a rebuild would be a second, invisible one.
 
-        The ids match `omarchy-default-agent`'s. Absent from the list are `pi`,
-        `omp` and `antigravity`, which nixpkgs has no package for -- that
-        command falls back to mise for those, and an imperative install is not
-        something an option should promise to reproduce.
+        The ids match `omarchy-default-agent`'s. This option installs these
+        seven. The menu installs more of them from nixpkgs, such as `pi` and
+        `omp`, and names where the ones nixpkgs lacks are packaged.
       '';
     };
 

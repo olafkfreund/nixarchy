@@ -5260,17 +5260,107 @@ pkgs.runCommand "nixarchy-options-files"
 
         # 5. --check answers the same question, silently -- it is what a menu
         #    row would gate on, and a row that disagrees with the command
-        #    behind it is a row that prints a refusal when clicked.
+        #    behind it is a row that prints a refusal when clicked. Exit 1 is
+        #    "no"; exit 3 is "could not ask" (checked below).
         env NIXARCHY_MANAGED_MARKER="$marker" NIXARCHY_BTRFS="$fr/bin/btrfs" \
             FAKE_SUBVOLUMES="$subvols" "$factoryReset" --check || {
           echo "--check refuses a machine that has a baseline" >&2
           exit 1
         }
-        if env NIXARCHY_MANAGED_MARKER="$fr/absent" NIXARCHY_BTRFS="$fr/bin/btrfs" \
-               FAKE_SUBVOLUMES="$subvols" "$factoryReset" --check; then
-          echo "--check passes on a machine nixarchy did not install" >&2
+        check_rc=0
+        env NIXARCHY_MANAGED_MARKER="$fr/absent" NIXARCHY_BTRFS="$fr/bin/btrfs" \
+            FAKE_SUBVOLUMES="$subvols" "$factoryReset" --check || check_rc=$?
+        test "$check_rc" -eq 1 || {
+          echo "--check on a machine nixarchy did not install exited $check_rc, want 1 (3 is 'could not ask')" >&2
           exit 1
-        fi
+        }
+        : >"$subvols"
+        check_rc=0
+        env NIXARCHY_MANAGED_MARKER="$marker" NIXARCHY_BTRFS="$fr/bin/btrfs" \
+            FAKE_SUBVOLUMES="$subvols" "$factoryReset" --check || check_rc=$?
+        test "$check_rc" -eq 1 || {
+          echo "--check with no baseline exited $check_rc, want 1 (3 is 'could not ask')" >&2
+          exit 1
+        }
+
+        # 6. "Could not ask" is not "no": an unprivileged btrfs failure exits 3
+        #    under --check and elevates through sudo otherwise, without printing
+        #    the false no-snapshot refusal or adding --force (#1621).
+        rm -f "$request"
+        printf '#!/bin/sh\necho "ERROR: cannot list subvolumes: Operation not permitted" >&2\nexit 1\n' >"$fr/bin/btrfs-refuse"
+        printf '#!/bin/sh\nfor a in "$@"; do echo "$a"; done >"$FAKE_SUDO_ARGS"\n' >"$fr/bin/sudo"
+        chmod +x "$fr/bin/btrfs-refuse" "$fr/bin/sudo"
+        sudo_args=$fr/sudo-args
+
+        check_rc=0
+        check_out=$(env PATH="$fr/bin:$PATH" NIXARCHY_MANAGED_MARKER="$marker" \
+                    NIXARCHY_FACTORY_REQUEST="$request" NIXARCHY_BTRFS="$fr/bin/btrfs-refuse" \
+                    FAKE_SUDO_ARGS="$sudo_args" "$factoryReset" --check 2>&1) || check_rc=$?
+        test "$check_rc" -eq 3 || {
+          echo "--check exited $check_rc when btrfs could not ask; want 3" >&2
+          exit 1
+        }
+        test -z "$check_out" || {
+          echo "--check was not silent when btrfs could not ask: $check_out" >&2
+          exit 1
+        }
+        test ! -e "$sudo_args" || { echo "--check elevated through sudo" >&2; exit 1; }
+        test ! -e "$request" || { echo "--check staged a reset" >&2; exit 1; }
+
+        reset_out=$(env PATH="$fr/bin:$PATH" NIXARCHY_MANAGED_MARKER="$marker" \
+                    NIXARCHY_FACTORY_REQUEST="$request" NIXARCHY_BTRFS="$fr/bin/btrfs-refuse" \
+                    FAKE_SUDO_ARGS="$sudo_args" "$factoryReset" 2>&1) || {
+          echo "omarchy-system-factory-reset failed instead of elevating through sudo:" >&2
+          echo "$reset_out" >&2
+          exit 1
+        }
+        case "$reset_out" in
+          *"no factory snapshot"*)
+            echo "an unprivileged run printed the false 'no factory snapshot' refusal:" >&2
+            echo "$reset_out" >&2
+            exit 1
+            ;;
+        esac
+        test -s "$sudo_args" || {
+          echo "omarchy-system-factory-reset did not exec sudo when btrfs refused" >&2
+          exit 1
+        }
+        case "$(head -n1 "$sudo_args")" in
+          /nix/store/*/omarchy-system-factory-reset) ;;
+          *)
+            echo "sudo was not given a /nix/store/ path to omarchy-system-factory-reset:" >&2
+            cat "$sudo_args" >&2
+            exit 1
+            ;;
+        esac
+        test "$(wc -l <"$sudo_args")" -eq 1 || {
+          echo "sudo received arguments none were given (must not add --force):" >&2
+          cat "$sudo_args" >&2
+          exit 1
+        }
+        test ! -e "$request" || { echo "elevating staged a reset before root ran" >&2; exit 1; }
+
+        rm -f "$sudo_args"
+        env PATH="$fr/bin:$PATH" NIXARCHY_MANAGED_MARKER="$marker" \
+            NIXARCHY_FACTORY_REQUEST="$request" NIXARCHY_BTRFS="$fr/bin/btrfs-refuse" \
+            FAKE_SUDO_ARGS="$sudo_args" "$factoryReset" --force >/dev/null 2>&1 || {
+          echo "omarchy-system-factory-reset --force failed instead of elevating through sudo" >&2
+          exit 1
+        }
+        case "$(head -n1 "$sudo_args")" in
+          /nix/store/*/omarchy-system-factory-reset) ;;
+          *)
+            echo "sudo with --force was not given a /nix/store/ path:" >&2
+            cat "$sudo_args" >&2
+            exit 1
+            ;;
+        esac
+        test "$(wc -l <"$sudo_args")" -eq 2 && test "$(sed -n '2p' "$sudo_args")" = "--force" || {
+          echo "sudo did not receive --force unchanged:" >&2
+          cat "$sudo_args" >&2
+          exit 1
+        }
+        test ! -e "$request" || { echo "elevating with --force staged a reset before root ran" >&2; exit 1; }
         echo "the factory reset refuses without ownership, without a baseline and on half of one"
 
         python3 ${./home-backup-menu.py} "$vm/etc/nixarchy/omarchy-menu.jsonc"

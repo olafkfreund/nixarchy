@@ -888,6 +888,9 @@ pkgs.testers.runNixOSTest {
             "commit would get the 'no factory snapshot' refusal forever.")
     print("the baseline survived the boot, and is still read-only")
 
+    status, _ = target.execute("runuser -u omarchy -- /run/current-system/sw/bin/omarchy-system-factory-reset --check")
+    assert status == 3, f"an unprivileged --check exited {status}; 3 means it could not ask"
+
     # Something to lose, in both halves of what the reset covers.
     target.succeed("touch /home/omarchy/a-file-the-user-made")
     target.succeed("mkdir -p /var/lib/some-service")

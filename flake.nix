@@ -1873,6 +1873,8 @@
             "edge-carry"
             "edge-report"
             "edge-promote"
+            # Proves btrfs subvolume and directory exchanges before the reset uses them (#1621).
+            "factory-reset"
             "firmware-guard"
             # The dangerous one. Installs into free space on a disk that already
             # carries partitions and asserts those partitions are byte-identical

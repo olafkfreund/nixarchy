@@ -120,9 +120,8 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   fi
 
   # ---- the release fallback's parse, on a JSON shaped like the real one ---
-  # Including what v4.0.2-4 really looks like: SHA256SUMS names a -net.iso
-  # and the release does not attach one. `iso-net` must come back empty
-  # there, not grab an offline part.
+  # An old release can carry both offline parts and a network image. The
+  # network image is the only one this front door may select.
   cat > rel.json <<'P'
   { "tag_name": "v9.9.9-9",
     "assets": [
@@ -130,19 +129,18 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
         "browser_download_url": "https://example.invalid/nixarchy-v9.9.9-9.iso.part-ab" },
       { "name": "nixarchy-v9.9.9-9.iso.part-aa",
         "browser_download_url": "https://example.invalid/nixarchy-v9.9.9-9.iso.part-aa" },
+      { "name": "nixarchy-v9.9.9-9-net.iso",
+        "browser_download_url": "https://example.invalid/nixarchy-v9.9.9-9-net.iso" },
       { "name": "SHA256SUMS",
         "browser_download_url": "https://example.invalid/SHA256SUMS" } ] }
   P
   [ "$(release_tag rel.json)" = "v9.9.9-9" ] \
     && ok "the release tag parses" || no "the release tag parses"
-  [ "$(release_urls rel.json iso | head -n1)" = "https://example.invalid/nixarchy-v9.9.9-9.iso.part-aa" ] \
-    && ok "offline parts come back sorted, aa first" \
-    || no "offline parts come back sorted, aa first"
-  [ "$(release_urls rel.json iso | wc -l)" = 2 ] \
-    && ok "offline parts exclude SHA256SUMS" || no "offline parts exclude SHA256SUMS"
-  [ -z "$(release_urls rel.json iso-net)" ] \
-    && ok "a release with no net image says so, not a wrong URL" \
-    || no "a release with no net image says so, not a wrong URL"
+  [ "$(release_urls rel.json iso-net)" = "https://example.invalid/nixarchy-v9.9.9-9-net.iso" ] \
+    && ok "an old release selects its network image" \
+    || no "an old release selects its network image"
+  [ -z "$(release_urls rel.json iso)" ] \
+    && ok "offline parts are not selectable" || no "offline parts are not selectable"
   [ "$(release_urls rel.json sums)" = "https://example.invalid/SHA256SUMS" ] \
     && ok "the checksum file is found" || no "the checksum file is found"
 
@@ -150,11 +148,9 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   # stale cached sums must never be consulted.
   CACHE_DIR=$PWD/cache GH_API=https://example.invalid/api
   mkdir -p "$CACHE_DIR"
-  printf aa > part-aa
-  printf bb > part-ab
-  cat part-aa part-ab > complete.iso
+  printf aabb > complete.iso
   hash=$(sha256sum complete.iso | awk '{print $1}')
-  printf '%s  nixarchy-v9.9.9-9.iso\n' "$hash" > fresh-sums
+  printf '%s  nixarchy-v9.9.9-9-net.iso\n' "$hash" > fresh-sums
   check_disk() { :; }
   curl() {
     local url= out= next=false arg
@@ -166,39 +162,38 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
     case "$url" in
       */api) cp rel.json "$out" ;;
       */SHA256SUMS) [ "''${FAIL_SUMS:-false}" = true ] && return 1; cp fresh-sums "$out" ;;
-      *.part-aa) [ "''${FAIL_PART:-false}" = true ] && return 1; cat part-aa ;;
-      *.part-ab) [ "''${FAIL_PART:-false}" = true ] && return 1; cat part-ab ;;
+      *-net.iso) [ "''${FAIL_IMAGE:-false}" = true ] && return 1; cat complete.iso ;;
       *) return 1 ;;
     esac
   }
-  cp complete.iso "$CACHE_DIR/nixarchy-v9.9.9-9.iso"
-  if path=$(fetch_release iso 2>msg) && [ "$path" = "$CACHE_DIR/nixarchy-v9.9.9-9.iso" ]; then
+  cp complete.iso "$CACHE_DIR/nixarchy-v9.9.9-9-net.iso"
+  if path=$(fetch_release iso-net 2>msg) && [ "$path" = "$CACHE_DIR/nixarchy-v9.9.9-9-net.iso" ]; then
     ok "valid cache is hashed against fresh sums"
   else no "valid cache is hashed against fresh sums"; fi
-  printf stale > "$CACHE_DIR/nixarchy-v9.9.9-9.iso"
-  if path=$(fetch_release iso 2>msg) && cmp -s complete.iso "$path"; then
+  printf stale > "$CACHE_DIR/nixarchy-v9.9.9-9-net.iso"
+  if path=$(fetch_release iso-net 2>msg) && cmp -s complete.iso "$path"; then
     ok "corrupt cache is deleted and replaced with verified bytes"
   else no "corrupt cache is deleted and replaced with verified bytes"; fi
   grep -F 'SHA256SUMS' curl-args > checksum-curl
-  grep -F '.part-aa' curl-args > iso-curl
+  grep -F -- '-net.iso' curl-args > iso-curl
   grep -Fq -- "--proto =https --proto-redir =https" checksum-curl \
     && grep -Fq -- "--proto =https --proto-redir =https" iso-curl \
     && ok "checksum and ISO redirects stay on HTTPS" || no "checksum or ISO fetch permits HTTP"
-  printf stale > "$CACHE_DIR/nixarchy-v9.9.9-9.iso"
+  printf stale > "$CACHE_DIR/nixarchy-v9.9.9-9-net.iso"
   cp fresh-sums "$CACHE_DIR/SHA256SUMS"
   FAIL_SUMS=true
-  if fetch_release iso >msg 2>&1; then no "stale sums never authorize a cached ISO"
+  if fetch_release iso-net >msg 2>&1; then no "stale sums never authorize a cached ISO"
   else ok "stale sums never authorize a cached ISO"; fi
   unset FAIL_SUMS
   printf '%s  other.iso\n' "$hash" > fresh-sums
-  if fetch_release iso >msg 2>&1; then no "missing checksum entry refuses"
+  if fetch_release iso-net >msg 2>&1; then no "missing checksum entry refuses"
   else ok "missing checksum entry refuses"; fi
-  printf '%s  nixarchy-v9.9.9-9.iso\n' "$hash" > fresh-sums
-  FAIL_PART=true
-  if fetch_release iso >msg 2>&1; then no "failed replacement refuses"
-  elif [ -e "$CACHE_DIR/nixarchy-v9.9.9-9.iso" ]; then no "failed replacement left corrupt cache"
+  printf '%s  nixarchy-v9.9.9-9-net.iso\n' "$hash" > fresh-sums
+  FAIL_IMAGE=true
+  if fetch_release iso-net >msg 2>&1; then no "failed replacement refuses"
+  elif [ -e "$CACHE_DIR/nixarchy-v9.9.9-9-net.iso" ]; then no "failed replacement left corrupt cache"
   else ok "failed replacement removes corrupt cache"; fi
-  unset FAIL_PART
+  unset FAIL_IMAGE
 
   # ---- the download-or-build decision, on plans nix really prints ---------
   cat > plan.build <<'P'
@@ -253,6 +248,7 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   resolve_ref() { echo fixture; }
   classify_plan() { echo ready; }
   nix() {
+    printf '%s\n' "$*" >> nix-args
     case " $* " in
       *' --dry-run '*) : ;;
       *) echo "$PWD/fixture" ;;
@@ -262,6 +258,8 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   # success path execs QEMU, and an exec'd shell never runs an EXIT trap (#1274).
   mkdir tmp-main
   ( TMPDIR=$PWD/tmp-main main --vnc ) >main.out 2>&1
+  grep -Fq 'fixture#iso-net' nix-args \
+    && ok "the default builds the network image" || no "the default did not select the network image"
   grep -Fx 'virtio-blk-pci,drive=hd0,serial=nixarchy-try-target,bootindex=1' qemu-args >/dev/null \
     && ok "install passes the target serial to QEMU" || no "install lost the target serial"
   [ -z "$(ls -A tmp-main)" ] \

@@ -196,8 +196,8 @@ plan_unpacked_mb() {
     }' || :
 }
 
-# From a GitHub release JSON in file $1, the download URLs for $2 -- `iso`
-# (the offline parts, in order), `iso-net`, or `sums`. Prints nothing when
+# From a GitHub release JSON in file $1, the download URLs for $2 -- `iso-net`
+# or `sums`. Prints nothing when
 # the release does not carry the asset, which is a real state: recent
 # releases name a -net.iso in SHA256SUMS and do not attach one.
 release_urls() {
@@ -205,7 +205,6 @@ release_urls() {
   urls=$(grep -oE '"browser_download_url": *"[^"]*"' "$f" | grep -oE 'https://[^"]*' || :)
   case "$what" in
     iso-net) grep -E -- '-net\.iso$' <<<"$urls" || : ;;
-    iso) grep -E '\.iso(\.part-[a-z]+)?$' <<<"$urls" | grep -vE -- '-net\.iso$' | sort || : ;;
     sums) grep -E '/SHA256SUMS$' <<<"$urls" | head -n1 || : ;;
   esac
 }
@@ -214,7 +213,7 @@ release_tag() {
   grep -oE '"tag_name": *"[^"]*"' "$1" | head -n1 | cut -d'"' -f4 || :
 }
 
-# Download the latest release image for $1 (iso | iso-net) into CACHE_DIR,
+# Download the latest release image for $1 (iso-net) into CACHE_DIR,
 # verify it against the release's SHA256SUMS, and print its path. A file
 # that already verified on a previous run is reused; an interrupted or
 # corrupt download is deleted, never reused -- the qcow2 rule again, one
@@ -238,7 +237,7 @@ fetch_release() {
   rm -f "$json"
 
   base=$(basename "$(head -n1 <<<"$urls")")
-  iso_name=${base%.part-*}
+  iso_name=$base
   mkdir -p "$CACHE_DIR"
   sums=$(mktemp)
   if ! curl --proto '=https' --proto-redir '=https' -fsSL "$sums_url" -o "$sums"; then
@@ -304,9 +303,7 @@ usage() {
   cat <<EOF
 Try nixarchy in a virtual machine. No repository knowledge required.
 
-  nix run github:olafkfreund/nixarchy#try            offline image (~5.6 GB download,
-                                                     installs with no network at all)
-  nix run github:olafkfreund/nixarchy#try -- --net   network image (~1.9 GB download;
+  nix run github:olafkfreund/nixarchy#try            network image (~1.9 GB download;
                                                      the install then fetches the rest
                                                      from binary caches)
 
@@ -319,7 +316,7 @@ and the machine powers off:
   nix run github:olafkfreund/nixarchy#try -- --fresh   wipe the disk, install again
 
 Options:
-  --net          install from the small network image instead of the offline one
+  --net          use the network image (also the default)
   --boot         boot the already-installed disk instead of the installer
   --fresh        delete the disk a previous run left, then install
   --memory MB    RAM for the VM (default ${MEM_MB}, minimum ${MEM_MIN})
@@ -336,7 +333,7 @@ EOF
 }
 
 main() {
-  local attr=iso mem=$MEM_MB cpus="" vnc=0 fresh=0 boot=0 srcbuild=0
+  local attr=iso-net mem=$MEM_MB cpus="" vnc=0 fresh=0 boot=0 srcbuild=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --net) attr="iso-net" ;;

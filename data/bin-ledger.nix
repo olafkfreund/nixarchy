@@ -42,7 +42,8 @@
 # So a row may also carry `allow`, a space-separated list of the behaviour
 # groups .github/scripts/check-bin-ledger.py finds in the shipped script --
 # ufw, systemctl-system, systemctl-user, etc-write, boot-write, modprobe,
-# account-tools, kernel-ctl, initrd-boot, rfkill, nmcli-radio, ctl-set. Same
+# account-tools, kernel-ctl, initrd-boot, rfkill, nmcli-radio, ctl-set,
+# remote-exec. Same
 # biconditional as everything else here: a script matching a group with no
 # allowance fails, and an allowance the script no longer matches fails too, so
 # an upstream cleanup is reported rather than assumed.
@@ -101,7 +102,7 @@
   };
   "nixarchy-reinstall-iso" = {
     class = "new";
-    reason = "Not in upstream, whose recovery story is snapper snapshots on the same disk. Builds a bootable image from this machine's own configuration -- the system closure and /etc/nixos, never /home or secrets -- after refusing on low disk, an uncommitted tree, or a running system that drifted from the flake.";
+    reason = "Not in upstream, whose recovery story is snapper snapshots on the same disk. Builds a network reinstall image carrying this machine's /etc/nixos, never /home or secrets. Installation needs a network; uncached packages compile or fail. Checks disk space and the committed tree, warns on drift, and reports what caches cannot supply.";
   };
   "nixarchy-rollback" = {
     class = "new";
@@ -130,6 +131,11 @@
   "omarchy-agent-account-exec" = {
     class = "patch";
     reason = "Its mise install fallback refuses with exit 127 instead: nixarchy installs claude, codex and grok through Nix, and one it did not install (unfree off) stays not installed (#1386).";
+  };
+  "omarchy-agent-account-copy" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Sends logins over ssh -T to a receiver command omarchy-agent-account-transfer generates naming /bin/bash and /usr/bin/python3, which must resolve on the far end, with OMARCHY_PATH set there. On nixarchy that takes envfs; checks.session runs it over a real sshd, and checks.account-copy pins the failures (#1616).";
+    allow = "remote-exec";
   };
   "omarchy-install-ai-chatgpt" = {
     class = "patch";
@@ -200,11 +206,11 @@
   };
   "omarchy-default-browser" = {
     class = "patch";
-    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id. It also names zen.desktop; nixarchy's Zen is the zen-browser flake's beta, which installs zen-beta.desktop, so the setter set a desktop id that does not exist and the reader never answered zen (#1303). Quattro also probes `zen-browser` before setting, and nixarchy's binary is `zen-beta` (#1398).";
+    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id. It also names zen.desktop; nixarchy's Zen is the zen-browser flake's beta, which installs zen-beta.desktop, so the setter set a desktop id that does not exist and the reader never answered zen (#1303). Quattro also probes `zen-browser` before setting, and nixarchy's binary is `zen-beta` (#1398). Missing browsers now enter the declarative install and are set after rebuild (#1623).";
   };
   "omarchy-default-editor" = {
     class = "patch";
-    reason = "quattro's setter installs an editor it thinks is missing, and probes `helix`, which nixpkgs installs as `hx`. So choosing an installed Helix tried an Arch install and set nothing (#1398).";
+    reason = "quattro's setter installs an editor it thinks is missing, and probes `helix`, which nixpkgs installs as `hx`. So choosing an installed Helix tried an Arch install and set nothing (#1398). Missing editors now enter the declarative install and are set after rebuild (#1623).";
   };
   "omarchy-dev-install-ydoo" = {
     class = "vendor";
@@ -389,7 +395,7 @@
   };
   "omarchy-pkg-add" = {
     class = "replace";
-    reason = "Upstream runs `sudo pacman -S`. Nothing is installed imperatively here, so this prints the nixpkgs name from a build-time table plus the declarative route, and exits non-zero.";
+    reason = "Upstream runs `sudo pacman -S`. Nothing is installed imperatively here, so this prints the nixpkgs name from a build-time table plus the declarative route, and exits non-zero; an input-method engine is asked of omarchy-pkg-present, since it has no command.";
   };
   "omarchy-pkg-aur-add" = {
     class = "replace";
@@ -414,7 +420,7 @@
   };
   "omarchy-pkg-present" = {
     class = "replace";
-    reason = "Upstream asks `pacman -Q`. There is no package database here, so the closest honest answer is whether the command is runnable; menu rows needing exactness check the app selection themselves. The stock menu does not call this command: its guard batch defines a function of the same name, which #1301 makes answer by the same rule, inside the shell.";
+    reason = "Upstream asks `pacman -Q`. There is no package database here, so the closest honest answer is whether the command is runnable, and an engine in presets.json is present if the tree of the fcitx5 on PATH carries its .conf; menu rows needing exactness check the app selection themselves. The stock menu does not call this command: its guard batch defines a function of the same name, which #1301 makes answer by the same rule, inside the shell, and the menu's copy does not need the exception because no menu row names an engine.";
   };
   "omarchy-pkg-remove" = {
     class = "vendor";
@@ -508,7 +514,7 @@
   };
   "omarchy-remove-preinstalls" = {
     class = "replace";
-    reason = "Upstream deletes every web app and TUI launcher and rm -f's named ~/.local/bin entries whoever made them. Deletes only an unmodified, regular-file seed of a shipped web app or TUI, and only an exact omarchy-mise-install stub (#1304).";
+    reason = "Upstream deletes every web app and TUI launcher and rm -f's named ~/.local/bin entries whoever made them. Deletes only an unmodified, regular-file seed of a shipped web app or TUI, and only an exact omarchy-mise-install stub and only the byte-exact Hermes wrapper upstream's installer generated (#1304, #1623).";
   };
   "omarchy-remove-security-fido2" = {
     class = "patch";
@@ -517,8 +523,7 @@
   };
   "omarchy-remove-security-fingerprint" = {
     class = "patch";
-    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes, and the script exits 1 with the services.fprintd route before dropping packages or deleting the omarchy-lock file (#1304). quattro's remove_resume_hook deletes a /usr/lib sleep hook and an fprintd drop-in the build declares instead (#1288), so here it has nothing to remove.";
-    allow = "etc-write";
+    reason = "Upstream's PAM edits, lock-file rm, resume hook, lifecycle hook and pkg-drop are cut from the file, because all are wrong or inert on NixOS (#1304). What stays is what the row is named for: fprintd-delete, then rm of /var/lib/fprint/<user>, for the invoking account only, and a real fprintd failure stops before the rm, because the host's files are fprintd's only route to a reader's copy (#1620).";
   };
   "omarchy-remove-security-sshd" = {
     class = "vendor";
@@ -592,8 +597,8 @@
   };
   "omarchy-setup-security-sshd" = {
     class = "vendor";
-    reason = "Vendored unchanged. Since v4.5.0-rc3 it enables and (re)starts sshd.service only once a key is authorized, then runs `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach.";
-    allow = "systemctl-system ufw";
+    reason = "Vendored unchanged. Since v4.5.0-rc3 it enables and (re)starts sshd.service only once a key is authorized, then runs `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach. Its remote-exec match is a false positive: the echo at the end only prints the ssh command to connect with.";
+    allow = "remote-exec systemctl-system ufw";
   };
   "omarchy-setup-security-sudoless-docker" = {
     class = "patch";
@@ -628,6 +633,11 @@
   "omarchy-theme-set" = {
     class = "patch";
     reason = "Three edits: `cp -r` from $OMARCHY_THEMES_PATH preserves the store's read-only directory modes, so the next switch cannot clean up; omarchy-theme-set-zed is appended, which upstream has no equivalent of; and the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429) adds is_video_path and the staged-background lookups it needs, carried as a patch and deleted by the quattro bump with the rest of it.";
+  };
+  "omarchy-theme-set-herdr-machines" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Runs `bash -l -s` on each herdr machine from the far end's PATH, so no fixed path is involved and the far end may be any OS (#1616).";
+    allow = "remote-exec";
   };
   "omarchy-theme-set-browser-policy" = {
     class = "patch";

@@ -65,7 +65,7 @@ jobs:
   iso:
     name: build and publish the ISO
     runs-on: [self-hosted, nixos, kvm, big]
-    # Two ISO builds, then splitting and uploading 5.6 GB. Was 300 minutes
+    # One network ISO build and upload. Was 300 minutes
     # when this also installed from the image; that step moved to the nightly,
     # and a smaller window is part of the point -- a job that cannot finish in
     # ninety minutes has gone wrong rather than gone slowly.
@@ -210,20 +210,13 @@ jobs:
       # --out-link, not --no-link: the result is a GC root for the rest of the
       # job. An ISO collected between building it and uploading it would fail
       # in a way that took an afternoon to understand.
-      - name: Build the ISO
-        run: nix build .#iso --out-link result --print-build-logs
-
-      # The smaller image, for people who would rather download 1.5 GB and let
-      # the install fetch the rest. Not separately install-tested: it shares
-      # every line of the installer with the image below, and what differs --
-      # downloading rather than copying -- is what checks.install already does.
       - name: Build the network ISO
-        run: nix build .#iso-net --out-link result-net --print-build-logs
+        run: nix build .#iso-net --out-link result --print-build-logs
 
-      # checks.install-iso is deliberately NOT here, and the reasoning is
+      # checks.install-iso-net is deliberately not here, and the reasoning is
       # about survivability rather than about trusting the image less.
       #
-      # It boots the 5.6 GB image and installs a desktop from it, which takes
+      # It boots the network image and installs a desktop from it, which takes
       # about an hour, and it ran here because "the image nobody boots is the
       # image that does not boot". That argument is right and this still holds
       # it: the nightly runs the same check, against the same expression, on
@@ -246,24 +239,15 @@ jobs:
       # If that stops being true -- if tags start being cut faster than
       # nightlies run -- this decision is worth revisiting.
 
-      - name: Split it into pieces GitHub will accept
-        id: split
+      - name: Prepare release assets
+        id: prepare
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          # GitHub caps a single release asset at 2 GiB and there is no limit
-          # on a release's total size, so the image ships in parts. 1900 MiB
-          # leaves room under the cap without making a fourth part likely.
           iso=$(echo result/iso/*.iso)
-          net=$(echo result-net/iso/*.iso)
-          base="nixarchy-${TAG}.iso"
-          netbase="nixarchy-${TAG}-net.iso"
+          base="nixarchy-${TAG}-net.iso"
           rm -rf out && mkdir out
-          split -b 1900M -- "$iso" "out/$base.part-"
-
-          # The network image is 1.5 GiB and ships whole. Only the image that
-          # cannot fit gets taken apart.
-          cp -- "$net" "out/$netbase"
+          cp -- "$iso" "out/$base"
 
           # mcp-nixarchy's fallback (#1166): the catalogue the `nixos` MCP
           # tool reads from an installed machine, also attached here for a
@@ -272,40 +256,22 @@ jobs:
           nix build .#nixarchy-options -o result-options
           cp -- result-options/share/doc/nixos/options.json out/options.json
 
-          # One SHA256SUMS covering the parts *and* the assembled image, so a
-          # single `sha256sum -c` after reassembly checks both the download and
-          # the cat that put it back together. Checked in that order, because
-          # the image does not exist until the user makes it.
           (
             cd out
-            sha256sum "$base".part-* > SHA256SUMS
-            # Hashed from stdin so the store path never reaches the file, and
-            # the name is printed rather than edited in. Rewriting the path out
-            # of sha256sum's own output with sed is greedy and eats the hash
-            # too, which produces a line `sha256sum -c` calls "improperly
-            # formatted", skips, and still exits 0 -- a checksum file that
-            # reports PASS without having checked the image.
-            printf '%s  %s\n' \
-              "$(sha256sum < "$OLDPWD/$iso" | cut -d' ' -f1)" "$base" >> SHA256SUMS
-            sha256sum "$netbase" >> SHA256SUMS
+            sha256sum "$base" > SHA256SUMS
             sha256sum options.json >> SHA256SUMS
           )
 
           {
             echo "iso=$base"
-            echo "netiso=$netbase"
             echo "size=$(du -h "$iso" | cut -f1)"
-            echo "netsize=$(du -h "$net" | cut -f1)"
-            echo "parts=$(find out -name "$base.part-*" | wc -l)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Write the release notes
         env:
           OMARCHY: ${{ steps.version.outputs.omarchy }}
-          ISO: ${{ steps.split.outputs.iso }}
-          SIZE: ${{ steps.split.outputs.size }}
-          NETISO: ${{ steps.split.outputs.netiso }}
-          NETSIZE: ${{ steps.split.outputs.netsize }}
+          ISO: ${{ steps.prepare.outputs.iso }}
+          SIZE: ${{ steps.prepare.outputs.size }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           # What actually changed, first. Everything below this is about the
@@ -363,7 +329,7 @@ jobs:
               echo "**These notes could not be derived.** The tooling that"
               echo "reads what changed between \`$previous\` and \`$TAG\` refused"
               echo "rather than report nothing; see this job's log."
-              echo "The images below are unaffected."
+              echo "The image below is unaffected."
               echo
             } >> notes.md
           fi
@@ -374,33 +340,20 @@ jobs:
           cat >> notes.md <<EOF
           ## Getting it
 
-          Omarchy $OMARCHY, packaged for NixOS. Two images, and the difference
-          is what they carry.
+          Omarchy $OMARCHY, packaged for NixOS.
 
-          **\`$ISO\`** — $SIZE, carries the whole system closure. The install
-          copies rather than downloads and needs no network at all. Take this
-          one unless the download is what you mind.
-
-          GitHub will not accept a file that size, so it is split. Put it back
-          together and check it:
-
-          \`\`\`
-          cat $ISO.part-* > $ISO
-          sha256sum -c --ignore-missing SHA256SUMS
-          \`\`\`
-
-          **\`$NETISO\`** — $NETSIZE, downloads the desktop as it installs.
-          One file, no reassembly, and it needs a working network: its first
+          **\`$ISO\`** — $SIZE, downloads the desktop as it installs.
+          It needs a working network: its first
           screen offers Wi-Fi if there is no cable.
 
           \`\`\`
           sha256sum -c --ignore-missing SHA256SUMS
           \`\`\`
 
-          (\`--ignore-missing\` because one SHA256SUMS covers both images, and
-          nobody downloads both.)
+          (\`--ignore-missing\` allows the checksum file to include
+          \`options.json\` when you downloaded only the ISO.)
 
-          Then write one to a USB stick and boot it. See
+          Then write the image to a USB stick and boot it. See
           [Fresh-machine install](https://github.com/${{ github.repository }}#fresh-machine-install)
           for what happens next.
           EOF
@@ -466,14 +419,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
-          # The ASSEMBLED image, which SHA256SUMS names on purpose and which is
-          # never an asset: the parts ship, the user cats them back together,
-          # and that line is what `sha256sum -c` checks afterwards. Exempted by
-          # name rather than by a pattern, because "the one file in SHA256SUMS
-          # that is deliberately absent" is a fact about this release's shape,
-          # not something to infer. Written down after a first draft of this
-          # check flagged it and would have failed every release.
-          ASSEMBLED: ${{ steps.split.outputs.iso }}
         run: |
           set -euo pipefail
 
@@ -482,7 +427,7 @@ jobs:
           # Two lists, because they can disagree in both directions: a file
           # built but not promised, and a file promised but not built.
           built=$(cd out && ls -1)
-          promised=$(awk '{ print $2 }' out/SHA256SUMS | grep -vxF "$ASSEMBLED")
+          promised=$(awk '{ print $2 }' out/SHA256SUMS)
 
           missing=""
           assets=$(attached)
@@ -599,9 +544,9 @@ jobs:
             echo "published; only the pointer users update against was left alone."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # 5.6 GB of parts on the runner's root filesystem, which is the small
+      # Release assets on the runner's root filesystem, which is the small
       # one. The workspace is cleaned at the start of the next run, but a
       # failed release should not sit on the disk until then.
-      - name: Remove the split copies
+      - name: Remove the prepared assets
         if: always()
         run: rm -rf out

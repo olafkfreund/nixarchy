@@ -109,6 +109,76 @@ let
         patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1
       '';
 
+  inputMethodDriver = pkgs.writeText "session-input-methods.py" ''
+    import json
+    from pathlib import Path
+    import subprocess
+    import sys
+    import typing_setup as t
+
+    action = sys.argv[1]
+    if action == "input":
+        group, layout, items = t.setup.live_group()
+        catalog, _ = t.input_catalog(items)
+        rows = t.picker_rows(catalog, [])
+        t.apply_selection("input", {"catalog": catalog, "overrides": dict(items)}, [rows[sys.argv[2]][1:]])
+    elif action == "keyboard":
+        catalog = t.keyboard_catalog()
+        t.apply_selection("keyboard", {"catalog": catalog}, [t.picker_rows(catalog, [])[sys.argv[2]][1:]])
+    elif action == "group":
+        print(json.dumps(t.setup.live_group()))
+    elif action == "stock-profile":
+        path = Path.home() / ".config/fcitx5/profile"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(t.setup.profile_text("us", "none"))
+    elif action == "terminal":
+        reply = subprocess.check_output([
+            "hyprctl", "dispatch",
+            "hl.dsp.exec_cmd(\"xdg-terminal-exec -e sh -c 'cat > /tmp/typed'\")"
+        ], text=True).strip()
+        assert reply == "ok", "terminal dispatch: " + reply
+    else:
+        raise SystemExit("unknown input-method probe: " + action)
+  '';
+
+  # #1616: the real sender, ssh -T, sshd, a login shell, envfs and the receiver,
+  # with nothing rewritten. HOME moves only on the sending side; ssh finds its key
+  # through the passwd entry, so the far side is omarchy's real home.
+  accountCopyProbe = pkgs.writeShellScript "account-copy-probe" ''
+    set -euo pipefail
+    exec 2>&1
+    real=/home/omarchy
+    far=$real/.local/state/omarchy/agents/accounts
+    test ! -e "$far" || { echo "account state exists before the copy: $far"; exit 1; }
+    test ! -e "$real/.ssh/id_ed25519" || { echo "a key exists before the copy"; exit 1; }
+
+    # The sender passes no -i or host-key option, and with no terminal an
+    # unknown host key is a refusal.
+    install -d -m 700 "$real/.ssh"
+    ssh-keygen -q -t ed25519 -N "" -f "$real/.ssh/id_ed25519"
+    install -m 600 "$real/.ssh/id_ed25519.pub" "$real/.ssh/authorized_keys"
+    ssh-keyscan -t ed25519 localhost > "$real/.ssh/known_hosts"
+
+    tmp=$(mktemp -d)
+    export HOME=$tmp XDG_CONFIG_HOME=$tmp/.config XDG_DATA_HOME=$tmp/.local/share
+    export XDG_STATE_HOME=$tmp/.local/state XDG_CACHE_HOME=$tmp/.cache
+    pending=$(omarchy-agent-account-state begin claude work)
+    printf '%s\n' '{"oauthAccount":{"accountUuid":"u-1616","emailAddress":"copy@example.org"}}' > "$pending/.claude.json"
+    printf '%s\n' '{"claudeAiOauth":{"rateLimitTier":"","subscriptionType":"fake-1616"}}' > "$pending/.credentials.json"
+    omarchy-agent-account-state register claude work "$pending" > /dev/null
+
+    rc=0
+    out=$(omarchy-agent-account-copy localhost claude) || rc=$?
+    echo "$out"
+    test "$rc" -eq 0 || { echo "the copy exited $rc"; exit 1; }
+    [[ $out == *"Claude: copied"* ]] || { echo "the copy reported no account"; exit 1; }
+    grep -qF fake-1616 "$far/claude/work/.credentials.json"
+    for f in claude/work/.credentials.json claude/work/.claude.json; do
+      mode=$(stat -c %a "$far/$f")
+      test "$mode" = 600 || { echo "$f has mode $mode, wanted 600"; exit 1; }
+    done
+  '';
+
 in
 # Drives a real Omarchy session and reports what it logged.
 #
@@ -141,8 +211,6 @@ pkgs.testers.runNixOSTest {
 
       nixarchy = {
         enable = true;
-        # Omarchy 4.5's default apps (#1572), asserted below.
-        omarchyApps.enable = true;
         # Off by default; on here so the accent path is actually exercised.
         # Without it omarchy-theme-set-browser skips every policy directory
         # and the accent silently never applies -- which is what shipped.
@@ -187,6 +255,8 @@ pkgs.testers.runNixOSTest {
         home.stateVersion = "25.05";
       };
     };
+
+    services.openssh.enable = true;
 
     users.users.omarchy = {
       isNormalUser = true;
@@ -325,6 +395,24 @@ pkgs.testers.runNixOSTest {
         print(reg + ": " + binfmt.splitlines()[0])
         assert "enabled" in binfmt, (
             "the " + reg + " binfmt registration is not enabled: " + binfmt)
+
+    # ---- the kernel runs what the sysctl file says (#1615) ---------------
+    # tcp_bbr and sch_fq are modules. One that cannot load leaves cubic and a
+    # single journal line, and every evaluated value still reads as right.
+    sysctl_conf = machine.succeed("cat /etc/sysctl.d/60-nixos.conf")
+    for sysctl_key in ("net.ipv4.tcp_congestion_control", "net.core.default_qdisc"):
+        sysctl_want = [
+            entry.split("=", 1)[1]
+            for entry in sysctl_conf.splitlines()
+            if entry.startswith(sysctl_key + "=")
+        ]
+        assert sysctl_want, sysctl_key + " is not in 60-nixos.conf:\n" + sysctl_conf
+        sysctl_running = machine.succeed(
+            "cat /proc/sys/" + sysctl_key.replace(".", "/")).strip()
+        print(sysctl_key + ": configured " + sysctl_want[0] + ", running " + sysctl_running)
+        assert sysctl_running == sysctl_want[0], (
+            sysctl_key + " is configured as " + sysctl_want[0]
+            + " and the kernel runs " + sysctl_running)
 
     # ---- the menu extension belongs to the user (#210) ------------------
     # Omarchy reads two menu files and merges the second over the first: the
@@ -1792,8 +1880,7 @@ pkgs.testers.runNixOSTest {
     # ---- every keybinding launches something that exists ------------------
     # A key bound to a missing program fails only when somebody presses it,
     # with a notification naming the program and nothing else. SUPER + SHIFT +
-    # ALT + M did that for cliamp, which had been in nixpkgs for a while by
-    # then, and SUPER + SHIFT + W still does for omawrite, which is not.
+    # ALT + M did that for cliamp.
     #
     # Checked in the VM rather than at build time on purpose: the answer is
     # what is on the session PATH, and a build sandbox cannot see the system
@@ -1819,22 +1906,19 @@ pkgs.testers.runNixOSTest {
     machine.succeed("chmod 0755 /tmp/bindprobe.sh")
     dead = machine.succeed(user % "bash /tmp/bindprobe.sh").split()
 
-    # Two are absent on purpose, and named rather than tolerated so either
+    # One is absent on purpose, and named rather than tolerated so it
     # surfaces the day it stops being true.
-    #
-    # omawrite is Omarchy's own writing application and is not in nixpkgs, so
-    # SUPER + SHIFT + W has nothing to launch on any machine.
     #
     # obsidian is unfree, so it is opt-in through apps.obsidian rather than
     # preinstalled -- an unfree package in the always-on set aborts the whole
     # rebuild rather than failing on its own. Its key works on a machine that
     # enables it; this one does not.
-    expected_absent = {"omawrite", "obsidian"}
+    expected_absent = {"obsidian"}
     dead = [d for d in dead if d not in expected_absent]
     assert not dead, (
         f"these keybindings launch something that does not exist: {dead}. "
         "Install it, or name it here with the reason.")
-    print("every keybinding launches something that exists (bar omawrite)")
+    print("every keybinding launches something that exists")
 
     # ---- every binary the seeded config names exists ----------------------
     # The probe above asks this of default/hypr/bindings. Nothing asked it of
@@ -1895,7 +1979,7 @@ pkgs.testers.runNixOSTest {
     # Empty since #204: tensaku-edit was the one entry, and imv's Ctrl+E now
     # names satty-edit, which the omarchy package ships. Kept as the escape
     # hatch the assertion below points at -- a name goes in here with its
-    # reason, the way omawrite is named in the sibling keybinding probe.
+    # reason, the way obsidian is named in the sibling keybinding probe.
     expected_absent = set()
     # Absent on nixos-26.05, where weekly.yml runs this check (#1199);
     # modules/nixos.nix leaves the picker out there on purpose.
@@ -1913,12 +1997,27 @@ pkgs.testers.runNixOSTest {
     print("every binary the seeded config names is on the session PATH")
 
     # ---- Omarchy 4.5's default apps and floating-workspace titlebars (#1572) --
-    # The apps come with programs.nixarchy.omarchyApps.enable, set above; dua is
-    # gone because upstream replaced Disk Usage with disktree.
+    # The apps come by default, following preinstalls; dua is gone because
+    # upstream replaced Disk Usage with disktree.
     # One name per call: `command -v a b` succeeds if ANY of them resolves.
-    for app in ["hype", "monologue", "signed", "disktree"]:
+    for app in ["hype", "signed", "monologue", "omacalc", "omacut", "omawrite", "aether", "disktree"]:
         machine.succeed(user % f"command -v {app}")
     machine.fail(user % "command -v dua")
+    # This machine has real vim, whose vi beats the wrapper; checks.coexistence holds the wrapper.
+    machine.succeed(user % "vi --version > /dev/null")
+    # Left with Omarchy 4.5 (#1612). obs-studio's binary is obs.
+    for app in ["obs", "kdenlive", "xournalpp"]:
+        machine.fail(user % f"command -v {app}")
+    # The new apps claim these types (#1612); adding them must not move the handler.
+    # Markdown is not asserted: upstream sets no default for it.
+    for mime, want in [("application/pdf", "org.gnome.Evince.desktop"),
+                       ("video/mp4", "mpv.desktop"),
+                       ("text/plain", "nvim.desktop")]:
+        got = machine.succeed(user % (
+            "XDG_CURRENT_DESKTOP=Hyprland "
+            "XDG_DATA_DIRS=/run/current-system/sw/share:/etc/profiles/per-user/omarchy/share "
+            f"xdg-mime query default {mime}")).strip()
+        assert got == want, f"{mime} opens with {got!r}, not {want}"
     # LC_ALL and QT_QPA_PLATFORM only on this command (pkgs/AGENTS.md: a parsed
     # tool run in the C locale warns on stdout).
     machine.succeed(user % "LC_ALL=C.UTF-8 QT_QPA_PLATFORM=offscreen hype check --help")
@@ -1931,7 +2030,7 @@ pkgs.testers.runNixOSTest {
         on_desktop("hyprctl plugin list | grep hyprbars >/dev/null"), timeout=60)
     # Back to tiling, so what follows sees the layout it always saw.
     machine.succeed(on_desktop("omarchy-hyprland-workspace-layout-toggle"))
-    print("hype, monologue, signed and disktree are on PATH, dua is not, and a floating workspace loads hyprbars")
+    print("hype, signed, monologue, omacalc, omacut, omawrite, aether and disktree are on PATH; dua, obs, kdenlive and xournalpp are absent; PDF, MP4 and plain-text handlers are unchanged; a floating workspace loads hyprbars")
 
     # ---- the shell rc files know where they live --------------------------
     # All three opened with a fallback to /usr/share/omarchy for when
@@ -2075,15 +2174,15 @@ pkgs.testers.runNixOSTest {
                "omarchy-launch-browser", "omarchy-launch-webapp",
                # Arch installers for apps that are mapped, excepted or absent
                # here: Claude Desktop (data/menu-exceptions.nix), its Chromium
-               # extension, Superwhisper, and the hermes/openclaw CLIs, which
-               # omarchy-default-agent reaches through nixpkgs or mise instead.
+               # extension, Superwhisper, and the hermes/openclaw CLIs: omarchy-default-agent
+               # installs openclaw from nixpkgs and declines hermes.
                "omarchy-install-ai-claude", "omarchy-install-chromium-claude",
                "omarchy-install-dictation-superwhisper",
                "omarchy-remove-dictation-superwhisper",
                "omarchy-install-dictation-voxtype",
                "omarchy-install-hermes-cli", "omarchy-install-openclaw-cli",
-               # The /usr/bin/python3 here runs on the REMOTE machine an account
-               # is transferred to, not on this one.
+               # The /usr/bin/python3 here runs on the REMOTE machine an account is
+               # transferred to. The loopback copy below runs it for real (#1616).
                "omarchy-agent-account-transfer",
                # Upstream's Limine default-kernel switcher (#1423). Its one
                # caller, Update > Kernel, shows only when /usr/lib/modules/*/
@@ -2115,6 +2214,22 @@ pkgs.testers.runNixOSTest {
         + ". Either point them at what NixOS actually uses, or add them to the "
         "named exceptions with a command that explains itself.")
     print("no unexpected command reaches into /usr")
+
+    # ---- account copy, over a real sshd (#1616) ---------------------------
+    with subtest("account copy reaches a default destination (#1616)"):
+        machine.wait_for_unit("sshd.service")
+        rc, out = machine.execute(as_user("${accountCopyProbe}"))
+        print(out)
+        assert rc == 0, f"account copy over loopback ssh failed: {out}"
+        # The import starts this detached, and it writes under the state removed
+        # below. The brackets stop pgrep's own shell wrapper matching.
+        machine.wait_until_fails(
+            "pgrep -u omarchy -f '[o]marchy-agent-usage-update'", timeout=120)
+        machine.succeed(
+            "cd /home/omarchy && rm -rf .local/state/omarchy/agents/accounts "
+            ".local/state/omarchy/agents/usage .ssh/id_ed25519 "
+            ".ssh/id_ed25519.pub .ssh/authorized_keys .ssh/known_hosts")
+        print("an account copy over ssh reaches the far side, mode 600")
 
     # ---- the Network Speed Test reaches its packaged client (#1485) -------
     # The script execs ''${OMARCHY_SPEEDTEST_BINARY:-<path>}; on NixOS the
@@ -2540,6 +2655,30 @@ pkgs.testers.runNixOSTest {
             for j in range(i + 1, len(readings))
         )
 
+    # A handoff, fade included, ends. The video changes every 1 s, so five
+    # readings at least 0.4 s apart (1.6 s) cannot be one colour while it plays.
+    def holds_still(readings):
+        changes = [
+            i for i in range(1, len(readings))
+            if spread(readings[i - 1:i + 1]) > 60
+        ]
+        settled = readings[changes[-1]:] if changes else readings
+        return len(settled) >= 5 and spread(settled) <= 60
+
+    R, B = (237, 12, 12), (1, 1, 251)
+    for readings, expected in [
+        ([B] + [R] * 5, True),  # the recorded failure, run 42072346082
+        ([B, (119, 6, 131)] + [R] * 5, True),  # a handoff caught mid-fade
+        ([R] * 6, True),
+        ([R] * 5, True),  # blanked before a sixth, on a loaded host
+        ([R] * 4, False),  # too short to call still
+        ([R] * 2 + [B] * 3 + [R] * 3, False),  # playback
+        ([R] * 3 + [B] * 3, False),  # one change, then too short to call still
+        ([(237 - 25 * i, 12, 12 + 25 * i) for i in range(6)], False),  # a slow drift
+    ]:
+        assert holds_still(readings) == expected, f"holds_still({readings}) is not {expected}"
+    print("owe: holds_still's own cases pass")
+
     # 1. owed is a user unit (modules/home.nix), gated on programs.nixarchy
     # .owe.enable, which the installer-managed reference turns on by default.
     machine.wait_until_succeeds(as_user("systemctl --user is-active owed"), timeout=30)
@@ -2717,16 +2856,13 @@ pkgs.testers.runNixOSTest {
     # The lock screen blanks the display about 5s after locking, which can land
     # inside the series; a blank is not playback, and the video has no black.
     lock_readings = [r for r in shot_series("owe-lock") if not near_black(r)]
-    # Six readings 0.4s apart still span one 2s loop.
-    assert len(lock_readings) >= 6, (
+    # holds_still needs five readings: longer than one colour of the video lasts.
+    assert len(lock_readings) >= 5, (
         f"the lock screen blanked before one video loop could be watched: {lock_readings}")
-    lock_spread = spread(lock_readings)
-    print(f"owe: lock screen series spread {lock_spread}")
-
-    # settle() has already seen the poster: a saturated frame of the video.
+    print(f"owe: lock screen readings {lock_readings}")
     # The outcome a user sees: it holds still rather than playing (#15289).
-    assert lock_spread <= 60, (
-        f"the locked screen plays the video over 2.8s (spread {lock_spread}); "
+    assert holds_still(lock_readings), (
+        f"the locked screen plays the video over 2.8s ({lock_readings}); "
         f"since quattro 1381fa0 it shows the still")
 
     # Unlock. The lock screen blanks after a few seconds, and a keystroke
@@ -2951,6 +3087,139 @@ pkgs.testers.runNixOSTest {
         "#1155: a panel, menu or overlay re-registered its IpcHandler across a "
         "restart (counts above) -- panelEntryModel should have kept its Loader:\n"
         + journal)
+
+    # ---- live input methods, through compositor keys (#1614) -------------
+    # export, not a prefix: a prefix reaches neither $(...), nor && and |, nor
+    # the command's own $OMARCHY_PATH.
+    def desktop_user(cmd):
+        return ("su omarchy -c 'export XDG_RUNTIME_DIR=/run/user/1000"
+                " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+                " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+                " OMARCHY_PATH=" + omarchy_path +
+                " PYTHONPATH=" + omarchy_path + "/default/input-methods; " + cmd + "'")
+
+    import re
+    picker_source = machine.succeed(desktop_user(
+        "cat $OMARCHY_PATH/default/input-methods/typing_setup.py"))
+    picker_interpreter = re.search(r'on_change = \["([^"]+)",', picker_source)
+    assert picker_interpreter, "the patched picker interpreter was not found"
+    interpreter = picker_interpreter.group(1)
+    assert interpreter.startswith("/nix/store/") and interpreter.endswith("/bin/python3"), (
+        "the patched picker interpreter is missing: " + repr(interpreter))
+
+    def input_driver(action, name=""):
+        return machine.succeed(desktop_user(
+            interpreter + " ${inputMethodDriver} " + action + (" " + name if name else "")))
+
+    def group():
+        return json.loads(input_driver("group"))
+
+    def open_typing_terminal():
+        machine.succeed("rm -f /tmp/typed")
+        input_driver("terminal")
+        machine.wait_for_file("/tmp/typed")
+
+    def finish_typing(keys, expected, label):
+        machine.send_chars(keys)
+        machine.send_key("ret")
+        machine.send_key("ctrl-d")
+        machine.send_key("ctrl-d")
+        typed = machine.wait_until_succeeds("test -s /tmp/typed && cat /tmp/typed", timeout=30)
+        assert typed.rstrip("\n") == expected, (
+            f"{label}: expected {expected!r}, got {typed.rstrip(chr(10))!r}")
+
+    def type_keys(keys, expected, label, method):
+        open_typing_terminal()
+        machine.succeed(desktop_user("fcitx5-remote -s " + method))
+        finish_typing(keys, expected, label)
+
+    unitctl = "systemctl --user "
+    machine.wait_until_succeeds(desktop_user(unitctl + "is-active omarchy-fcitx5"), timeout=60)
+    for engine, keys, expected in (
+        ("mozc", "nihon ", "日本"),
+        # The space commits the syllable, and Hangul then types the space itself.
+        ("hangul", "dkssud ", "안녕 "),
+        ("pinyin", "nihao ", "你好"),
+        ("chewing", "su3cl3", "你好"),
+        ("cangjie5", "a ", "日"),
+    ):
+        input_driver("input", engine)
+        type_keys(keys, expected, engine, engine)
+        print(f"#1614: {engine} composed {expected}")
+
+    # With the terminal focused, cycle through the shell's QML input reader.
+    input_driver("input", "mozc")
+    open_typing_terminal()
+    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    before = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
+    machine.succeed(desktop_user("omarchy-input-method cycle"))
+    machine.wait_until_succeeds(desktop_user(
+        "test $(fcitx5-remote -n) != " + before), timeout=30)
+    machine.send_key("ctrl-d")
+    print("#1614: the shell input reader cycles the focused terminal")
+
+    input_driver("keyboard", "de")
+    machine.wait_until_succeeds(desktop_user(
+        "hyprctl -j getoption input:kb_layout | grep de"), timeout=30)
+    type_keys("y", "z", "German keyboard picker", "keyboard-de")
+    open_typing_terminal()
+    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    active = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
+    machine.send_key("shift")
+    machine.wait_until_succeeds(desktop_user(
+        "test $(fcitx5-remote -n) != " + active), timeout=30)
+    finish_typing("y", "z", "German keys after leaving Mozc")
+    print("#1614: Shift returns from Mozc to German keyboard input")
+
+    # The daemon writes its profile on exit; seed a stock one only while stopped.
+    machine.succeed(desktop_user(unitctl + "stop omarchy-fcitx5"))
+    input_driver("stock-profile")
+    machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
+    machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    assert group()[1] == "de", "ExecStartPre did not align the stock profile to de: " + repr(group())
+    input_driver("input", "hangul")
+    machine.succeed(desktop_user("grep -qx Layout=us ~/.config/fcitx5/profile"))
+    type_keys("dkssud ", "안녕 ", "Hangul with profile alignment", "hangul")
+    type_keys("dy", "요", "Hangul layout override on German keys", "hangul")
+    print("#1614: a stock profile aligns to de and keeps Hangul on us")
+
+    # A rebuild changes PATH before it restarts this unit: reproduce that stale unit.
+    dropin = "/run/user/1000/systemd/user/omarchy-fcitx5.service.d"
+    machine.succeed("mkdir -p " + dropin)
+    machine.succeed("printf '%s\\n' '[Service]' 'ExecStart=' "
+        "'ExecStart=${pkgs.qt6Packages.fcitx5-with-addons}/bin/fcitx5 --disable notificationitem' "
+        "> " + dropin + "/stale.conf")
+    machine.succeed(desktop_user(unitctl + "daemon-reload && " + unitctl + "restart omarchy-fcitx5"))
+    machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    stale_exec = machine.succeed(desktop_user(unitctl + "show -p ExecStart --value omarchy-fcitx5"))
+    assert "${pkgs.qt6Packages.fcitx5-with-addons}/bin/fcitx5" in stale_exec, (
+        "the stale unit did not load the addon-less daemon: " + stale_exec)
+    stale_pid = machine.succeed(desktop_user(unitctl + "show -p MainPID --value omarchy-fcitx5")).strip()
+    machine.succeed("rm " + dropin + "/stale.conf && rmdir " + dropin)
+    machine.succeed(desktop_user(unitctl + "daemon-reload"))
+    assert machine.succeed(desktop_user(
+        unitctl + "show -p MainPID --value omarchy-fcitx5")).strip() == stale_pid, (
+        "removing the drop-in unexpectedly restarted the stale daemon")
+    input_driver("input", "mozc")
+    # fcitx5-remote -n is empty until something focused has an input context.
+    open_typing_terminal()
+    machine.wait_until_succeeds(desktop_user(
+        'fcitx5-remote -s mozc && test "$(fcitx5-remote -n)" = mozc'), timeout=60)
+    machine.send_key("ctrl-d")
+    print("#1614: picking Mozc replaces a stale addon-less unit")
+
+    machine.succeed(desktop_user(unitctl + "stop omarchy-fcitx5"))
+    machine.succeed(desktop_user("rm -f ~/.config/omarchy/keyboard-layouts"))
+    machine.succeed(desktop_user("hyprctl reload"))
+    input_driver("stock-profile")
+    machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
+    machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    machine.succeed(desktop_user("rm -f ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    machine.succeed(desktop_user("omarchy-theme-set-fcitx5 --activate"))
+    # -e follows the link, so a dangling one fails.
+    machine.succeed(desktop_user("test -e ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    print("#1624: the candidate window's theme has its glyphs")
+    print("#1614: keyboard and input-method state restored")
 
     # A QML engine that resolves a singleton to the wrong type (omarchy#14811,
     # Qt 6.12.0) leaves the shell running with every surface black or

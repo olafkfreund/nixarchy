@@ -253,7 +253,24 @@ when you switch.
 
 Choosing one installs it declaratively — `nixarchy-pkg-add` and a rebuild —
 rather than fetching a binary into `~/.local` that nothing records. Antigravity
-is in the list because Google deprecated `gemini-cli` in its favour.
+is in the list because Google deprecated `gemini-cli` in its favour. Kimi,
+MiniMax Code, Freebuff, Command Code, Ori and Hermes are not in nixpkgs: their
+rows say so, name their package in `numtide/llm-agents.nix`, and leave your
+current default alone. A row opens a terminal whenever it has something to tell
+you.
+
+Upstream's Claude entry also offers to install the Claude browser extension.
+Here that is a NixOS option:
+
+```nix
+programs.chromium.enable = true;
+programs.chromium.extensions = [ "fcoeoabgfenejglbffodgkkbkcdhcgfn" ];
+```
+
+This reaches Chromium, Chrome and Brave, but not Edge. Because `extensions`
+becomes `ExtensionInstallForcelist`, it force-installs the extension so the
+browser will not let you remove it; installing from the Web Store is the
+removable route.
 
 Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
@@ -580,6 +597,24 @@ and an eval-only CI workflow.
 It is offered once as a notification after an agent is set up, and a
 configuration that is already committed and pushed marks itself done rather than
 asking again.
+
+## Copying subscription logins to another machine
+
+`omarchy agent account copy <host>` moves your Claude, Codex and Grok logins over
+SSH. The credentials travel on stdin, never in command arguments.
+
+It works to and from machines with `services.envfs` on, which is the default, and
+to Omarchy on Arch. The destination needs `services.openssh.enable`.
+
+With envfs off, or on a machine importing the module with `programs.nixarchy.enable`
+off, or on plain NixOS, it fails with `/bin/bash: No such file or directory` and
+writes nothing. The sender names `/bin/bash` and `/usr/bin/python3` because it can't
+know what the far end is, and only envfs makes those resolve on NixOS.
+
+Under envfs those paths resolve through `PATH`, so a `python3` in `~/bin` on the
+destination receives the stream. That crosses no privilege boundary: that code
+already runs as the account receiving the logins. If an import fails partway, the
+providers already copied stay copied.
 
 ## Giving an agent less than the whole machine
 

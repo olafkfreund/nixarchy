@@ -197,9 +197,8 @@ pkgs.testers.runNixOSTest {
         # source bootstrap from stage0-posix appears and the install dies
         # fetching bash's tarball.
         #
-        # The store is the test's own output, on a medium the test built. An
-        # offline ISO is in exactly the same position -- its closure is baked
-        # in unsigned -- so #15 and #16 will need this too.
+        # The store is the test's own output, on a medium the test built. Its
+        # seeded closure is unsigned, so this test must accept those paths.
         require-sigs = false;
       };
 
@@ -311,6 +310,10 @@ pkgs.testers.runNixOSTest {
         pkgs.kmod.dev
         pkgs.libcap
         pkgs.nukeReferences
+        # dbus-1 and initrd-units, in the initrd every machine rebuilds. Kdenlive's
+        # closure carried both by accident until #1612 retired it.
+        pkgs.libxslt.bin
+        pkgs.lndir
       ]
       ++ inputPaths;
 
@@ -425,16 +428,17 @@ pkgs.testers.runNixOSTest {
             raise AssertionError(
                 "the install had to BUILD something, and this machine has no "
                 "network to fetch its source with. That is a closure that was "
-                "not substitutable when the runner realised it -- usually a "
-                "nixpkgs rebuild that has not reached cache.nixos.org yet, "
-                "which clears on its own in under an hour.\n\n"
+                "not substitutable when the runner realised it, or a build "
+                "input of the per-machine initrd that left the seed because "
+                "the change under test removed whatever carried it.\n\n"
                 f"  {listed}{more}\n\n"
-                "It is very probably not the change under test. Check whether "
-                "these are substitutable now:\n"
+                "Check whether these are substitutable now:\n"
                 "  nix path-info --store https://cache.nixos.org <path>\n"
-                "and if they are, re-run. If they are not, wait rather than "
-                "widening system.extraDependencies -- see the note there about "
-                "seeded systems drifting from installed ones.")
+                "If they are, and this change removes a package, find what the "
+                "initrd lost (installer/AGENTS.md). Otherwise a nixpkgs rebuild "
+                "that has not reached the cache clears in under an hour; wait "
+                "rather than widening system.extraDependencies -- see the note "
+                "there about seeded systems drifting from installed ones.")
 
     assert rc == 0, f"nixarchy-install exited {rc}; the log above says why"
 

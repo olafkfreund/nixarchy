@@ -28,7 +28,7 @@ package itself as well as the function check after changing its shell source.
 |---|---|---|
 | `install` | the installer's output boots — a real disk, real bootloader | self-hosted |
 | `install-encrypted` | the LUKS path, unlocked over the serial console | self-hosted |
-| `install-iso` / `-net` | the real published image, installing with no network | self-hosted |
+| `install-iso-net` | the published image installs through a substituter | self-hosted |
 | `free-space` | installing beside an existing OS without eating it | self-hosted |
 | `session` | a booted desktop; **does not run locally**, CI only | self-hosted |
 | `microvm-boot` | a guest actually boots, not just builds | `-tcg` runner |
@@ -36,22 +36,26 @@ package itself as well as the function check after changing its shell source.
 VM tests run from `/mnt/data/vmtest`, never `/tmp` — `/tmp` is a 32G tmpfs and
 a VM test that runs out of room does not fail cleanly, it wedges.
 
+No check installs a personal network image end to end. `install-iso-net` boots
+the stock image; `reinstall-iso` exercises the personal-image preflights with
+stubs. `install-matrix.py` also uses the published stock image. A personal
+image must be built and installed manually to cover that path.
+
 `checks.coexistence` (`tests/coexistence/`, AGENTS.md §14) proves nixarchy's
 own fixtures still build and don't get silently shadowed — it cannot see
 fonts (no known failing case) or a real host config, only what a fixture
 names.
 
-## The one nothing here can prove: a username that is not `omarchy`
+## The manual username case
 
 `tests/install-matrix.py` is not a check. It boots a **published** `.iso` in
 real qemu and installs it every way a person can — scripted, driven by hand
 through the greeter, and then re-booted from its own disk to prove the result
 starts.
 
-It exists because of a hole every check above shares. All of them install as
-username **`omarchy`**, which is the name the ISO's reference closure is baked
-for — the one username that cannot diverge from it. On 2026-09-07 the full
-matrix ran 6/6 green against the published `v4.0.2-8` offline image; the same
+It exists because the automated checks install as username **`omarchy`**.
+On 2026-09-07 the full
+matrix ran 6/6 green against the published `v4.0.2-8` image; the same
 file, driven by hand with the username `olaf`, died in the source bootstrap:
 
 ```
@@ -59,34 +63,24 @@ hm_hmfontconfigfonts.xml -> libxml2+py -> doxygen -> cmake
   -> libarchive -> attr -> download.savannah.gnu.org
 ```
 
-home-manager's per-user fontconfig file is in no baked closure, and the offline
+home-manager's per-user fontconfig file was in no baked closure, and that
 image had `substituters = lib.mkForce [ ]`, so it could not fetch that path and
 had to build it — and building anything with no compiler on the medium is the
 stdenv bootstrap. Two users hit the same bootstrap by a different route, an
-Intel NPU. #384 gave both images substituters; the same cells against an image
-built from that fix installed and booted clean.
-
-`installer/cd.nix` bakes `inputDerivation` for `toplevel`, `initialRamdisk` and
-`etc`. home-manager is a fourth per-machine thing and is not in that list.
+Intel NPU. #384 gave the images published then substituters; the same cells
+against an image built from that fix installed and booted clean.
 
 So, when changing what the ISO carries or how the installer writes a machine:
 
 ```
-MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py off-free manual
+MATRIX_NET_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py net-free manual
 ```
 
 and **type a username that is not `omarchy`**.
 
-**Partly closed since.** `checks.install-iso` now installs as `lovelace`, so
-one automated cell finally varies this — offline, nightly, already paying for a
-full image build, so a per-user rebuild costs wall clock nobody waits on.
-`checks.install` keeps `omarchy` deliberately: it is PR-gated and its seeded
-store is the thing under test there.
-
 What is still uncovered, and worth typing by hand: a name with a **hyphen or a
 digit**, which also stresses systemd unit naming (`home-manager-<user>.service`)
-and home-manager's own paths. `install-iso` varies one variable on purpose —
-a compound change makes a failure unattributable.
+and home-manager's own paths.
 
 ## The other one nothing here can prove: a disk that is not virtio
 
@@ -106,12 +100,12 @@ the framework with raw `qemu.options` and creating the image yourself, inside a
 So it lives in the harness instead, which drives real qemu directly:
 
 ```
-MATRIX_NVME=1 MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso \
-  python3 tests/install-matrix.py off-whole-plain
+MATRIX_NVME=1 MATRIX_NET_ISO=result/iso/nixarchy-*.iso \
+  python3 tests/install-matrix.py net-whole-plain
 ```
 
 Run it when changing anything that builds a partition name, mounts by path, or
-touches `installer/disk-config.nix`. Both an online and an offline whole-disk
+touches `installer/disk-config.nix`. Both an online and a former offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
@@ -310,7 +304,7 @@ What IS covered:
   `/dev/dri/renderD128`, and gliff allocates capture buffers with GBM on it
   even on the CPU tier, so capture ends in ENOENT. Frames and the GPU tier are
   `pkgs/verify.sh`'s `gliff-probe` rows, on real hardware; the ssh hop is
-  ssh's, and the session VM runs no sshd.
+  ssh's.
 
 **A configured value that equals the platform's default cannot vary with the
 thing that sets it** (found probing hypr-rdp's headless output, which
@@ -324,6 +318,19 @@ cannot be driven in a sandbox either. It reads the hostname from
 and reports `localhost` -- measured, not assumed. That is why the decision and
 the write live in `pkgs/sops-policy-add.nix`, so the check runs the code the
 CLI runs rather than a copy of it.
+
+## The account-copy holes: one machine, default nixarchy only
+
+`checks.session` runs a real `omarchy agent account copy` over loopback sshd, and
+`checks.account-copy` pins the failures in a sandbox (#1616). Neither reaches: a
+real second machine; an Arch end in either direction; a real envfs-off machine
+over SSH (`account-copy`'s leg A is the same failure without sshd); Codex and Grok,
+which share the transport and differ only in which files they carry; or login shells
+other than the session user's.
+
+`OMARCHY_PATH` may arrive by two routes: PAM, and bash's `SSH_SOURCE_BASHRC` via
+`/etc/bashrc`. <Supervisor: replace this sentence with what the `UsePAM no` run in
+step 5 measured.>
 
 ## The stub-only one: `pkg-new` never runs a real nix-init here
 
@@ -455,11 +462,13 @@ nothing.
 
 `tests/session.nix`'s #1153 probe sets a real video background and locks
 with one set, and proves the wiring end to end: `owed` starts, `owe status`
-reports a video source with a live renderer, the desktop and the lock
-screen's feed both visibly move, and the background plugin comes back once
-the still returns. **None of that reaches the two questions a VM genuinely
-cannot answer**, for the same reason the Graphics section of `pkgs/verify.sh`
-exists at all:
+reports a video source with a live renderer, the desktop video visibly moves,
+the lock screen holds still, and the background plugin comes back once the
+still returns. The lock assertion can miss playback more than 1.6 times too
+slow, or a screenshot stall that aliases with the video loop for one run; a
+handoff one shot later still fails and prints the readings. **None of that
+reaches the two questions a VM genuinely cannot answer**, for the same reason
+the Graphics section of `pkgs/verify.sh` exists at all:
 
 - **hardware decode.** Every VM here renders on llvmpipe, so `owe
   render-status`'s `hwdec` field is always `"no"` on this renderer whether
@@ -558,8 +567,9 @@ seen failing:
     the accepted-agent parse found 0 ids; ... This check is refusing rather than passing.
 
 **What it cannot reach:** whether `openclaw` actually launches once installed,
-and whether the three llm-agents.nix attribute names (`cursor-agent`,
-`hermes-agent`, `muse-code`) are still correct. The second is a claim about
+and whether the six llm-agents.nix attribute names
+(`kimi-code`, `minimax-code`, `freebuff`, `command-code`, `ori`, `hermes-agent`)
+are still correct. The second is a claim about
 another repository printed to users, and nothing here notices when it goes
 stale -- a source of quietly wrong advice rather than a broken build.
 
@@ -925,8 +935,8 @@ cannot fetch an unfree or locally built path — cannot be produced by any
 layer here. What IS covered: the prediction's classification against real
 `nix path-info` shapes (`substitutable`), the build-machine verdict wiring
 (`reinstall-iso`), and the target-side plan report with plans nix really
-prints (`installer-store-space`). What is not: a real `reinstall-iso-net`
-image, booted against real caches, missing a real unfree package. That run
+prints (`installer-store-space`). What is not: a personal network image,
+booted against real caches, missing a real unfree package. That run
 needs a human with vscode in their closure and a machine to lose; until one
 reports back, the prediction is tested and the event it predicts is not.
 
@@ -986,6 +996,23 @@ module system. What the check does instead is force the sentence to be written
 when upstream changes, and force it to be long enough to be checkable by a
 person — `etc-overlay` throws on a reason under 80 characters for that reason
 alone. Reasons go stale silently; the keys cannot.
+
+## etc-sysctl compares values; every other native row is still a name
+
+`checks.etc-sysctl` reads the three `sysctl.d` files upstream ships, compares each key with
+the rendered `60-nixos.conf`, and sweeps a sentinel `mkDefault` over every `native` key. A
+key that differs needs a `differs` entry on its row in `data/etc-overlay.nix`, and that entry
+goes red when upstream moves again or the configuration stops differing.
+
+The holes, by name:
+
+- the other `native` rows, including the `key=value` drop-ins for systemd, logind, oomd,
+  NetworkManager, sudo and Docker logs, map to differently shaped options and are classified
+  by name only, so an edit to one of those files stays silent;
+- a key upstream deletes is not noticed, because the rendered file also holds nixpkgs' keys
+  and the user's, so only upstream's keys are walked. A dropped file is still `etc-overlay`'s;
+- `session` reads `/proc/sys` for nixarchy's own kernel only, so a user's kernel without
+  `tcp_bbr` runs `cubic` with one journal line and nothing here sees it.
 
 ## A verb check is not an arity check
 
@@ -1394,7 +1421,8 @@ cache.
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,
 `installer-store-space`, `try-preflight`, `doctor-graphics`, `dashboard-clock`,
-`options`, `review-pins`, `patched-files`, `doc-options`, `explain`.
+`options`, `review-pins`, `patched-files`, `doc-options`, `explain`,
+`input-methods`.
 
 These are `runCommand`s that finish in seconds and drive one decision with a
 stubbed environment. Prefer one of these over extending a VM test: they are the
@@ -1444,6 +1472,38 @@ the real handler runs) and reads state over IPC.
 
 `checks.menu-model-merge` is the cheap sibling: node over the built
 `MenuModel.js`, for the partial-override merge.
+
+## The input-method one: physical keys and real toolkit apps are hardware-only (#1614)
+
+`fcitx5` runs in a build sandbox, so `checks.input-methods` carries the daemon
+assertions (`AvailableInputMethods`, `omarchy-setup-input`, `typing_setup.py`'s
+first save after a rebuild and `seed-language`, `indicator.py`,
+`keyboard_catalog()`, and `omarchy-fcitx5`'s `ExecStartPre` profile alignment)
+without a VM. A session bus can activate `org.fcitx.Fcitx5` by itself through
+`XDG_DATA_DIRS`, which would start the real daemon behind a row testing the
+addon-less one, so that check starts `dbus-run-session` with an empty
+`XDG_DATA_DIRS` and every row runs only the daemon it started.
+
+`checks.session` drives compositor keys into a focused terminal for all five
+engines (`mozc`, `hangul`, `pinyin`, `chewing`, `cangjie5`), cycles the
+indicator with `omarchy-input-method cycle`, applies `de` through the keyboard
+picker, and checks the `ExecStartPre` alignment and stale-unit replacement. On
+`de` with `mozc` selected, tapping Shift flips `fcitx5-remote` back to Latin
+input and types `y` as `z`: the flip itself has a break (removing
+`Hotkey/AltTriggerKeys`), while the German output after the flip has no break
+in our code and is a report of what Fcitx does rather than a check.
+
+What stays hardware-only: physical 한/영 (`Hangul`) and 全角/半角
+(`Zenkaku_Hankaku`) keys, and composition inside real GTK, Qt and Electron
+toolkit apps. `pkgs/verify.sh` checks that the running `fcitx5` daemon lists
+all five engines in `AvailableInputMethods`. By hand on real hardware:
+
+```sh
+nixarchy verify                  # fcitx5 engines: mozc, hangul, pinyin, chewing, cangjie5
+omarchy setup input mozc         # or pick under Setup > Typing > Input Methods
+# press Super+I (or physical 全角/半角 / 한/영) and compose in a browser, a GTK app and a Qt app
+# tap Shift alone to flip to Latin input and back
+```
 
 ## Working here
 
@@ -1734,6 +1794,35 @@ Two fixes ported from Omarchy `quattro` have parts no layer here can show:
   call. By hand: boot with a Thunderbolt dock whose display comes up late
   and watch the logo and the passphrase field land in the middle of it.
 
+## Removing a fingerprint: what each layer sees, and the hole (#1620)
+
+`checks.remove-fingerprint` runs the shipped script with two paths rewritten, and every writer
+stubbed. A green run proves the deletion was **asked for**, in the right order, of the right
+account, and that the row said the right thing. It proves nothing was erased only on a rewritten
+copy. `checks.options` holds the PAM stacks by evaluation.
+
+`checks.remove-fingerprint-vm` (`tests/remove-fingerprint-vm.nix`) runs the shipped script in a VM
+against real `fprintd`, libfprint's `virtual_device_storage` driver, and `pamtester`. It enrols
+`alice` (`alice-id`) and `bob` (`bob-id`), runs the shipped script as `alice`, and proves: exit 0
+with `Deleted alice's saved fingerprints`, `/var/lib/fprint/alice` gone while `/var/lib/fprint/bob`
+stays, `fprintd-list alice` reporting `has no fingers enrolled`, a second `fprintd-delete alice`
+printing `No fingerprints to delete on`, `REMOVE alice-id` warning `not found in storage` while
+the `REMOVE bob-id` control succeeds without that warning, and `pamtester` on `sudo` and
+`omarchy-lock-password` accepting `alice`'s password and rejecting a wrong one. Getting the
+virtual reader to run took: clearing the upstream unit's `ExecStart` with `""` before passing
+`--no-timeout` (and keeping `RuntimeDirectory = "fprintd-virt"` for the socket under
+`ProtectSystem=strict`), `security.polkit.enable = true`, `SET_KEEP_ALIVE 1` so the socket
+outlives a device close, repeated `SCAN`s during enrolment because `fprintd` identifies first to
+catch duplicates, and opening the reader once more (`fprintd-verify`) because queued socket
+commands are only processed on the reader's next use.
+
+Nothing here can show a physical chip obeying. By hand, on a match-on-chip reader: enrol, press
+Remove, `sudo ls /var/lib/fprint`, confirm the finger no longer verifies at `sudo`, then that the
+password does. Nobody working on this has one.
+
+Boot snapshots keeping templates indefinitely is read from `systemd-helper.cc:125`, not observed.
+The row claims no retention period, so nothing depends on it.
+
 ## menu-tree: reachable by browsing, and what it cannot see (#1302)
 
 `tests/menu-tree.py` applies `MenuModel.js`'s rules to the generated menu
@@ -1801,6 +1890,8 @@ Holes, named rather than closed:
 - systemd's EFI `HibernateLocation` path is not booted by any VM.
 - Zen is supported for the shipped beta package only: another variant of the
   package hides the row by design.
+- Nothing rebuilds a machine to install a missing default browser or editor and
+  read `xdg-settings` back; the chain is proved in parts (#1623).
 
 ## menu-actions proves classification, not safety (#1304)
 
@@ -2032,3 +2123,18 @@ on 26.05, and the test script is type-checked.
 **What neither check reaches:** `omarchy-edge.yml`'s wiring is asserted only by
 variable name in the `report` step (and whether a timed-out job keeps its step
 outputs cannot be tested locally). Its first real run is after merge.
+
+## OpenSSH menu and login (#1611)
+
+`sshd-login` checks key login and refusal of password and keyboard-interactive
+login in a VM. `sshd-enable` checks the menu script's key gate and row changes;
+row 23 reads `reference`'s script because the vm turns sshd on itself. Neither
+check reaches a real menu click in a floating terminal or a key sshd will not
+use because of `~/.ssh` permissions (§3).
+
+## A build that is not reproducible keeps its path
+
+Found on 2026-11-06, when `installer-refusal` failed with `curl` exit 60 on a pull request that had not touched it. Its stub certificate came from `openssl req` in a `runCommand`, so each build made a new key under the same store path. A garbage collection removed that path, the next build made a new certificate there, and the CA bundles already built from the old one stayed in the shared store and went on trusting only the old one. Nothing in the derivation graph can see that, so every run on that host fails until those bundles are collected too.
+
+A test's key or certificate is a committed fixture. So is anything else that another derivation embeds by content and that a rebuild would change. It is test-only and trusted only inside that VM.
+

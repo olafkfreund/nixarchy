@@ -446,7 +446,6 @@ let
     "hype"
     "monologue"
     "signed"
-    "omarchy-local-ai"
   ];
 
   hasPname = cfg: name: builtins.any (p: (p.pname or "") == name) cfg.environment.systemPackages;
@@ -1197,9 +1196,79 @@ let
         off = kept != "10s";
       };
 
+    # #1624: on a Mode A machine that turns fcitx5 on itself. loaderOff has no input method,
+    # so it could not see the entry leave cfg.enable.
+    fcitx5ThemesLinked = {
+      on = builtins.elem "/share/fcitx5/themes" adopter.config.environment.pathsToLink;
+      off =
+        builtins.elem "/share/fcitx5/themes"
+          (modeAOff.extendModules {
+            modules = [
+              {
+                i18n.inputMethod = {
+                  enable = true;
+                  type = "fcitx5";
+                };
+              }
+            ];
+          }).config.environment.pathsToLink;
+    };
+
+    # #1620: deleting prints leaves a machine as one that never enrolled, so a stack with a
+    # password must still reach it past pam_fprintd, and the fingerprint one must have none.
+    # Auth lines only: pam_unix is in account, password and session whatever auth does.
+    fprintdPamFallback =
+      let
+        withFprintd =
+          machine: extra:
+          (machine.extendModules {
+            modules = [ { services.fprintd.enable = true; } ] ++ extra;
+          }).config;
+        authLines =
+          c: name:
+          builtins.filter (pkgs.lib.hasPrefix "auth ") (
+            pkgs.lib.splitString "\n" c.security.pam.services.${name}.text
+          );
+        authOf = c: name: pkgs.lib.concatStringsSep "\n" (authLines c name);
+        # sufficient, or no-prints stops there; and pam_unix before pam_deny, or it is never reached.
+        fallsBack =
+          c: name:
+          let
+            parts = pkgs.lib.splitString "pam_fprintd" (authOf c name);
+          in
+          builtins.any (l: pkgs.lib.hasPrefix "auth sufficient " l && pkgs.lib.hasInfix "pam_fprintd" l) (
+            authLines c name
+          )
+          && pkgs.lib.hasInfix "pam_unix" (
+            builtins.head (pkgs.lib.splitString "pam_deny" (pkgs.lib.last parts))
+          );
+        has = c: name: c.security.pam.services ? ${name};
+        on = withFprintd adopter [ ];
+        modeA = withFprintd modeAOff [ ];
+      in
+      {
+        on =
+          builtins.all (fallsBack on) [
+            "sudo"
+            "polkit-1"
+            "login"
+            "omarchy-lock-password"
+          ]
+          && pkgs.lib.hasInfix "pam_fprintd" (authOf on "omarchy-lock-fingerprint")
+          && !pkgs.lib.hasInfix "pam_unix" (authOf on "omarchy-lock-fingerprint");
+        off =
+          has adopter.config "omarchy-lock-fingerprint"
+          || has modeA "omarchy-lock-fingerprint"
+          || has modeA "omarchy-lock-password";
+      };
+
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;
+    etcNativeCongestionControl = etcNative (
+      c: c.boot.kernel.sysctl."net.ipv4.tcp_congestion_control" or null
+    ) "bbr";
+    etcNativeQdisc = etcNative (c: c.boot.kernel.sysctl."net.core.default_qdisc" or null) "fq";
     etcNativeWifiPowersave = etcNative (c: c.networking.networkmanager.wifi.powersave) false;
     etcNativeUsbAutosuspend = etcNative (
       c: pkgs.lib.hasInfix "options usbcore autosuspend=-1" c.boot.extraModprobeConfig
@@ -1997,20 +2066,30 @@ let
     };
 
     # ---- #1572: Omarchy 4.5's default apps are one switch ----
-    # All seven rows with preinstall = true, by pname. The on half needs every
-    # one, so a row dropped from data/apps.nix fails here; the off half is a
-    # machine that never asked. The titlebars plugin rides on the session.
+    # All seven default rows, by pname. A dropped row fails on; off uses
+    # preinstalls = false. The titlebars plugin rides on the session.
     omarchyApps = {
       on =
-        let
-          cfg = configWith { omarchyApps.enable = true; };
-        in
-        builtins.all (hasPname cfg) omarchyAppPnames;
-      off =
-        let
-          cfg = configWith { };
-        in
-        builtins.any (hasPname cfg) omarchyAppPnames;
+        builtins.all (hasPname defaultMachine) omarchyAppPnames
+        && !builtins.any (hasPname defaultMachine) [
+          "obs-studio"
+          "kdenlive"
+          "xournalpp"
+          "omarchy-local-ai"
+        ];
+      off = builtins.any (hasPname (configWith {
+        preinstalls = false;
+      })) omarchyAppPnames;
+    };
+    omarchyAppsInertWhenDisabled = {
+      on = builtins.any (hasPname defaultMachine) omarchyAppPnames;
+      off = builtins.any (hasPname (configWith {
+        enable = false;
+      })) omarchyAppPnames;
+    };
+    omarchyAppOptOut = {
+      on = hasPname defaultMachine "hype";
+      off = hasPname (configWith { apps.hype.enable = false; }) "hype";
     };
 
     titlebarsPluginFollowsTheSession = {
@@ -2210,6 +2289,21 @@ let
         }).i18n.inputMethod.type == "fcitx5";
     };
 
+    # Mode A: the addon list is ours only while nixarchy is on.
+    inputMethodAddons = {
+      on =
+        pkgs.lib.all
+          (n: builtins.elem n (map (p: p.pname or "") defaultMachine.i18n.inputMethod.fcitx5.addons))
+          [
+            "fcitx5-mozc"
+            "fcitx5-hangul"
+            "fcitx5-chewing"
+            "fcitx5-table-extra"
+            "fcitx5-chinese-addons"
+          ];
+      off = (configWith { enable = false; }).i18n.inputMethod.fcitx5.addons != [ ];
+    };
+
     # nixarchy allows unfree because most of the Install menu is unfree. The
     # half worth testing is the other one: a user who wants nixpkgs' own policy
     # back must be able to have it.
@@ -2223,6 +2317,17 @@ let
       on = defaultMachine.nixpkgs.config.allowUnfree or false;
       off = (configWith { allowUnfree = false; }).nixpkgs.config.allowUnfree or false;
     };
+
+    viCommand =
+      let
+        hasVi = c: pkgs.lib.any (p: (p.name or "") == "vi") c.environment.systemPackages;
+      in
+      {
+        on = hasVi defaultMachine;
+        off = hasVi (configWith {
+          enable = false;
+        });
+      };
 
     browserThemeUser = {
       # null is the default, so this one reads the other way round: the rules
@@ -2346,6 +2451,12 @@ let
     tailscaleTrust = {
       on = builtins.elem "ts0" tailscaleTrustIface.on;
       off = builtins.elem "ts0" tailscaleTrustIface.off;
+    };
+    opensshPasswordsOff = {
+      on = !opensshMenu.PasswordAuthentication && !opensshMenu.KbdInteractiveAuthentication;
+      off =
+        !(opensshPlain.PasswordAuthentication && opensshPlain.KbdInteractiveAuthentication)
+        || !(opensshModeA.PasswordAuthentication && opensshModeA.KbdInteractiveAuthentication);
     };
     fleetDelayBeside = {
       on = fleet.delayTheirs == "10min";
@@ -2567,7 +2678,15 @@ let
       "/plymouth-is-not-enabled";
 
   installedSplash = defaultMachine;
-  isoSplash = inputs.self.nixosConfigurations.iso.config;
+  isoSplash = inputs.self.nixosConfigurations.iso-net.config;
+
+  legacyIso =
+    offline:
+    inputs.self.lib.mkUserIso {
+      flake = inputs.self;
+      host = "reference";
+      inherit offline;
+    };
 
   # ---- nixarchy does not delete software somebody installed ----
   #
@@ -3265,6 +3384,19 @@ let
       }).networking.firewall.trustedInterfaces;
     off = defaultMachine.networking.firewall.trustedInterfaces;
   };
+  opensshMenu =
+    (configBeside { programs.nixarchy.services.openssh.enable = true; }).services.openssh.settings;
+  opensshPlain = (configBeside { services.openssh.enable = true; }).services.openssh.settings;
+  # programs.nixarchy.enable off: the option alone must change nothing (Mode A).
+  opensshModeA =
+    (modeAOff.extendModules {
+      modules = [
+        {
+          programs.nixarchy.services.openssh.enable = true;
+          services.openssh.enable = true;
+        }
+      ];
+    }).config.services.openssh.settings;
   localAiIpv6 = configBeside {
     programs.nixarchy.localAi = {
       enable = true;
@@ -3466,6 +3598,15 @@ let
   pkgAddUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (pkgAddTextWith {
     allowUnfree = false;
   });
+  defaultInstallTextWith =
+    settings:
+    (pkgs.lib.findFirst (p: (p.name or "") == "nixarchy-default-install")
+      (throw "no nixarchy-default-install in systemPackages")
+      (configWith settings).environment.systemPackages
+    ).text;
+  defaultInstallUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (defaultInstallTextWith {
+    allowUnfree = false;
+  });
 
   # otherChannel.config's DEFAULT, every value forced, on the usual machine:
   # allowUnfree and no predicate. `inherit (pkgs.config) allowUnfreePredicate`
@@ -3655,6 +3796,7 @@ pkgs.runCommand "nixarchy-options-files"
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     flatpakExplicitDisable = pkgs.lib.boolToString flatpakDisabled.services.flatpak.enable;
     pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
+    defaultInstallUnfreeOff = pkgs.lib.boolToString defaultInstallUnfreeOffBaked;
     inherit otherChannelConfigKeys;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
     fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
@@ -3805,6 +3947,10 @@ pkgs.runCommand "nixarchy-options-files"
     splashIsoDir = splashPaths isoSplash;
     splashIsoOn = pkgs.lib.boolToString isoSplash.boot.plymouth.enable;
     splashIsoTheme = isoSplash.boot.plymouth.theme;
+    legacyIsoSame = pkgs.lib.boolToString (
+      (legacyIso true).drvPath == (legacyIso false).drvPath
+      && (legacyIso true).drvPath == inputs.self.packages.${system}.iso-net.drvPath
+    );
     # What the assets are measured against. The vendored tree, at the version
     # this flake pins -- so a bump that changes an asset changes what "still
     # upstream's" means, which is the point.
@@ -4467,7 +4613,7 @@ pkgs.runCommand "nixarchy-options-files"
         }
         echo "fontconfig pins Omarchy's font choices"
 
-        # ---- the two images are tellable apart -----------------------------
+        # ---- the network image has a stable name and label -----------------
         #
         # Interpolated rather than grepped, because reading these forces the
         # ISO configurations to evaluate -- which is what makes the volumeID
@@ -4475,25 +4621,21 @@ pkgs.runCommand "nixarchy-options-files"
         # evaluates them, and a release build finding it is a release too
         # late.
         #
-        # They were identical once: same filename, same label, for a 5.6 GB
-        # image and a 1.5 GB one.
-        isoName=${inputs.self.nixosConfigurations.iso.config.image.baseName}
-        netName=${inputs.self.nixosConfigurations.iso-net.config.image.baseName}
-        isoLabel=${inputs.self.nixosConfigurations.iso.config.isoImage.volumeID}
-        netLabel=${inputs.self.nixosConfigurations.iso-net.config.isoImage.volumeID}
-        test "$isoName" != "$netName" || {
-          echo "both ISOs build to the same filename ($isoName): copy them out and they collide" >&2
-          exit 1
-        }
-        test "$isoLabel" != "$netLabel" || {
-          echo "both ISOs carry the same volume label ($isoLabel): two sticks, one name" >&2
-          exit 1
-        }
+        isoName=${inputs.self.nixosConfigurations.iso-net.config.image.baseName}
+        isoLabel=${inputs.self.nixosConfigurations.iso-net.config.isoImage.volumeID}
         case "$isoName" in
           *${inputs.self.packages.${system}.omarchy.version}*) ;;
           *) echo "the ISO filename does not carry the version: $isoName" >&2; exit 1 ;;
         esac
-        echo "the two images are tellable apart by name and label ($isoLabel / $netLabel)"
+        case "$isoLabel" in
+          NIXARCHY_*) ;;
+          *) echo "the ISO volume label is unexpected: $isoLabel" >&2; exit 1 ;;
+        esac
+        test "$legacyIsoSame" = true || {
+          echo "mkUserIso's old outputs do not both give the network image" >&2
+          exit 1
+        }
+        echo "the network image has a versioned name and label; old output arguments agree"
 
         # ---- a flatpak is pickable, by the tooling that already exists ------
         #
@@ -4808,6 +4950,12 @@ pkgs.runCommand "nixarchy-options-files"
         test "$pkgAddUnfreeOff" = true || {
           echo "with allowUnfree = false the built nixarchy-pkg-add does not carry allowunfree=false:" >&2
           echo "  the baked policy constant no longer follows the option, so the unfree help" >&2
+          echo "  fires never or always" >&2
+          exit 1
+        }
+        test "$defaultInstallUnfreeOff" = true || {
+          echo "with allowUnfree = false the built nixarchy-default-install does not carry allowunfree=false:" >&2
+          echo "  the baked policy constant no longer follows the option, so the unfree refusal" >&2
           echo "  fires never or always" >&2
           exit 1
         }

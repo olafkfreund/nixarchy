@@ -93,9 +93,9 @@ pkgs.runCommand "nixarchy-installer-lock"
     }
 
     # And the URL in flake.nix must agree with it, because nix re-resolves on
-    # a flake.nix/lock mismatch -- over a network the offline ISO does not
-    # have. A rev-shaped URL here is the same freeze wearing different
-    # clothes: `nix flake update nixarchy` obeys flake.nix, not the lock.
+    # a flake.nix/lock mismatch. A rev-shaped URL here is the same freeze
+    # wearing different clothes: `nix flake update nixarchy` obeys flake.nix,
+    # not the lock.
     ref=$(jq -r '.ref' <<<"$original")
     grep -Fq "url = \"github:olafkfreund/nixarchy/$ref\";" \
       ${flakeTemplate}/flake.nix || {

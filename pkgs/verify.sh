@@ -337,6 +337,26 @@ for unit in omarchy-sleep-lock omarchy-crash-watch omarchy-recover-internal-moni
 done
 if [ -e /etc/systemd/user/omarchy-fcitx5.service ]; then
   check_nixarchy_user_unit omarchy-fcitx5
+  fcitx_methods=$(
+    timeout 5 busctl --user --auto-start=no --json=short call org.fcitx.Fcitx5 /controller \
+      org.fcitx.Fcitx.Controller1 AvailableInputMethods 2>/dev/null
+  ) || true
+  if [ -z "$fcitx_methods" ]; then
+    hmm "fcitx5 is not running" "omarchy-fcitx5.service may be stopped"
+  else
+    fcitx_missing=""
+    for engine in mozc hangul pinyin chewing cangjie5; do
+      case "$fcitx_methods" in
+        *'"'"$engine"'"'*) ;;
+        *) fcitx_missing="$fcitx_missing $engine" ;;
+      esac
+    done
+    if [ -n "$fcitx_missing" ]; then
+      hmm "fcitx5 engines missing" "${fcitx_missing# } (expected if i18n.inputMethod.fcitx5.addons was overridden)"
+    else
+      ok "fcitx5 engines" "mozc, hangul, pinyin, chewing, cangjie5"
+    fi
+  fi
 fi
 
 if systemctl --user is-active omarchy-sleep-lock.service >/dev/null 2>&1; then
@@ -1202,7 +1222,7 @@ else
   hmm "RetroArch not installed" "enable apps.retroarch to test this"
 fi
 
-for app in nautilus pinta gnome-disks xournalpp; do
+for app in nautilus pinta gnome-disks signed; do
   if command -v "$app" >/dev/null 2>&1; then
     ok "$app" "on PATH"
   else

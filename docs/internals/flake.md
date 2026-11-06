@@ -23,7 +23,7 @@ it. This page is read when somebody follows a pointer.
 - **packages** — the ISO, the installer, the doctor, `#try`, `#vm`.
 - **checks** — 37 of them; `tests/AGENTS.md` covers what each proves.
 - **nixosConfigurations** — `reference` is the machine the installer writes,
-  `vm` is the smoke-test guest, `iso`/`iso-net` are the images.
+  `vm` is the smoke-test guest, `iso-net` is the installer image.
 
 ## Two rules with teeth
 
@@ -285,7 +285,7 @@ this rev's override starts throwing. Never track a branch here.
 
 ```nix
 gliff = {
-  url = "github:omacom/gliff/v0.4.1";
+  url = "github:omacom/gliff/v0.4.2";
   flake = false;
 };
 ```
@@ -386,7 +386,7 @@ is QML plus a bash adapter, so there is nothing to build and no binary
 cache to forfeit, and one nixpkgs in the lock beats two.
 
 Measured at dd937f2 (2026-09-19): the plugin output is **120 KiB**. The
-input's source tree, which `lib.inputSources` carries onto the offline ISO
+input's source tree, which `lib.inputSources` carries onto the network ISO
 and the installed host, is **6.0 MiB**, mostly its docs images.
 
 It is not in `checks`. modules/home.nix's `validatedPlugins` runs
@@ -422,7 +422,7 @@ nixarchy-pkg's entry above gives: pure QML, nothing to build, one nixpkgs.
 
 Measured at 03d9f02 (2026-09-19): the plugin output is **106 KiB**, and ships
 its MIT `LICENSE` (its flake lists it among the copied files). The input's
-source tree, which `lib.inputSources` carries onto the offline ISO and the
+source tree, which `lib.inputSources` carries onto the network ISO and the
 installed host whether or not podman is on, is **5.2 MiB**, mostly docs images.
 
 Not in `checks`, like nixarchy-pkg: `validatedPlugins` validates it in every
@@ -646,7 +646,7 @@ nixi does the same since nixi-nixarchy#84, which is why
 
 Measured at 8775661 (2026-09-24): the closure is **84.7 MiB**, of which the
 Smart Match engine and both models are most. Since #1052 that reaches every
-installed machine, and the offline ISO's reference closure.
+installed machine. The former offline ISO also carried the reference closure.
 
 **Bumping the pin:** move `url` to a newer commit on nixarchy-menu `main` --
 now a release commit, pinned at v1.0.1 -- then
@@ -1419,21 +1419,20 @@ Returns `declaredRunner`, upstream's own name for
 which is what `packages.<system>.microvm-<template>` has to be.
 
 <a id="both-images-against-the-budgets-recorded-in-instal"></a>
-### Both images, against the budgets recorded in installer/cd.nix
+### The network image, against the budget recorded in installer/cd.nix
 
 ```nix
 iso-budget =
 ```
 
-Both images, against the budgets recorded in installer/cd.nix.
+The network image, against the budget recorded in installer/cd.nix.
 
 A check rather than a comment because a number nobody enforces is a
 number that drifts. The nightly runs this; it costs nothing beyond
 the ISO builds it already does.
 
-The iso-net budget is the load-bearing one, and it is not a taste
-question: GitHub refuses a release asset over 2 GiB, so an iso-net
-that crosses it stops being publishable as a single file and
+The budget is load-bearing: GitHub refuses a release asset over 2 GiB, so an
+iso-net that crosses it stops being publishable as a single file and
 release.yml would have to start splitting it. Failing here says so
 while there is still something to do about it, rather than at the
 next tag.

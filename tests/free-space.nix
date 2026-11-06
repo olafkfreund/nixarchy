@@ -203,9 +203,8 @@ pkgs.testers.runNixOSTest {
         # source bootstrap from stage0-posix appears and the install dies
         # fetching bash's tarball.
         #
-        # The store is the test's own output, on a medium the test built. An
-        # offline ISO is in exactly the same position -- its closure is baked
-        # in unsigned -- so #15 and #16 will need this too.
+        # The store is the test's own output, on a medium the test built. Its
+        # seeded closure is unsigned, so this test must accept those paths.
         require-sigs = false;
       };
 
@@ -314,6 +313,10 @@ pkgs.testers.runNixOSTest {
         pkgs.kmod.dev
         pkgs.libcap
         pkgs.nukeReferences
+        # dbus-1 and initrd-units, in the initrd every machine rebuilds. Kdenlive's
+        # closure carried both by accident until #1612 retired it.
+        pkgs.libxslt.bin
+        pkgs.lndir
       ]
       ++ inputPaths;
 

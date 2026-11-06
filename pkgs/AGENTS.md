@@ -1242,9 +1242,7 @@ First: mise activates from the shell rc, and the menu launches an
 agent through `bash -c` inside a floating terminal, which sources no
 rc. An agent mise had installed perfectly was therefore reported as
 "not installed" by the very next line, while running fine one shell
-over. Only the two agents nixpkgs has no package for still come from
-mise -- see nix-bin/omarchy-default-agent -- but for those this is
-the difference between a working menu entry and a lie.
+over.
 
 Second: Antigravity. Google deprecated gemini-cli in favour of it,
 mise carries it as a prebuilt `aqua:` binary, and upstream's launcher
@@ -1346,3 +1344,15 @@ now fails until somebody decides about it.
 Disk Usage is one of those decisions. Upstream replaced `dua i /` with
 Disktree (`migrations/1791345484.sh`), so `dua` left `runtimeDeps` and
 `disktree` took its place.
+
+## omarchy-apply-lock resets PATH to nothing
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte budget (`checks.install-phase-budget`, #1623).
+
+omarchy-apply-lock resets PATH when it runs as root, and the value it resets to is empty on NixOS.
+
+Upstream's reasoning is sound and worth keeping: an install or upgrade may start this helper as root, and it does not want optional commands resolving out of a user-writable directory. On Arch the answer is /usr/bin and friends. Here those hold nothing, so the script would lose `tee`, `getent` and everything else it shells out to. It writes PAM files for the lock screen, so the failure would be a lock screen that cannot authenticate, discovered at the worst moment.
+
+The patch uses /run/wrappers/bin first, then the system profile: the same two directories a root login gets here, both root-owned, which is exactly the property upstream is reaching for.
+
+New in 4.0.3, and `checks.session` caught it. That check scans every shipped command for /usr and is the reason this is a patch rather than a surprise on somebody's laptop.

@@ -33,14 +33,14 @@ stubbed=$stubs:$bin:$PATH
 # status <PATH> <expr>: the exit status of a menu expression under that PATH
 status() { if env PATH="$1" bash -c "$2"; then echo 0; else echo 1; fi; }
 
-# --- Helix: the row looks for the binary nixpkgs installs -----------------
+# --- Helix: the row shows while missing, and the setter probes hx ---------
+[ "$hxBinary" = hx ] || bad "the helix package installs $hxBinary, and the setter and launcher patches name hx"
 when=$(field "$menu" setup.default.editor.helix when)
-[ "$when" = "omarchy-cmd-present $hxBinary" ] || bad "setup.default.editor.helix: when is '$when', not omarchy-cmd-present $hxBinary"
-[ "$(status "$plain" "$when")" = 1 ] || bad "setup.default.editor.helix: when is true with no $hxBinary on PATH"
+[ -z "$when" ] || bad "setup.default.editor.helix: when is '$when', expected empty"
+[ "$(status "$plain" "$when")" = 0 ] || bad "setup.default.editor.helix: hidden with no $hxBinary on PATH"
 stub "$hxBinary" 'echo hx >>"$HOME/launched"'
 stub nvim 'echo nvim >>"$HOME/launched"'
 stub omarchy-notification-send ':'
-[ "$(status "$stubbed" "$when")" = 0 ] || bad "setup.default.editor.helix: when is false with $hxBinary on PATH"
 
 # --- Helix: choosing it ticks the row and opens hx, not nvim --------------
 PATH=$stubbed omarchy-default-editor helix || bad "omarchy-default-editor helix exited non-zero"
@@ -49,15 +49,14 @@ checked=$(field "$menu" setup.default.editor.helix checked)
 PATH=$stubbed omarchy-launch-editor --inline "$work/f" || bad "omarchy-launch-editor exited non-zero"
 launched=$(cat "$HOME/launched" 2>/dev/null || echo nothing)
 [ "$launched" = hx ] || bad "launched $launched, expected hx"
-ok "Helix shows with hx, ticks, and opens hx"
+ok "Helix shows while missing, ticks with hx, and opens hx"
 
 # --- Zen: row, setter and reader agree with the package -------------------
 [ "$zenBinary" = zen-beta ] || bad "the zen-browser package installs $zenBinary, and the patch and row name zen-beta"
 when=$(field "$menu" setup.default.browser.zen when)
-[ "$when" = "omarchy-cmd-present $zenBinary" ] || bad "setup.default.browser.zen: when is '$when'"
-[ "$(status "$plain" "$when")" = 1 ] || bad "setup.default.browser.zen: when is true with no $zenBinary on PATH"
+[ -z "$when" ] || bad "setup.default.browser.zen: when is '$when', expected empty"
+[ "$(status "$plain" "$when")" = 0 ] || bad "setup.default.browser.zen: hidden with no $zenBinary on PATH"
 stub "$zenBinary" ':'
-[ "$(status "$stubbed" "$when")" = 0 ] || bad "setup.default.browser.zen: when is false with $zenBinary on PATH"
 stub xdg-settings 'if [ "$1" = set ]; then echo "$3" >"$HOME/xdg-set"; else cat "$HOME/xdg-get"; fi'
 PATH=$stubbed omarchy-default-browser zen || bad "omarchy-default-browser zen exited non-zero"
 wrote=$(cat "$HOME/xdg-set" 2>/dev/null || echo nothing)
@@ -73,7 +72,32 @@ checked=$(field "$menu" setup.default.browser.zen checked)
 [ "$(status "$stubbed" "$checked")" = 0 ] || bad "setup.default.browser.zen: not ticked when $zenBinary.desktop is the default"
 remove=$(cat "$bin/omarchy-remove-browser")
 if grep -q 'zen\.desktop' <<<"$remove"; then bad "omarchy-remove-browser still names zen.desktop"; fi
-ok "Zen shows with $zenBinary, and sets and reads $zenBinary.desktop"
+ok "Zen shows while missing, and sets and reads $zenBinary.desktop"
+
+# --- Default setters: missing picks route to nixarchy-default-install (#1623) -
+stub nixarchy-default-install 'echo "$*" >>"$HOME/default-install"'
+rm -f "$HOME/xdg-set" "$HOME/default-install"
+PATH=$stubbed omarchy-default-browser --install firefox || bad "omarchy-default-browser --install firefox exited non-zero"
+PATH=$stubbed omarchy-default-editor --install vim || bad "omarchy-default-editor --install vim exited non-zero"
+[ ! -e "$HOME/xdg-set" ] || bad "xdg-settings called when browser missing"
+[ "$(cat "$HOME/default-install" 2>/dev/null)" = "$(printf '%s\n%s' 'browser firefox firefox' 'editor vim vim')" ] ||
+  bad "default-install calls: $(cat "$HOME/default-install" 2>/dev/null || echo none)"
+
+mkdir -p "$XDG_STATE_HOME/nixarchy"
+printf 'firefox\nfirefox\n' >"$XDG_STATE_HOME/nixarchy/pending-default-browser"
+printf 'vim\nvim\n' >"$XDG_STATE_HOME/nixarchy/pending-default-editor"
+PATH=$stubbed omarchy-default-browser zen || bad "omarchy-default-browser zen exited non-zero"
+PATH=$stubbed omarchy-default-editor helix || bad "omarchy-default-editor helix exited non-zero"
+[ ! -e "$XDG_STATE_HOME/nixarchy/pending-default-browser" ] || bad "installed browser pick left pending-default-browser"
+[ ! -e "$XDG_STATE_HOME/nixarchy/pending-default-editor" ] || bad "installed editor pick left pending-default-editor"
+
+printf 'firefox\nfirefox\n' >"$XDG_STATE_HOME/nixarchy/pending-default-browser"
+stub xdg-settings 'exit 1'
+if PATH=$stubbed omarchy-default-browser zen 2>/dev/null; then
+  bad "omarchy-default-browser zen succeeded when xdg-settings failed"
+fi
+[ -f "$XDG_STATE_HOME/nixarchy/pending-default-browser" ] || bad "failed xdg-settings removed pending-default-browser"
+ok "missing defaults route to nixarchy-default-install, and only a successful set clears pending"
 
 # --- Hibernate: only yes or challenge from logind shows the row -----------
 # upstream may add conditions after the availability probe (#1398)

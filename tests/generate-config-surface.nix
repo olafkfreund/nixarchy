@@ -1,5 +1,5 @@
 { inputs, pkgs, ... }:
-# Every attribute `nixos-generate-config` can emit, against what the ISO bakes.
+# Every attribute `nixos-generate-config` can emit, against the reference fixtures.
 #
 # The failure this exists for, in full, because it cost two users an install
 # and most of a day to find:
@@ -8,24 +8,22 @@
 #   PCI 8086:7d1d and friends and writes `hardware.cpu.intel.npu.enable = true`
 #   into hardware-configuration.nix. hardware/cpu/intel-npu.nix turns that into
 #   pkgs.intel-npu-driver.validation in environment.systemPackages. That
-#   package is not in either reference closure, so the ISO does not carry it;
-#   it is a cmake build, so building it pulls cmake, libarchive and acl, none
-#   of which are baked either; and the offline image could not substitute. The
+#   package was not in either reference closure, so the former offline ISO
+#   did not carry it; it is a cmake build, so building it pulls cmake,
+#   libarchive and acl, none of which were baked either; and the former
+#   offline image could not substitute. The
 #   install walked back to the source bootstrap and died fetching
 #   acl-2.4.0.tar.gz -- after partitioning the disk.
 #
 # qemu exposes no NPU, so no VM has ever emitted that attribute, and every
 # install check passed throughout.
 #
-# The general shape: installer/cd.nix bakes the closures of two reference
-# systems plus inputDerivation for their toplevel, initrd and etc, on the
-# argument that a real machine differs from them only by "a few dozen text
-# derivations". That argument holds right up until generate-config adds a
-# PACKAGE. Then the difference is a compiler.
+# The former offline image baked reference closures on the assumption that a
+# real machine differed only by a few text derivations. A new package broke
+# that assumption. The network image can fetch what it needs.
 #
-# So this asserts the argument rather than trusting it: for every attribute
-# that tool can emit, either the package set is unchanged, or the packages it
-# adds are ones the image carries.
+# This still tracks which generated attributes add packages beyond the
+# reference fixtures; it no longer proves those packages are on the image.
 #
 # The list is not invented. It is `push @attrs` in nixos-generate-config.pl of
 # the pinned nixpkgs, read out in full. When nixpkgs adds the next one, this
@@ -36,10 +34,7 @@ let
 
   reference = inputs.self.nixosConfigurations.reference;
 
-  # What the ISO actually carries, which is the question -- not what the
-  # encrypted reference alone carries. installer/cd.nix bakes these three and
-  # this list is kept in step with it by hand; if they drift, this check gets
-  # stricter than the image, which fails loudly rather than quietly.
+  # The reference configurations retained for this surface comparison.
   baked = [
     reference
     inputs.self.nixosConfigurations.reference-unencrypted
@@ -126,7 +121,7 @@ let
       # prl-tools is built from a Parallels Desktop .dmg fetched from
       # Parallels, unfree and not redistributable. It cannot go on an image
       # this project publishes, so there is nothing to bake. What covers it
-      # instead is #384: both images now carry substituters, and a machine
+      # instead is the network image's substituters, and a machine
       # running under Parallels is a desktop VM with a working network by
       # definition -- the case this check exists for is the laptop with an
       # NPU and a hotel wifi, not a guest that cannot reach the internet.
@@ -150,9 +145,7 @@ let
     c:
     let
       v = reference.extendModules { modules = [ c.module ]; };
-      # Against the union of what is BAKED, not against the reference alone:
-      # an attribute that adds intel-npu-driver is fine once the image
-      # carries intel-npu-driver, and that is the whole fix.
+      # Compare with the union of reference fixtures, not one reference.
       new = lib.subtractLists onImage (pathsOf v);
     in
     {
@@ -183,7 +176,7 @@ pkgs.runCommand "nixarchy-generate-config-surface"
     offenderCount = builtins.length offenders;
   }
   ''
-    echo "attributes the image already satisfies:"
+    echo "attributes the reference fixtures already cover:"
     printf '%s' "$clean"
     echo
     echo "attributes excused, with the reason:"
@@ -191,7 +184,7 @@ pkgs.runCommand "nixarchy-generate-config-surface"
     echo
 
     if [ "$offenderCount" -eq 0 ]; then
-      echo "every generate-config attribute is one this image can satisfy"
+      echo "every generate-config attribute is covered by the reference fixtures"
       touch $out
       exit 0
     fi
@@ -201,21 +194,9 @@ pkgs.runCommand "nixarchy-generate-config-surface"
     cat >&2 <<'WHY'
 
     nixos-generate-config writes these into hardware-configuration.nix when it
-    finds the hardware. The offline image bakes two reference closures; a
-    package that is not in either is one the machine must BUILD, and building
-    it needs a compiler the image does not carry, which is the source
-    bootstrap.
-
-    Two ways to make this green, and both are real fixes:
-
-      - bake the packages, by turning the attribute on in
-        nixosConfigurations.reference-hardware (flake.nix), which
-        installer/cd.nix bakes for exactly this reason; or
-      - have installer/install.sh comment the attribute out of the generated
-        hardware-configuration.nix, the way reuse_baked_initrd already rewrites
-        the initrd lines, so it applies at the first update instead.
-
-    Adding the attribute to this check's allowlist is not one of them.
+    finds the hardware. The network image fetches packages absent from the
+    reference fixtures. Decide whether this comparison still needs each new
+    package; this check no longer proves that the ISO carries it.
     WHY
     exit 1
   ''

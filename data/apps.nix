@@ -20,8 +20,8 @@
 #              build failure nobody can read -- it still matters to anyone who
 #              turns the default back off.
 #   note       Anything a reader would otherwise have to discover the hard way.
-#   preinstall Omarchy itself installs this app by default; turned on together
-#              by programs.nixarchy.omarchyApps.enable (#1572).
+#   preinstall Omarchy installs this app by default; on by default here through
+#              omarchyApps.enable, which follows preinstalls (#1572).
 #   arch       Upstream's Arch package name. Kept solely so the CI cross-check
 #              can match rows; nothing at runtime reads it.
 {
@@ -113,7 +113,7 @@
     # nixpkgs marks sublimetext4 broken -- "Packages, including core ones, do
     # not run without plug-in host depending on insecure OpenSSL" -- and
     # enabling it aborts the whole rebuild rather than failing on its own.
-    unavailable = "nixpkgs marks sublimetext4 broken over an insecure OpenSSL dependency; enabling it fails the rebuild.";
+    unavailable = "nixpkgs marks sublimetext4 broken over an insecure OpenSSL dependency; enabling it fails the rebuild. Zed and VSCode are in the catalogue.";
     arch = "sublime-text-4";
   };
 
@@ -524,9 +524,9 @@
   };
   omawrite = {
     # No menuId: Omarchy has no install row for its own applications -- upstream
-    # installs omawrite, omacalc, omacut and aether as preinstalls instead. Here
-    # they cannot be preinstalls, because nixpkgs carries none of them, so this
-    # is the opt-in form: programs.nixarchy.apps.omawrite.
+    # installs omawrite, omacalc, omacut and aether as preinstalls instead.
+    # nixpkgs carries none of them, so nixarchy builds them, and they come
+    # through omarchyApps.enable.
     label = "Omawrite";
     category = "Utility";
     attr = "omawrite";
@@ -569,7 +569,6 @@
     category = "Utility";
     attr = "omarchy-local-ai";
     ours = true;
-    preinstall = true;
     arch = "omarchy-local-ai";
   };
   signed = {
@@ -660,8 +659,7 @@
   aether = {
     # The fourth of the four in the note on omawrite, and the only one that is
     # not a script or a small Qt program: a Wails app, a Go backend and a Svelte
-    # frontend in one binary rendered through webkitgtk. Same reasoning, same
-    # opt-in form -- programs.nixarchy.apps.aether.
+    # frontend in one binary rendered through webkitgtk.
     #
     # Utility rather than a theming category, because there is no theming
     # category: it sits beside Omacalc and Omacut, which is where someone

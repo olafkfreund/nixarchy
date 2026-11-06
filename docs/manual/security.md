@@ -13,7 +13,7 @@ things Omarchy does for you. Here is how each of them lands on NixOS.
 | ufw, closed except 53317 | `networking.firewall`, closed except 53317. Same policy, different tool. |
 | Arch rolling updates | `nix flake update` moves nixpkgs; security fixes arrive with the next `omarchy update`. |
 | Omarchy's own package mirror | Everything comes from nixpkgs and this flake. There is no Omarchy repo and no AUR. |
-| Cloudflare in front of the ISOs | The ISO is built from source with `nix build .#iso`, not downloaded — there is nothing in front of it because there is nothing hosted. Packages come from the nixarchy binary cache and cache.nixos.org, both signed. |
+| Cloudflare in front of the ISOs | Releases publish the network ISO, which you can also build with `nix build .#iso-net`. Packages come from the nixarchy binary cache and cache.nixos.org, both signed. |
 
 ## The firewall
 
@@ -53,20 +53,35 @@ to opt into the root-owned daemon.
 
 ## SSH
 
-*Setup > Security > SSHD* in the menu is upstream's script, and it cannot
-finish here: its first step is `omarchy-pkg-add openssh`, which exits 1 by
-design (see [the philosophy](philosophy.md)), and the script runs under
-`set -e`. Declare it instead:
+*Setup > Security > SSHD* in the menu asks for your public key, from GitHub or
+pasted, and turns on SSH with password logins off for every account:
+
+```nix
+programs.nixarchy.services.openssh.enable = true;
+```
+
+It looks for a key in `~/.ssh/authorized_keys` and in
+`users.users.you.openssh.authorizedKeys`. It will not turn on without one, and
+it refuses on a machine whose own config already runs sshd, where it cannot see
+who would lose access.
+
+To declare it yourself, turn passwords off beside it. On its own,
+`services.openssh.enable = true;` accepts them:
 
 ```nix
 services.openssh.enable = true;
+services.openssh.settings.PasswordAuthentication = false;
+services.openssh.settings.KbdInteractiveAuthentication = false;
 users.users.you.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAA... you@host" ];
 ```
 
+**A machine enabled from the menu before this change keeps its passwords.** First
+check you can log in with a key. Then replace `services.openssh.enable = true;` in
+`~/.config/nixarchy/services.nix` with the
+`programs.nixarchy.services.openssh.enable` line above, and run `nixarchy-apply`.
+
 `services.openssh.openFirewall` defaults to `true`, so port 22 opens with it.
-Upstream rate-limits port 22 with `ufw limit`; nothing equivalent is set here,
-so keep password authentication off (`settings.PasswordAuthentication =
-false`) rather than relying on rate limiting.
+Upstream rate-limits port 22 with `ufw limit`; nothing equivalent is set here.
 
 ## Remote desktop
 
@@ -93,6 +108,34 @@ security.pam.services.polkit-1.u2fAuth = true;
 or, for fingerprint, `services.fprintd.enable = true` plus
 `security.pam.services.sudo.fprintAuth = true` and the same for `polkit-1`.
 Rebuild, and the enrolled key or print is accepted.
+
+### Removing a fingerprint
+
+*Remove > Security > Fingerprint* deletes your prints: from the reader first, while fprintd
+can still reach it, and then your templates under `/var/lib/fprint`. Other accounts' prints
+stay, and it does not ask for confirmation beyond `sudo`. If you change your mind, enrol again.
+
+What it does not do:
+
+- **Turn fingerprint login off.** That is still your configuration: turn off `services.fprintd`
+  (`fprintAuth` follows it), then Apply changes.
+- **Reach a disk snapshot.** Snapshots taken since you enrolled hold a copy until they are
+  deleted. `sudo snapper -c root list` shows the boot snapshots.
+- **Reach a reader that is not there.** With no reader attached it removes the files, and any
+  copy on the reader itself stays there, with no way left to address it.
+- **Press on after a real failure.** If fprintd refuses, the files stay, because they are how
+  fprintd finds the reader's copy. Press Remove again.
+
+If you already turned `services.fprintd` off, your templates are still on disk:
+
+1. If the reader might store prints itself, or you are not sure, turn `services.fprintd` back on,
+   Apply changes, press Remove, turn it off, and Apply changes again. Removing the files first
+   leaves the reader's copy out of reach for good.
+2. Otherwise: `sudo rm -rf -- /var/lib/fprint/<user>`, with the account written out. `$USER` is
+   wrong in a root shell.
+
+A factory reset keeps fingerprint templates, in the `/var/lib` it sets aside, and the reader keeps
+its own, so run Remove first.
 
 ## Passwordless sudo
 

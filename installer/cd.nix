@@ -4,49 +4,9 @@
   lib,
   pkgs,
   modulesPath,
-  # Whose machines this image carries.
-  #
-  # Defaults to this flake, which is every image nixarchy itself builds -- so
-  # the reference ISO is unchanged by this parameter existing, and CI proves
-  # that by comparing the derivation rather than by asserting it.
-  #
-  # A user's image (#478) passes their own flake instead: their
-  # nixosConfigurations get baked, their inputs get collected, and their rev
-  # names the file. What does NOT come from here is the installer itself --
-  # the script, the version, the branding are nixarchy's whoever is being
-  # installed, and they keep reading `inputs.self` below.
-  #
-  # `configs` is a list of nixosConfigurations rather than names, because a
-  # user's machines are called whatever they called them; the reference set is
-  # three configurations that happen to have fixed names, which is a fact
-  # about this repository and not about the shape of an image.
-  #
-  # `installed` is which of them the installer actually writes, keyed by
-  # whether the user asked for encryption -- the two markers install.sh reads.
-  # Separate from `configs` because the image carries more than it installs:
-  # reference-hardware is seeded so its PACKAGES are on the medium and is not
-  # a machine anyone installs (#382). Both must be in `configs`, and
-  # checks.iso-source fails if they are not.
-  # Passed through specialArgs, NOT defaulted here with `?`. A module argument
-  # missing from specialArgs is resolved through `_module.args` rather than by
-  # the function default, so `source ? {...}` evaluates to
-  # `error: attribute 'source' missing` -- confusing, because the default is
-  # right there in the signature. It belongs at the call site anyway, beside
-  # `offline`, which is the other per-image decision.
+  # The flake whose inputs the image carries. Passed through specialArgs;
+  # module arguments cannot use a function default here.
   source,
-  # Whether this image carries the desktop or downloads it. True is the real
-  # product -- see the header. False builds the same installer over the network
-  # instead, which is the same install path the `install` check has always
-  # exercised: without the marker file at the bottom of this file, install.sh
-  # keeps the substituters it already has.
-  #
-  # Passed by both nixosConfigurations, with no default here on purpose. A
-  # module argument's default is not a function default: the module system
-  # cannot see one without consulting _module.args, which needs `config`,
-  # which is what is being evaluated -- so `offline ? true` fails the ISO
-  # build outright rather than defaulting. Making both callers say which
-  # image they want is also the honest reading of a flag this load-bearing.
-  offline,
   ...
 }:
 # The live image: boot it, answer the questions, get a machine.
@@ -57,29 +17,8 @@
 # Hyprland fetch before the first question. This is the answer to that, and it
 # is what Omarchy ships.
 #
-# This image installs with no network. Nothing is fetched, and the installer
-# is told not to try -- see `substituters` below for why being told matters as
-# much as having the paths.
-#
-# Two halves, which fail in different places and are worth telling apart:
-#
-#   storeContents puts the OUTPUTS on the image, so nixos-install copies a
-#   desktop instead of downloading one. A gap here reads as
-#   "cannot build ... hyprland ... no substituter".
-#
-#   extraDependencies puts the SOURCES on it, so `nix` can evaluate the
-#   generated flake at all. A gap here reads as "unable to download
-#   'https://api.github.com/...'", and it happens BEFORE any copying, which
-#   is what makes it easy to mistake for the other one.
-#
-# An ISO can still only install from a PUBLISHED commit.
-#
-# The flake this writes to /etc/nixos pins `github:olafkfreund/nixarchy/<rev>`,
-# and <rev> is whatever commit the image was built from. Offline that resolves
-# from the store by narHash and the rev is never dereferenced -- so an image
-# built from an unpushed commit installs fine and then hands its owner a flake
-# that 404s on the first `nix flake update`. Offline installs hide this rather
-# than fixing it; #19 builds release images from tags, which does fix it.
+# The flake inputs are on the image so evaluation can start without fetching
+# them. The installed system comes from the configured caches.
 #
 # nixosModules.nixarchy is deliberately NOT imported. The live image does not
 # need a desktop; importing the module would make it one, at several gigabytes,
@@ -88,158 +27,6 @@ let
   # Every locked input, transitively, as a store path -- the same walk the
   # installed host roots its inputs with (#701); see lib.inputSources in flake.nix.
   inputSources = inputs.self.lib.inputSources { inherit (source) flake; };
-
-  # Both disk modes, because the installer offers both.
-  #
-  # The image bakes a machine that does not exist -- hostname "nixarchy", the
-  # placeholder disk -- so that the machine the user does install shares
-  # everything expensive with it. Encryption is the one answer that changes
-  # the shared part: 51 derivations differ between the two, 180 MiB, all of
-  # them unit files and etc fragments. Small, but not present is not present,
-  # and on an image with no network a missing text derivation means building
-  # stdenv to produce it, which means the source bootstrap, which means the
-  # install stops.
-  #
-  # Found the hard way: an image carrying only the encrypted reference
-  # installs an encrypted machine perfectly and dies partway through an
-  # unencrypted one.
-  #
-  # NOT here, and known: the free-space mode (#47). Its layout addresses
-  # partitions by partlabel instead of by disko's generated names, so its
-  # fileSystems differ, so its etc, system-units and toplevel differ -- the
-  # same class of difference as encryption on and off, and the same size. It
-  # is not baked because doing so is two more full references on an image that
-  # already has a budget, and the argument for skipping it is that the ISO
-  # carries stdenv and the reference inputDerivations, so the difference is a
-  # local build of a few dozen text derivations rather than a fetch.
-  #
-  # That argument has NOT been tested. If a free-space install from the
-  # offline image ends in the source bootstrap, this list is the place it is
-  # wrong, and checks.free-space -- which seeds the free-mode toplevels the
-  # way this would -- is the shape of the fix.
-  # Kept in step with tests/generate-config-surface.nix, which reads the same
-  # three and fails if a generate-config attribute adds a package none of them
-  # carries.
-  # The default set, and why it is what it is, is documented on the `source`
-  # argument at the top of this file.
-  referenceConfigs = map (c: c.config) source.configs;
-
-  references = map (c: c.system.build) referenceConfigs;
-
-  # What an installed machine will have to BUILD, and therefore what it needs
-  # the parts for.
-  #
-  # A real machine gets a hardware-configuration.nix that the reference host
-  # does not have, and that is not a detail: it changes the initrd, which
-  # changes the module closure, which changes the toplevel. Twelve derivations
-  # differ -- measured, not guessed -- and every one of them has to be built on
-  # the target, from parts, with no network.
-  #
-  # inputDerivation is nixpkgs' answer to "realise everything this derivation
-  # is built FROM", and seeding it here helps -- but READ THE NEXT PARAGRAPH
-  # before trusting it, because the sentence that used to stand here was wrong
-  # and cost a day.
-  #
-  # What was claimed: that this "puts their build inputs on the image, so
-  # building a differently-configured one is a matter of assembling parts
-  # rather than of finding a compiler."
-  #
-  # What is true: these are handed to system.extraDependencies, whose type is
-  # `types.listOf types.pathInStore` (nixos/modules/system/activation/
-  # top-level.nix:212). A derivation coerces to its OUTPUT path. So this seeds
-  # the outputs of the input-derivations -- runtime paths -- and NOT the build
-  # graph: no .drv files, no sources, no intermediate outputs. It is a partial
-  # measure that happens to cover many cases, not the guarantee it read as.
-  #
-  # The option that makes the real guarantee is a different one, and NixOS
-  # ships it: system.includeBuildDependencies (same file, line 302) --
-  # "includes all sources, patches, and intermediate outputs required to build
-  # all the derivations that the system depends on" -- implemented as
-  # closureInfo rooted at the system's drvPath, not its outPath. The ISO-level
-  # spelling is isoImage.includeSystemBuildDependencies, which appends
-  # toplevel.drvPath to storeContents (iso-image.nix:951). The reason neither
-  # is used here is size: the option's own documentation puts a minimal
-  # configuration at 670 MiB -> 13.5 GiB, and this image is already 5.6 GB
-  # against a budget check.
-  #
-  # The consequence, measured on 2026-09-08 and reproduced locally: an offline
-  # install of a machine whose config differs from the reference at all --
-  # hostname and username are enough -- rebuilds its initrd, boot.json and
-  # units, cannot find the build graph for them, walks back to the stage0
-  # source bootstrap (hex0, mescc-tools) and dies. 677 derivations, of which
-  # the top three are this machine's own initrd and boot config.
-  #
-  # This withdrew the offline image (#430). It is published again since
-  # #469, because the install no longer builds: stage 3 of #436 copies the
-  # baked toplevel instead (install.sh, the nixarchy-reference-* branch). The
-  # NET image fetches whatever it lacks, so there the same divergence costs a
-  # download instead of the install.
-  #
-  # Worth knowing before anyone tries to finish this: an official offline
-  # install of a CUSTOM configuration is not a thing NixOS supports. Its own
-  # ISO bakes no system closure (the comment further down already says so),
-  # Calamares BUILDS rather than copying, and every project that does this
-  # seriously -- nixos-anywhere, tfc/nixos-offline-installer -- ships a
-  # prebuilt toplevel and runs `nixos-install --system <path>`, which skips
-  # evaluation and building entirely (nixos-install.sh:266). That is the shape
-  # this would have to take; seeding more parts is the other road.
-  buildInputsOfWhatChanges =
-    map (c: c.system.build.toplevel.inputDerivation) referenceConfigs
-    ++ map (c: c.system.build.initialRamdisk.inputDerivation) referenceConfigs
-    ++ map (c: c.system.build.etc.inputDerivation) referenceConfigs
-    # The module closure is shrunk from this tree by kmod, and neither the tree
-    # nor the tools are in any runtime closure.
-    ++ map (c: c.system.modulesTree) referenceConfigs
-    ++ [
-      pkgs.kmod
-      pkgs.nukeReferences
-
-      # The CPU microcode, both vendors, for exactly the reason the kmod note
-      # below gives: the installed machine has to build its own initrd, and
-      # hardware.cpu.*.updateMicrocode puts these in boot.initrd.prepend --
-      # a build input of that per-machine derivation, and a runtime reference
-      # of nothing. No closure carries them, so storeContents cannot.
-      #
-      # Every real machine asks for microcode: nixos-generate-config.pl:328-329
-      # emits updateMicrocode = mkDefault enableRedistributableFirmware, with
-      # not-detected.nix beside it making that true. Both sit inside
-      # `if ($virt eq "none")`, so no VM ever did -- which is why an image that
-      # carried none of it looked fine for as long as only VMs installed from
-      # it, and a bare-metal install died in the texinfo bootstrap trying to
-      # compile microcode-intel.
-      #
-      # This is the case tests/install.nix's note explicitly is NOT about. That
-      # warns against widening a seed list to paper over the seeded and
-      # installed systems drifting apart. These agree -- modules/nixos.nix sets
-      # the option for both -- and the microcode is still needed, because the
-      # initrd is rebuilt per machine no matter how well they agree.
-      pkgs.microcode-intel
-      pkgs.microcode-amd
-
-      # kmod's `dev` output, and it is worth saying why one output of one
-      # package gets its own entry.
-      #
-      # The installed machine has to build its own initrd, because a systemd
-      # initrd embeds the hostname -- initrd-hostname, initrd-group,
-      # initrd-release are all per-machine, so no baked initrd can ever match
-      # one belonging to a machine with a different name. Building it means
-      # building linux-<v>-modules-shrunk, and that wants kmod's dev output.
-      # Everything else it wants is here: stdenv, the module tree, nuke-refs,
-      # bash. Just not this.
-      #
-      # Nix does not degrade over a missing build input; it builds it. Building
-      # kmod means a compiler, which is not here either, so it works backwards
-      # to the source bootstrap and the install ends several minutes later
-      # trying to download a perl tarball from CPAN. Measured on this graph:
-      # without this line 619 derivations have to be built and the bootstrap is
-      # reachable; with it, 76, and it is not. All 76 are per-machine text
-      # files that assemble from parts already on the image.
-      #
-      # The general lesson, since this cost a day: a `-dev` output is a real
-      # build input. Seeding a package by name gives you `out`, and that is not
-      # the same thing.
-      pkgs.kmod.dev
-    ];
 
   version = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.omarchy.version;
 
@@ -251,10 +38,8 @@ let
     "${config.boot.plymouth.package}/sbin/plymouthd --mode=boot --pid-file=/run/plymouth/pid --attach-to-session --ignore-serial-consoles"
   ];
 
-  # "" for the offline image: it is the default one, and the plain name is the
-  # one people will be told to download.
-  variant = lib.optionalString (!offline) "-net";
-  labelVariant = lib.replaceStrings [ "-" ] [ "_" ] (lib.toUpper variant);
+  variant = "-net";
+  labelVariant = "_NET";
   # The installer, plus whatever the kernel command line asked for.
   #
   # The unit used to exec the installer with no arguments, so there was no way
@@ -550,12 +335,7 @@ in
   # until the built file is called nixos-minimal-*.iso anyway. The filename is
   # derived from image.baseName.
   # mkForce because installation-cd-base sets this too, at the same priority.
-  # Version, then variant, then the commit. All three earn their place:
-  # the version is what a person calls the release, the variant is the
-  # difference between a 5.6 GB image and a 1.5 GB one, and the commit is the
-  # only thing that says which source an image can actually install from (see
-  # the published-commit note at the top of this file). Without the variant
-  # the two images were byte-for-byte different files with identical names.
+  # Version, network suffix, then the commit identify the image and its source.
   #
   # The version comes from the omarchy package rather than a second binding,
   # so it cannot drift from what is actually on the image.
@@ -581,8 +361,7 @@ in
   isoImage = {
     # The label the bootloader finds the root by, so it is [A-Z0-9_] and at
     # most 32 characters -- asserted below rather than left to a truncation
-    # nobody notices until a stick fails to boot. Two nixarchy sticks of
-    # different versions or variants no longer collide.
+    # nobody notices until a stick fails to boot.
     # #1398: edge's version is edge-YYYYMMDD-rev, too long and not [A-Z0-9_]; its label is the rev.
     volumeID =
       if lib.hasPrefix "edge-" version then
@@ -592,126 +371,12 @@ in
     makeEfiBootable = true;
     makeUsbBootable = true;
 
-    # The desktop, on the image. This is the difference between an install
-    # that copies and one that downloads, and it is most of the image's size:
-    # the reference closure is 15.3 GiB unpacked, and the squashfs is zstd.
-    #
-    # The REFERENCE host's closure, not the user's. Their hostname, username
-    # and disk differ, so their toplevel is a different store path and is not
-    # here -- but everything expensive underneath it is, and the handful of
-    # text derivations that differ are built on the spot from the build
-    # environment below.
-    #
-    # Not nixosConfigurations.vm: it imports qemu-vm.nix and carries guest
-    # tooling nobody installs on metal.
-    #
-    # This is the whole difference between the two images. Dropped entirely
-    # when `offline` is false: the desktop then comes from the binary caches
-    # named under nix.settings below.
-    #
-    # ## The size budget, measured 2026-09-14
-    #
-    #   reference closure   18.3 GiB unpacked   what the install produces
-    #   packages.iso         6.58 GiB           this image, offline
-    #   packages.iso-net     1.63 GiB           the network image
-    #
-    # 2026-09-13 -> 14 the closure went 17.1 -> 18.3 GiB on one nixpkgs move
-    # (20260910 -> 20260911) and crossed the old 6.5 GiB; raised, not traced.
-    #
-    # Budgets, enforced by checks.iso-budget rather than written down and
-    # forgotten:
-    #
-    #   iso       7.5 GiB   headroom over 6.58, tight enough to notice a jump
-    #   iso-net   2 GiB     NOT a preference. GitHub refuses a release asset
-    #                       over 2 GiB, so crossing this does not make the
-    #                       download annoying, it makes it impossible to
-    #                       publish as one file. See .github/workflows/
-    #                       release.yml, which splits the image above and
-    #                       ships this one whole.
-    #
-    # ## No apps on the image, deliberately
-    #
-    # The reference host enables no programs.nixarchy.apps.*, and should not
-    # start. The 52 selectable apps are a post-install concern, reached
-    # through the Install menu once the machine is the user's: several are
-    # unfree, several are hundreds of megabytes each, and baking even the free
-    # half would roughly double an image for apps most people never pick. The
-    # base desktop is what everyone gets and therefore what is worth carrying.
-    #
-    # ## Compression: nothing to tune here
-    #
-    # isoImage.squashfsCompression is `zstd -Xcompression-level 19` -- the
-    # nixpkgs default, already, so the argument for moving off xz (~100 MB/s
-    # decompressing a live root read cold, against zstd's ~900 MB/s) is one
-    # this image already wins. Level 19 over level 6 costs build time on a
-    # machine with plenty and saves a download for every user, which is the
-    # right way round.
-    #
-    # Storing the tree UNCOMPRESSED inside the squashfs -- what Omarchy does
-    # with its package mirror -- does not port. Theirs is already-compressed
-    # pacman packages, where the outer compression buys nothing. A Nix store
-    # is not: 15.3 GiB becomes 5.6 GB here, 2.7x. Uncompressed would mean a
-    # ~15 GB image to save decompression on a file read once.
-    storeContents = lib.optionals offline (
-      map (r: r.toplevel) references
-      # The installer runs this before anything else, and it is not part of
-      # any runtime closure.
-      ++ map (r: r.diskoScript) references
-    );
+    # The desktop is fetched from the configured caches. The image measured
+    # 1.63 GiB on 2026-09-14; checks.iso-budget enforces the 2 GiB release
+    # asset limit.
   };
 
-  # Everything needed to EVALUATE the generated flake, and to build the few
-  # derivations that are genuinely per-machine.
-  #
-  # extraDependencies rather than storeContents for these: the option's stated
-  # purpose is "paths that should be included in the system closure", which is
-  # the claim being made for the plain packages below.
-  #
-  # NOT the claim being made for buildInputsOfWhatChanges at the end of this
-  # list -- see the long note beside it. This option carries runtime output
-  # paths and cannot carry a build graph, whatever the name of the thing
-  # handed to it suggests.
-  #
-  # inputSources stays on BOTH images. It is the flake sources rather than the
-  # desktop, it costs little, and it means evaluation starts immediately
-  # instead of fetching a nixpkgs tarball before the first question. The build
-  # environment below is offline-only: with a network, anything missing is
-  # downloaded rather than built.
-  system.extraDependencies =
-    inputSources
-    ++ lib.optionals offline [
-      # nixos-install builds roughly twenty derivations for the real hostname,
-      # user and disk -- etc, users-groups.json, system-path, the bootloader
-      # entry, the toplevel -- and their build inputs are in no runtime
-      # closure. Measured by installing offline and reading what was missing,
-      # not guessed.
-      #
-      # isoImage.includeSystemBuildDependencies would cover this and is not
-      # usable: it pulls the entire build graph of the image's own system,
-      # compilers and source tarballs included, at tens of gigabytes.
-      pkgs.stdenv
-      pkgs.stdenvNoCC
-      pkgs.stdenv.cc
-      pkgs.gnumake
-      pkgs.gnutar
-      pkgs.diffutils
-      pkgs.patchelf
-      pkgs.file
-      pkgs.findutils
-      pkgs.gawk
-      pkgs.gnused
-      pkgs.gnugrep
-      pkgs.gzip
-      pkgs.xz
-      pkgs.bash
-      pkgs.bashInteractive
-      pkgs.coreutils
-      pkgs.perl
-      # systemd-boot-builder.
-      pkgs.python3
-      pkgs.jq
-    ]
-    ++ lib.optionals offline buildInputsOfWhatChanges;
+  system.extraDependencies = inputSources;
 
   nix.settings = {
     # flake-registry is a flakes setting, and nix.conf is validated at build
@@ -726,86 +391,7 @@ in
       "nix-command"
       "flakes"
     ];
-  }
-  # Everything below is one choice made twice. The offline image must be told
-  # there is nothing to fetch; the network image must be told where to fetch
-  # from. Neither set is a sensible default for the other, and the failure when
-  # they are crossed is a hang rather than an error.
-  // lib.optionalAttrs offline {
-    # Nothing to fetch, and nothing that may try.
-    #
-    # An empty list is not the same as an unreachable one. With a substituter
-    # configured and no network, nix waits out a connection timeout for every
-    # path before falling back to the local store, and an install that is
-    # actually working looks hung for several minutes. Saying there are none
-    # makes the store the first answer rather than the last.
-    #
-    # It also means the image's completeness is tested by everyone who uses
-    # it, rather than silently patched over on machines that happen to have a
-    # network.
-    # NOT mkForce [ ]. This line is what turned "needs one derivation we did
-    # not bake" into "compile stdenv from source, offline, and die".
-    #
-    # Reported by two users on real hardware. Their machine needed one thing
-    # the image does not carry -- a real laptop's configuration can diverge
-    # from the baked reference in ways a qemu guest never does;
-    # `services.fwupd.enable` alone changes system-path, measured -- and with
-    # no substituter nix could not fetch it, so it tried to BUILD it, which
-    # needs build inputs that are also not baked, which walks back to stdenv
-    # and ends fetching acl's tarball from savannah with a one-second
-    # timeout. The install stops after the disk has been partitioned.
-    #
-    # A cache would have downloaded the difference in seconds.
-    #
-    # So `offline` now means what it should mean: the store is pre-populated,
-    # so a standard install needs no network. It does not mean the network is
-    # forbidden. This is also what NixOS itself does -- its installation ISO
-    # bakes no system closure at all and substitutes everything.
-    #
-    # The case this used to protect is still handled, by connect-timeout
-    # below: with no network the substituters fail fast and the local store
-    # answers, which is the behaviour the empty list was reaching for.
 
-    # An indirect reference -- `nixpkgs#hello`, or any flake input that is not
-    # already locked -- sends nix to channels.nixos.org for the global
-    # registry. There is no network, so that is a timeout rather than an
-    # answer.
-    flake-registry = "";
-
-    # Never re-fetch a locked input whose source is already here.
-    #
-    # This is the line that makes the image offline, and it is not obvious.
-    # Every input's source IS on the image, and `nix eval --offline` resolves
-    # all of them from the store by narHash -- but the default tarball-ttl is
-    # an hour, so a locked github: input older than that is considered stale
-    # and nix goes to fetch it BEFORE looking in the store. With no network
-    # that is not a fallback, it is the end of the install:
-    #
-    #   error: unable to download
-    #   'https://github.com/olafkfreund/nixarchy/archive/<rev>.tar.gz':
-    #   Could not resolve host: github.com
-    #
-    # -- after the disk has been partitioned. An infinite ttl makes the store
-    # the first answer.
-    #
-    # This is the `tarball-ttl` half of what `nix --offline` sets. The other
-    # half, `substitute = false`, must NOT be set: nixos-install builds into
-    # the target store and copies from this one by declaring it a substituter,
-    # so turning substitution off would leave it rebuilding a desktop it
-    # already has.
-    tarball-ttl = 4294967295;
-
-    # Fail rather than hang, for anything that still tries. Five attempts at
-    # fifteen seconds each is over a minute of silence per path on an image
-    # that by construction has nothing to download.
-    # Fail fast when there is no network, without failing a network that is
-    # merely slow. One second and zero retries was tuned for an image that
-    # could never download anything; now that it can, a laptop on hotel wifi
-    # has to be able to finish a TLS handshake.
-    connect-timeout = 5;
-    download-attempts = 1;
-  }
-  // {
     # The same two caches install.sh already knows about and modules/nixos.nix
     # gives every installed machine. They are not a nicety here: CI builds
     # checks.reference-toplevel inside a cachix job, so the whole 15.3 GiB
@@ -823,19 +409,6 @@ in
     ];
   };
 
-  # Read by installer/install.sh, which uses it to decide that it is running
-  # from this image and must not reach for a substituter. A marker file rather
-  # than a kernel parameter: the installer can also be run by hand from a
-  # mounted image, and the file travels with the filesystem.
-  #
-  # Its ABSENCE is what makes the network image work, and that is the whole
-  # mechanism -- install.sh already carries both cachix substituters and only
-  # clears them when it finds this file. So there is no second install path to
-  # keep working; there is one, and this file switches it.
-  #
-  # The gitconfig is merged into both variants because it has nothing to do
-  # with the offline/online split.
-  #
   # A rescue reinstall is the flow that needs it: boot this ISO because the
   # disk will not, mount it at /mnt, and re-run
   #
@@ -860,56 +433,10 @@ in
       [safe]
       	directory = /mnt/etc/nixos
     '';
-  }
-  // (
-    if offline then
-      {
-        "nixarchy-iso".text = ''
-          ${inputs.self.shortRev or "dirty"}
-        '';
-
-        # The systems this image CARRIES, so an offline install can copy one
-        # instead of building it. Stage 3 of #436.
-        #
-        # Only on the offline image, and that is the whole point: the network
-        # image has somewhere to fetch from, and checks.install runs with
-        # neither marker in a seeded sandbox where building is free. A file
-        # that exists only here keys all three cases correctly, where "no
-        # network marker" would have made the check demand a network.
-        #
-        # Two files rather than one with a flag, because the installer reads
-        # them from shell and `encrypt` is already true or false there.
-        #
-        # These are the SAME configurations seeded into the store above --
-        # referenceConfigs -- so naming their toplevels here adds no closure.
-        # It records a path the image already contains.
-        #
-        # From `source`, not from inputs.self. #479 parameterised what gets
-        # SEEDED and left these naming nixarchy's own machines, which is a
-        # half-refactor that reads fine and is fatal: a user's image would
-        # carry their closures and then tell the installer to install the
-        # reference system, which is not on the medium at all. Harmless for
-        # this repository's own images, where the two are the same
-        # configurations, and checks.iso-source now asserts the pairing rather
-        # than trusting it.
-        "nixarchy-reference-true".text = ''
-          ${source.installed.encrypted.config.system.build.toplevel}
-        '';
-        "nixarchy-reference-false".text = ''
-          ${source.installed.unencrypted.config.system.build.toplevel}
-        '';
-      }
-    else
-      {
-        # The mirror of the above, and the installer's cue to make sure there
-        # is a network before it asks anything else. A marker of its own rather
-        # than "no offline marker": the install check runs with neither, in a
-        # sandbox with no network, and must not be told to go and find one.
-        "nixarchy-iso-net".text = ''
-          ${inputs.self.shortRev or "dirty"}
-        '';
-      }
-  );
+    "nixarchy-iso-net".text = ''
+      ${inputs.self.shortRev or "dirty"}
+    '';
+  };
 
   system.stateVersion = "25.05";
 }

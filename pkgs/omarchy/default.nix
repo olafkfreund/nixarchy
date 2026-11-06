@@ -800,25 +800,7 @@ stdenvNoCC.mkDerivation {
                   --replace-fail 'ExecStart=/usr/bin/pipewire' \
                   'ExecStart=/run/current-system/sw/bin/pipewire'
 
-                # omarchy-apply-lock resets PATH when it runs as root, and the
-                # value it resets to is empty on NixOS.
-                #
-                # Upstream's reasoning is sound and worth keeping: an install
-                # or upgrade may start this helper as root, and it does not
-                # want optional commands resolving out of a user-writable
-                # directory. On Arch the answer is /usr/bin and friends. Here
-                # those hold nothing, so the script would lose `tee`, `getent`
-                # and everything else it shells out to -- it writes PAM files
-                # for the lock screen, so the failure would be a lock screen
-                # that cannot authenticate, discovered at the worst moment.
-                #
-                # /run/wrappers/bin first, then the system profile: the same
-                # two directories a root login gets here, both root-owned,
-                # which is exactly the property upstream is reaching for.
-                #
-                # New in 4.0.3, and checks.session caught it -- that check
-                # scans every shipped command for /usr and is the reason this
-                # is a patch rather than a surprise on somebody's laptop.
+                # Why: pkgs/AGENTS.md#omarchy-apply-lock-resets-path-to-nothing
                 substituteInPlace $out/share/omarchy/bin/omarchy-apply-lock \
                   --replace-fail \
                   'export PATH=/usr/share/omarchy/bin:/usr/local/bin:/usr/bin:/bin' \
@@ -864,6 +846,13 @@ stdenvNoCC.mkDerivation {
                   substituteInPlace $out/share/omarchy/bin/$f \
                     --replace-fail '/usr/bin/python3' '${python3}/bin/python3'
                 done
+                substituteInPlace $out/share/omarchy/default/input-methods/typing_setup.py \
+                  --replace-fail '/usr/share/systemd/kbd-model-map' '${systemd}/share/systemd/kbd-model-map' \
+                  --replace-fail '/usr/bin/python3' '${python3}/bin/python3'
+                substituteInPlace $out/share/omarchy/shell/Commons/InputMethodState.qml \
+                  --replace-fail '/usr/bin/python3' '${
+                    python3.withPackages (p: [ p.pygobject3 ])
+                  }/bin/python3'
                 # Setup > Language (#1289): a locale this system has not built is
                 # recorded for the next rebuild, never generated at runtime, and the
                 # script stops before LANG or the interface changes. The menu shows
@@ -1332,6 +1321,18 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
                       --replace-fail 'command="zen-browser"' 'command="zen-beta"'
 
+                    # #1623: missing defaults are enabled declaratively, then set after rebuild.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
+                      --replace-fail 'omarchy-install-browser "$browser" || exit 1' 'exec nixarchy-default-install browser "$browser" "$command"' \
+                      --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
+                      --replace-fail "$(cat ${./default-editor-install.upstream.sh})" 'exec nixarchy-default-install editor "$selection" "$editor"' \
+                      --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
+
+                    # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
+                    substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
+                      --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
+
                     # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-editor \
                       --replace-fail 'omarchy-cmd-present "$editor" || editor="nvim"' \
@@ -1358,7 +1359,8 @@ stdenvNoCC.mkDerivation {
                       omarchy-setup-security-fingerprint:setup_pam_config \
                       omarchy-remove-security-fido2:remove_pam_config \
                       omarchy-remove-security-fingerprint:remove_pam_config \
-                      omarchy-remove-security-fingerprint:remove_resume_hook; do
+                      omarchy-remove-security-fingerprint:remove_resume_hook \
+                      omarchy-remove-security-fingerprint:remove_lock_fingerprint_pam; do
                       grep -q "^''${pair#*:}() {$" "$pambin/''${pair%%:*}" || {
                         echo "''${pair%%:*} no longer defines ''${pair#*:}() where the patch below expects it" >&2
                         exit 1
@@ -1372,7 +1374,8 @@ stdenvNoCC.mkDerivation {
                       $pambin/omarchy-remove-security-fido2 \
                       $pambin/omarchy-remove-security-fingerprint
                     sed -i '/^remove_resume_hook() {$/,/^}$/d' $pambin/omarchy-remove-security-fingerprint
-                    ! grep -q '^\(setup_pam_config\|remove_pam_config\|remove_resume_hook\)() {$' \
+                    sed -i '/^remove_lock_fingerprint_pam() {$/,/^}$/d' $pambin/omarchy-remove-security-fingerprint
+                    ! grep -q '^\(setup_pam_config\|remove_pam_config\|remove_resume_hook\|remove_lock_fingerprint_pam\)() {$' \
                       $pambin/omarchy-{setup,remove}-security-{fido2,fingerprint} || {
                       echo "a function deleted above survived its sed range delete" >&2
                       exit 1
@@ -1417,10 +1420,9 @@ stdenvNoCC.mkDerivation {
                         echo "  then: sudo nixos-rebuild switch --flake <your-flake>" >&2
                         exit 1'
 
-                    # The removal side says the same thing in one breath, and the block
-                    # after the drift guard makes both exit 1 before they drop packages or
-                    # delete anything. /etc/pam.d/omarchy-lock-fingerprint is declared by
-                    # modules/nixos.nix when fprintd is on, so removing it by hand is wrong.
+                    # Only the FIDO2 removal exits 1 before dropping packages. The fingerprint
+                    # removal is cut below (#1620). /etc/pam.d/omarchy-lock-fingerprint is
+                    # declared by modules/nixos.nix when fprintd is on, so removing it by hand is wrong.
                     substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fido2 \
                       --replace-fail 'remove_pam_config' \
                         'echo "PAM is configured by your NixOS build, so there is nothing to unpick" >&2
@@ -1428,13 +1430,24 @@ stdenvNoCC.mkDerivation {
                         echo "configuration and rebuild. The registration itself is removed below." >&2
                         echo "" >&2'
 
-                    substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fingerprint \
-                      --replace-fail 'remove_pam_config' \
-                        'echo "PAM is configured by your NixOS build, so there is nothing to unpick" >&2
-                        echo "in /etc/pam.d. Turn off services.fprintd (fprintAuth follows it)" >&2
-                        echo "and rebuild." >&2
-                        echo "" >&2' \
-                      --replace-fail 'remove_resume_hook' ':' # the build declares the resume restart (#1288), so there is nothing to remove
+                    # #1620: the row deletes prints and stops. From the anchor down is Arch's teardown, so it is
+                    # cut rather than jumped over; the ledger and checks.menu-actions read this file as text.
+                    fp=$out/share/omarchy/bin/omarchy-remove-security-fingerprint
+                    grep -q '^# fprintd finds no reader when it is off or unplugged:' "$fp" || {
+                      echo "omarchy-remove-security-fingerprint: the anchor for its tail moved" >&2
+                      exit 1
+                    }
+                    sed -i '/^# fprintd finds no reader when it is off or unplugged:/,$d' "$fp"
+                    cat ${./1620-remove-fingerprint.sh} >> "$fp"
+                    ! grep -E 'omarchy-pkg-drop|omarchy-lifecycle-dispatch|/etc/pam\.d|remove_pam_config|remove_lock_fingerprint_pam|remove_resume_hook' "$fp" || {
+                      echo "omarchy-remove-security-fingerprint: something from its tail survived the cut" >&2
+                      exit 1
+                    }
+                    substituteInPlace "$fp" \
+                      --replace-fail '# omarchy:summary=Remove fingerprint authentication from sudo, polkit, and lock screen' \
+                        '# omarchy:summary=Delete your saved fingerprints' \
+                      --replace-fail 'echo -e "\e[32mRemoving fingerprint scanner from authentication.\n\e[0m"' \
+                        'echo -e "\e[32mDelete $fingerprint_user'"'"'s saved fingerprints\n\e[0m"'
 
                     # The drift guard for all four: if an upstream release moves these edits
                     # into a script this does not name, the build stops here rather than
@@ -1456,11 +1469,6 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-sudoless-docker \
                       --replace-fail 'echo "Removing $USER from the docker group..."' \
                         "$(cat ${./1304-guidance-sudoless-docker-remove.sh})"
-
-                    # #1398: the guidance runs before the `id` lookup, which the sandbox and a broken PATH cannot reach.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fingerprint \
-                      --replace-fail '# Resolve the invoking account before changing authentication or packages.' \
-                        "$(cat ${./1304-guidance-remove-fingerprint.sh})"$'\n'"# Resolve the invoking account before changing authentication or packages."
 
                     substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fido2 \
                       --replace-fail 'echo -e "\e[32mRemoving FIDO2 device from authentication.\n\e[0m"' \

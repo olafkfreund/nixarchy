@@ -95,7 +95,7 @@ def _diagnose(machine, probe_timeout):
         for sample in (1, 2):
             for command in ("info cpus", "info registers -a"):
                 try:
-                    response = machine.send_monitor_command(command)
+                    response = machine.send_monitor_command(command).replace("\r", "")
                 except Exception as error:
                     response = f"monitor command failed: {error!r}"
                 entry = f"monitor sample {sample} ({command}):\n{response}"

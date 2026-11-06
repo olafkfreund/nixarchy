@@ -596,7 +596,7 @@ your question:
 | `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | self-hosted, one of the two install slots |
 | `free-space` | install beside an existing OS, which survives | same job, same nix invocation |
 | `installer-refusal` | a dark substituter is refused, disk left intact | ~2–3 min, same job — a VM too |
-| `install-iso`, `iso-budget` | the ISO installs offline, and fits | nightly only |
+| `install-iso-net`, `iso-budget` | the network ISO installs and fits | nightly only |
 
 **What nixarchy.cachix.org holds is a list, not whatever CI built.** It is the
 free tier: 5 GB, and when full it deletes what was *downloaded* longest ago. A
@@ -643,8 +643,8 @@ steps at minute 88. p620 was carrying a logged-in Hyprland session, k3s and a
 browser at load 5, and an agent was running small `nix build`s alongside. Two
 is the cap for two installs and *nothing else*; a desktop in use is a third
 tenant that the number never counted.
-**Four runners do not mean four installs** — the runners also serve `build`,
-the nightly and releases, and raising the cap needs a new measurement on this
+**Four runners do not mean four installs** — the runners also serve the
+install check, edge's `verify`, the nightly and releases, and raising the cap needs a new measurement on this
 host, not a runner count. A ref is assigned its slot by
 `cksum(GITHUB_REF) % 2`, so a pull request's re-runs queue behind themselves
 rather than migrating. Every push to your branch cancels and restarts your own
@@ -764,7 +764,7 @@ seconds-long checks. So:
 |---|---|
 | cheap: `runCommand`, static, evaluation-only, and their break proofs | any time, **one at a time** under `flock /mnt/data/vmtest/codex-build.lock` |
 | a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12, and no `install check` `install` job or `omarchy-edge` `verify` job in flight (#1365). Other in-flight CI does not block it |
-| a VM check, or an options case shard or `options-files` (`options-shards` is cheap) | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
+| a VM check, or an options case shard or `options-files` (`options-shards` is cheap) | at most two at once, with no p620 system build and no self-hosted runner busy: `gh api repos/olafkfreund/nixarchy/actions/runners -q '[.runners[]\|select(.busy)]\|length'` prints `0`. Ask again when the slot is taken, not only before waiting for it, and read an API failure as busy |
 
 "Is a p620 build running" has a trap of its own. `pgrep -f
 'nixosConfigurations.p620'` also matches every `nixd` language server (its
@@ -800,13 +800,25 @@ change can reach:
   CI already built is a cache hit, and "all" costs only what your change
   rebuilds;
 - by the tiers above: cheap now, package tier when its gate is free, VM checks
-  and options shards when CI is idle. Wait for the gate rather than skip it
+  and options shards when no runner is busy. Wait for the gate rather than skip it
   and push;
 - what cannot run here (the `install` job, a hosted runner's limits) is named
   in the PR as not run locally, with the reason.
 
 The edge carry for #1589 was pushed with only the package ledger built; the
 rest of edge's checks met the new quattro commit first in CI.
+
+**The VM tier used to wait for all of CI, and most of CI is not on this machine
+(owner, 2026-11-06).** It asked `gh run list` for nothing in flight, but every
+job in `build.yml` runs on a hosted `ubuntu-26.04` runner, so each push held
+local VMs for 20 to 26 minutes behind work that never touched p620. Only a
+self-hosted runner shares it, so that is what the gate now asks. A local VM can
+still be running when an install starts, which is why the limit is two rather
+than what the 128 threads would allow: two installs is the measurement here, and
+three or four failed. Two local VMs side by side is a choice awaiting the same
+measurement, so drop to one if a guest starves. An install beside a local VM is
+what a guest-side timeout looks like (above), and that failure is yours to read
+first.
 
 **Two ways a local VM outlives your attention, both from 2026-09-22.**
 
@@ -846,7 +858,9 @@ files carry the full reasoning and the failure history.
   `mkForce` never on anything a user would set. The two exceptions the tree
   carries are where the user asked for force through an option
   (`bootSplash = "force"`) and where it corrects nixpkgs' own literal that no
-  user chooses (the rootless Docker unit's `ConditionUser`).
+  user chooses (the rootless Docker unit's `ConditionUser`). One priority departs from
+  mkDefault: boot.kernel.sysctl is at mkOverride 1250, because it merges through
+  mergeOneOption and a user's own mkDefault would tie (modules/AGENTS.md, #1615).
 - **Mode A is real.** Someone importing `nixosModules.nixarchy` into a
   configuration they already run must be untouched by anything opt-in.
   `tests/options.nix` asserts every option in both states for this reason —
@@ -1327,9 +1341,9 @@ thing and meant another. None of them was a bug in this repo.
   `grep -oE "from 'https://[^']*'" | sort | uniq -c` counts downloads per
   cache, and a cache at zero is a cache nobody asked.
 - **A workflow run named in an issue can 404, so the digest in the issue is
-  the evidence.** Failed `omarchy-edge.yml` runs have vanished while passing
-  runs from the same hours remain; nothing in this repo deletes runs, so the
-  cause is not established (#1602).
+  the evidence.** The owner deletes failed runs from the Actions view by hand, so
+  a missing run means nothing, and `gh run list` showing no failures is not
+  evidence that nothing failed (#1602).
   `edge-report.sh` puts the bounded `failure-digest.sh` excerpt in the issue
   body or comment so the failure reason survives when the run link is dead.
 

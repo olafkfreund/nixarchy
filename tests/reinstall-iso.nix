@@ -2,8 +2,7 @@
 # nixarchy-reinstall-iso's preflights (#482), driven with an environment that
 # lies -- the manner of tests/installer-store-space.nix, because it is the
 # same failure being refused: this repo's ENOSPC deaths surface three levels
-# from the cause, and a 12 GB image build is the biggest single write a user
-# can ask this machine for.
+# from the cause, even when building a network image.
 #
 # Three functions, extracted and driven on their own; then the assertions
 # that keep the extraction honest -- that main still calls each one before
@@ -31,7 +30,7 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
   fails=0
   t() {
     want=$1 name=$2 line=$3
-    if DF_LINE=$line check_disk /somewhere 12000 "the image" >got 2>&1; then g=proceed; else g=refuse; fi
+    if DF_LINE=$line check_disk /somewhere 6000 "the image" >got 2>&1; then g=proceed; else g=refuse; fi
     if [ "$g" = "$want" ]; then
       echo "  ok      $name ($g)"
     else
@@ -39,9 +38,9 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
       fails=$((fails + 1))
     fi
   }
-  t refuse  "8 GB free, 12 GB needed"     "btrfs 8000M"
-  t proceed "40 GB free, 12 GB needed"    "btrfs 40000M"
-  # A live ISO's store: df's figure is RAM, and 12 GB of build into it takes
+  t refuse  "4 GB free, 6 GB needed"      "btrfs 4000M"
+  t proceed "8 GB free, 6 GB needed"     "btrfs 8000M"
+  # A live ISO's store: df's figure is RAM, and a build into it takes
   # the machine down. Refused whatever the number says.
   t refuse  "tmpfs with a big number"     "tmpfs 64000M"
   # Tolerance: a probe that cannot read must not invent a refusal.
@@ -161,7 +160,7 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
   # ------------------------------------------------------------------------
   build_line=$(grep -n 'nix build "$REINSTALL_ATTR"' ${reinstallScript} | cut -d: -f1 | head -1 || true)
   [ -n "$build_line" ] || { echo "the script no longer builds via REINSTALL_ATTR; retarget this check" >&2; exit 1; }
-  for probe in 'check_disk /nix/store' 'committed_verdict "$FLAKE"' 'drift_verdict "$running"' 'case "$(substitutable_verdict'; do
+  for probe in '^refuse_stock_image$' 'check_disk /nix/store' 'committed_verdict "$FLAKE"' 'drift_verdict "$running"' 'case "$(substitutable_verdict'; do
     line=$(grep -n "$probe" ${reinstallScript} | cut -d: -f1 | head -1 || true)
     [ -n "$line" ] || { echo "main() never calls: $probe" >&2; exit 1; }
     [ "$line" -lt "$build_line" ] || {
@@ -197,7 +196,7 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
     grep -qF "$claim" ${reinstallScript} || {
       echo "the script no longer says: $claim" >&2
       echo "#478 makes that honesty non-negotiable -- the image carries the" >&2
-      echo "system and /etc/nixos only, and booting it wipes the target" >&2
+      echo "/etc/nixos, and booting it wipes the target" >&2
       exit 1
     }
   done

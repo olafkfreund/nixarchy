@@ -4,7 +4,7 @@
 # Why: installer/AGENTS.md#try-nixarchy-sh
 #
 #   ./try-nixarchy.sh            download the net image and install into a VM
-#   ./try-nixarchy.sh --full     the offline image instead (6 GB, no network)
+#   ./try-nixarchy.sh --full     refused: the full image is gone
 #   ./try-nixarchy.sh --boot     boot what you already installed
 #   ./try-nixarchy.sh --fresh    wipe the disk and install again
 #   ./try-nixarchy.sh --help     the rest
@@ -31,10 +31,10 @@ red=$(printf '\033[31m'); off=$(printf '\033[0m')
 say() { printf '%s\n' "$*"; }
 die() { printf '%s%s%s\n' "$red" "$*" "$off" >&2; exit 1; }
 
-full=false boot_only=false fresh=false
+boot_only=false fresh=false
 while (($#)); do
   case "$1" in
-    --full) full=true; shift ;;
+    --full) die "The full image is gone. Run without --full for the network image." ;;
     --boot) boot_only=true; shift ;;
     --fresh) fresh=true; shift ;;
     --memory) MEM_MB=${2:?--memory needs a number in MB}; shift 2 ;;
@@ -141,7 +141,7 @@ fi
 mkdir -p "$WORK" || die "Cannot write to $WORK"
 avail_gb=$(df -BG --output=avail "$WORK" 2>/dev/null | tail -1 | tr -dc '0-9')
 avail_gb=${avail_gb:-0}
-if $full; then image_gb=7; else image_gb=2; fi
+image_gb=2
 want_gb=$((DISK_GB + image_gb))
 if [ "$avail_gb" -gt 0 ] && [ "$avail_gb" -lt "$want_gb" ]; then
   die "$WORK has ${avail_gb}GB free; this needs about ${want_gb}GB (a ${DISK_GB}GB
@@ -220,17 +220,8 @@ fetch() {
 }
 
 fetch SHA256SUMS
-if $full; then
-  iso="nixarchy-$tag.iso"
-  for p in aa ab ac ad; do fetch "$iso.part-$p"; done
-  if [ ! -f "$WORK/$iso" ]; then
-    say "  joining the parts"
-    cat "$WORK/$iso".part-* > "$WORK/$iso.tmp" && mv "$WORK/$iso.tmp" "$WORK/$iso"
-  fi
-else
-  iso="nixarchy-$tag-net.iso"
-  fetch "$iso"
-fi
+iso="nixarchy-$tag-net.iso"
+fetch "$iso"
 
 # Verified against the release's own checksums. A truncated download does not
 # announce itself -- it boots halfway and fails as something else entirely.
@@ -260,8 +251,8 @@ qemu-img create -f qcow2 "$DISK" "${DISK_GB}G" >/dev/null ||
   die "Could not create $DISK"
 
 say "${bold}Starting the installer.${off}"
-$full || say "  The net image downloads the desktop as it installs, so this VM needs"
-$full || say "  the network it already has through qemu's user networking."
+say "  The net image downloads the desktop as it installs, so this VM needs"
+say "  the network it already has through qemu's user networking."
 say "  When the install finishes, close the window and run:  $0 --boot"
 say ""
 run_vm "$WORK/$iso"

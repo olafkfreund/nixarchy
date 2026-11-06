@@ -16,13 +16,10 @@ pages you want.
 ## With Nix
 
 ```sh
-nix run github:olafkfreund/nixarchy#try            # offline image, ~7 GB download
-nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~2 GB download
+nix run github:olafkfreund/nixarchy#try            # network image, ~2 GB download
 ```
 
-The **offline** image installs with no network at all — it carries its own
-store paths and copies them from the medium. The **network** image is smaller
-and fetches the rest from binary caches while installing. Both write a
+The image fetches the desktop from binary caches while installing. It writes a
 `nixarchy-try.qcow2` in the current directory, up to 32 GB.
 
 When the install finishes:

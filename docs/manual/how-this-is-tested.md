@@ -148,12 +148,10 @@ deliberately vary the thing they are about — two machines differing only by
 hostname, two usernames, two disk modes — because a test that pins a value
 cannot tell you anything about it.
 
-**The offline image was withdrawn for a while.** It carried the whole system
-closure and promised an install with no network; it stopped keeping that promise,
-and rather than ship an image whose only reason to exist was broken, it was
-withdrawn until the check that installs from it offline went green. It came
-back once the installer copied the system it carries instead of building one,
-and `checks.install-iso` installs from it every night.
+**A former image exposed a gap in the checks.** It promised installation with
+no network but stopped keeping that promise. It was withdrawn until a VM check
+proved it could copy the system it carried. That image has since been retired;
+the published network image is installed by `checks.install-iso-net`.
 
 ## If you want to look
 

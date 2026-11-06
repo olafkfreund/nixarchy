@@ -13,7 +13,7 @@ things Omarchy does for you. Here is how each of them lands on NixOS.
 | ufw, closed except 53317 | `networking.firewall`, closed except 53317. Same policy, different tool. |
 | Arch rolling updates | `nix flake update` moves nixpkgs; security fixes arrive with the next `omarchy update`. |
 | Omarchy's own package mirror | Everything comes from nixpkgs and this flake. There is no Omarchy repo and no AUR. |
-| Cloudflare in front of the ISOs | The ISO is built from source with `nix build .#iso`, not downloaded — there is nothing in front of it because there is nothing hosted. Packages come from the nixarchy binary cache and cache.nixos.org, both signed. |
+| Cloudflare in front of the ISOs | Releases publish the network ISO, which you can also build with `nix build .#iso-net`. Packages come from the nixarchy binary cache and cache.nixos.org, both signed. |
 
 ## The firewall
 

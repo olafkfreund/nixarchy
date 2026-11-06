@@ -30,7 +30,6 @@ tests/install-encrypted.nix	" | grep -q 'enable = true'")	one write: grep -A2, t
 tests/install-iso-net.nix	step LEASED sh -c 'ip -4 addr show | grep -q "192\.168\.1\."'	inside sh -c: no pipefail
 tests/install-iso-net.nix	cache.succeed("ip -4 addr show eth1 | grep -q 192.168.1.1/")	one write: ip addr of one interface, under 4 KiB
 tests/install-iso-net.nix	cache.succeed("curl -sf http://127.0.0.1:5000/nix-cache-info | grep -q StoreDir")	one write: curl of nix-cache-info, three lines
-tests/install-iso.nix	! grep "unable to download" "$log" | grep -qv nix-cache-info	inside sh -c: no pipefail
 tests/install.nix	target.wait_until_succeeds("loginctl list-sessions | grep -q greeter")	one write: loginctl list-sessions, a few lines
 tests/install.nix	target.succeed("btrfs subvolume list / | grep -q @home-before-reset-")	one write: btrfs subvolume list, a few lines
 tests/installer-from-repo.nix	git -C "$wa" diff --cached --name-only | grep -q 'hosts/alpha/hardware-configuration.nix' \	one write: git diff --cached --name-only of a few files
@@ -46,7 +45,6 @@ tests/patched-files.nix	echo "$report" | grep 'omarchy-plugin-clone' | grep -q '
 tests/patched-files.nix	echo "$report" | grep 'xdph.conf' | grep -q 'seeded' || {	one write: a grep-filtered line or two, under 4 KiB
 tests/plugin.nix	machine.succeed(f"readlink {decl} | grep -q '^/nix/store/'")	one write: readlink prints one line
 tests/qml.nix	if ! lint ${broken} | grep -q '\[syntax\]'; then	|| true absorbs 141: a race cannot reach the if
-tests/reinstall-vm.nix	! grep "unable to download" "$log" | grep -qv nix-cache-info	inside sh -c: no pipefail
 tests/session.nix	patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1	one write: patchelf --print-needed, a few lines
 tests/session.nix	machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")	one write: loginctl list-sessions, a few lines
 tests/session.nix	"! systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=60)	one write: systemctl list-units of one glob, a few lines

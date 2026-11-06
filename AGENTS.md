@@ -596,7 +596,7 @@ your question:
 | `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | self-hosted, one of the two install slots |
 | `free-space` | install beside an existing OS, which survives | same job, same nix invocation |
 | `installer-refusal` | a dark substituter is refused, disk left intact | ~2–3 min, same job — a VM too |
-| `install-iso`, `iso-budget` | the ISO installs offline, and fits | nightly only |
+| `install-iso-net`, `iso-budget` | the network ISO installs and fits | nightly only |
 
 **What nixarchy.cachix.org holds is a list, not whatever CI built.** It is the
 free tier: 5 GB, and when full it deletes what was *downloaded* longest ago. A

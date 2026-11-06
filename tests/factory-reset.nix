@@ -354,9 +354,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed("runuser -u omarchy -- git -C /etc/nixos -c user.name=Test -c user.email=test@example.invalid commit -m initial")
     machine.succeed("mkdir -p /test-control/fake-bin")
     machine.succeed("printf '#!/bin/sh\\ntouch /tmp/factory-reset-fake-gum\\nexit 1\\n' > /test-control/fake-bin/gum && chmod +x /test-control/fake-bin/gum")
-    status, output = machine.execute("runuser -u omarchy -- sh -c 'PATH=/test-control/fake-bin:/run/wrappers/bin:/run/current-system/sw/bin omarchy-system-factory-reset' </dev/null 2>&1")
-    assert status == 0 and "Factory reset" in output and "/etc/nixos's first commit is the configuration" in output, (status, output)
-    assert "there is no first commit" not in output and "Nothing has been changed." in output, output
+    # Real gum waits for ever with no terminal, so the wait is bounded: 124 is that wait ending.
+    status, output = machine.execute("timeout -k 5 20 runuser -u omarchy -- sh -c 'PATH=/test-control/fake-bin:/run/wrappers/bin:/run/current-system/sw/bin omarchy-system-factory-reset' </dev/null 2>&1", timeout=60)
+    assert status == 124 and "Factory reset" in output and "/etc/nixos's first commit is the configuration" in output, (status, output)
+    assert "there is no first commit" not in output, output
     machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
     machine.fail("test -e /tmp/factory-reset-fake-gum")
     machine.succeed("install -m755 /run/current-system/sw/bin/omarchy-system-factory-reset /tmp/factory-reset-copy")

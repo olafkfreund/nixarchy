@@ -38,7 +38,7 @@ pkgs.runCommand "nixarchy-agent-account-routing"
         printf '%s\n' '#!/bin/sh' 'if [ "''${1:-}" = --spawn-codex ]; then codex; exit; fi' \
           'if [ "''${1:-}" = auth ] && [ "''${2:-}" = login ]; then printf "CFG=%s PIN=%s\n" "''${CLAUDE_CONFIG_DIR-unset}" "''${OMARCHY_AGENT_CLAUDE_HOME-unset}" > "$PWD/login"; exit; fi' \
           'echo "CFG=''${CLAUDE_CONFIG_DIR-unset} PIN=''${OMARCHY_AGENT_CLAUDE_HOME-unset}"' > withclaude/claude
-        printf '%s\n' '#!/bin/sh' 'if [ "''${OMARCHY_TEST_CHILD:-}" = 1 ]; then echo "PIN=''${OMARCHY_AGENT_CODEX_HOME-unset}"; else OMARCHY_TEST_CHILD=1 codex; fi' > withcodex/codex
+        printf '%s\n' '#!/bin/sh' 'if [ "''${OMARCHY_TEST_CHILD:-}" = 1 ]; then command -v codex > "$PWD/child-codex"; echo "PIN=''${OMARCHY_AGENT_CODEX_HOME-unset}"; else OMARCHY_TEST_CHILD=1 codex; fi' > withcodex/codex
         printf '%s\n' '#!/bin/sh' 'echo USER' > user/claude
         chmod +x stub/* withclaude/* withcodex/* user/*
         base=$PWD/stub:${omarchy}/share/omarchy/bin:$PATH
@@ -120,9 +120,11 @@ pkgs.runCommand "nixarchy-agent-account-routing"
         # Case 12: the launcher carries dispatch even if its caller did not.
         mkdir -p "$HOME/.config/omarchy/defaults"
         printf '%s\n' codex > "$HOME/.config/omarchy/defaults/agent"
+        rm -f child-codex
         got=$(PATH=$base:$PWD/withcodex omarchy-agent --inline 2>err) \
           || bad "case 12: launcher exited $?: $(cat err)"
         test "$got" = 'PIN=' || bad "case 12: got '$got'"
+        test "$(cat child-codex 2>/dev/null)" = "$D/codex" || bad "case 12: child resolved '$(cat child-codex 2>/dev/null)'"
 
         # Case 13: the usage probe ignores dispatch, but accepts a real binary.
         mkdir -p empty-codex # the home for the real-binary run; the dispatch run's must not exist

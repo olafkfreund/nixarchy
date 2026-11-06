@@ -38,8 +38,9 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # omarchy job, which has no KVM setup -- the udev rule lives in `box` -- so
 # leaving it generated put a VM test in a job that cannot boot one. The
 # integration that added the check is what surfaced it.
+# factory-reset is a nixosTest and needs /dev/kvm, as wifi-hwsim.
 # sshd-login is a nixosTest and needs /dev/kvm, as wifi-hwsim.
-claimed="wifi-hwsim remove-fingerprint-vm hibernate-resume boot-hang-detect sshd-login install free-space installer-refusal
+claimed="wifi-hwsim factory-reset remove-fingerprint-vm hibernate-resume boot-hang-detect sshd-login install free-space installer-refusal
   install-encrypted install-iso install-iso-net iso-budget microvm-boot
   reinstall-vm
   box-boot box-template coexist coexistence dashboard-clock installer-ui

@@ -201,14 +201,12 @@ in the checks:
 | `install` | install onto a blank disk and boot the result; check the harness builds; report the duration |
 | `install-encrypted` | install with encryption, boot through the LUKS prompt |
 | `microvm` | boot a MicroVM on the `-tcg` runner |
-| `install-iso` | build the ISO, report its size, check both images are inside their budgets, **install from it with no network device present**, then install from the network ISO |
+| `install-iso-net` | build the network ISO, report its size, check its budget, then install from it |
 | `cache` | does cachix hold what `main` last built? **main only** — the omarchy derivation depends on the flake's own rev, so on a branch it probes a path nobody pushed and 404s by construction |
 | `canary` | resolve every input the way a user would tomorrow, and run `eval-gate.sh` (every cached output and each pin-fix probe) against it |
 | `report` | open or update an issue when something failed |
 
-`install-iso` is the one that proves the offline image: it installs with **no
-network device at all** and asserts not that the install succeeded but that
-**nothing was built and nothing was fetched**.
+`install-iso-net` boots the published network image and installs from it.
 
 ---
 
@@ -352,13 +350,11 @@ Steps, in order, and the first three are refusals:
 1. **The tag is not behind main**
 2. **The clone is not shallow**, or the notes cannot be derived
 3. **The tag names the Omarchy the flake vendors** — `v4.0.3-2` must vendor 4.0.3
-4. **Build the ISO** and **Build the network ISO**
-5. **Split it into pieces GitHub will accept** — the offline image exceeds the 2 GiB asset cap
-6. **Write the release notes** — derived, via `nix run .#release-notes`
-7. **Publish**
-8. **The release attached everything it promised** — compares what was built against what `SHA256SUMS` names
-9. **Move the release branch to this tag** — this is what `nixarchy update` follows, so cutting a tag is what delivers updates. It pushes with `BUMP_TOKEN`, which needs Contents and Workflows write: `GITHUB_TOKEN` can never push commits that touch `.github/workflows/`, and most releases carry one (#1251)
-10. **Remove the split copies**
+4. **Build the network ISO**
+5. **Write the release notes** — derived, via `nix run .#release-notes`
+6. **Publish**
+7. **The release attached everything it promised** — compares what was built against what `SHA256SUMS` names
+8. **Move the release branch to this tag** — this is what `nixarchy update` follows, so cutting a tag is what delivers updates. It pushes with `BUMP_TOKEN`, which needs Contents and Workflows write: `GITHUB_TOKEN` can never push commits that touch `.github/workflows/`, and most releases carry one (#1251)
 
 ## `wiki.yml` — publishes these pages
 

@@ -443,7 +443,7 @@ the last run in CI on each push; the last is two machines that boot it.
 | --- | --- |
 | The session, bar, themes and wallpaper | `checks.session` logs in through SDDM's greeter and asserts the desktop *renders* -- it compares the screen against the wallpaper, because every other check passed once while it was black |
 | Installing on a blank machine | a real install from the ISO onto an empty disk: partitioned, closure copied, bootloader written, and the result booted into the desktop on its own. `checks.install` does the same in CI and boots the result, asserting that a rebuild immediately afterwards builds nothing |
-| Installing with **no network at all** | `checks.install-iso` boots the offline image in a VM with no network device, installs from it, and boots what it installed to a login prompt. The assertion that matters is not that the install succeeded but that **nothing was built and nothing was fetched** -- 2,221 store paths copied locally, zero from a substituter, and `--max-jobs 0` on the copied path so a single attempted build fails loudly instead of quietly reaching for a compiler |
+| Installing from the published image | `checks.install-iso-net` boots the network image in a VM, installs through a substituter, and boots the result |
 | Adding it to a machine you already run | `checks.integration` **builds** the module onto a config that overrides a package Omarchy also uses, pins its own Hyprland and already greets with greetd |
 | Sitting beside an existing Hyprland | `checks.coexist` boots the Omarchy session with a foreign `hyprland.lua` in place and asserts the bar comes up anyway |
 | The CLI | `omarchy commands --check`, plus a count the build refuses to let drift |
@@ -525,19 +525,18 @@ someone would miss it:
 
 Known gaps in detail:
 
-- **The installer works, and it is not finished.** `nix build .#iso` produces a
+- **The installer works, and it is not finished.** `nix build .#iso-net` produces a
   bootable image that asks a handful of questions and installs onto a blank disk
-  — see [the ISO in depth](../manual/the-iso.md). It carries the desktop rather
-  than downloading it: 5.6 GB of image holding a 15.3 GB closure, and an install
-  with no network at all is a store copy and an activation. `checks.install`
+  — see [the ISO in depth](../manual/the-iso.md). The image is about 2 GB and
+  downloads the desktop during installation. `checks.install`
   records the duration on every run and fails above a budget, so a package that
   starts being built rather than copied turns a test red instead of quietly
   costing everyone ten minutes.
 
   The rest of the product around it has since been built: release automation
-  publishes both images from a tag, `checks.free-space` installs alongside an
-  existing OS, and `checks.install-iso` runs nightly against the offline image
-  -- booting it with no network device, installing, and booting the result.
+  publishes the network image from a tag, `checks.free-space` installs alongside
+  an existing OS, and `checks.install-iso-net` runs nightly against the published
+  image -- installing from it and booting the result.
   What is *not* finished is the same list as above: no partition resize, no
   Secure Boot, no graphical installer, each for a stated reason.
 

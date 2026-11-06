@@ -99,53 +99,18 @@ pkgs.runCommand "nixarchy-installer-network"
 
     ${pkgs.bash}/bin/bash t.sh
 
-    # The offline image offers Wi-Fi and never demands it. Asserted on the source
-    # because the branch is a gum screen: what matters is that it cannot block an
-    # install needing no network, and cannot fire unattended.
-    #
-    # The old early return left the offline image with no way to configure Wi-Fi
-    # at all -- correct for the install, wrong for the machine it produces, whose
-    # first boot then has neither a network nor the credentials for one.
-    grep -q 'offer_optional_wifi' ${installScript} || {
-      echo "the offline image can no longer offer Wi-Fi at all" >&2; exit 1; }
-    # Extracted once and kept, so a failure can SHOW what it read.
-    #
-    # As a bare pipeline this reported "the screen is no longer skipped under
-    # --answers" for any reason sed produced nothing -- a renamed function, a
-    # changed brace, a missing tool -- and the message named a cause it had not
-    # established. That cost an afternoon on a failure that reproduced in CI and
-    # not locally, on a byte-identical derivation, with nothing to look at but a
-    # sentence asserting the wrong thing.
+    # Markerless checks.install skips the network prompt; unattended installs on
+    # the network image refuse when no connection is available.
     sed -n '/^ask_network()/,/^}/p' ${installScript} > ask_network.txt || true
     if ! [ -s ask_network.txt ]; then
       echo "could not extract ask_network() from the installer at all." >&2
-      echo "sed found no /^ask_network()/ .. /^}/ range, so every assertion" >&2
-      echo "below would fail for a reason that has nothing to do with Wi-Fi." >&2
-      echo "First 40 lines of what was searched:" >&2
-      head -40 ${installScript} >&2
       exit 1
     fi
-    if ! grep -q 'answers_file' ask_network.txt; then
-      echo "the offline Wi-Fi screen is no longer skipped under --answers;" >&2
-      echo "an unattended install would hang on a prompt nobody answers." >&2
-      echo "ask_network() as extracted:" >&2
-      sed 's/^/  | /' ask_network.txt >&2
-      exit 1
-    fi
-    echo "  ok      the offline image offers Wi-Fi, and skips it unattended"
-
-    # And only where there is a radio. Without this the screen appeared on every
-    # machine with no wireless card -- a desktop on ethernet, and the VM every
-    # wizard check runs in, where checks.installer-wizard sat on it for 180
-    # seconds waiting for the keyboard screen behind it. An optional step is
-    # still a step.
-    if ! grep -q 'phy80211' ask_network.txt; then
-      echo "the offline Wi-Fi screen is no longer gated on a wireless interface;" >&2
-      echo "it will be offered to machines that have no radio to use it." >&2
-      sed 's/^/  | /' ask_network.txt >&2
-      exit 1
-    fi
-    echo "  ok      and only where there is a radio to use"
+    grep -Fq 'on_net_image || return 0' ask_network.txt || {
+      echo "markerless installs no longer skip the network prompt" >&2; exit 1; }
+    grep -Fq 'if [ -n "$answers_file" ]; then' ask_network.txt || {
+      echo "unattended network installs no longer have a refusal path" >&2; exit 1; }
+    echo "  ok      markerless installs skip the prompt; unattended network installs refuse"
 
     # And the sentence that misled the tester: it may only be said when there is
     # genuinely no wireless interface. Asserted on the source, because the branch

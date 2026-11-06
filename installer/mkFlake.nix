@@ -87,7 +87,7 @@ runCommand "nixarchy-flake-template"
     # The lock is transformed rather than regenerated. `nix flake lock` on the
     # target would re-resolve every input against whatever is current, so the
     # first `nixos-rebuild switch` would build a different system from the one
-    # just installed -- and it needs a network the offline ISO does not have.
+    # just installed -- and it would need to re-resolve inputs from the network.
     #
     # The `locked`/`original` split is the whole design: `locked` (rev +
     # narHash) is what evaluation reads, and is where reproducibility lives;
@@ -150,9 +150,8 @@ runCommand "nixarchy-flake-template"
 
     # The nixpkgs URL the machine's flake.nix declares must be EXACTLY the
     # `original` of the node the lock carries -- a mismatch makes nix
-    # re-resolve on first use, which needs the network the offline ISO does
-    # not have. So it is read out of the lock rather than written down a
-    # second time.
+    # re-resolve on first use. So it is read out of the lock rather than
+    # written down a second time.
     nixpkgs_url=$(jq -r '
       .nodes.root.inputs.nixpkgs as $n
       | .nodes[$n].original

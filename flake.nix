@@ -25,7 +25,7 @@
     };
 
     # Declarative runtime theme switching and application bridges. The input
-    # stays pinned so the offline image and installed systems agree on the
+    # stays pinned so the network image and installed systems agree on the
     # plugin manifest and module interface.
     nixarchy-omatheme = {
       url = "github:olafkfreund/nixarchy-omatheme/51fb12943b66389da778af42926e06e80691dd53";
@@ -111,7 +111,7 @@
     # It carries a nixpkgs of its own for its tests. Without the follows the
     # lock grows a SECOND nixpkgs node -- measured: adding this input pulled
     # in nixos-26.05pre924538 alongside ours -- and every one of those is a
-    # tarball the offline image copies into inputSources for nothing.
+    # tarball the network image copies into inputSources for nothing.
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -979,11 +979,8 @@
               ncurses # clear and tput, which the screens are drawn with
               kbd # loadkeys, and the keymap list
               tzdata # the timezone list
-              # Both only used by ask_network, which the offline image returns
-              # from before it reaches either. Carried anyway rather than
-              # conditionally: this is one script, `nix run .#install` on a stock
-              # ISO needs them, and a runtime input that is missing on one image
-              # is a class of bug that only shows up on that image.
+              # Both are used by ask_network. `nix run .#install` on a stock
+              # ISO needs them as runtime inputs.
               curl # the connectivity test -- can we reach the binary cache
               networkmanager # nmcli, for joining a wireless network
               # The failure and finish screens offer a way out of both. Present
@@ -1322,16 +1319,7 @@
           # 32GB, 8 cores, and a real disk rather than a tmpfs root.
           vm-big = self.nixosConfigurations.vm-big.config.system.build.vm;
 
-          # The bootable image: boot it and answer the questions. Still online
-          # at this stage -- #15 bakes the closure onto it, #16 takes the
-          # network away.
-          iso = self.nixosConfigurations.iso.config.system.build.isoImage;
-
-          # The same installer, without the desktop on it. Small enough to
-          # download over a hotel connection, and it fetches the closure from
-          # the binary caches instead of carrying it. Needs a working network
-          # before it can do anything, which is what the wizard's first screen
-          # is for.
+          # The bootable network image.
           iso-net = self.nixosConfigurations.iso-net.config.system.build.isoImage;
 
           # Why: docs/internals/flake.md#a-vm-that-installs-onto-a-blank-disk-with-a-networ
@@ -1450,75 +1438,18 @@
       # Smoke-test VM. Not a daily driver -- it exists to prove the QuickShell
       # bar comes up against Hyprland's Lua config before any packaging effort
       # is spent on the long tail.
-      # isoSource is a helper, not a machine, so it is removed after the `rec`
-      # has used it. Left in, `nix flake show` lists it as a configuration and
-      # anything iterating nixosConfigurations -- checks.config-warnings does
-      # exactly that -- gets an attrset with no `config` and has to guess what
-      # it is looking at.
       nixosConfigurations =
         let
           withHelpers = rec {
-            # Whose machines the images below carry.
-            #
-            # Named here rather than inside installer/cd.nix so that a user's own
-            # image (#478) is the same module with a different `source` -- their
-            # flake, their machines, their rev -- instead of a second copy of a
-            # 900-line file. What stays nixarchy's either way is the installer
-            # itself: the script, the version and the branding come from
-            # `inputs.self` inside cd.nix, whoever is being installed.
-            #
-            # `rec` so the three configurations below can be named without
-            # repeating `self.nixosConfigurations`. They are defined further down
-            # this attrset.
             isoSource = {
               flake = inputs.self;
-              configs = [
-                reference
-                reference-unencrypted
-
-                # The hardware the reference machine does not have. #382: a real
-                # laptop's hardware-configuration.nix is not the reference's, and
-                # where the difference is a PACKAGE the "a few dozen text
-                # derivations" argument stops holding -- building a package with
-                # no compiler on the image is the source bootstrap. This exists so
-                # those packages are on the medium; nobody installs it.
-                reference-hardware
-              ];
-
-              # What an install actually WRITES, keyed on the encryption
-              # answer -- the two markers installer/cd.nix puts on the image
-              # and install.sh reads. Separate from `configs` because the
-              # image carries more than it installs: reference-hardware is
-              # seeded so its packages are on the medium (#382) and is not a
-              # machine anyone installs.
-              #
-              # A user's image (#478) points both at their one machine; this
-              # repository ships two because the reference exists in both
-              # encryption shapes.
-              installed = {
-                encrypted = reference;
-                unencrypted = reference-unencrypted;
-              };
             };
 
-            # The live image. See installer/cd.nix.
-            iso = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-              specialArgs = {
-                inherit inputs;
-                offline = true;
-                source = isoSource;
-              };
-              modules = [ ./installer/cd.nix ];
-            };
-
-            # Same module, one argument different. See the `offline` parameter in
-            # installer/cd.nix for what it turns off.
+            # The live network image. See installer/cd.nix.
             iso-net = nixpkgs.lib.nixosSystem {
               system = "x86_64-linux";
               specialArgs = {
                 inherit inputs;
-                offline = false;
                 source = isoSource;
               };
               modules = [ ./installer/cd.nix ];
@@ -1590,10 +1521,7 @@
             };
 
             # The machine the installer produces, with the installer's own defaults.
-            # Built in CI so the install path cannot rot between releases, and baked
-            # into the ISO's store later so that installing copies rather than
-            # downloads -- which only works if this closure is a closure of something
-            # a real install actually produces.
+            # Built in CI so the install path cannot rot between releases.
             #
             # `device` is a placeholder: nothing here formats a disk. What matters is
             # that the expensive derivations in this toplevel are the same ones a real
@@ -1602,18 +1530,14 @@
 
             # The same machine on an unencrypted disk.
             #
-            # Not a variant anybody installs -- it exists so the ISO can carry
-            # both. The installer offers encryption on or off, and the two produce
-            # different systems: 51 derivations differ, all of them unit files and
-            # etc fragments, 180 MiB of content. Small, but not present is not
-            # present, and on an image with no network the difference between
-            # having them and not is a source bootstrap.
+            # The installer offers encryption on or off; this evaluates the
+            # unencrypted result for checks and cache population.
             reference-unencrypted = self.lib.mkReference { encrypt = false; };
 
             # The same machine again, with every hardware attribute
-            # nixos-generate-config can emit that ADDS A PACKAGE turned on. It is
-            # not a machine anyone installs; it exists so installer/cd.nix can put
-            # those packages on the image.
+            # nixos-generate-config can emit that adds a package turned on.
+            # tests/generate-config-surface.nix evaluates this configuration;
+            # tests/config-warnings.nix checks its warnings.
             #
             # #382: an Intel NPU made the tool write hardware.cpu.intel.npu.enable
             # into hardware-configuration.nix, which put intel-npu-driver into
@@ -1719,22 +1643,13 @@
               virtualisation.virtualbox.guest.enable = true;
 
               # Every nixos-hardware module installer/hardware-modules.sh can
-              # select, so the packages behind them are on the offline image.
-              #
-              # This is the same argument as the attributes above, and the same
-              # one #382 made the hard way: a real machine's generated config is
-              # not the reference's, and where the difference is a PACKAGE, an
-              # offline install has to build it from parts with no compiler.
-              # common-gpu-intel alone pulls intel-media-driver, the compute
-              # runtime and vpl-gpu-rt.
+              # select. Keep this union for the hardware evaluation checks.
               #
               # The UNION, not a machine: no real machine has an Intel and an
               # AMD GPU and both microcode sets. Every entry is mkDefault config
-              # and this host is never installed -- it exists so the medium
-              # carries the parts, which is exactly what the header above says.
+              # and this host is never installed.
               #
-              # checks.hardware-modules asserts these names exist; the ISO budget
-              # check is what says whether they FIT.
+              # checks.hardware-modules asserts these names exist.
               imports = with inputs.nixos-hardware.nixosModules; [
                 common-cpu-intel-cpu-only
                 common-cpu-amd
@@ -1750,30 +1665,24 @@
         # Why: docs/internals/flake.md#one-closure-per-template-shared-by-every-vm-a-user
         # An installable image carrying somebody else's machine (#478).
         #
-        # The same installer/cd.nix the reference images use, with `source`
-        # pointing at the caller's flake instead of this one -- so a user's
-        # reinstall image is one function call rather than a copy of a
-        # 900-line module that goes stale on the next bump.
+        # The same installer/cd.nix as the published network image, with
+        # `source` pointing at the caller's flake.
         #
         # Called from the generated flake (installer/template/flake.nix), which
         # is why it takes `flake` and `host` rather than reading anything here:
         # at that point `self` is the USER's repository and this repository is
         # one of its inputs.
         #
-        # It is a reinstaller, not a backup. What it carries is the system
-        # closure and the configuration; what it does not carry is /home,
+        # It is a reinstaller, not a backup. It carries the flake inputs, then
+        # fetches the system from the network. It does not carry /home,
         # service state or secrets, and booting it erases the target disk. The
         # command that builds it says so; this is the machinery underneath.
         mkUserIso =
           {
             flake,
             host,
-            # Offline by default, because the whole point is a machine that can
-            # be rebuilt when there is nothing to fetch from. false is the
-            # network variant (#483): ~1.5 GB, fetching at install time --
-            # honest only for a closure the caches hold, which
-            # `nixarchy reinstall iso --net` checks before offering the build.
-            offline ? true,
+            # Accept stale generated flakes that still pass offline.
+            ...
           }:
           let
             machine =
@@ -1782,26 +1691,17 @@
                 It has: ${lib.concatStringsSep ", " (lib.attrNames flake.nixosConfigurations)}
               '');
           in
-          (nixpkgs.lib.nixosSystem {
-            system = "x86_64-linux";
-            specialArgs = {
-              inherit inputs offline;
-              source = {
-                inherit flake;
-                # One machine, seeded and installed. The reference images carry
-                # three because the reference exists in two encryption shapes
-                # plus a hardware superset; a user has the machine they have,
-                # and its own configuration already decided whether it is
-                # encrypted.
-                configs = [ machine ];
-                installed = {
-                  encrypted = machine;
-                  unencrypted = machine;
+          builtins.seq machine
+            (nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = {
+                inherit inputs;
+                source = {
+                  inherit flake;
                 };
               };
-            };
-            modules = [ ./installer/cd.nix ];
-          }).config.system.build.isoImage;
+              modules = [ ./installer/cd.nix ];
+            }).config.system.build.isoImage;
 
         mkMicrovm =
           {
@@ -1908,11 +1808,7 @@
             # See tests/install-encrypted.nix for why the passphrase prompt is
             # not the obstacle tests/install.nix's header once took it for.
             "install-encrypted"
-            # The same question as checks.install, asked of the artefact people
-            # download rather than of a test node: boots the ISO with no network
-            # device at all and installs from what the image carries.
-            "install-iso"
-            # The other image: the net ISO installing by FETCHING, from a
+            # The ISO installing by FETCHING, from a
             # substituter stood up inside the test's own vlan. The image people
             # download for a network install had no install check at all until
             # this one; see the file header for what it proves and what no
@@ -1961,7 +1857,6 @@
             "microvm-boot"
             # The per-VM vsock CID and the autoconfirm loop of hyprland-ai-mirror; boots nothing (#1508).
             "microvm-ai-mirror"
-            "offline-hardware-packages"
             # Evaluation against stable, ~20s and no VM (#527). `stableVm` is
             # passed in rather than reached through `inputs.self`, because it is
             # deliberately not a nixosConfigurations entry -- see its definition.
@@ -1993,14 +1888,6 @@
             "preview-variant"
             # First login seeds only missing launchers and stubs (#1319).
             "provision-launchers"
-            # The reinstall image (#478): installer/cd.nix over a USER machine
-            # instead of the reference set, installed offline and booted. Asserts
-            # copy-never-build and that the machine that boots is the closure the
-            # image carried. CANNOT PASS until cd.nix writes the reference
-            # markers from `source.configs` (#480) -- the file header names the
-            # gap and the CARRIED step asserts it. Nightly-class cost: a full
-            # image build plus an offline install, ~3h on the big runner.
-            "reinstall-vm"
             # The release notes, against a fixture repository whose diff is known.
             # Same dangerous failure as the delta above, over more scans: a release
             # note that reads calm because a grep stopped matching. See
@@ -2156,24 +2043,11 @@
             inherit self;
           };
 
-          # Why: tests/installer-offline-rescue.nix
-          installer-offline-rescue = import ./tests/installer-offline-rescue.nix {
-            pkgs = pkgsFor.${system};
-            installScript = ./installer/install.sh;
-          };
-
           # Why: tests/install-seed-shape.nix (#1176, #1179)
           install-seed-shape = import ./tests/install-seed-shape.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
-          };
-
-          # Why: tests/installer-baked-guard.nix
-          installer-baked-guard = import ./tests/installer-baked-guard.nix {
-            pkgs = pkgsFor.${system};
-            installScript = ./installer/install.sh;
-            dashboardScript = ./installer/lib/dashboard.sh;
           };
 
           # Why: tests/installer-answers.nix
@@ -2886,14 +2760,8 @@
           iso-budget =
             let
               pkgs = pkgsFor.${system};
-              # MiB, as integers: nix has floats but this needs exact bytes, and
-              # 7680 is less to get wrong than 7.5 * 1073741824.
+              # MiB, as integers: the release asset limit is 2048 MiB.
               images = [
-                {
-                  name = "iso";
-                  drv = self.packages.${system}.iso;
-                  mib = 7680; # 7.5 GiB, over a measured 6.58 GiB
-                }
                 {
                   name = "iso-net";
                   drv = self.packages.${system}.iso-net;
@@ -2916,9 +2784,8 @@
                   echo
                   echo "An image outgrew its budget. Either something large joined the"
                   echo "closure by accident, or the budget in installer/cd.nix needs"
-                  echo "raising on purpose -- but iso-net's 2 GiB is GitHub's limit on"
-                  echo "a release asset, and cannot be raised, only worked around by"
-                  echo "splitting the image the way release.yml splits the other one."
+                  echo "raising on purpose -- but iso-net's 2 GiB is GitHub's"
+                  echo "limit on a release asset."
                   exit 1
                 fi
                 touch $out

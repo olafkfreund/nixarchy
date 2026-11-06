@@ -5,31 +5,17 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
-import textwrap
 import threading
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent
-TESTS = ("install", "free-space", "install-encrypted", "install-iso",
-         "install-iso-net", "reinstall-vm")
+TESTS = ("install", "free-space", "install-encrypted", "install-iso-net")
 
 
 def child(mode):
     namespace = {}
-    helper = ROOT / "vm-cleanup.py"
-    if helper.exists():
-        exec(helper.read_text(), namespace)
-        cleanup = namespace["reap_owned_vms"]
-    else:
-        # Exercise the actual previous monitor-based cleanup, not a quotation
-        # of the proposed fix. A stuck monitor must not turn failure into hang.
-        source = (ROOT / "install-iso.nix").read_text()
-        reap = source[source.index("    def reap():"):source.index("    try:\n        # A blank disk")]
-        exec(textwrap.dedent(reap), namespace)
-
-        def cleanup(machines):
-            namespace["vms"] = machines
-            namespace["reap"]()
+    exec((ROOT / "vm-cleanup.py").read_text(), namespace)
+    cleanup = namespace["reap_owned_vms"]
 
     process = subprocess.Popen(
         [sys.executable, "-c", "import signal,threading; "
@@ -111,7 +97,7 @@ def main():
             assert "finally:\n        reap_owned_vms(vms)" in source, name
             assert source.count("vms.append(") == 2, name
             assert source.count('"exec ${') == 2, name
-    print("PASS all six install scripts register dynamic machines for cleanup")
+    print("PASS all four install scripts register dynamic machines for cleanup")
 
 
 if __name__ == "__main__":

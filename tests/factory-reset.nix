@@ -71,7 +71,8 @@ pkgs.testers.runNixOSTest {
     assert machine.succeed("cat /top/@spike/spike-sentinel").strip() == "old"
     machine.succeed("umount /top")
 
-    machine.reboot()
+    machine.shutdown()
+    machine.start()
     machine.wait_for_unit("multi-user.target")
     assert machine.succeed("cat /home/spike-sentinel").strip() == "new"
     machine.succeed("mount -o subvol=/ /dev/disk/by-label/storage /top")

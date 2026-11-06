@@ -206,7 +206,7 @@ fi
 # numtide/llm-agents.nix has all six. It is NOT a nixarchy input and must not
 # become one: lib.inputSources collects every flake's outPath and every input of
 # theirs transitively, and installer/cd.nix and installer/host.nix both carry
-# that onto the offline ISO and every installed host. llm-agents.nix pins its
+# that onto the network ISO and every installed host. llm-agents.nix pins its
 # own nixpkgs-unstable and documents being tested only against it, so `follows`
 # is not safely available -- one nixpkgs source tree measures about 486 MB, and
 # checks.iso-budget exists to refuse it.

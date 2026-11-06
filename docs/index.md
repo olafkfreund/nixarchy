@@ -180,8 +180,8 @@ connects your agents to it. It is off until you set that.
 
 `nixarchy reinstall iso` builds a bootable image **from this machine's own
 configuration**. Boot it on a new laptop and you get this system back —
-packages, desktop, services, settings — with nothing downloaded and nothing
-compiled, because the closure is on the medium.
+packages, desktop, services, settings. Installation needs a network and caches
+holding its packages; a package no cache holds is compiled or fails.
 
 **It is not a backup, and the name says so on purpose.** It carries your
 system, not your files — no `/home`, no browser profiles, no service state —
@@ -215,7 +215,7 @@ See **[getting started](manual/getting-started)**.
 > and back up anything on the target disk.
 
 ```
-nix build github:olafkfreund/nixarchy#iso
+nix build github:olafkfreund/nixarchy#iso-net
 sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 

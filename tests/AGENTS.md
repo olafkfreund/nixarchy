@@ -28,7 +28,7 @@ package itself as well as the function check after changing its shell source.
 |---|---|---|
 | `install` | the installer's output boots — a real disk, real bootloader | self-hosted |
 | `install-encrypted` | the LUKS path, unlocked over the serial console | self-hosted |
-| `install-iso` / `-net` | the real published image, installing with no network | self-hosted |
+| `install-iso-net` | the published image installs through a substituter | self-hosted |
 | `free-space` | installing beside an existing OS without eating it | self-hosted |
 | `session` | a booted desktop; **does not run locally**, CI only | self-hosted |
 | `microvm-boot` | a guest actually boots, not just builds | `-tcg` runner |
@@ -36,22 +36,26 @@ package itself as well as the function check after changing its shell source.
 VM tests run from `/mnt/data/vmtest`, never `/tmp` — `/tmp` is a 32G tmpfs and
 a VM test that runs out of room does not fail cleanly, it wedges.
 
+No check installs a personal network image end to end. `install-iso-net` boots
+the stock image; `reinstall-iso` exercises the personal-image preflights with
+stubs. `install-matrix.py` also uses the published stock image. A personal
+image must be built and installed manually to cover that path.
+
 `checks.coexistence` (`tests/coexistence/`, AGENTS.md §14) proves nixarchy's
 own fixtures still build and don't get silently shadowed — it cannot see
 fonts (no known failing case) or a real host config, only what a fixture
 names.
 
-## The one nothing here can prove: a username that is not `omarchy`
+## The manual username case
 
 `tests/install-matrix.py` is not a check. It boots a **published** `.iso` in
 real qemu and installs it every way a person can — scripted, driven by hand
 through the greeter, and then re-booted from its own disk to prove the result
 starts.
 
-It exists because of a hole every check above shares. All of them install as
-username **`omarchy`**, which is the name the ISO's reference closure is baked
-for — the one username that cannot diverge from it. On 2026-09-07 the full
-matrix ran 6/6 green against the published `v4.0.2-8` offline image; the same
+It exists because the automated checks install as username **`omarchy`**.
+On 2026-09-07 the full
+matrix ran 6/6 green against the published `v4.0.2-8` image; the same
 file, driven by hand with the username `olaf`, died in the source bootstrap:
 
 ```
@@ -59,34 +63,24 @@ hm_hmfontconfigfonts.xml -> libxml2+py -> doxygen -> cmake
   -> libarchive -> attr -> download.savannah.gnu.org
 ```
 
-home-manager's per-user fontconfig file is in no baked closure, and the offline
+home-manager's per-user fontconfig file was in no baked closure, and that
 image had `substituters = lib.mkForce [ ]`, so it could not fetch that path and
 had to build it — and building anything with no compiler on the medium is the
 stdenv bootstrap. Two users hit the same bootstrap by a different route, an
-Intel NPU. #384 gave both images substituters; the same cells against an image
-built from that fix installed and booted clean.
-
-`installer/cd.nix` bakes `inputDerivation` for `toplevel`, `initialRamdisk` and
-`etc`. home-manager is a fourth per-machine thing and is not in that list.
+Intel NPU. #384 gave the images published then substituters; the same cells
+against an image built from that fix installed and booted clean.
 
 So, when changing what the ISO carries or how the installer writes a machine:
 
 ```
-MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py off-free manual
+MATRIX_NET_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py net-free manual
 ```
 
 and **type a username that is not `omarchy`**.
 
-**Partly closed since.** `checks.install-iso` now installs as `lovelace`, so
-one automated cell finally varies this — offline, nightly, already paying for a
-full image build, so a per-user rebuild costs wall clock nobody waits on.
-`checks.install` keeps `omarchy` deliberately: it is PR-gated and its seeded
-store is the thing under test there.
-
 What is still uncovered, and worth typing by hand: a name with a **hyphen or a
 digit**, which also stresses systemd unit naming (`home-manager-<user>.service`)
-and home-manager's own paths. `install-iso` varies one variable on purpose —
-a compound change makes a failure unattributable.
+and home-manager's own paths.
 
 ## The other one nothing here can prove: a disk that is not virtio
 
@@ -106,12 +100,12 @@ the framework with raw `qemu.options` and creating the image yourself, inside a
 So it lives in the harness instead, which drives real qemu directly:
 
 ```
-MATRIX_NVME=1 MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso \
-  python3 tests/install-matrix.py off-whole-plain
+MATRIX_NVME=1 MATRIX_NET_ISO=result/iso/nixarchy-*.iso \
+  python3 tests/install-matrix.py net-whole-plain
 ```
 
 Run it when changing anything that builds a partition name, mounts by path, or
-touches `installer/disk-config.nix`. Both an online and an offline whole-disk
+touches `installer/disk-config.nix`. Both an online and a former offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
@@ -941,8 +935,8 @@ cannot fetch an unfree or locally built path — cannot be produced by any
 layer here. What IS covered: the prediction's classification against real
 `nix path-info` shapes (`substitutable`), the build-machine verdict wiring
 (`reinstall-iso`), and the target-side plan report with plans nix really
-prints (`installer-store-space`). What is not: a real `reinstall-iso-net`
-image, booted against real caches, missing a real unfree package. That run
+prints (`installer-store-space`). What is not: a personal network image,
+booted against real caches, missing a real unfree package. That run
 needs a human with vscode in their closure and a machine to lose; until one
 reports back, the prediction is tested and the event it predicts is not.
 

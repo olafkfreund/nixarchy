@@ -4,6 +4,13 @@ title: A reinstall image of this machine
 
 # A reinstall image of this machine
 
+**Not available right now.** The command runs its checks and then refuses to
+build, because the image would install a stock system rather than this machine
+([#1649](https://github.com/olafkfreund/nixarchy/issues/1649)). To get a machine
+back today, boot the published network image with `nixarchy.from=<your config
+repo> nixarchy.host=<name>` on its kernel command line. The rest of this page
+describes the command once that is fixed.
+
 `nixarchy reinstall iso` builds a bootable image **from this machine's own
 configuration**. Boot it on new hardware and you get this system back: the same
 packages, the same desktop, the same services, the same settings.
@@ -21,7 +28,8 @@ disk:
 
 ## It is not a backup, and that distinction is the whole page
 
-**The image carries your system. It does not carry your files.**
+**The image carries your configuration and fetches your system. It does not
+carry your files.**
 
 No `/home`. No browser profiles. No service state, no databases, no
 photographs. And **booting it erases the target disk**.
@@ -41,11 +49,8 @@ a terminal:
 nixarchy reinstall iso
 ```
 
-It checks three things before it starts, and each refusal says what to do:
+Before building, it checks:
 
-- **Disk space.** The image is 6–10 GB and the build wants roughly twice the
-  closure in transient space. Checked first, because running out of disk
-  mid-build fails several levels away from the cause.
 - **Committed.** The flake embedded in the image pins by commit, so an
   uncommitted tree cannot be baked. `git add` is not enough — it has to be
   committed.
@@ -54,6 +59,9 @@ It checks three things before it starts, and each refusal says what to do:
   building an image of what the configuration *says*, rather than what happens
   to be running, is a legitimate thing to want. It just should not happen
   without being told.
+- **Cache availability.** It asks your store what a fresh machine could fetch
+  and lists packages no configured cache holds, with their sizes, before you
+  choose whether to build the image.
 
 Then it asks before building, because the build takes tens of minutes —
 compression is most of it.
@@ -61,30 +69,18 @@ compression is most of it.
 The image lands at `~/.local/share/nixarchy/reinstall-iso/`, and the command
 prints the exact path and size.
 
-## The network variant
+## What the image needs to reinstall
 
-```
-nixarchy reinstall iso --net
-```
-
-About 1.5 GB instead of 6–10, because it carries the configuration and
-fetches the system from the binary caches as it installs. The trade is
-explicit: the target needs a network, and the image is only honest if the
-caches actually hold your system.
+The image is about 1.5 GB because it carries your configuration and fetches
+the system as it installs. Reinstalling needs a network and caches holding
+this machine's packages. `--net` is still accepted and builds the same image.
 
 They often do not hold all of it. `cache.nixos.org` carries **no unfree
 packages** — vscode, zoom, every IDE with a licence — and anything built on
 your machine (an overlay, a patched package) is in no cache anywhere. A
-target would have to *compile* those, mid-install, which is the failure the
-command exists to get in front of: before offering the build, it asks your
-own store what a fresh machine could not fetch, lists it with sizes, and
-points at the offline image — which carries everything and needs no such
-answer. The installer asks the same question again on the target, before
-anything is formatted.
-
-If your closure comes back clean — everything fetchable — the network image
-is the cheaper artifact to keep and re-make. If it does not, burn the big
-one.
+target must *compile* those during installation, or the install fails. The
+command warns about them before building the image. The installer checks again
+on the target, before anything is formatted.
 
 ## Writing it to a USB stick
 
@@ -100,9 +96,8 @@ Two things to do with the image once you have it:
 **Keep it off this machine.** An image stored on the disk it exists to replace
 protects nothing.
 
-**Keep it private.** It contains your `/etc/nixos` — hostnames, options, the
-shape of your network — and the unfree packages your system uses. Those are
-yours to keep and not yours to publish.
+**Keep it private.** It contains your `/etc/nixos` — hostnames, options, and
+the shape of your network. Those are yours to keep and not yours to publish.
 
 ## Using it: a new machine
 
@@ -111,9 +106,9 @@ what comes up, the same one the [normal ISO](getting-started) runs, and it asks
 the same questions.
 
 The difference is what it installs. A normal ISO installs a fresh nixarchy. This
-one installs **the system that built it** — the closure is on the medium, so
-nothing is downloaded and nothing is compiled. That means it works on a machine
-with no network at all: no wifi driver loaded, no cable to hand.
+one installs **the system that built it**. The target needs a network to fetch
+that system from caches. A package no cache holds is compiled during the
+install, or the install fails.
 
 After it finishes, the machine has your system and `/etc/nixos` is your
 repository. What it does not have is your files — bring those back with
@@ -139,23 +134,16 @@ the bootloader, and a bad result is one `nixos-rebuild --rollback` away.
 
 ## What is checked, and what is not
 
-The image is built and reinstalled from, in a VM, on a machine that is
-deliberately *not* this project's reference system — and the assertion is not
-"the install worked" but that **nothing was built and nothing was fetched**:
-every path came off the medium. That check runs nightly rather than on every
-change, because it builds a second full image and installs from it.
+No automated check installs a personal image end to end. The stock network
+image is installed in a VM, and the personal image's cache preflights are
+tested with stubs. Your hardware is also untested: if the new machine differs
+from the old one, expect to edit `hosts/<name>/hardware-configuration.nix`
+after the first boot and rebuild.
 
-What no check covers is your particular hardware. A green check says the image
-reinstalls correctly in a VM; it says nothing about whether your new laptop's
-wifi chip has a driver in the closure you baked. If the new machine's hardware
-differs from the old one, expect to edit `hosts/<name>/hardware-configuration.nix`
-after the first boot, and to rebuild — which needs a network.
-
-The network variant's prediction is tested against real `nix path-info`
-shapes, but no automated check can watch a network image actually fail to
-fetch — every store CI touches is warm, and every closure it installs is
-cached. If `--net` predicted "all fetchable" and the install still had to
-build something, that is a bug in the prediction: please report it.
+The cache prediction is tested against real `nix path-info` shapes, but no
+automated check watches a personal image fetch its system on a new machine.
+If the preflight predicted "all fetchable" and installation still had to
+build something, please report it.
 
 ## Related
 

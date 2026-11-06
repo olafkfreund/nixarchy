@@ -2690,7 +2690,15 @@ let
       "/plymouth-is-not-enabled";
 
   installedSplash = defaultMachine;
-  isoSplash = inputs.self.nixosConfigurations.iso.config;
+  isoSplash = inputs.self.nixosConfigurations.iso-net.config;
+
+  legacyIso =
+    offline:
+    inputs.self.lib.mkUserIso {
+      flake = inputs.self;
+      host = "reference";
+      inherit offline;
+    };
 
   # ---- nixarchy does not delete software somebody installed ----
   #
@@ -3951,6 +3959,10 @@ pkgs.runCommand "nixarchy-options-files"
     splashIsoDir = splashPaths isoSplash;
     splashIsoOn = pkgs.lib.boolToString isoSplash.boot.plymouth.enable;
     splashIsoTheme = isoSplash.boot.plymouth.theme;
+    legacyIsoSame = pkgs.lib.boolToString (
+      (legacyIso true).drvPath == (legacyIso false).drvPath
+      && (legacyIso true).drvPath == inputs.self.packages.${system}.iso-net.drvPath
+    );
     # What the assets are measured against. The vendored tree, at the version
     # this flake pins -- so a bump that changes an asset changes what "still
     # upstream's" means, which is the point.
@@ -4613,7 +4625,7 @@ pkgs.runCommand "nixarchy-options-files"
         }
         echo "fontconfig pins Omarchy's font choices"
 
-        # ---- the two images are tellable apart -----------------------------
+        # ---- the network image has a stable name and label -----------------
         #
         # Interpolated rather than grepped, because reading these forces the
         # ISO configurations to evaluate -- which is what makes the volumeID
@@ -4621,25 +4633,21 @@ pkgs.runCommand "nixarchy-options-files"
         # evaluates them, and a release build finding it is a release too
         # late.
         #
-        # They were identical once: same filename, same label, for a 5.6 GB
-        # image and a 1.5 GB one.
-        isoName=${inputs.self.nixosConfigurations.iso.config.image.baseName}
-        netName=${inputs.self.nixosConfigurations.iso-net.config.image.baseName}
-        isoLabel=${inputs.self.nixosConfigurations.iso.config.isoImage.volumeID}
-        netLabel=${inputs.self.nixosConfigurations.iso-net.config.isoImage.volumeID}
-        test "$isoName" != "$netName" || {
-          echo "both ISOs build to the same filename ($isoName): copy them out and they collide" >&2
-          exit 1
-        }
-        test "$isoLabel" != "$netLabel" || {
-          echo "both ISOs carry the same volume label ($isoLabel): two sticks, one name" >&2
-          exit 1
-        }
+        isoName=${inputs.self.nixosConfigurations.iso-net.config.image.baseName}
+        isoLabel=${inputs.self.nixosConfigurations.iso-net.config.isoImage.volumeID}
         case "$isoName" in
           *${inputs.self.packages.${system}.omarchy.version}*) ;;
           *) echo "the ISO filename does not carry the version: $isoName" >&2; exit 1 ;;
         esac
-        echo "the two images are tellable apart by name and label ($isoLabel / $netLabel)"
+        case "$isoLabel" in
+          NIXARCHY_*) ;;
+          *) echo "the ISO volume label is unexpected: $isoLabel" >&2; exit 1 ;;
+        esac
+        test "$legacyIsoSame" = true || {
+          echo "mkUserIso's old outputs do not both give the network image" >&2
+          exit 1
+        }
+        echo "the network image has a versioned name and label; old output arguments agree"
 
         # ---- a flatpak is pickable, by the tooling that already exists ------
         #

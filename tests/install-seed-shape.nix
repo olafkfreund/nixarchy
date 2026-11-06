@@ -60,8 +60,7 @@ let
           > "$out/hosts/installed/hardware-configuration.nix"
 
         # The functions on their own, extracted rather than sourced:
-        # install.sh runs a wizard when sourced. Same pattern as
-        # tests/installer-offline-rescue.nix:37.
+        # install.sh runs a wizard when sourced.
         for fn in subst substitute_host_files; do
           sed -n "/^$fn()/,/^}/p" ${installScript} >> f.sh
           echo >> f.sh

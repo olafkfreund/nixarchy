@@ -27,7 +27,7 @@
 let
   inherit (pkgs) lib;
 
-  iso = inputs.self.nixosConfigurations.iso.config.boot.initrd.availableKernelModules;
+  iso = inputs.self.nixosConfigurations.iso-net.config.boot.initrd.availableKernelModules;
   reference = inputs.self.nixosConfigurations.reference.config.boot.initrd.availableKernelModules;
 
   # Modules the ISO carries that an installed machine provably does not need.

@@ -36,13 +36,10 @@ pkgs.testers.runNixOSTest {
       ];
     };
     boot.initrd.supportedFilesystems = [ "btrfs" ];
-    boot.initrd.systemd = {
+    boot.initrd.systemd.repart = {
       enable = true;
-      repart = {
-        enable = true;
-        device = "/dev/vda";
-        empty = "allow";
-      };
+      device = "/dev/vda";
+      empty = "allow";
     };
     users.users.omarchy = {
       isNormalUser = true;

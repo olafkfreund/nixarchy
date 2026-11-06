@@ -1,6 +1,11 @@
-{ pkgs, ... }:
+{ inputs, pkgs }:
 # Why: tests/AGENTS.md#factory-reset
 let
+  inherit (pkgs.extend inputs.self.overlays.default) omarchy;
+  resetCommand = pkgs.runCommand "omarchy-system-factory-reset" { } ''
+    mkdir -p $out/bin
+    install -m755 ${omarchy}/share/omarchy/bin/omarchy-system-factory-reset $out/bin/omarchy-system-factory-reset
+  '';
   exchWrapper = pkgs.writeShellScriptBin "exch" ''
     calls=$(cat /run/test-exch-calls 2>/dev/null || echo 0)
     calls=$((calls + 1))
@@ -69,9 +74,14 @@ pkgs.testers.runNixOSTest {
       isNormalUser = true;
       extraGroups = [ "wheel" ];
     };
+    environment.etc."nixarchy/managed".text = "";
+    security.sudo.wheelNeedsPassword = false;
     environment.systemPackages = [
       pkgs.btrfs-progs
       pkgs.e2fsprogs
+      pkgs.git
+      pkgs.gum
+      resetCommand
     ];
   };
 
@@ -111,8 +121,6 @@ pkgs.testers.runNixOSTest {
     assert machine.succeed("cat /var/lib/spike-sentinel").strip() == "new"
     assert machine.succeed("cat /var/lib.spike/spike-sentinel").strip() == "old"
     machine.succeed("exch /var/lib /var/lib.spike")
-
-    machine.fail("runuser -u omarchy -- btrfs subvolume list -r /")
 
     machine.succeed("btrfs subvolume delete /top/@spike /top/@spike-ro")
     machine.succeed("rm /var/lib.spike/spike-sentinel /var/lib/spike-sentinel /home/spike-sentinel")
@@ -248,6 +256,18 @@ pkgs.testers.runNixOSTest {
     assert "Starting Restore /home" not in journal(), journal()
     old()
 
+    # 10: the command elevates before reading the root-only failure record.
+    status, output = machine.execute("runuser -u omarchy -- omarchy-system-factory-reset")
+    assert status == 1 and "The last factory reset did not finish." in output, (status, output)
+    assert output.index("The last factory reset did not finish.") < output.index("nothing changed"), output
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
+    status, output = machine.execute("omarchy-system-factory-reset --check")
+    assert status == 0 and output == "", (status, output)
+    machine.succeed("truncate -s 0 /var/lib/nixarchy/factory-reset.failed")
+    status, output = machine.execute("runuser -u omarchy -- omarchy-system-factory-reset")
+    assert status == 1 and "left no reason" in output, (status, output)
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
+
     # 3: the snapshot fails after copy, and stage cleanup removes both names.
     clean()
     top()
@@ -273,6 +293,9 @@ pkgs.testers.runNixOSTest {
     failed("rolled back")
     old()
     machine.succeed("chattr -i /var/lib")
+
+    # 7: the real kernel refuses the baseline query to an unprivileged user.
+    machine.fail("runuser -u omarchy -- btrfs subvolume list -r /")
 
     # 5: the second exchange and rollback both fail; run the printed repair.
     clean()
@@ -310,5 +333,29 @@ pkgs.testers.runNixOSTest {
     top()
     machine.fail("test -e /top/@home-before-reset-case12")
     untop()
+
+    # 8: an unprivileged check stays quiet; an interactive run elevates.
+    clean()
+    status, output = machine.execute("runuser -u omarchy -- omarchy-system-factory-reset --check")
+    assert status == 3 and output == "", (status, output)
+    machine.succeed("chown omarchy:users /etc/nixos")
+    machine.succeed("runuser -u omarchy -- git -C /etc/nixos init")
+    machine.succeed("runuser -u omarchy -- git -C /etc/nixos add reset-sentinel")
+    machine.succeed("runuser -u omarchy -- git -C /etc/nixos -c user.name=Test -c user.email=test@example.invalid commit -m initial")
+    machine.succeed("mkdir -p /test-control/fake-bin")
+    machine.succeed("printf '#!/bin/sh\\ntouch /tmp/factory-reset-fake-gum\\nexit 1\\n' > /test-control/fake-bin/gum && chmod +x /test-control/fake-bin/gum")
+    status, output = machine.execute("runuser -u omarchy -- sh -c 'PATH=/test-control/fake-bin:/run/wrappers/bin:/run/current-system/sw/bin omarchy-system-factory-reset'")
+    assert status == 0 and "Factory reset" in output and "first commit" in output, (status, output)
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
+    machine.fail("test -e /tmp/factory-reset-fake-gum")
+    machine.succeed("install -m755 /run/current-system/sw/bin/omarchy-system-factory-reset /tmp/factory-reset-copy")
+    status, output = machine.execute("runuser -u omarchy -- /tmp/factory-reset-copy")
+    assert status == 1 and "not the installed command" in output, (status, output)
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
+
+    # 9: root reports a failed baseline query as unknown, not absent.
+    status, output = machine.execute("NIXARCHY_BTRFS=false omarchy-system-factory-reset")
+    assert status == 1 and "Could not ask" in output and "no factory snapshot" not in output, (status, output)
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.request")
   '';
 }

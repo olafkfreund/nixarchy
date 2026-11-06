@@ -35,7 +35,7 @@
 #   The reset itself, from this process. /home is mounted and in use by the
 #   session you typed this into. This writes a request and reboots; the work
 #   is done by nixarchy-factory-reset.service before /home is mounted on the
-#   next boot. See installer/host.nix for why that is the only honest order.
+#   next boot. See installer/factory-reset.nix for why that is the only honest order.
 #
 # Upstream reached the same conclusion and ships the same shape --
 # omarchy-system-factory-reset-finish, a first-boot worker ordered before
@@ -49,6 +49,7 @@
 # holds the user's commits), and an empty @home is not the same thing as the
 # @home the installer made.
 set -euo pipefail
+if [ "$EUID" -eq 0 ]; then export PATH=/run/wrappers/bin:/run/current-system/sw/bin; fi
 
 # The ownership marker, and the two paths the boot unit agrees with. Overridable
 # so the check in tests/options.nix can exercise every branch of this file
@@ -56,6 +57,7 @@ set -euo pipefail
 # sets any of them.
 MANAGED_MARKER=${NIXARCHY_MANAGED_MARKER:-/etc/nixarchy/managed}
 REQUEST=${NIXARCHY_FACTORY_REQUEST:-/var/lib/nixarchy/factory-reset.request}
+FAILED=${REQUEST%.request}.failed
 FLAKE=${NIXARCHY_FLAKE:-/etc/nixos}
 BTRFS=${NIXARCHY_BTRFS:-btrfs}
 
@@ -89,19 +91,25 @@ is_managed() { [ -e "$MANAGED_MARKER" ]; }
 # is a second copy of the machine wearing the name of the first, and restoring
 # from it would return the user to some arbitrary Tuesday.
 #
-# No mount is needed to ask. The snapshots live at the top level, which nothing
-# mounts; `btrfs subvolume list` reads the filesystem's own tree through any
-# mount of it.
+# No mount is needed to ask, but root is. The snapshots live at the top level,
+# which nothing mounts; `btrfs subvolume list` reads the filesystem's own tree
+# through any mount of it.
 # ---------------------------------------------------------------------------
-baseline_subvolumes() {
-  command -v "$BTRFS" >/dev/null 2>&1 || return 0
-  "$BTRFS" subvolume list -r / 2>/dev/null | awk '{ print $NF }' || true
-}
-
-has_baseline() {
-  local subvols
-  subvols=$(baseline_subvolumes)
-  grep -qx '@factory' <<<"$subvols" && grep -qx '@factory-home' <<<"$subvols"
+baseline=unknown
+baseline_err=
+ask_baseline() {
+  local out subvols
+  if ! command -v "$BTRFS" >/dev/null 2>&1; then
+    baseline_err="$BTRFS is not installed"
+    return 0
+  fi
+  out=$("$BTRFS" subvolume list -r / 2>&1) || { baseline_err=$out; return 0; }
+  subvols=$(awk '{ print $NF }' <<<"$out")
+  if grep -qx '@factory' <<<"$subvols" && grep -qx '@factory-home' <<<"$subvols"; then
+    baseline=yes
+  else
+    baseline=no
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -110,6 +118,7 @@ has_baseline() {
 # ---------------------------------------------------------------------------
 force=false
 check_only=false
+args=("$@")
 
 while (($#)); do
   case "$1" in
@@ -117,11 +126,10 @@ while (($#)); do
     --check) check_only=true; shift ;;
     -h | --help)
       echo "Usage: omarchy-system-factory-reset [--check] [--force]"
-      echo "  --check  exit 0 if this machine has a factory baseline to return to."
-      echo "           Needs root, like everything else here: btrfs subvolume list"
-      echo "           reads the filesystem tree and the kernel wants CAP_SYS_ADMIN"
-      echo "           for it, so an unprivileged --check answers 'no' on a machine"
-      echo "           that has a baseline."
+      echo "  --check  exit 0 if this machine has a factory baseline to return to,"
+      echo "           1 if it does not, or 3 if the question could not be asked."
+      echo "           An unprivileged --check on a real machine exits 3: btrfs"
+      echo "           subvolume list needs CAP_SYS_ADMIN."
       echo "  --force  skip both confirmations. For automation, and for the test"
       echo "           that proves the restore actually restores."
       exit 0
@@ -134,10 +142,9 @@ while (($#)); do
 done
 
 if [ "$check_only" = true ]; then
-  if is_managed && has_baseline; then
-    exit 0
-  fi
-  exit 1
+  is_managed || exit 1
+  ask_baseline
+  case $baseline in yes) exit 0 ;; no) exit 1 ;; *) exit 3 ;; esac
 fi
 
 # ---------------------------------------------------------------------------
@@ -163,6 +170,37 @@ MSG
   exit 1
 fi
 
+ask_baseline
+if [ "$baseline" = unknown ] && [ "$EUID" -ne 0 ]; then
+  self=$(readlink -f "${BASH_SOURCE[0]}")
+  case $self in
+    /nix/store/*) ;;
+    *) red "Could not ask, and this is not the installed command. Run omarchy-system-factory-reset."; exit 1 ;;
+  esac
+  exec sudo "$self" "${args[@]}"
+fi
+
+if [ -e "$FAILED" ]; then
+  red "The last factory reset did not finish." >&2
+  if [ -s "$FAILED" ]; then
+    cat "$FAILED" >&2
+  else
+    echo "The last reset left no reason: a crash, a power cut, or a disk too full to write one. To see what is where:" >&2
+    echo "  sudo mkdir -p /mnt" >&2
+    echo "  sudo mount -o subvol=/ \$(findmnt -no SOURCE / | sed 's/\[.*\]//') /mnt" >&2
+    echo "  sudo bash -c 'ls -d /var/lib.before-reset-* /mnt/@home-before-reset-*'" >&2
+  fi
+  echo "Once you have read this, dismiss it:" >&2
+  echo "  sudo rm $FAILED" >&2
+  exit 1
+fi
+
+if [ "$baseline" = unknown ]; then
+  echo "Could not ask whether this machine has a factory snapshot:" >&2
+  echo "$baseline_err" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Our machine, no baseline: every machine installed before #172, forever.
 #
@@ -170,7 +208,7 @@ fi
 # a baseline cannot be created retroactively, and the point of a baseline is
 # that it predates everything you are trying to undo.
 # ---------------------------------------------------------------------------
-if ! has_baseline; then
+if [ "$baseline" = no ]; then
   cat >&2 <<'MSG'
 There is no factory snapshot on this machine to return to.
 
@@ -227,14 +265,16 @@ echo
 bold "Factory reset"
 echo
 echo "  This machine has a factory baseline: snapshots of / and /home taken by"
-echo "  the installer before anyone logged in. Resetting puts them back."
+echo "  the installer before anyone logged in. Resetting puts /home and"
+echo "  /var/lib back from them. The rest of / stays as it is."
 echo
 bold "  What comes back"
 echo
-echo "    /home         as the installer created it. Empty."
-echo "    /var/lib      as the installer left it. Every service forgets"
-echo "                  everything: wifi passwords, bluetooth pairings,"
-echo "                  container images, databases, the lot."
+echo "    /home         as the installer created it."
+echo "    /var/lib      as the installer left it. Services forget what they"
+echo "                  keep there: bluetooth pairings, container images,"
+echo "                  databases. Wi-Fi profiles are in /etc/NetworkManager,"
+echo "                  and stay."
 echo
 bold "  What does NOT come back"
 echo
@@ -243,8 +283,8 @@ echo "                  your commits, and it is what makes a reinstall"
 echo "                  recoverable. A reset that ate it would be worse than"
 echo "                  no reset at all."
 echo "    The system    a NixOS closure is not a subvolume and swapping one"
-echo "                  would not reset it. It resets by rebuilding from the"
-echo "                  first commit in $FLAKE -- see below."
+echo "                  would not reset it. An earlier one comes back by"
+echo "                  rebuilding a commit in $FLAKE -- see below."
 echo
 bold "  Where your data goes"
 echo
@@ -283,9 +323,10 @@ fi
 bold "  The system half"
 echo
 if [ -n "$first_commit" ]; then
-  echo "    $FLAKE's first commit is the configuration this machine was"
-  echo "    installed with. Building it and making it the boot default is the"
-  echo "    system's equivalent of this reset, and it is reversible -- the"
+  echo "    $FLAKE's first commit is the configuration you first committed."
+  echo "    The installer makes no commit, so it is what this machine was"
+  echo "    installed with only if you committed before changing anything."
+  echo "    Building it and making it the boot default is reversible -- the"
   echo "    generation you are on now stays in the boot menu."
   echo
   dim "      sudo nixos-rebuild boot --flake \"git+file://$FLAKE?rev=$first_commit#\$(hostname)\""

@@ -2704,7 +2704,7 @@ run_install() {
 # function and unmounted again. installer/disk-config.nix deliberately gains
 # no entry -- the baseline is never mounted by the running system, it is
 # reached by mounting the top level at the moment it is used, which is what
-# installer/host.nix's restore unit does.
+# installer/factory-reset.nix's restore unit does.
 #
 # What is NOT here: any change to the bootloader. Upstream offers @factory as
 # a boot entry; PR #114 settled why that is meaningless on this layout --

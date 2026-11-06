@@ -2049,6 +2049,11 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.boot-hang-detect
 
+      # checks.factory-reset is a nixosTest and needs the /dev/kvm set up above (#1621).
+      - name: A failed factory reset leaves both halves untouched, on real btrfs
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.factory-reset
+
       # checks.remove-fingerprint-vm is a nixosTest and needs the /dev/kvm set up above (#1620).
       - name: A fingerprint removed through real fprintd and a virtual reader is gone
         if: needs.gate.outputs.relevant == 'true'

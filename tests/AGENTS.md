@@ -2187,6 +2187,66 @@ unlocking `omarchy-shell lock` on `de`. What no VM here can reach is a
 than QEMU's `send_chars` qcodes) and **Plymouth on a real KMS driver** on a
 non-US encrypted install.
 
+<a id="factory-reset"></a>
+## factory-reset (#1621)
+
+`checks.factory-reset` (`tests/factory-reset.nix`) boots a one-node btrfs guest
+(`/` on `subvol=@`, `/home` on `subvol=@home`) with
+`installer/factory-reset.nix` and `omarchy-system-factory-reset` installed. It
+runs the `exch` spike first (subvolume and directory exchanges across a reboot,
+plus unprivileged `btrfs subvolume list -r /` failing with `EPERM`), takes
+`@factory` and `@factory-home` snapshots, and then drives thirteen cases:
+
+- **Unit (`nixarchy-factory-reset.service`).** Case 1: full reset, the receipt's
+  own mount and `ls` commands reaching the preserved `@home-before-reset-*` and
+  `/var/lib.before-reset-*`, `/etc/nixos` untouched, and no `.failed` marker in
+  either the live or preserved `/var/lib`. Cases 11 and 11b: collided
+  `before-reset` names and a dangling symlink at `$oldvar` refused in
+  `phase=guard` with the existing data and symlink preserved. Case 6: a plain
+  directory at `@factory-home` refused by `btrfs subvolume show` before `cp`.
+  Case 2: `chattr +i /var` fails `cp`, leaves both halves untouched, and does
+  not retry on the next boot. Case 3: `chattr +i` on the top-level root fails
+  the snapshot after `cp` and cleans up `$oldvar`. Case 4: `chattr +i /var/lib`
+  fails the second exchange after `phase=home-swapped` and rolls `@home` back.
+  Case 5: both the second exchange and the rollback exchange fail; the user's
+  home survives at `@home-before-reset-*`, and running the `.failed` report's
+  printed repair commands with `/home` mounted restores it across a reboot and
+  clears the marker. Case 12: the first exchange fails and `remove_staged`
+  deletes both `$oldvar` and the `$oldhome` subvolume.
+- **Command (`omarchy-system-factory-reset`).** Case 7: after the kernel refuses
+  an unprivileged baseline query, `--force` as root refuses case 4's failure
+  marker; removing it permits a new request and a successful reset on reboot.
+  Case 10: as `omarchy`,
+  the command elevates via `sudo` before reading the `0600` `.failed` marker,
+  prints its contents (or the empty-file crash guidance when truncated), and
+  exits 1 without writing a request; `--check` never prints the marker. Case 8:
+  unprivileged `--check` exits 3 with no output; an unprivileged run with no
+  terminal and a fake `gum` first on the caller's `PATH` elevates, pins `PATH`
+  so the fake `gum` never runs, reads `/etc/nixos`'s first commit under `sudo`,
+  and refuses a copy of the script outside `/nix/store`. Case 9: as root with a
+  failing `btrfs`, reports "Could not ask" rather than "no factory snapshot".
+
+Two thin wrappers (`exchWrapper` and `dateWrapper`) sit first on the unit's
+`path` and are no-ops until `/test-control/exch-fail-from` or
+`/test-control/date` is written. With case 8's fake `gum`, on the caller's `PATH` to prove it is not reached, and case 9's `NIXARCHY_BTRFS=false`, they are the only stubs, because no real
+filesystem state makes `exch "$top/@home" "$oldhome"` succeed in `phase=stage`
+and its exact reverse fail milliseconds later in `phase=home-swapped` (case 5),
+or makes the first `exch` fail after `btrfs subvolume snapshot` on the same
+top-level mount just succeeded (case 12), and the wall clock cannot be relied on
+to land in the same second across a reboot (cases 11 and 11b). Every other
+failure (`chattr +i`, missing subvolume, kernel `EPERM`, real `sudo`) comes from
+the guest's real kernel and tools.
+
+**Holes, named rather than closed:** real btrfs metadata exhaustion mid-reset
+(`ENOSPC` during `cp --reflink=auto`, `btrfs subvolume snapshot`, or `exch`) and
+a real power cut between the two exchanges. No layer here can produce either on
+demand (§3). Whether a machine with no `@home` subvolume (from the pre-#1621
+code failing after moving `@home` aside) stops in emergency mode with root
+locked is inferred from `/home` having no `nofail` and `tests/install.nix:818-820`,
+not booted.
+
+Two traps from writing it. **Real `gum` does not fail with no terminal:** it waits for ever, even with stdin closed, so a case that reaches a prompt has to bound the wait and expect 124. **`ConditionResult` cannot say whether a one-shot ran:** `local-fs.target` re-queues the unit after its request file has gone, so the field reads `no` after a successful run too. Read the journal instead.
+
 ## A build that is not reproducible keeps its path
 
 Found on 2026-11-06, when `installer-refusal` failed with `curl` exit 60 on a pull request that had not touched it. Its stub certificate came from `openssl req` in a `runCommand`, so each build made a new key under the same store path. A garbage collection removed that path, the next build made a new certificate there, and the CA bundles already built from the old one stayed in the shared store and went on trusting only the old one. Nothing in the derivation graph can see that, so every run on that host fails until those bundles are collected too.

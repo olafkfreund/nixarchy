@@ -70,6 +70,16 @@ let
       failingMessages = map (a: a.message) failing;
     };
 
+  miseOwnCheck =
+    let
+      c = configOf fixtures.mise-own;
+      failing = builtins.filter (a: !a.assertion) c.assertions;
+    in
+    failing == [ ]
+    && builtins.any (p: (p.pname or "") == "mise-coexist") c.environment.systemPackages
+    && !builtins.any (p: (p.pname or "") == "mise") c.environment.systemPackages
+    && c.environment.etc."mise/conf.d/omarchy.toml".text == "# theirs\n";
+
   # The plugin must be built against the user's Hyprland. Compared by drvPath
   # with the context discarded: this check must not build either Hyprland.
   hyprlandCheck =
@@ -301,6 +311,17 @@ let
         esac
       '';
 
+  miseOwnScript =
+    if miseOwnCheck then
+      ''
+        echo "mise-own: ok"
+      ''
+    else
+      ''
+        echo "mise-own: FAIL the user's mise package or etc file did not stand" >&2
+        fail=1
+      '';
+
   ownHypeScript =
     let
       c = configOf fixtures.systempkg-own-hype;
@@ -342,6 +363,7 @@ pkgs.runCommand "nixarchy-coexistence"
     fail=0
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
+    ${miseOwnScript}
     ${ownHypeScript}
     ${nmScript}
     ${hyprlandScript}

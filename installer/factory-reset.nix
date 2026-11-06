@@ -140,7 +140,7 @@
                 "  sudo exch /mnt/@home /mnt/@home-before-reset-$stamp" \
                 "  sudo rm -rf $oldvar    # the unused factory copy" \
                 "  sudo rm $failed        # so this is not repeated: a second exch undoes the first" \
-                "  systemctl reboot" \
+                "  sudo systemctl reboot" \
                 "Then @home-before-reset-$stamp holds only the factory copy, and can be deleted:" \
                 "  sudo mount -o subvol=/ $device /mnt" \
                 "  sudo btrfs subvolume delete /mnt/@home-before-reset-$stamp"
@@ -201,8 +201,9 @@
       printf '%s\n' \
         "This machine was factory-reset on $stamp." \
         "" \
-        "/home and /var/lib were restored from the snapshots the installer took" \
-        "before anyone logged in. What was there instead is still on the disk:" \
+        "/home was restored from the installer's @factory-home snapshot, and" \
+        "/var/lib from its @factory snapshot of /. /etc/nixos was not restored." \
+        "What was there instead is still on the disk:" \
         "" \
         "  the home directory   @home-before-reset-$stamp, a btrfs subvolume at" \
         "                       the top level of this filesystem" \
@@ -223,8 +224,10 @@
         "" \
         "  sudo bash -c 'ls -d /var/lib.before-reset-* /mnt/@home-before-reset-*'" \
         "" \
-        "/etc/nixos was not touched. The system half resets by rebuilding from" \
-        "the first commit in that repository; see omarchy-system-factory-reset." \
+        "/etc/nixos was not touched. To restore an earlier system configuration," \
+        "choose a commit in that repository and rebuild it. The installer made" \
+        "no commit, so its first commit may not be the installed configuration." \
+        "See omarchy-system-factory-reset." \
         >"$oldvar/nixarchy/factory-reset.done"
 
       # The old @home is renamed, never deleted. "Factory reset" here means
@@ -249,7 +252,12 @@
       echo "phase=$phase"
       # Created by this run. Left there, restoring that directory would report a crashed reset.
       rm -f "$oldvar/nixarchy/factory-reset.failed" || true
-      btrfs filesystem sync "$top" || true
+      if ! btrfs filesystem sync "$top"; then
+        warning="warning: post-reset filesystem sync failed; the reset committed, but its durability is unconfirmed."
+        echo "$warning" >&2
+        printf '\n%s\n' "$warning" >>/var/lib/nixarchy/factory-reset.done ||
+          echo "could not add sync warning to /var/lib/nixarchy/factory-reset.done" >&2
+      fi
 
       echo "factory reset complete: /home and /var/lib are as the installer left them."
     '';

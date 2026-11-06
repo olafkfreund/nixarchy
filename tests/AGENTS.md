@@ -468,11 +468,13 @@ nothing.
 
 `tests/session.nix`'s #1153 probe sets a real video background and locks
 with one set, and proves the wiring end to end: `owed` starts, `owe status`
-reports a video source with a live renderer, the desktop and the lock
-screen's feed both visibly move, and the background plugin comes back once
-the still returns. **None of that reaches the two questions a VM genuinely
-cannot answer**, for the same reason the Graphics section of `pkgs/verify.sh`
-exists at all:
+reports a video source with a live renderer, the desktop video visibly moves,
+the lock screen holds still, and the background plugin comes back once the
+still returns. The lock assertion can miss playback more than 1.6 times too
+slow, or a screenshot stall that aliases with the video loop for one run; a
+handoff one shot later still fails and prints the readings. **None of that
+reaches the two questions a VM genuinely cannot answer**, for the same reason
+the Graphics section of `pkgs/verify.sh` exists at all:
 
 - **hardware decode.** Every VM here renders on llvmpipe, so `owe
   render-status`'s `hwdec` field is always `"no"` on this renderer whether

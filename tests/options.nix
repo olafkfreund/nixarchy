@@ -446,7 +446,6 @@ let
     "hype"
     "monologue"
     "signed"
-    "omarchy-local-ai"
   ];
 
   hasPname = cfg: name: builtins.any (p: (p.pname or "") == name) cfg.environment.systemPackages;
@@ -1197,9 +1196,61 @@ let
         off = kept != "10s";
       };
 
+    # #1620: deleting prints leaves a machine as one that never enrolled, so a stack with a
+    # password must still reach it past pam_fprintd, and the fingerprint one must have none.
+    # Auth lines only: pam_unix is in account, password and session whatever auth does.
+    fprintdPamFallback =
+      let
+        withFprintd =
+          machine: extra:
+          (machine.extendModules {
+            modules = [ { services.fprintd.enable = true; } ] ++ extra;
+          }).config;
+        authLines =
+          c: name:
+          builtins.filter (pkgs.lib.hasPrefix "auth ") (
+            pkgs.lib.splitString "\n" c.security.pam.services.${name}.text
+          );
+        authOf = c: name: pkgs.lib.concatStringsSep "\n" (authLines c name);
+        # sufficient, or no-prints stops there; and pam_unix before pam_deny, or it is never reached.
+        fallsBack =
+          c: name:
+          let
+            parts = pkgs.lib.splitString "pam_fprintd" (authOf c name);
+          in
+          builtins.any (l: pkgs.lib.hasPrefix "auth sufficient " l && pkgs.lib.hasInfix "pam_fprintd" l) (
+            authLines c name
+          )
+          && pkgs.lib.hasInfix "pam_unix" (
+            builtins.head (pkgs.lib.splitString "pam_deny" (pkgs.lib.last parts))
+          );
+        has = c: name: c.security.pam.services ? ${name};
+        on = withFprintd adopter [ ];
+        modeA = withFprintd modeAOff [ ];
+      in
+      {
+        on =
+          builtins.all (fallsBack on) [
+            "sudo"
+            "polkit-1"
+            "login"
+            "omarchy-lock-password"
+          ]
+          && pkgs.lib.hasInfix "pam_fprintd" (authOf on "omarchy-lock-fingerprint")
+          && !pkgs.lib.hasInfix "pam_unix" (authOf on "omarchy-lock-fingerprint");
+        off =
+          has adopter.config "omarchy-lock-fingerprint"
+          || has modeA "omarchy-lock-fingerprint"
+          || has modeA "omarchy-lock-password";
+      };
+
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;
+    etcNativeCongestionControl = etcNative (
+      c: c.boot.kernel.sysctl."net.ipv4.tcp_congestion_control" or null
+    ) "bbr";
+    etcNativeQdisc = etcNative (c: c.boot.kernel.sysctl."net.core.default_qdisc" or null) "fq";
     etcNativeWifiPowersave = etcNative (c: c.networking.networkmanager.wifi.powersave) false;
     etcNativeUsbAutosuspend = etcNative (
       c: pkgs.lib.hasInfix "options usbcore autosuspend=-1" c.boot.extraModprobeConfig
@@ -1997,20 +2048,30 @@ let
     };
 
     # ---- #1572: Omarchy 4.5's default apps are one switch ----
-    # All seven rows with preinstall = true, by pname. The on half needs every
-    # one, so a row dropped from data/apps.nix fails here; the off half is a
-    # machine that never asked. The titlebars plugin rides on the session.
+    # All seven default rows, by pname. A dropped row fails on; off uses
+    # preinstalls = false. The titlebars plugin rides on the session.
     omarchyApps = {
       on =
-        let
-          cfg = configWith { omarchyApps.enable = true; };
-        in
-        builtins.all (hasPname cfg) omarchyAppPnames;
-      off =
-        let
-          cfg = configWith { };
-        in
-        builtins.any (hasPname cfg) omarchyAppPnames;
+        builtins.all (hasPname defaultMachine) omarchyAppPnames
+        && !builtins.any (hasPname defaultMachine) [
+          "obs-studio"
+          "kdenlive"
+          "xournalpp"
+          "omarchy-local-ai"
+        ];
+      off = builtins.any (hasPname (configWith {
+        preinstalls = false;
+      })) omarchyAppPnames;
+    };
+    omarchyAppsInertWhenDisabled = {
+      on = builtins.any (hasPname defaultMachine) omarchyAppPnames;
+      off = builtins.any (hasPname (configWith {
+        enable = false;
+      })) omarchyAppPnames;
+    };
+    omarchyAppOptOut = {
+      on = hasPname defaultMachine "hype";
+      off = hasPname (configWith { apps.hype.enable = false; }) "hype";
     };
 
     titlebarsPluginFollowsTheSession = {
@@ -2210,6 +2271,21 @@ let
         }).i18n.inputMethod.type == "fcitx5";
     };
 
+    # Mode A: the addon list is ours only while nixarchy is on.
+    inputMethodAddons = {
+      on =
+        pkgs.lib.all
+          (n: builtins.elem n (map (p: p.pname or "") defaultMachine.i18n.inputMethod.fcitx5.addons))
+          [
+            "fcitx5-mozc"
+            "fcitx5-hangul"
+            "fcitx5-chewing"
+            "fcitx5-table-extra"
+            "fcitx5-chinese-addons"
+          ];
+      off = (configWith { enable = false; }).i18n.inputMethod.fcitx5.addons != [ ];
+    };
+
     # nixarchy allows unfree because most of the Install menu is unfree. The
     # half worth testing is the other one: a user who wants nixpkgs' own policy
     # back must be able to have it.
@@ -2346,6 +2422,12 @@ let
     tailscaleTrust = {
       on = builtins.elem "ts0" tailscaleTrustIface.on;
       off = builtins.elem "ts0" tailscaleTrustIface.off;
+    };
+    opensshPasswordsOff = {
+      on = !opensshMenu.PasswordAuthentication && !opensshMenu.KbdInteractiveAuthentication;
+      off =
+        !(opensshPlain.PasswordAuthentication && opensshPlain.KbdInteractiveAuthentication)
+        || !(opensshModeA.PasswordAuthentication && opensshModeA.KbdInteractiveAuthentication);
     };
     fleetDelayBeside = {
       on = fleet.delayTheirs == "10min";
@@ -3265,6 +3347,19 @@ let
       }).networking.firewall.trustedInterfaces;
     off = defaultMachine.networking.firewall.trustedInterfaces;
   };
+  opensshMenu =
+    (configBeside { programs.nixarchy.services.openssh.enable = true; }).services.openssh.settings;
+  opensshPlain = (configBeside { services.openssh.enable = true; }).services.openssh.settings;
+  # programs.nixarchy.enable off: the option alone must change nothing (Mode A).
+  opensshModeA =
+    (modeAOff.extendModules {
+      modules = [
+        {
+          programs.nixarchy.services.openssh.enable = true;
+          services.openssh.enable = true;
+        }
+      ];
+    }).config.services.openssh.settings;
   localAiIpv6 = configBeside {
     programs.nixarchy.localAi = {
       enable = true;

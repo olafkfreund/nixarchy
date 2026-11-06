@@ -125,7 +125,7 @@
 
     # Why: docs/internals/flake.md#gliff-from-a-non-flake-input-pinned-to-a-tag
     gliff = {
-      url = "github:omacom/gliff/v0.4.1";
+      url = "github:omacom/gliff/v0.4.2";
       flake = false;
     };
 
@@ -770,7 +770,7 @@
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
           omasnap = final.callPackage ./pkgs/apps/omasnap.nix { };
 
-          # Omarchy 4.5's other default apps (#1572). Opt-in through
+          # Omarchy 4.5's other default apps (#1572). On by default through
           # programs.nixarchy.omarchyApps.enable.
           hype = final.callPackage ./pkgs/apps/hype.nix { };
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };
@@ -1946,6 +1946,8 @@
             "menu-verbs"
             # The menu scripts patched to explain and exit 1 call no writer (#1304).
             "menu-guidance"
+            # Removal asks fprintd first, then removes only the invoking account's files (#1620).
+            "remove-fingerprint"
             # A font row run with no terminal reopens itself in one, when the font is missing (#1304).
             "install-font-terminal"
             # Every visible menu row's action, followed into its scripts (#1304).
@@ -2018,6 +2020,9 @@
             # tests/skill-parity.nix and #643.
             "skill-parity"
             "sops-evaluates"
+            "sshd-enable"
+            # A real ssh login against the menu's sshd, and the plain line as control (#1611). Needs KVM.
+            "sshd-login"
             "swap-guard"
             "switch-indicator"
             "try-nixarchy"
@@ -2068,6 +2073,9 @@
           wifi-hwsim = import ./tests/wifi-hwsim.nix {
             pkgs = pkgsFor.${system};
           };
+          remove-fingerprint-vm = import ./tests/remove-fingerprint-vm.nix {
+            pkgs = pkgsFor.${system};
+          };
 
           # Why: tests/installer-failure-hints.nix
           installer-failure-hints = import ./tests/installer-failure-hints.nix {
@@ -2103,6 +2111,16 @@
 
           # omarchy-default-agent's nixpkgs mapping, against this nixpkgs (#1452).
           agent-attrs = import ./tests/agent-attrs.nix { pkgs = pkgsFor.${system}; };
+
+          # Every menu row's route in omarchy-default-agent, with no mise (#1622).
+          default-agent-routes = import ./tests/default-agent-routes.nix {
+            pkgs = pkgsFor.${system};
+            omarchySrc = self.packages.${system}.omarchy.src;
+          };
+
+          # pi and omp start with no node on PATH. Its own check because their closures
+          # are 2.4 GiB, and a proof keeps those off every script edit's run (#1622).
+          agent-no-node = import ./tests/agent-no-node.nix { pkgs = pkgsFor.${system}; };
 
           # nixarchy-reinstall-iso's preflights, with a df, git and eval that
           # lie -- plus the #478 honesty strings. See tests/reinstall-iso.nix.
@@ -2265,6 +2283,13 @@
           # Edge carry (#1386): mise's [wrappers] route claude through the selected
           # account, and the exec refuses a mise install.
           agent-account-routing = import ./tests/agent-account-routing.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #1616: what a destination does with the receiver the sender generates, when
+          # it has no envfs or no OMARCHY_PATH. checks.session has the working case.
+          account-copy = import ./tests/account-copy.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };
@@ -2711,6 +2736,14 @@
           # tests/etc-overlay.nix and #642.
           etc-overlay = import ./tests/etc-overlay.nix { pkgs = pkgsFor.${system}; };
 
+          # Upstream's sysctl values against the rendered file, and a user's
+          # own mkDefault against every key. See tests/etc-sysctl.nix and #1615.
+          etc-sysctl = import ./tests/etc-sysctl.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+            upstream = omarchy;
+          };
+
           # The reference initrd can mount a disk it was not built on, which is
           # a precondition for offline install stage 3. See
           # tests/reference-initrd.nix and #436.
@@ -2796,6 +2829,10 @@
           # installed-machine closure: it needs the reference toplevel's
           # closure warm.
           coexistence = import ./tests/coexistence/default.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+          };
+          input-methods = import ./tests/input-methods.nix {
             pkgs = pkgsFor.${system};
             reference = self.nixosConfigurations.reference;
           };

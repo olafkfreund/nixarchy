@@ -8,8 +8,10 @@ let
   testLib = import ./lib.nix { inherit inputs; };
   appEnable = testLib.vmPackage "nixarchy-app-enable";
   appDisable = testLib.vmPackage "nixarchy-app-disable";
+  appRemove = testLib.vmPackage "nixarchy-app-remove";
   catalogueDiff = testLib.vmPackage "nixarchy-catalogue-diff";
   pkgAdd = testLib.vmPackage "nixarchy-pkg-add";
+  pkgRemove = testLib.vmPackage "nixarchy-pkg-remove";
   apply = testLib.vmPackage "nixarchy-apply";
   search = testLib.vmPackage "nixarchy-search";
 in
@@ -20,6 +22,7 @@ pkgs.runCommand "nixarchy-app-selection"
       gnugrep
       gnused
       jq
+      nix
       util-linux
     ];
   }
@@ -37,8 +40,10 @@ pkgs.runCommand "nixarchy-app-selection"
     chmod 640 "$file"
     enable=${appEnable}/bin/nixarchy-app-enable
     disable=${appDisable}/bin/nixarchy-app-disable
+    remove=${appRemove}/bin/nixarchy-app-remove
     diff=${catalogueDiff}/bin/nixarchy-catalogue-diff
     pkgadd=${pkgAdd}/bin/nixarchy-pkg-add
+    pkgremove=${pkgRemove}/bin/nixarchy-pkg-remove
     apply=${apply}/bin/nixarchy-apply
 
     # A missing row is inserted, and the file keeps its mode. (Whether that
@@ -84,6 +89,59 @@ pkgs.runCommand "nixarchy-app-selection"
     rc=0; "$pkgadd" brave > pkgadd.out 2>&1 || rc=$?
     test "$rc" -ne 0 || bad 'pkg-add reported success for a redirected name'
     grep -q 'curated' pkgadd.out || bad "pkg-add failed for some other reason: $(cat pkgadd.out)"
+
+    hypetpl=$PWD/hype-templates
+    mkdir -p "$hypetpl"
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    # hype.enable = false;  #@ hype  # on by default' '    # brave.enable = true;  #@ brave' '  };' '}' > "$hypetpl/apps-template.nix"
+    hypeoff='^[[:space:]]*(programs\.nixarchy\.apps\.)?hype\.enable[[:space:]]*=[[:space:]]*false'
+    # A full-path row sits outside the block, where catalogue-diff --add writes it.
+    start() { printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' "    $1" '  };' "  $2" '}' > "$file"; }
+    offcase() {
+      NIXARCHY_TEMPLATES=$hypetpl "$disable" hype >/dev/null || bad "disable hype failed from: $1"
+      grep -qE "$hypeoff" "$file" || bad "disable hype left no live false from: $1"
+      nix-instantiate --parse "$file" >/dev/null || bad "disable hype broke the file from: $1"
+    }
+    start 'hype.enable = true;  #@ hype' ""; offcase 'live true'
+    start '# hype.enable = true;  #@ hype' ""; offcase 'old commented row'
+    start '# hype.enable = false;  #@ hype  # on by default' ""; offcase 'new commented row'
+    start "" 'programs.nixarchy.apps.hype.enable = true;  #@ hype'; offcase 'full-path row'
+    start "" ""; offcase 'absent row'
+
+    fzf() { cat > "$PWD/offered"; }
+    export -f fzf
+    start '# hype.enable = false;  #@ hype  # on by default' ""
+    : > offered; PATH=${appDisable}/bin:$PATH "$remove" >/dev/null || bad 'remove failed on commented hype'
+    grep -qP '^app\thype$' offered || bad 'remove did not offer default-on hype'
+    NIXARCHY_TEMPLATES=$hypetpl "$disable" hype >/dev/null || bad 'disable hype before remove failed'
+    : > offered; PATH=${appDisable}/bin:$PATH "$remove" >/dev/null || bad 'remove failed on disabled hype'
+    if grep -qP '^app\thype$' offered; then bad 'remove offered disabled hype'; fi
+
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    hype.enable = false;  #@ hype' '    omacut.enable = true;  #@ omacut' '    # signed.enable = true;  #@ signed' '  };' '  programs.nixarchy.apps.brave.enable = true;  #@ brave' '}' > "$file"
+    NIXARCHY_TEMPLATES=$hypetpl "$disable" omacut > disable.out || bad 'disable omacut failed'
+    grep -qF '(1 still enabled)' disable.out || bad 'disable count included hype or missed full-path brave'
+    "$enable" signed > enable.out || bad 'enable signed failed'
+    grep -qF '(2 queued)' enable.out || bad 'enable count included hype or missed full-path brave'
+
+    sed -n '/^mark_live() {/,/^}/p' ${search}/bin/nixarchy-search > mark-live-function
+    grep -q 'mark_live()' mark-live-function || { echo 'mark_live function extraction failed' >&2; exit 1; }
+    source mark-live-function
+    start 'hype.enable = false;  #@ hype' ""
+    mark_live "$file" app > live.out
+    if grep -q hype live.out; then bad 'mark_live selected a false row'; fi
+    start 'hype.enable = true;  #@ hype' ""
+    mark_live "$file" app > live.out
+    grep -qP '^app\thype$' live.out || bad 'mark_live missed a true row'
+
+    export NIX_STATE_DIR=$PWD/nix-state NIX_LOG_DIR=$PWD/nix-state
+    mkdir -p nix-state
+    start "" ""
+    sed -i -e '1s/{ \.\.\. }/{ pkgs, ... }/' -e '/^}$/i\  # keep me' "$file"
+    "$pkgadd" kdePackages.kdenlive >/dev/null || bad 'pkg-add kdenlive failed'
+    grep -qF 'kdePackages.kdenlive  #@pkg kdePackages.kdenlive' "$file" || bad 'pkg-add did not write kdenlive'
+    nix-instantiate --parse "$file" >/dev/null || bad 'pkg-add wrote invalid Nix'
+    "$pkgremove" kdePackages.kdenlive >/dev/null || bad 'pkg-remove kdenlive failed'
+    if grep -qF '#@pkg kdePackages.kdenlive' "$file"; then bad 'pkg-remove left kdenlive'; fi
+    grep -qF '# keep me' "$file" || bad 'pkg-remove changed an unrelated line'
 
     # Extract the shipped Flathub function. Replace only the terminal read;
     # the query is fixed and fzf/curl stay stubbed, so this needs no network.

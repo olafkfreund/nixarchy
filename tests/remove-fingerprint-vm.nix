@@ -1,0 +1,94 @@
+{ pkgs }:
+let
+  shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
+in
+pkgs.testers.runNixOSTest {
+  name = "nixarchy-remove-fingerprint-vm";
+
+  nodes.machine =
+    { lib, ... }:
+    {
+      services.fprintd.enable = true;
+      users.users = {
+        alice = {
+          isNormalUser = true;
+          extraGroups = [ "wheel" ];
+          password = "secret";
+        };
+        bob.isNormalUser = true;
+      };
+      security = {
+        polkit.enable = true;
+        sudo.wheelNeedsPassword = false;
+        pam.services.omarchy-lock-password = { };
+      };
+      environment.systemPackages = [ pkgs.pamtester ];
+      systemd.services.fprintd = {
+        environment.FP_VIRTUAL_DEVICE_STORAGE = "/run/fprintd-virt/sock";
+        serviceConfig = {
+          RuntimeDirectory = "fprintd-virt";
+          # The unit file has its own ExecStart, so the empty entry clears it first.
+          ExecStart = lib.mkForce [
+            ""
+            "${pkgs.fprintd}/libexec/fprintd --no-timeout"
+          ];
+        };
+      };
+    };
+
+  testScript = ''
+    machine.wait_for_unit("multi-user.target")
+
+    def send(command):
+        machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket, sys; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(sys.argv[1].encode()); s.close()' '" + command + "'")
+
+    def stored():
+        return machine.succeed("${pkgs.python3}/bin/python3 -c 'import socket; s = socket.socket(socket.AF_UNIX); s.connect(\"/run/fprintd-virt/sock\"); s.sendall(b\"LIST\"); print(b\"\".join(iter(lambda: s.recv(4096), b\"\")).decode())'")
+
+    machine.succeed("sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger alice > /tmp/enroll-alice 2>&1 < /dev/null &")
+    machine.wait_until_succeeds("test -S /run/fprintd-virt/sock", timeout=60)
+    send("SET_KEEP_ALIVE 1")
+    send("SET_ENROLL_STAGES 1")
+    for user in ("alice", "bob"):
+        if user == "bob":
+            machine.succeed(f"sudo ${pkgs.fprintd}/bin/fprintd-enroll -f right-index-finger {user} > /tmp/enroll-{user} 2>&1 < /dev/null &")
+        # fprintd identifies first to catch a duplicate, which takes a scan of its own.
+        for _ in range(20):
+            send(f"SCAN {user}-id")
+            if machine.execute(f"grep -q enroll-completed /tmp/enroll-{user}")[0] == 0:
+                break
+            machine.sleep(1)
+        else:
+            raise Exception(machine.succeed(f"cat /tmp/enroll-{user}"))
+        machine.succeed(f"test -d /var/lib/fprint/{user}")
+    before = stored()
+    assert "alice-id" in before and "bob-id" in before, before
+
+    status, out = machine.execute("su - alice -c 'PATH=${shipped}/share/omarchy/bin:${pkgs.fprintd}/bin:$PATH bash ${shipped}/share/omarchy/bin/omarchy-remove-security-fingerprint' 2>&1")
+    assert status == 0, out
+    assert "Deleted alice's saved fingerprints" in out, out
+    machine.succeed("test ! -e /var/lib/fprint/alice")
+    machine.succeed("test -d /var/lib/fprint/bob")
+    listed = machine.succeed("${pkgs.fprintd}/bin/fprintd-list alice")
+    assert "has no fingers enrolled" in listed, listed
+
+    second = machine.succeed("${pkgs.fprintd}/bin/fprintd-delete alice")
+    print(second)
+    assert "No fingerprints to delete on" in second, second
+
+    send("REMOVE alice-id")
+    send("REMOVE bob-id")
+    # Opening the reader processes both queued commands.
+    machine.execute("timeout 5 ${pkgs.fprintd}/bin/fprintd-verify bob < /dev/null")
+    machine.wait_until_succeeds("journalctl -u fprintd --no-pager | grep -E 'alice-id.*not found in storage|not found in storage.*alice-id'", timeout=60)
+    assert "bob-id" not in stored(), "bob's reader print was not removed by the control command"
+    journal = machine.succeed("journalctl -u fprintd --no-pager")
+    assert not any("bob-id" in line and "not found in storage" in line for line in journal.splitlines()), journal
+
+    for service in ("sudo", "omarchy-lock-password"):
+        command = f"su - alice -c \"printf 'secret\\n' | pamtester {service} alice authenticate\""
+        machine.succeed(command)
+        wrong = f"su - alice -c \"printf 'wrong\\n' | pamtester {service} alice authenticate\""
+        machine.fail(wrong)
+  '';
+}

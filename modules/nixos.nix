@@ -141,6 +141,21 @@ let
   # defaults this module sets for it are mkDefault.
   usingFcitx5 = config.i18n.inputMethod.enable && config.i18n.inputMethod.type == "fcitx5";
 
+  # Why: modules/AGENTS.md#default-environment-d-10-omarchy-fcitx-conf-plus-t
+  pinyinWithoutBrowser = pkgs.qt6Packages.fcitx5-chinese-addons.overrideAttrs (o: {
+    buildInputs = lib.remove pkgs.qt6Packages.qtwebengine o.buildInputs;
+    cmakeFlags = (o.cmakeFlags or [ ]) ++ [ "-DENABLE_BROWSER=OFF" ];
+  });
+
+  # Env set here, not on the unit: Environment= and path would also reach the daemon.
+  # PATH appends so checks.input-methods can stub hyprctl.
+  fcitx5AlignProfile = pkgs.writeShellScript "omarchy-fcitx5-align-profile" ''
+    export OMARCHY_PATH=${cfg.package}/share/omarchy
+    export PYTHONPATH=$OMARCHY_PATH/default/input-methods
+    export PATH=$PATH:${config.programs.hyprland.package}/bin
+    exec ${pkgs.python3}/bin/python3 ${../pkgs/omarchy/fcitx5-align-profile.py}
+  '';
+
   # providedSessions has to match the .desktop basename or NixOS refuses it.
   #
   # The label is Nixarchy and the id stays `omarchy`, which is not an
@@ -625,12 +640,13 @@ in
         omarchy-install-preinstalls restores and Remove > Preinstalls takes
         away. Upstream has these on a fresh machine, so they are on here too.
 
-        Six of upstream's thirteen cannot be here: obsidian is unfree, so it
-        would abort the whole rebuild rather than fail on its own -- enable
-        `apps.obsidian` for it instead -- and aether, omacut, omacalc and
-        omawrite are Omarchy's own applications, not packaged in nixpkgs.
-        cliamp is, and is included: it arrived after this was first written.
-        lazydocker is already a runtime dependency.
+        Omarchy's own applications (Hype, Signed, Monologue, Omacalc, Omacut,
+        Omawrite, Aether) come through `omarchyApps.enable`, which follows this
+        option. obsidian is unfree, so it would abort the whole rebuild rather
+        than fail on its own: enable `apps.obsidian` for it instead. cliamp is
+        included. lazydocker is already a runtime dependency. OBS Studio,
+        Kdenlive and Xournal++ left with Omarchy 4.5; `nixarchy pkg add` brings
+        any of them back.
 
         gliff, Omarchy's Hyprland remote desktop over ssh, is included: it is in
         upstream's base packages rather than its preinstalls, and lives here so
@@ -671,10 +687,9 @@ in
         activation: the configuration is the source of truth, and a menu click
         that outlived a rebuild would be a second, invisible one.
 
-        The ids match `omarchy-default-agent`'s. Absent from the list are `pi`,
-        `omp` and `antigravity`, which nixpkgs has no package for -- that
-        command falls back to mise for those, and an imperative install is not
-        something an option should promise to reproduce.
+        The ids match `omarchy-default-agent`'s. This option installs these
+        seven. The menu installs more of them from nixpkgs, such as `pi` and
+        `omp`, and names where the ones nixpkgs lacks are packaged.
       '';
     };
 
@@ -725,7 +740,8 @@ in
         one app rather than the group.
 
         Names that match nothing are an error rather than a typo you find by
-        noticing the app is still installed.
+        noticing the app is still installed. obs-studio, kdenlive and xournalpp
+        left with Omarchy 4.5; those names are still accepted and do nothing.
       '';
     };
 
@@ -945,45 +961,38 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
-      {
-        # removeAttrs ignores a name that is not there, so a typo would leave
-        # the app installed and the user hunting for why. Named here instead.
-        assertion =
-          let
-            known = [
-              "pinta"
-              "libreoffice"
-              "xournalpp"
-              "obs-studio"
-              "moonlight-qt"
-              "kdenlive"
-              "gnome-disk-utility"
-              "sushi"
-              "cliamp"
-              "gliff"
-            ];
-          in
-          lib.all (n: builtins.elem n known) cfg.preinstallsExclude;
-        message =
-          "programs.nixarchy.preinstallsExclude names something that is not a "
-          + "preinstalled application: "
-          + lib.concatStringsSep " " (
-            lib.subtractLists [
-              "pinta"
-              "libreoffice"
-              "xournalpp"
-              "obs-studio"
-              "moonlight-qt"
-              "kdenlive"
-              "gnome-disk-utility"
-              "sushi"
-              "cliamp"
-              "gliff"
-            ] cfg.preinstallsExclude
-          )
-          + ". The set is: pinta libreoffice xournalpp obs-studio moonlight-qt "
-          + "kdenlive gnome-disk-utility sushi cliamp gliff.";
-      }
+      (
+        let
+          # Left with Omarchy 4.5. Still accepted, and do nothing, so a machine that
+          # already opted out keeps evaluating.
+          retired = [
+            "xournalpp"
+            "obs-studio"
+            "kdenlive"
+          ];
+          current = [
+            "pinta"
+            "libreoffice"
+            "moonlight-qt"
+            "gnome-disk-utility"
+            "sushi"
+            "cliamp"
+            "gliff"
+          ];
+        in
+        {
+          # removeAttrs ignores a name that is not there, so a typo would leave
+          # the app installed and the user hunting for why. Named here instead.
+          assertion = lib.all (n: builtins.elem n (current ++ retired)) cfg.preinstallsExclude;
+          message =
+            "programs.nixarchy.preinstallsExclude names something that is not a "
+            + "preinstalled application: "
+            + lib.concatStringsSep " " (lib.subtractLists (current ++ retired) cfg.preinstallsExclude)
+            + ". The set is: "
+            + lib.concatStringsSep " " current
+            + ".";
+        }
+      )
       {
         # versionAtLeast, not string >=: Nix compares strings lexicographically,
         # so "0.100.0" >= "0.55" is false and the day Hyprland reaches 0.100
@@ -1535,15 +1544,12 @@ in
             # -- pinta's is "Pinta", capitalised.
             lib.attrValues (
               lib.removeAttrs {
-                # omarchy-install-preinstalls, minus the six that cannot be here.
+                # omarchy-install-preinstalls, minus what cannot be here.
                 inherit (pkgs)
                   pinta
                   libreoffice
-                  xournalpp
-                  obs-studio
                   moonlight-qt
                   ;
-                inherit (pkgs.kdePackages) kdenlive;
 
                 # install/omarchy-base.packages. The GUIs manual sends people to
                 # Disks for formatting and SMART, and sushi is what makes Space
@@ -2058,6 +2064,11 @@ in
             # its bus name, and a clean exit still leaves no input method.
             Restart = "always";
             RestartSec = 2;
+          }
+          // lib.optionalAttrs (config.i18n.inputMethod.fcitx5.settings.inputMethod == { }) {
+            # "-": a hyprctl that does not answer must not stop fcitx5.
+            # A profile in ~/.config would shadow the user's /etc/xdg/fcitx5/profile.
+            ExecStartPre = "-${fcitx5AlignProfile}";
           };
         };
       };
@@ -2219,11 +2230,14 @@ in
         )
       );
 
-      # Upstream's sysctl.d, value for value. mkDefault on each, so a machine's
-      # own boot.kernel.sysctl wins.
+      # Upstream's sysctl.d, value for value. 1250 rather than mkDefault: these
+      # merge through mergeOneOption, so a user's own mkDefault would tie and
+      # refuse to evaluate. Their value wins either way.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
-      kernel.sysctl = lib.mapAttrs (_: lib.mkDefault) {
+      kernel.sysctl = lib.mapAttrs (_: lib.mkOverride 1250) {
         "net.ipv4.tcp_mtu_probing" = 1;
+        "net.core.default_qdisc" = "fq";
+        "net.ipv4.tcp_congestion_control" = "bbr";
         "vm.swappiness" = 150;
         "vm.vfs_cache_pressure" = 50;
         "vm.page-cluster" = 0;
@@ -2299,6 +2313,14 @@ in
     # Why: modules/AGENTS.md#fcitx5-says-this-itself-in-a-notification-on-every
     i18n.inputMethod.fcitx5.waylandFrontend = lib.mkIf usingFcitx5 (lib.mkDefault true);
 
+    i18n.inputMethod.fcitx5.addons = lib.mkIf usingFcitx5 [
+      pkgs.fcitx5-mozc
+      pkgs.fcitx5-hangul
+      pkgs.fcitx5-chewing
+      pkgs.fcitx5-table-extra
+      pinyinWithoutBrowser
+    ];
+
     # The two of upstream's four that the nixpkgs module does not set. It has
     # no opinion on either, and SDL applications and the older INPUT_METHOD
     # convention read nothing else.
@@ -2313,6 +2335,19 @@ in
     environment.sessionVariables.QML_IMPORT_PATH = lib.mkIf cfg.owe.enable [
       "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}"
     ];
+
+    # Without defaults, sorted mimeinfo.cache hands PDFs to the browser.
+    # mkDefault per key avoids conflicting strings when a user picks a handler.
+    xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) {
+      "application/pdf" = "org.gnome.Evince.desktop";
+      "video/mp4" = "mpv.desktop";
+      "video/x-matroska" = "mpv.desktop";
+      "video/quicktime" = "mpv.desktop";
+      "video/webm" = "mpv.desktop";
+      "video/x-msvideo" = "mpv.desktop";
+      "video/mpeg" = "mpv.desktop";
+      "text/plain" = "nvim.desktop";
+    };
 
     xdg.portal = {
       enable = lib.mkDefault true;

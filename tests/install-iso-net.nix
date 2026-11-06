@@ -240,6 +240,9 @@ pkgs.testers.runNixOSTest {
           pkgs.kmod.dev
           pkgs.libcap
           pkgs.nukeReferences
+          # See tests/install.nix: build inputs of the per-machine initrd.
+          pkgs.libxslt.bin
+          pkgs.lndir
           pkgs.stdenv
           pkgs.stdenvNoCC
           pkgs.stdenv.cc

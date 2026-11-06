@@ -1242,9 +1242,7 @@ First: mise activates from the shell rc, and the menu launches an
 agent through `bash -c` inside a floating terminal, which sources no
 rc. An agent mise had installed perfectly was therefore reported as
 "not installed" by the very next line, while running fine one shell
-over. Only the two agents nixpkgs has no package for still come from
-mise -- see nix-bin/omarchy-default-agent -- but for those this is
-the difference between a working menu entry and a lie.
+over.
 
 Second: Antigravity. Google deprecated gemini-cli in favour of it,
 mise carries it as a prebuilt `aqua:` binary, and upstream's launcher

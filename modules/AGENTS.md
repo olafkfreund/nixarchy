@@ -447,14 +447,20 @@ sets the same value through the NixOS option that owns it, inside
 - **Options, not the files.** Installing `sysctl.d/99-omarchy-sysctl.conf`
   through `environment.etc` would also work -- and would override a machine's
   own `boot.kernel.sysctl`, since a `99-` file sorts after NixOS's `60-nixos`.
-  Through the option at `mkDefault`, the machine's value wins. The cost is that
-  an Omarchy release changing a value is no longer carried automatically;
-  `tests/etc-overlay.nix` still forces a decision when a file is added or
-  dropped, but not when one is edited.
-- **`mkDefault` on every scalar; plain assignment on the two merging types**
+  Through the option, the machine's value wins. The cost is that an Omarchy release changing
+  a value is no longer carried automatically. checks.etc-sysctl makes a sysctl edit fail, and
+  tests/etc-overlay.nix forces a decision when any file is added or dropped. An edit to any
+  other native row's file is still silent.
+- **mkDefault on every scalar except the sysctls; plain assignment on the two merging types**
   (`boot.extraModprobeConfig`, `security.sudo.extraConfig` are lines), per the
   rule in `modules/services/default.nix`. Opting out of the USB autosuspend
   line therefore means overriding the lines, not unsetting a default.
+- **The sysctls are at mkOverride 1250, which departs from that rule.**
+  boot.kernel.sysctl merges through mergeOneOption (nixpkgs nixos/modules/config/sysctl.nix),
+  so two definitions at one priority are an evaluation error even with equal values, and a
+  user's own mkDefault sits at 1000 like ours. Measured: the owner's razer sets the BBR keys
+  that way and would stop evaluating. 1250 is the priority this file already documents for
+  i18n.inputMethod; mkOptionDefault would tie with a user's mkOptionDefault.
 - **Verified by evaluation, not by the diff.** One of upstream's values was
   already on every NixOS machine: nixpkgs' `nixos/modules/config/sysctl.nix`
   sets `fs.inotify.max_user_watches = 524288` by default, and a second
@@ -810,9 +816,11 @@ i18n.inputMethod = {
 
 default/environment.d/10-omarchy-fcitx.conf, plus the daemon that reads
 it -- fcitx5 was not installed at all. i18n.inputMethod rather than
-dropping fcitx5 into systemPackages: it is what builds fcitx5 with its
-addons, writes the Qt plugin path, and sets XMODIFIERS and the GTK/Qt IM
-modules. The unit that starts it is above.
+dropping fcitx5 into systemPackages: it builds fcitx5 with the addons in
+i18n.inputMethod.fcitx5.addons (enable alone installs none), writes the Qt
+plugin path, and sets XMODIFIERS and the GTK/Qt IM modules. The unit that
+starts it is above.
+
 Priority 1250, which is neither of the two names lib gives you, because
 this option is squeezed between them. GNOME's desktop-manager module sets
 type to "ibus" at mkDefault (1000) and two mkDefaults tie rather than
@@ -824,6 +832,13 @@ nullOr refuses to merge null with a value, so matching that ties in the
 other direction. Sitting between the two loses to anyone with a real
 opinion and still beats nixpkgs' placeholder, which is exactly the rule
 this module follows everywhere else: arrive beside what is installed.
+
+Pinyin (`qt6Packages.fcitx5-chinese-addons`) is overridden with
+`-DENABLE_BROWSER=OFF` and `qtwebengine` removed from `buildInputs`, saving
+422 MiB on every machine. This costs the online dictionary dialog in the
+configuration tool (importing a dictionary file still works) and one store
+path not on cache.nixos.org. `checks.input-methods` guards that `qtwebengine`
+stays out of the wrapper's closure (#1614).
 
 <a id="fcitx5-says-this-itself-in-a-notification-on-every"></a>
 
@@ -1733,6 +1748,23 @@ its documentation says.
 This file is yours. Nothing regenerates or overwrites it once created;
 the current full list is always at /etc/nixarchy/services-template.nix.
 
+<a id="openssh-from-the-menu"></a>
+
+### OpenSSH from the menu
+
+The OpenSSH row is bundled because nixpkgs defaults both
+`PasswordAuthentication` and `KbdInteractiveAuthentication` to `true` (measured).
+The menu writes `programs.nixarchy.services.openssh.enable`, while declaring
+`services.openssh.enable` yourself keeps the upstream option: a rebuild cannot
+tell two identical lines apart, and nothing regenerates `services.nix`. The
+gate first refuses when sshd is already on from the machine's own config,
+because turning passwords off could lock out other accounts. It then checks
+other authorized-key sources, the user's declared keys, and a usable home key;
+if sshd will not read home keys, it refuses before asking for a GitHub or pasted
+key. One old-file case is not guarded: a
+commented OpenSSH row keeps its false note until the menu rewrites that row,
+because nixarchy promises not to edit the user's `services.nix` on its own.
+
 <a id="anything-at-all"></a>
 
 ### Anything at all
@@ -1770,8 +1802,13 @@ is worth an issue -- it probably belongs in the catalogue.
 
 Applications available through the Omarchy menu, as NixOS configuration.
 
-Every app is listed and every line is commented out. Uncomment what you
-want -- or pick it from the menu, which uncomments it for you -- then run
+Every app is listed and every line is commented out. A default-on row reads
+
+    # id.enable = false;  #@ id  # on by default
+
+Commenting it does not turn the app off, and a live `false` is not a selection.
+Anything reading live rows must say what it does with a `false`. Uncomment what
+you want -- or pick it from the menu, which uncomments it for you -- then run
 
     nixarchy-apply
 

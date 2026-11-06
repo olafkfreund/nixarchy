@@ -95,7 +95,6 @@ pkgs.runCommand "nixarchy-menu-guidance"
     mk "$TMPDIR/s-sd-rm" omarchy-sudo-docker 1
     run_case "remove sudoless-docker" "$TMPDIR/s-sd-rm" out 'extraGroups' omarchy-remove-security-sudoless-docker
 
-    run_case "remove fingerprint" "$TMPDIR/s-gum" out 'Nothing on this machine was changed' omarchy-remove-security-fingerprint
     run_case "remove fido2" "$TMPDIR/s-gum" out 'only then delete the registration' omarchy-remove-security-fido2
 
     mk "$TMPDIR/s-fp" gum 0

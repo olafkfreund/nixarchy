@@ -82,7 +82,6 @@
   chromium,
   nautilus,
   neovim,
-  mise,
   lazygit,
   lazydocker,
   eza,
@@ -269,7 +268,6 @@ let
     chromium-flags
     nautilus
     neovim
-    mise
     lazygit
     lazydocker
     eza
@@ -571,16 +569,6 @@ stdenvNoCC.mkDerivation {
                       exit 1
                     }
 
-                    # A launcher in ~/.local/bin shadows the Nix package of the same name,
-                    # so a Nix codex never ran (#707). Write one only when nothing outside
-                    # ~/.local/bin provides the command; nix-bin/omarchy-mise-unshadow
-                    # removes the ones written before this. It never replaces an existing
-                    # ~/.local/bin entry either, which may be a home-manager link (#1319).
-                    substituteInPlace $out/share/omarchy/bin/omarchy-mise-install \
-                      --replace-fail \
-                        'rm -f "$HOME/.local/bin/$command"' \
-                        'nix_cmd=$(PATH=$(printf "%s" "$PATH" | tr ":" "\n" | grep -vx "$HOME/.local/bin" | paste -sd:) command -v "$command") && { echo "omarchy-mise-install: $command is provided by Nix ($nix_cmd), no mise launcher"; exit 0; }; [[ -e $HOME/.local/bin/$command || -L $HOME/.local/bin/$command ]] && { echo "omarchy-mise-install: ~/.local/bin/$command exists, left as is"; exit 0; }'
-
                     # Both launchers accept a handful of browser desktop-file names and fall
                     # back to "chromium.desktop" for anything else. nixpkgs ships chromium's
                     # entry as chromium-browser.desktop, so xdg-settings returns a name that
@@ -800,25 +788,7 @@ stdenvNoCC.mkDerivation {
                   --replace-fail 'ExecStart=/usr/bin/pipewire' \
                   'ExecStart=/run/current-system/sw/bin/pipewire'
 
-                # omarchy-apply-lock resets PATH when it runs as root, and the
-                # value it resets to is empty on NixOS.
-                #
-                # Upstream's reasoning is sound and worth keeping: an install
-                # or upgrade may start this helper as root, and it does not
-                # want optional commands resolving out of a user-writable
-                # directory. On Arch the answer is /usr/bin and friends. Here
-                # those hold nothing, so the script would lose `tee`, `getent`
-                # and everything else it shells out to -- it writes PAM files
-                # for the lock screen, so the failure would be a lock screen
-                # that cannot authenticate, discovered at the worst moment.
-                #
-                # /run/wrappers/bin first, then the system profile: the same
-                # two directories a root login gets here, both root-owned,
-                # which is exactly the property upstream is reaching for.
-                #
-                # New in 4.0.3, and checks.session caught it -- that check
-                # scans every shipped command for /usr and is the reason this
-                # is a patch rather than a surprise on somebody's laptop.
+                # Why: pkgs/AGENTS.md#omarchy-apply-lock-resets-path-to-nothing
                 substituteInPlace $out/share/omarchy/bin/omarchy-apply-lock \
                   --replace-fail \
                   'export PATH=/usr/share/omarchy/bin:/usr/local/bin:/usr/bin:/bin' \
@@ -1150,16 +1120,21 @@ stdenvNoCC.mkDerivation {
                     # Python 3.14's automatic dedent, and nixos-26.05 ships 3.13 (#1205).
                     ${python3}/bin/python3 ${./check-menu.py} $menu $out/share/omarchy/bin/omarchy-default-agent
 
-                    # mise shims are prepended because the menu's bash -c sources no rc; Antigravity has no upstream case.
-                    # Why: pkgs/AGENTS.md#omarchy-agent-gets-mise-shims-and-antigravity
+                    # Antigravity has no upstream case.
+                    # Why: pkgs/AGENTS.md#omarchy-agent-gets-antigravity
                     substituteInPlace $out/share/omarchy/bin/omarchy-agent \
-                      --replace-fail 'agent=$(omarchy-default-agent)' '[ -d "$HOME/.local/share/mise/shims" ] && PATH="$HOME/.local/share/mise/shims:$PATH"; agent=$(omarchy-default-agent)' \
                       --replace-fail 'omp)' 'antigravity) command=(agy --dangerously-skip-permissions) ;; omp)'
 
-                    # No mise download of an agent nixarchy chose not to install; see
-                    # nix-bin/omarchy-default-agent (#1386).
-                    substituteInPlace $out/share/omarchy/bin/omarchy-agent-account-exec \
-                      --replace-fail '  export MISE_MINIMUM_RELEASE_AGE=0' '  echo "$provider is not installed. nixarchy installs it through Nix: omarchy default agent $provider" >&2; exit 127'
+                    # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1625-no-mise.patch}
+                    rm $out/share/omarchy/install/user/mise.sh
+                    substituteInPlace $out/share/omarchy/bin/omarchy-agent $out/share/omarchy/bin/omarchy-agent-account-exec \
+                      --replace-fail '@omarchyDispatch@' "$out/share/omarchy/agent-dispatch"
+                    mkdir -p $out/share/omarchy/agent-dispatch
+                    for a in claude codex grok; do
+                      printf '#!%s\nexec %s %s "$@"\n' ${bash}/bin/bash "$out/bin/omarchy-agent-account-exec" "$a" > "$out/share/omarchy/agent-dispatch/$a"
+                      chmod +x "$out/share/omarchy/agent-dispatch/$a"
+                    done
 
                     # Every --replace-fail pattern AND replacement below is a single line
                     # on purpose. `nix fmt` re-indents multi-line strings inside this
@@ -1338,6 +1313,18 @@ stdenvNoCC.mkDerivation {
                       --replace-fail 'if omarchy-cmd-missing "$editor"; then' 'if omarchy-cmd-missing "$([[ $editor == helix ]] && echo hx || echo "$editor")"; then'
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
                       --replace-fail 'command="zen-browser"' 'command="zen-beta"'
+
+                    # #1623: missing defaults are enabled declaratively, then set after rebuild.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-browser \
+                      --replace-fail 'omarchy-install-browser "$browser" || exit 1' 'exec nixarchy-default-install browser "$browser" "$command"' \
+                      --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
+                    substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
+                      --replace-fail "$(cat ${./default-editor-install.upstream.sh})" 'exec nixarchy-default-install editor "$selection" "$editor"' \
+                      --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
+
+                    # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
+                    substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
+                      --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
 
                     # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-editor \

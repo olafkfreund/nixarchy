@@ -13,7 +13,7 @@ menus rewired to Nix instead of pacman.
 **[Roadmap](#roadmap)** ·
 **[Discussions](https://github.com/olafkfreund/nixarchy/discussions)**
 
-Omarchy 4.x is not a dotfiles repo, it's an application: **561 shell commands**,
+Omarchy 4.x is not a dotfiles repo, it's an application: **562 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
@@ -325,36 +325,21 @@ and answer seven questions.
 
 **[Releases](https://github.com/olafkfreund/nixarchy/releases)** carry prebuilt
 images from `v4.0.1-3` onward, built and install-tested by CI on the machine
-that runs the nightly checks. The large one is split, because GitHub will not
-take a single file that size:
+that runs the nightly checks. Download the network image and write it to a stick:
 
 ```
-cat nixarchy-v*.iso.part-* > nixarchy.iso     # the ~7 GB image only
-sha256sum -c --ignore-missing SHA256SUMS
-sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
+sha256sum -c SHA256SUMS
+sudo dd if=nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-`--ignore-missing` because one `SHA256SUMS` covers both images and nobody
-downloads both.
-
-There are two images, and the difference is what they carry:
-
-| | Size | Needs a network | |
-|---|---|---|---|
-| `#iso` | about 7 GB | no | carries the desktop; installs by copying |
-| `#iso-net` | about 2 GB | yes | downloads the desktop as it installs |
-
-Take `#iso` unless the download is the thing you mind. It is the one the tests
-boot every night, it works on a machine that has never had a network, and it is
-faster once you have it. `#iso-net` is a quarter of the download and asks you
-to get online first — its first screen offers Wi-Fi if there is no cable.
+`#iso-net` is about 2 GB and downloads the desktop as it installs. The target
+needs a network; the first screen offers Wi-Fi if there is no cable.
 
 Boot it: no boot menu, no login prompt, the installer is what comes up. The
 questions, one by one, are in
 [Getting started](https://olafkfreund.github.io/nixarchy/manual/getting-started).
-Writing the stick from Windows or macOS (and why Rufus' recommended answer is
-the wrong one), Secure Boot, Ventoy, answering the questions from a file, and
-what the installer leaves in `/etc/nixos`:
+Writing the stick from Windows or macOS, Secure Boot, Ventoy, answering the
+questions from a file, and what the installer leaves in `/etc/nixos`:
 [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso).
 Keeping Windows on the same disk:
 [dual boot](https://olafkfreund.github.io/nixarchy/manual/dual-boot-install).
@@ -366,13 +351,11 @@ installer ISO a release ships, in a local UEFI VM, and you answer the wizard
 yourself:
 
 ```sh
-nix run github:olafkfreund/nixarchy#try            # offline image, ~7 GB download
-nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~2 GB download
+nix run github:olafkfreund/nixarchy#try            # network image, ~2 GB download
 ```
 
-The offline image installs with no network at all; the network image fetches
-the rest from binary caches during the install. Both write to a
-`nixarchy-try.qcow2` in the current directory (up to 32 GB), and when the
+The image fetches the desktop from binary caches during the install. It writes
+to `nixarchy-try.qcow2` in the current directory (up to 32 GB), and when the
 install finishes, `-- --boot` starts the installed system from that disk;
 `-- --fresh` wipes it and installs again. `-- --help` lists the rest.
 
@@ -452,7 +435,7 @@ nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
 work and the exit status, terminal and signals stay the command's own.
 
-**Upstream's 561 commands keep upstream's name, deliberately.** `omarchy theme
+**Upstream's 562 commands keep upstream's name, deliberately.** `omarchy theme
 set` is the same script here as on Arch — a bug in it is a bug to report there,
 and renaming it would say otherwise. It would also cost the property this repo
 is built on: tracking a release is a source bump because nixarchy replaces 19
@@ -489,7 +472,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 561 subcommands, `omarchy commands --check` green |
+| `omarchy` CLI | all 562 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **Install ▸ Packages** | the same catalogue in a panel ([nixarchy-pkg](https://github.com/olafkfreund/nixarchy-pkg)): search, add, draft and apply without a terminal. **On by default**, Super+Alt+N on a new install; `programs.nixarchy.defaultPlugins.pkg = false` removes it |
@@ -504,7 +487,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Runtime themes** | the active palette across supported apps without a rebuild ([omatheme](https://github.com/olafkfreund/nixarchy-omatheme)). **On by default** |
 | **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **On by default**, and it asks a human before it takes control, and it can work in a window you are not using without moving your cursor — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
 | **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
-| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 561 |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 562 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
 | 75 apps in the selection | 51 from nixpkgs, 7 as NixOS modules, 12 built here, 5 with no equivalent |
@@ -828,7 +811,7 @@ scrolling past it:
 | | |
 |---|---|
 | [Configuring nixarchy](https://olafkfreund.github.io/nixarchy/manual/configuration) | every option worth a decision: shell functions, plugins, RetroArch cores, the binary cache, Neovim, the boot splash, and what defers to a configuration you already have |
-| [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) | writing the stick, the two images, the answers file, and the caveats |
+| [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) | writing the stick, the network image, the answers file, and the caveats |
 | [Design notes, status, and what running it found](docs/internals/design.md) | each bug that shipped and is now guarded by CI; what proves every claim in *What works*; the AI measurements; the screencast and the development checks |
 | [How this is tested](https://olafkfreund.github.io/nixarchy/manual/how-this-is-tested) | what CI runs, when, and what each check does not prove |
 

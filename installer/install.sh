@@ -52,35 +52,6 @@ NIX_FLAGS=(--extra-experimental-features "nix-command flakes")
 SUBSTITUTERS="https://nixarchy.cachix.org https://hyprland.cachix.org"
 TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc="
 
-# ...unless we are the offline image, which carries the whole closure.
-#
-# Not an optimisation. With a substituter configured and no network, nix waits
-# out a connection timeout for EVERY path before falling back to the local
-# store, so an install that is working perfectly sits there looking hung for
-# several minutes. Saying there are no substituters makes the store the first
-# answer rather than the last.
-#
-# It also means the image's completeness is tested by everyone who boots it. A
-# path missing from storeContents would otherwise be quietly downloaded by
-# anyone who happens to have a network, and found by the one person who does
-# not.
-#
-# installer/cd.nix writes the marker.
-#
-# Kept, not discarded. The offline image clears these so the store answers
-# first, and that stays true for the build it is expected to do -- but an image
-# that turns out to be missing a path has, until now, had nowhere to go: the
-# install dies on a machine with a perfectly good network, because the only
-# copy of the answer was on a cache the installer had just told itself to
-# forget. rescue_build below spends them, once, loudly.
-RESCUE_SUBSTITUTERS="$SUBSTITUTERS"
-RESCUE_TRUSTED_KEYS="$TRUSTED_KEYS"
-
-if [ -f /etc/nixarchy-iso ]; then
-  SUBSTITUTERS=""
-  TRUSTED_KEYS=""
-fi
-
 # Copy the system rather than rebuild it.
 #
 # nixos-install builds into the target store (--store /mnt) and offers this
@@ -100,10 +71,8 @@ fi
 SUBSTITUTE_FLAGS=(--option always-allow-substitutes true)
 
 # Derivations every machine assembles for itself -- /etc fragments, units,
-# activation scripts. Expected in any build plan and cheap anywhere, so any
-# report about what a plan REALLY builds filters them out, or the entries that
-# matter drown under a thousand that do not. Shared by preflight_build and the
-# offline failure report: two filters would disagree about the same plan.
+# activation scripts. Expected in any build plan and cheap anywhere, so
+# preflight_build filters them out to show the entries that matter.
 PLAN_TRIVIA='-(etc|activate|dry-activate|system-path|system-units|user-units|unit-|X-Restart|initrd|boot\.json|users-groups|nixos-system|.*\.conf|.*\.service|hosts|.*-hostname)'
 
 dry_run=false
@@ -273,12 +242,8 @@ require_root_and_uefi() {
 # several hundred files including mod-dh-ansi-us-fatz-wide, which is not a
 # thing to offer a person who has just booted a disk. Upstream shows about
 # fifty human-readable layouts with English first; so does this.
-# Getting online, on the image that needs to be.
-#
-# The offline image carries the whole desktop and skips all of this: asking
-# someone to join a network so they can then not use it is a question with no
-# purpose. The network image cannot do anything without one, and the machine it
-# is installing onto may never have had a network configured -- the disk is
+# Getting online for the network image. It cannot install without one, and the
+# machine it is installing onto may never have had a network configured -- the disk is
 # empty, and the desktop that would normally ask is the thing being installed.
 # So the installer has to ask, and this is the only place it can.
 #
@@ -495,73 +460,9 @@ connect_wifi() {
   done
 }
 
-# Wi-Fi on an image that does not need it, for the machine that will.
-#
-# Split from ask_network because the two are different questions wearing the
-# same screen: the net image cannot proceed without a network, and this one can
-# and simply produces a better machine with one. Conflating them is how the
-# offline image ended up with no way to configure Wi-Fi at all.
-offer_optional_wifi() {
-  ui_screen "Wi-Fi, if you want it..."
-  ui_left "This image installs without a network, so this is optional."
-  ui_left "\e[90mA network you join here is carried onto the installed machine, so it\e[0m"
-  ui_left "\e[90mis already online at the first boot rather than asking again.\e[0m"
-  echo
-
-  local choice
-  choice=$(printf '%s\n' "Skip" "Connect to Wi-Fi" |
-    gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" \
-      --header "Set up Wi-Fi now?") || choice=""
-
-  # Skip on anything that is not an explicit yes, INCLUDING an interrupt. The
-  # net image's screen calls ui_abort there because it cannot go on; this one
-  # can, and treating Escape as "get out of my way" is what the person means.
-  case $choice in
-    "Connect to Wi-Fi") connect_wifi || true ;;
-    *) return 0 ;;
-  esac
-}
-
 ask_network() {
-  # Only the network image asks. Keyed on that image's own marker rather than
-  # on the absence of the offline one, and the difference is not cosmetic:
-  # checks.install installs unattended, in a sandbox, with no network and no
-  # marker of either kind. It works because its store is seeded, so "no offline
-  # marker" would have made a passing check demand a network and fail. What
-  # this screen is for is the one image that genuinely cannot proceed without
-  # one, and that image says so itself.
-  if [ ! -f /etc/nixarchy-iso-net ]; then
-    # The OFFLINE image, which needs nothing from a network to install -- and
-    # produces a machine that does. Every profile the user joins here is
-    # carried onto the target by carry_network_profiles, so this screen is the
-    # difference between a first boot that is already online and one where
-    # they type their Wi-Fi password again at a desktop that cannot reach
-    # anything to look up how.
-    #
-    # Offered, never demanded, and that asymmetry is the whole design. The
-    # image installs perfectly without it, so a prompt that BLOCKED would be
-    # inventing a requirement -- which is what the old early return was
-    # rightly avoiding. Skipping is one keypress and the default.
-    #
-    # Not under --answers: unattended means nobody is there to pick a network,
-    # and the check that installs offline in a sandbox must not grow a screen.
-    if [ -n "$answers_file" ] || network_ready; then
-      return 0
-    fi
-    # And only where there is a radio to use. cfg80211 creates a phy80211 link
-    # for every driver that registers a wiphy, so its absence means this
-    # machine has no wireless interface -- a desktop on ethernet, or the VM
-    # every wizard check runs in.
-    #
-    # Without this the screen appeared on machines that cannot act on it, and
-    # checks.installer-wizard sat on it for 180 seconds waiting for a keyboard
-    # screen that was one un-answerable prompt away. An optional step is still
-    # a step: offering one to somebody who has no way to take it is the same
-    # cost as requiring it.
-    ls -d /sys/class/net/*/phy80211 >/dev/null 2>&1 || return 0
-    offer_optional_wifi
-    return 0
-  fi
+  # Markerless checks.install has a seeded store and no network prompt.
+  on_net_image || return 0
 
   if network_ready; then
     return 0
@@ -571,8 +472,7 @@ ask_network() {
   # hanging on a prompt no one will answer.
   if [ -n "$answers_file" ]; then
     echo "nixarchy-install: this image installs over the network and there is none." >&2
-    echo "nixarchy-install: connect a cable, or use the offline image, or configure" >&2
-    echo "nixarchy-install: the network before running with --answers." >&2
+    echo "nixarchy-install: connect a cable or configure the network before running with --answers." >&2
     exit 1
   fi
 
@@ -593,13 +493,12 @@ ask_network() {
         ui_left "\e[33mConnected, but names are not resolving.\e[0m"
         ui_left "\e[90mThat is what a captive portal looks like: a hotel or guest network\e[0m"
         ui_left "\e[90mwanting a login page first. Sign in from another device on the same\e[0m"
-        ui_left "\e[90mnetwork, then Try again -- or use the offline image, which needs no\e[0m"
-        ui_left "\e[90mnetwork at all.\e[0m"
+        ui_left "\e[90mnetwork, then Try again.\e[0m"
         ;;
       nocache)
         ui_left "\e[33mConnected and resolving, but cache.nixos.org will not answer.\e[0m"
-        ui_left "\e[90mA proxy or a filtered network does this. The offline image installs\e[0m"
-        ui_left "\e[90mwithout reaching any cache.\e[0m"
+        ui_left "\e[90mA proxy or a filtered network can do this. Check access to the\e[0m"
+        ui_left "\e[90mcache, then Try again.\e[0m"
         ;;
     esac
     echo
@@ -2554,211 +2453,14 @@ check_store_space() {
   echo "  slower -- every path is written to the disk as it is produced rather" >&2
   echo "  than copied there at the end -- and it is not a failure." >&2
   echo >&2
-  # ...on the OFFLINE image only. The network image fetches everything by
-  # design -- that is what it is for -- so telling its user they have found
-  # a bug is telling them the opposite of the truth, on the one screen they
-  # are most likely to act on. Seen on a real iso-net install: 14G to
-  # fetch, entirely expected, reported as "a bug worth reporting".
-  if [ ! -f /etc/nixarchy-iso-net ]; then
-    echo "  This normally fetches nothing at all: the image carries the closure" >&2
-    echo "  already. Having anything to fetch means what the image baked is not" >&2
-    echo "  what this flake asks for, which is a bug worth reporting with the" >&2
-    echo "  two numbers above." >&2
-  else
-    echo "  This image downloads the desktop as it installs, so a fetch this" >&2
-    echo "  size is expected and is not a fault." >&2
-  fi
+  echo "  This image downloads the desktop as it installs, so a fetch this" >&2
+  echo "  size is expected and is not a fault." >&2
   return 1
 }
 
 # One line so the store-space check can extract it with a grep; the test stubs
 # it to say "network image" without an /etc to write a marker into.
 on_net_image() { [ -f /etc/nixarchy-iso-net ]; }
-
-# The OFFLINE image specifically -- the one that carries the closure and has
-# cleared its substituters. Not `! on_net_image`: checks.install runs with no
-# marker of either kind and a seeded store, so a negation would call that an
-# offline image and change what a passing check is testing.
-on_offline_image() { [ -f /etc/nixarchy-iso ] && [ ! -f /etc/nixarchy-iso-net ]; }
-
-# Where the rescue records what the image could not supply, for
-# `omarchy bug-report` and for a person reading the installed machine later.
-RESCUE_REPORT=/var/log/nixarchy-image-incomplete.log
-
-# The offline image was missing something. Say so, at length, and fetch it.
-#
-# The offline image clears its substituters on purpose (see the comment where
-# that happens): the store answers first, no per-path connection timeouts, and
-# -- the load-bearing half -- "the image's completeness is tested by everyone
-# who boots it", because a missing path cannot be quietly downloaded by whoever
-# happens to have a network and left for the one person who does not.
-#
-# That argument is right and this does not discard it. What it does is stop the
-# failure being TOTAL. Today an image missing one path produces neither an
-# installed machine nor a diagnosis: the build works backwards to the source
-# bootstrap, dies fetching a perl tarball, and the screen names texinfo. That
-# happened on real hardware -- the microcode was on no image, every real
-# machine asks for it, and no VM ever does.
-#
-# So: the fast path is unchanged and still proves completeness. Only when it
-# has already FAILED, and only on the offline image, and only with a network,
-# is the cache spent -- and then the paths that were missing are named on the
-# screen and written to $RESCUE_REPORT, which is a stronger signal than the
-# silent download the original comment was guarding against. The bug becomes a
-# list somebody can paste into an issue instead of a machine that will not
-# install.
-rescue_build() {
-  local flakeref=$1 plan fetch
-
-  on_offline_image || return 1
-
-  echo >&2
-  echo "nixarchy-install: the build failed, and this is the offline image." >&2
-  echo "  Checking whether a network can supply what the image could not." >&2
-
-  if ! network_ready; then
-    echo "  No network, so there is nothing to fall back to. The image is" >&2
-    echo "  missing something it should carry -- please report this with" >&2
-    echo "  /var/log/nixarchy-install.log." >&2
-
-    # And WHAT it is missing, and WHY -- which needs no network at all.
-    #
-    # The branch below this one has had that report since it was written, but
-    # only when a network exists to compare against, and the case that matters
-    # is this one: the image alone, failing on its own. What the log kept
-    # instead was the consequence -- hundreds of derivations walking down to
-    # the source bootstrap, which names the toolchain and never names the
-    # thing that asked for it.
-    #
-    # `nix build --dry-run` offline lists what would be built. why-depends
-    # then answers the question the list cannot: which part of THIS system
-    # reaches the thing that needs a compiler. Guessing at that from the list
-    # is how three wrong causes were proposed for one failure.
-    #
-    # Everything here is best-effort and cannot change the outcome: the
-    # install has already failed and this function returns 1 either way.
-    # Which of the build's own foundations are actually on this machine.
-    #
-    # The chain why-depends prints ends at the source bootstrap, and the
-    # question that answers is "what did the image fail to carry" -- but the
-    # answer is one level up: a toplevel that differs from the image's has to
-    # be BUILT here, and building anything needs a stdenv. If stdenvNoCC is
-    # not a valid path on this machine, nix has no choice but to make one,
-    # and making one from nothing is mescc-tools and hex0.
-    #
-    # installer/cd.nix seeds these deliberately (buildInputsOfWhatChanges,
-    # and tests/install-iso.nix's REBUILT step names that list as "where the
-    # answer is" if this ever happens). So this prints whether the seeding
-    # WORKED, which is a different question from whether it was written --
-    # and the two were indistinguishable from the log until now.
-    # The pkgs of the machine being installed, derived from the flakeref this
-    # function was handed rather than from a variable a caller might forget:
-    #   /mnt/etc/nixos#nixosConfigurations.<host>.config.system.build.toplevel
-    #                 \________________ this half ________/
-
-    local plan builds drv
-    plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "$flakeref" 2>&1) || true
-    builds=$(printf '%s\n' "$plan" | sed -n 's|^ *\(/nix/store/[^ ]*\.drv\)$|\1|p')
-
-    if [ -n "$builds" ]; then
-      echo >&2
-      echo "  It would have to build $(printf '%s\n' "$builds" | wc -l) derivations." >&2
-      echo "  The first few:" >&2
-      printf '%s\n' "$builds" | head -15 | sed 's|^|    |' >&2
-
-      # WHICH INPUT IS MISSING, asked of nix rather than guessed.
-      #
-      # The build list is read top-down here on purpose: its last entries are
-      # the machine's own targets -- its initrd, its boot.json, its units --
-      # and those are EXPECTED to be built. What is not expected is that one
-      # of their inputs is absent, because that single absence is what sends
-      # nix down to the source bootstrap for everything underneath.
-      #
-      # A first version of this check named five packages it thought were the
-      # likely ones (stdenv, stdenvNoCC, bash, coreutils, perl) and reported
-      # all five present, which was true and useless. Nix knows the answer
-      # exactly; it only has to be asked.
-      for drv in $(printf '%s\n' "$builds" | grep -vE -- '-(bootstrap-|stage[0-9]|hex[0-9]|M[0-9]|mescc|catm|cc_arch|blood-elf|kaem|stage0)' | tail -3); do
-        echo >&2
-        echo "  Inputs of $(basename "$drv") that are NOT on this machine:" >&2
-        nix "${NIX_FLAGS[@]}" derivation show "$drv" 2>/dev/null \
-          | jq -r '.[].inputDrvs | keys[]' 2>/dev/null \
-          | while read -r d; do
-              nix "${NIX_FLAGS[@]}" derivation show "$d" 2>/dev/null \
-                | jq -r '.[].outputs[].path' 2>/dev/null \
-                | while read -r o; do
-                    nix "${NIX_FLAGS[@]}" path-info "$o" >/dev/null 2>&1 \
-                      || echo "    $o"
-                  done
-            done | sort -u | head -12 >&2
-      done
-
-      # The ones worth explaining are the packages, not this machine's own
-      # etc fragments and units -- those are expected to be built and are
-      # cheap. A compiler appearing under any of them is the actual finding.
-      for drv in $(printf '%s\n' "$builds" \
-        | grep -vE -- "$PLAN_TRIVIA" \
-        | head -3); do
-        echo >&2
-        echo "  Why this system needs $(basename "$drv"):" >&2
-        nix "${NIX_FLAGS[@]}" why-depends --derivation "$flakeref" "$drv" 2>&1 \
-          | head -20 | sed 's|^|    |' >&2 || true
-      done
-    fi
-
-    return 1
-  fi
-
-  # WHAT was missing, before fetching it. --dry-run with the caches restored
-  # lists exactly the paths this image should have carried and did not, which
-  # is the report; without it the rescue would be the silent download the
-  # offline design exists to prevent.
-  plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
-    --extra-substituters "$RESCUE_SUBSTITUTERS" \
-    --extra-trusted-public-keys "$RESCUE_TRUSTED_KEYS" \
-    "$flakeref" 2>&1) || true
-
-  # Paths only. `nix build --dry-run` prints its headings on stderr and the
-  # store paths indented beneath them, so the indent is the selector.
-  fetch=$(printf '%s\n' "$plan" | sed -n 's|^ *\(/nix/store/[^ ]*\)$|\1|p' | sort -u)
-
-  {
-    echo "nixarchy image incomplete"
-    echo "image:  $(cat /etc/nixarchy-iso 2>/dev/null || echo unknown)"
-    echo "date:   $(date -Is)"
-    echo "flake:  $flakeref"
-    echo
-    echo "These paths were not on the medium and were downloaded instead:"
-    printf '%s\n' "${fetch:-  (nix named none -- see the plan below)}"
-    echo
-    printf '%s\n' "$plan"
-  } > "$RESCUE_REPORT" 2>/dev/null || true
-
-  echo >&2
-  echo "  ============================================================" >&2
-  echo "  THIS IMAGE IS INCOMPLETE. That is a bug in nixarchy, not in" >&2
-  echo "  your machine, and the install is continuing over the network" >&2
-  echo "  so you get a working system anyway." >&2
-  echo >&2
-  echo "  Missing from the medium:" >&2
-  printf '%s\n' "${fetch:-  (none named; the plan is in the log)}" |
-    head -20 | sed 's|^|    |' >&2
-  if [ "$(printf '%s\n' "$fetch" | grep -c .)" -gt 20 ]; then
-    echo "    ... and more, all of them in $RESCUE_REPORT" >&2
-  fi
-  echo >&2
-  echo "  Please report this with $RESCUE_REPORT --" >&2
-  echo "  it is copied onto the installed system, and omarchy bug-report" >&2
-  echo "  collects it. An offline image that needs the network is exactly" >&2
-  echo "  the thing we cannot find without you telling us." >&2
-  echo "  ============================================================" >&2
-  echo >&2
-
-  nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
-    --extra-substituters "$RESCUE_SUBSTITUTERS" \
-    --extra-trusted-public-keys "$RESCUE_TRUSTED_KEYS" \
-    "$flakeref"
-}
 
 # Prove the build could start BEFORE the disk is wiped (#300).
 #
@@ -2785,11 +2487,8 @@ rescue_build() {
 #     run_install repeats this dry-run after the wipe; by then evaluation is
 #     cached and the repeat is close to free.
 #
-# Only the network image. The offline image carries the closure and has no
-# substituters to probe, and checks.install runs with no network, no marker
-# of either kind and a seeded store -- keying on anything but the net image's
-# own marker would make a passing check demand a network and fail, which is
-# the trap the ask_network comment already names.
+# Only the network image. checks.install runs with no network, no marker
+# and a seeded store; its preflight must remain skipped.
 
 # The plan succeeded; now what does it SAY (#483). `nix build --dry-run`
 # lists what no reachable cache could supply under "will be built", and on
@@ -2874,11 +2573,8 @@ preflight_build() {
 }
 
 run_install() {
-  installed_baked=false
-  # What would have to be built, printed before doing it. On a machine with no
-  # network an unseeded build input is the difference between an install and a
-  # confusing cascade of source downloads, and this names it once rather than
-  # leaving it to be inferred from whatever failed first.
+  # What would have to be built, printed before doing it, so a failure names
+  # the missing build input rather than a cascade of source downloads.
   #
   # Captured rather than piped straight to the log, because check_store_space
   # reads the same plan: the sizes it decides on are the ones printed here.
@@ -2962,67 +2658,10 @@ run_install() {
   # way it happens once, in the store that already holds every dependency,
   # instead of inside a target store that has to have each one copied to it
   # before it can be used.
-  local system=""
-
-  # The offline image CARRIES the system, so copy it rather than build it.
-  #
-  # Stage 3 of #436, and the reason the two stages before it existed. Building
-  # the machine's own configuration offline means building whatever differs
-  # from what the image holds, and with no network that ends at the source
-  # bootstrap -- 677 derivations, measured, dying on a Debian patch.
-  #
-  # What makes copying CORRECT rather than merely faster:
-  #
-  #   the hostname   is not in the closure any more (stage 1). The name is
-  #                  applied at first boot from /etc/nixarchy/hostname.
-  #   the password   is a file the installer already wrote, read at activation
-  #                  (#457), so the account is usable.
-  #   the disk       does not matter: disk-config.nix names filesystems
-  #                  by-partlabel, so a toplevel built against /dev/vda is
-  #                  byte-identical to one built against /dev/nvme0n1 --
-  #                  measured, same drvPath.
-  #   the layout     whole-disk only; see why_not_baked below.
-  #
-  # What is DELIBERATELY not the same is the username and the detected
-  # hardware-configuration.nix. Both are written to /mnt/etc/nixos and arrive
-  # with the first online rebuild; that is option A on #435, chosen knowing
-  # the machine boots as the reference's account until then.
-  #
-  # Keyed on a file that exists only on the offline image, never on "no
-  # network marker": checks.install runs with neither marker in a seeded
-  # sandbox where building is free and correct.
-  local baked="/etc/nixarchy-reference-$encrypt"
-  local baked_system="" why_not_baked=""
-  # The baked system is the REFERENCE machine: whole-disk partition labels and
-  # the template's host. A free-space install cuts other partitions, and one
-  # that mounts labels it never created does not boot (#1078); --from installs
-  # the repository's machine, not the reference.
-  [ "$disk_mode" = whole ] || why_not_baked="a free-space install mounts partitions the image's system does not name (#1078)"
-  [ -z "$from_repo" ] || why_not_baked="--from installs $from_repo's $hostname, not the image's reference machine"
-  if [ -r "$baked" ] && [ -n "$why_not_baked" ]; then
-    echo "nixarchy-install: building rather than copying the system this image carries: $why_not_baked."
-    echo "nixarchy-install: on the offline image that is expected; if the image lacks something, the rescue below says so."
-  elif [ -r "$baked" ]; then
-    local candidate
-    candidate=$(tr -d '[:space:]' <"$baked")
-    # Valid in THIS store, not merely a plausible path. An image that lost the
-    # closure would otherwise hand nixos-install a name it cannot copy, and
-    # the failure would land in nixos-install rather than here.
-    if [ -n "$candidate" ] && nix "${NIX_FLAGS[@]}" path-info "$candidate" >/dev/null 2>&1; then
-      system="$candidate"
-      baked_system="$candidate"
-      echo "nixarchy-install: installing the system this image carries: $system"
-    else
-      echo "nixarchy-install: $baked names $candidate, which is not in this" >&2
-      echo "store. Falling back to building, which offline will be slow." >&2
-    fi
-  fi
-
-  if [ -z "$system" ]; then
-    system=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
-      "${build_store[@]}" \
-      "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
-  fi
+  local system
+  system=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
+    "${build_store[@]}" \
+    "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
 
   # Checked, because set -e will not check it here. The whole install runs as
   # `{ ...; } || rc=$?` so the dashboard can report a failure, and inside a
@@ -3034,15 +2673,6 @@ run_install() {
   #   error: could not find a flake.nix file
   #
   # naming nothing that has anything to do with what actually went wrong.
-  # One retry, over the network, on the offline image only -- see rescue_build.
-  # Placed here rather than inside the assignment above so the fast path keeps
-  # its exact shape: no substituters, no timeouts, and a store that answers
-  # first. This runs only once that has already failed.
-  if [ -z "$system" ]; then
-    system=$(rescue_build \
-      "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
-  fi
-
   if [ -z "$system" ]; then
     echo "nixarchy-install: the system did not build; nothing was installed." >&2
     echo "The build output is above, in /var/log/nixarchy-install.log." >&2
@@ -3051,32 +2681,11 @@ run_install() {
 
   # nixos-install takes --option, not --extra-experimental-features: it is not
   # a nix subcommand and rejects the flag outright.
-  # --max-jobs 0 when the system was COPIED rather than built, and it is the
-  # assertion rather than an optimisation.
-  #
-  # With --system, nixos-install runs no build of its own (nixos-install.sh:266
-  # gates the whole build block on the system being empty). What remains is
-  # `nix-env --store /mnt --set`, which CAN fall back to building a path it
-  # cannot substitute. --max-jobs 0 makes nix refuse to start any build and say
-  # so, instead of quietly compiling for an hour on a machine with no network.
-  #
-  # So an offline install that would have had to build now FAILS LOUDLY, which
-  # is the property #436 asked for: not "the install succeeded" but "nothing
-  # was built". Counting `building '` lines was the alternative and is fragile
-  # -- --log-format is user-overridable -- and `--offline` is not a flag
-  # nixos-install accepts at all; it hits the catch-all and exits 1.
-  #
-  # Only on the copied path. A network install builds on purpose.
-  local no_build=()
-  [ "$system" = "${baked_system:-}" ] && no_build=(--max-jobs 0)
-
   nixos-install --root /mnt --system "$system" --no-root-password \
     --option extra-experimental-features "nix-command flakes" \
     --option extra-substituters "$SUBSTITUTERS" \
     --option extra-trusted-public-keys "$TRUSTED_KEYS" \
-    "${no_build[@]}" \
     "${SUBSTITUTE_FLAGS[@]}" || return 1
-  [ -z "$baked_system" ] || installed_baked=true
 }
 
 # The baseline a factory reset returns to (#172).
@@ -3369,7 +2978,7 @@ main() {
   local target_log=""
   local started rc=0 elapsed
   install_attempts
-  ui_finished "$elapsed" "$username" "${installed_baked:-false}"
+  ui_finished "$elapsed" "$username"
 }
 
 # The phases, then the failure screen, again for as long as the person at it
@@ -3516,17 +3125,6 @@ install_once() {
     ( umask 077 && cat "$log" >/mnt/var/log/nixarchy-install.log ) 2>/dev/null \
       && chown 0:0 /mnt/var/log/nixarchy-install.log 2>/dev/null \
       && target_log=/var/log/nixarchy-install.log
-
-    # And the incompleteness report, if the offline image had to fall back to
-    # the network. It goes onto the INSTALLED machine deliberately: the live
-    # medium is gone after the reboot, and this is the one artefact that says
-    # the image was missing something. Same umask as the log above, for the
-    # same reason -- it quotes a build plan and nothing should assume a build
-    # plan is free of anything sensitive.
-    if [ -f "$RESCUE_REPORT" ]; then
-      ( umask 077 && cat "$RESCUE_REPORT" >/mnt"$RESCUE_REPORT" ) 2>/dev/null \
-        && chown 0:0 /mnt"$RESCUE_REPORT" 2>/dev/null || true
-    fi
   fi
 
 }

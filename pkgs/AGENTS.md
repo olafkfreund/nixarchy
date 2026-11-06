@@ -1233,23 +1233,34 @@ Getting a command name wrong here fails SAFE: the row simply
 never ticks, which reads as "that agent is not installed".
 The direction that would matter -- ticking for an agent that
 
-<a id="omarchy-agent-gets-mise-shims-and-antigravity"></a>
-## omarchy-agent gets the mise shims and Antigravity (#1398)
+<a id="omarchy-agent-gets-antigravity"></a>
+## omarchy-agent gets Antigravity (#1398)
 
-omarchy-agent, twice.
+Google deprecated gemini-cli in favour of Antigravity (`agy`), and upstream's
+launcher has no case for that name -- which is an "Unsupported default agent"
+rather than an agent.
 
-First: mise activates from the shell rc, and the menu launches an
-agent through `bash -c` inside a floating terminal, which sources no
-rc. An agent mise had installed perfectly was therefore reported as
-"not installed" by the very next line, while running fine one shell
-over. Only the two agents nixpkgs has no package for still come from
-mise -- see nix-bin/omarchy-default-agent -- but for those this is
-the difference between a working menu entry and a lie.
+<a id="typed-agents-go-through-a-nix-dispatch-directory"></a>
+## Typed agents go through a Nix dispatch directory (#1625)
 
-Second: Antigravity. Google deprecated gemini-cli in favour of it,
-mise carries it as a prebuilt `aqua:` binary, and upstream's launcher
-has no case for a name it has never heard of -- which is an
-"Unsupported default agent" rather than an agent.
+Upstream routes a typed `claude`, `codex` or `grok` to the selected account
+through mise's `[wrappers]` (`etc/mise/conf.d/omarchy-agent-accounts.toml`).
+nixarchy ships no mise, so `$out/share/omarchy/agent-dispatch/{claude,codex,grok}`
+takes its place, prepended once by `default/bash/init`, `zsh-rc` and `fish-rc`,
+and carried on `omarchy-agent`'s launch command because the menu's `bash -c`
+sources no rc and a terminal started through uwsm does not inherit its
+environment.
+
+- **A directory, not shell functions:** a function does not reach an agent's
+  subprocesses when one agent spawns another.
+- **Exec, not a function:** each wrapper execs this generation's
+  `omarchy-agent-account-exec`, which resolves the real CLI under the stripped
+  PATH and puts this generation's dispatch directory back before execing the
+  agent, so subprocesses are routed too.
+- **Stripped by suffix (`*/agent-dispatch`), not by store path:** after a
+  rebuild, a long-lived shell still holds the directory of the generation it
+  started in, and an exact store-path match would leave that one on PATH and
+  loop forever (`omarchy-agent-real-path`).
 
 <a id="sddm-lastuser-is-seeded-in-main-qml"></a>
 ## SDDM lastUser is seeded in Main.qml (#1398)
@@ -1346,3 +1357,15 @@ now fails until somebody decides about it.
 Disk Usage is one of those decisions. Upstream replaced `dua i /` with
 Disktree (`migrations/1791345484.sh`), so `dua` left `runtimeDeps` and
 `disktree` took its place.
+
+## omarchy-apply-lock resets PATH to nothing
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte budget (`checks.install-phase-budget`, #1623).
+
+omarchy-apply-lock resets PATH when it runs as root, and the value it resets to is empty on NixOS.
+
+Upstream's reasoning is sound and worth keeping: an install or upgrade may start this helper as root, and it does not want optional commands resolving out of a user-writable directory. On Arch the answer is /usr/bin and friends. Here those hold nothing, so the script would lose `tee`, `getent` and everything else it shells out to. It writes PAM files for the lock screen, so the failure would be a lock screen that cannot authenticate, discovered at the worst moment.
+
+The patch uses /run/wrappers/bin first, then the system profile: the same two directories a root login gets here, both root-owned, which is exactly the property upstream is reaching for.
+
+New in 4.0.3, and `checks.session` caught it. That check scans every shipped command for /usr and is the reason this is a patch rather than a surprise on somebody's laptop.

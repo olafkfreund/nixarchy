@@ -30,7 +30,8 @@
 # only checked the value would pass on an mkForce that takes their choice away.
 pkgs.runCommand "nixarchy-firmware-guard" { } (
   let
-    inherit (inputs.self.nixosConfigurations) reference iso;
+    inherit (inputs.self.nixosConfigurations) reference;
+    iso = inputs.self.nixosConfigurations.iso-net;
 
     # A configuration with the option explicitly off. If the module used
     # mkForce, or plain assignment at the same priority, this would either

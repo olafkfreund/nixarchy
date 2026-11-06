@@ -28,26 +28,21 @@ want depends on whether the drive is blank.
 
 ## The ISO
 
-Two images are published with each
-[release](https://github.com/olafkfreund/nixarchy/releases): a **net** image of
-about 2 GB that downloads the desktop while it installs, and an **offline**
-image of about 7 GB that carries it. The offline one is split into `.part-*`
-files because GitHub refuses a single asset over 2 GiB; the release notes give
-the one command that joins them.
+Each [release](https://github.com/olafkfreund/nixarchy/releases) publishes one
+network image of about 2 GB. It downloads the desktop while it installs.
 
-Or build either yourself:
+Or build it yourself:
 
 ```
-nix build github:olafkfreund/nixarchy#iso
+nix build github:olafkfreund/nixarchy#iso-net
 sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
 **On Windows or macOS, how you write the stick matters**, and the way it fails
 is at boot with no explanation —
 [the ISO in depth](the-iso#writing-the-stick-from-windows-or-macos)
-has the detail, including why Rufus' *recommended* answer to its ISOHybrid
-question is the wrong one for the offline image. On Linux, `dd` as above has no
-such trap.
+has the detail, including which Rufus mode writes the image byte-for-byte. On
+Linux, `dd` as above does that directly.
 
 Boot it. There is no boot menu and no login prompt — the installer is what
 comes up, and it asks the same questions Omarchy asks, in the same order.
@@ -133,11 +128,9 @@ described in those files rather than done behind them.
 
 Three things to know first.
 
-**Only the net image needs a network.** It downloads the closure rather than
-carrying it, so an install is as fast as your connection. The offline image
-carries the whole closure and installs with no network at all — see
-[The ISO](#the-iso) above. The first rebuild of your own configuration needs a
-network once, whichever image you used; [The ISO in depth](the-iso) says why.
+**Installing needs a network.** The image downloads the system instead of
+carrying it, so install speed depends on your connection and the available
+caches. [The ISO in depth](the-iso) explains what it fetches.
 
 **It is UEFI only.** The layout is an ESP with systemd-boot, and there is no BIOS
 path — the installer checks and refuses rather than failing at the end.

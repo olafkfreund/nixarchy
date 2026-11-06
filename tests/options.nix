@@ -1112,18 +1112,30 @@ let
     # The About screen omarchy-launch-about renders, and the file the OS-line
     # patch in pkgs/omarchy/default.nix is applied to.
     etcFastfetch = etcInstalled "fastfetch/config.jsonc";
-    # The tool_alias `mise use -g cursor-agent` resolves through.
-    etcMise = etcInstalled "mise/conf.d/omarchy.toml";
-    # The [wrappers] that route claude, codex and grok through the selected
-    # account (#1386).
-    etcMiseAccounts = etcInstalled "mise/conf.d/omarchy-agent-accounts.toml";
-    # Upstream builds the wrapper links with `mise reshim`; nothing else here
-    # does, so without this the installed toml routes nothing (#1386).
-    agentWrappersReshim = {
-      on = pkgs.lib.hasInfix "mise reshim" defaultHomeOn.home.activation.nixarchyAgentWrappers.data;
-      # The step is unconditional in the home module (its guard is the file at
-      # run time), so there is no configured-off home to ask.
+    # Negative: nixarchy ships no mise (#1625). `off` is constant, so these say nothing
+    # about Mode A, which omarchyRcChain and the etc cases below answer.
+    etcMise = {
+      on = !(adopter.config.environment.etc ? "mise/conf.d/omarchy.toml");
       off = false;
+    };
+    etcMiseAccounts = {
+      on = !(adopter.config.environment.etc ? "mise/conf.d/omarchy-agent-accounts.toml");
+      off = false;
+    };
+    agentWrappersReshim = {
+      on = !(defaultHomeOn.home.activation ? nixarchyAgentWrappers);
+      off = false;
+    };
+    # The dispatch line lives in package files, so it reaches a machine only through
+    # this source line. Mode A is asserted here.
+    omarchyRcChain = {
+      on = pkgs.lib.hasInfix "default/bash/rc" adopter.config.programs.bash.interactiveShellInit;
+      off = pkgs.lib.hasInfix "default/bash/rc" loaderOff.programs.bash.interactiveShellInit;
+    };
+    miseNoticeHook = {
+      # .enable, not ?: the entry exists either way, and enable is what writes the file.
+      on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
+      off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
     };
 
     # ---- upstream's /etc overlay, the rows carried as NixOS options ----
@@ -1196,6 +1208,24 @@ let
         on = kept == "10s";
         off = kept != "10s";
       };
+
+    # #1624: on a Mode A machine that turns fcitx5 on itself. loaderOff has no input method,
+    # so it could not see the entry leave cfg.enable.
+    fcitx5ThemesLinked = {
+      on = builtins.elem "/share/fcitx5/themes" adopter.config.environment.pathsToLink;
+      off =
+        builtins.elem "/share/fcitx5/themes"
+          (modeAOff.extendModules {
+            modules = [
+              {
+                i18n.inputMethod = {
+                  enable = true;
+                  type = "fcitx5";
+                };
+              }
+            ];
+          }).config.environment.pathsToLink;
+    };
 
     # #1620: deleting prints leaves a machine as one that never enrolled, so a stack with a
     # password must still reach it past pam_fprintd, and the fingerprint one must have none.
@@ -2301,6 +2331,17 @@ let
       off = (configWith { allowUnfree = false; }).nixpkgs.config.allowUnfree or false;
     };
 
+    viCommand =
+      let
+        hasVi = c: pkgs.lib.any (p: (p.name or "") == "vi") c.environment.systemPackages;
+      in
+      {
+        on = hasVi defaultMachine;
+        off = hasVi (configWith {
+          enable = false;
+        });
+      };
+
     browserThemeUser = {
       # null is the default, so this one reads the other way round: the rules
       # appear when a user is named.
@@ -2650,7 +2691,15 @@ let
       "/plymouth-is-not-enabled";
 
   installedSplash = defaultMachine;
-  isoSplash = inputs.self.nixosConfigurations.iso.config;
+  isoSplash = inputs.self.nixosConfigurations.iso-net.config;
+
+  legacyIso =
+    offline:
+    inputs.self.lib.mkUserIso {
+      flake = inputs.self;
+      host = "reference";
+      inherit offline;
+    };
 
   # ---- nixarchy does not delete software somebody installed ----
   #
@@ -3562,6 +3611,15 @@ let
   pkgAddUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (pkgAddTextWith {
     allowUnfree = false;
   });
+  defaultInstallTextWith =
+    settings:
+    (pkgs.lib.findFirst (p: (p.name or "") == "nixarchy-default-install")
+      (throw "no nixarchy-default-install in systemPackages")
+      (configWith settings).environment.systemPackages
+    ).text;
+  defaultInstallUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (defaultInstallTextWith {
+    allowUnfree = false;
+  });
 
   # otherChannel.config's DEFAULT, every value forced, on the usual machine:
   # allowUnfree and no predicate. `inherit (pkgs.config) allowUnfreePredicate`
@@ -3752,6 +3810,7 @@ pkgs.runCommand "nixarchy-options-files"
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     flatpakExplicitDisable = pkgs.lib.boolToString flatpakDisabled.services.flatpak.enable;
     pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
+    defaultInstallUnfreeOff = pkgs.lib.boolToString defaultInstallUnfreeOffBaked;
     inherit otherChannelConfigKeys;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
     fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
@@ -3902,6 +3961,10 @@ pkgs.runCommand "nixarchy-options-files"
     splashIsoDir = splashPaths isoSplash;
     splashIsoOn = pkgs.lib.boolToString isoSplash.boot.plymouth.enable;
     splashIsoTheme = isoSplash.boot.plymouth.theme;
+    legacyIsoSame = pkgs.lib.boolToString (
+      (legacyIso true).drvPath == (legacyIso false).drvPath
+      && (legacyIso true).drvPath == inputs.self.packages.${system}.iso-net.drvPath
+    );
     # What the assets are measured against. The vendored tree, at the version
     # this flake pins -- so a bump that changes an asset changes what "still
     # upstream's" means, which is the point.
@@ -4569,7 +4632,7 @@ pkgs.runCommand "nixarchy-options-files"
         }
         echo "fontconfig pins Omarchy's font choices"
 
-        # ---- the two images are tellable apart -----------------------------
+        # ---- the network image has a stable name and label -----------------
         #
         # Interpolated rather than grepped, because reading these forces the
         # ISO configurations to evaluate -- which is what makes the volumeID
@@ -4577,25 +4640,21 @@ pkgs.runCommand "nixarchy-options-files"
         # evaluates them, and a release build finding it is a release too
         # late.
         #
-        # They were identical once: same filename, same label, for a 5.6 GB
-        # image and a 1.5 GB one.
-        isoName=${inputs.self.nixosConfigurations.iso.config.image.baseName}
-        netName=${inputs.self.nixosConfigurations.iso-net.config.image.baseName}
-        isoLabel=${inputs.self.nixosConfigurations.iso.config.isoImage.volumeID}
-        netLabel=${inputs.self.nixosConfigurations.iso-net.config.isoImage.volumeID}
-        test "$isoName" != "$netName" || {
-          echo "both ISOs build to the same filename ($isoName): copy them out and they collide" >&2
-          exit 1
-        }
-        test "$isoLabel" != "$netLabel" || {
-          echo "both ISOs carry the same volume label ($isoLabel): two sticks, one name" >&2
-          exit 1
-        }
+        isoName=${inputs.self.nixosConfigurations.iso-net.config.image.baseName}
+        isoLabel=${inputs.self.nixosConfigurations.iso-net.config.isoImage.volumeID}
         case "$isoName" in
           *${inputs.self.packages.${system}.omarchy.version}*) ;;
           *) echo "the ISO filename does not carry the version: $isoName" >&2; exit 1 ;;
         esac
-        echo "the two images are tellable apart by name and label ($isoLabel / $netLabel)"
+        case "$isoLabel" in
+          NIXARCHY_*) ;;
+          *) echo "the ISO volume label is unexpected: $isoLabel" >&2; exit 1 ;;
+        esac
+        test "$legacyIsoSame" = true || {
+          echo "mkUserIso's old outputs do not both give the network image" >&2
+          exit 1
+        }
+        echo "the network image has a versioned name and label; old output arguments agree"
 
         # ---- a flatpak is pickable, by the tooling that already exists ------
         #
@@ -4910,6 +4969,12 @@ pkgs.runCommand "nixarchy-options-files"
         test "$pkgAddUnfreeOff" = true || {
           echo "with allowUnfree = false the built nixarchy-pkg-add does not carry allowunfree=false:" >&2
           echo "  the baked policy constant no longer follows the option, so the unfree help" >&2
+          echo "  fires never or always" >&2
+          exit 1
+        }
+        test "$defaultInstallUnfreeOff" = true || {
+          echo "with allowUnfree = false the built nixarchy-default-install does not carry allowunfree=false:" >&2
+          echo "  the baked policy constant no longer follows the option, so the unfree refusal" >&2
           echo "  fires never or always" >&2
           exit 1
         }

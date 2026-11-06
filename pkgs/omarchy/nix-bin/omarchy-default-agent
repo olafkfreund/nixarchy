@@ -4,36 +4,11 @@
 # omarchy:args=[claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|ori|kimi|qwen|dsh|mcode|kiro-cli|freebuff|kilo|devin|amp|commandcode]
 # omarchy:examples=omarchy default agent | omarchy default agent codex | omarchy default agent claude
 
-# Upstream installs the agent with `mise use -g`, which downloads a prebuilt
-# binary into ~/.local/share/mise. On NixOS that is wrong three times over, and
-# every one of them was observed on a real machine:
-#
-#   1. It is imperative. Nothing records it, a reinstall does not reproduce it,
-#      and it is invisible to anyone reading the configuration -- the exact
-#      failure omarchy-pkg-add was replaced to stop.
-#
-#   2. mise activates in the SHELL rc, so its shims reach an interactive
-#      terminal and nothing else. The menu launches an agent through
-#      `bash -c` inside a floating terminal, which sources no rc, so a
-#      perfectly installed agent reported
-#
-#        claude is not installed. Choose an installed agent with: ...
-#
-#      while `claude --version` printed 2.1.251 one shell over.
-#
-#   3. mise's npm backend needs node, which is not in this closure, so an
-#      npm-only agent could not install at all:
-#
-#        sh: line 1: node: command not found
-#
-# nixpkgs has seven of these agents, and each one's meta.mainProgram is exactly
-# the command omarchy-agent looks for -- so routing them through the declarative
-# path fixes all three at once. environment.systemPackages lands in
-# /run/current-system/sw/bin, which is on every PATH including the compositor's,
-# with no shell rc and no shims involved.
-#
-# The two that nixpkgs has no package for still go through mise, because a
-# broken menu entry is worse than an imperative one. They say so out loud.
+# Upstream installs the agent with `mise use -g`; nixarchy installs nothing that way.
+# Each row either adds a nixpkgs package through nixarchy-pkg-add and rebuilds
+# (attr_for), or says plainly that nixarchy does not install it and where it is
+# packaged (elsewhere_attr_for). Each package's meta.mainProgram is the agent's id,
+# which is the command omarchy-agent looks for.
 
 set -uo pipefail
 
@@ -52,11 +27,15 @@ attr_for() {
     grok)     echo grok-cli ;;
     openclaw) echo openclaw ;;
     agy)      echo antigravity-cli ;;
+    pi)       echo pi-coding-agent ;;
+    omp)      echo omp ;;
+    cursor-agent) echo cursor-cli ;;
+    muse)     echo muse-code ;;
     # Added to quattro's menu by #14040. `amp` in nixpkgs is a text editor;
     # Sourcegraph's agent is amp-cli.
     amp)      echo amp-cli ;;
     qwen)     echo qwen-code ;;
-    kilo)     echo kilocode-cli ;;
+    kilo)     echo kilo ;;
     devin)    echo devin-cli ;;
     dsh)      echo deepseek-harness ;;
     kiro-cli) echo kiro-cli ;;
@@ -64,26 +43,10 @@ attr_for() {
   esac
 }
 
-# Not in nixpkgs at the time of writing. mise has both, as `aqua:` backends --
-# prebuilt binaries rather than npm, so they install without node.
-mise_pkg_for() {
-  case "$1" in
-    pi)          echo pi ;;
-    omp)         echo "github:can1357/oh-my-pi" ;;
-    ori)         echo "github:OpenRouterLabs/ori-releases" ;;
-    kimi)        echo "npm:@moonshot-ai/kimi-code" ;;
-    mcode)       echo "npm:@minimax-ai/code" ;;
-    freebuff)    echo "npm:freebuff" ;;
-    commandcode) echo "npm:command-code" ;;
-    *)           echo "" ;;
-  esac
-}
-
+installing=false
 if [[ ${1:-} == "--install" ]]; then
-  # Upstream re-execs itself with this after opening a floating terminal, so a
-  # long mise download has somewhere to draw. The declarative route does its
-  # own waiting inside nixarchy-apply; the flag is accepted so an upstream
-  # caller does not error, and otherwise ignored.
+  # Set when this script re-execs itself in a terminal; see the guard below.
+  installing=true
   shift
 fi
 
@@ -113,8 +76,7 @@ agy | antigravity | antigravity-cli) agent="agy"; name="Antigravity" ;;
 gemini | gemini-cli) agent="gemini"; name="Gemini" ;;
 copilot | github-copilot) agent="copilot"; name="GitHub Copilot" ;;
 # The menu has rows for these four and the case did not, so each printed a usage
-# line and exited 1 -- into a detached terminal nobody sees (#949). openclaw is
-# in nixpkgs; the other three are not, and get the third route below.
+# line and exited 1 -- into a detached terminal nobody sees (#949).
 cursor-agent | cursor) agent="cursor-agent"; name="Cursor Agent" ;;
 hermes) agent="hermes"; name="Hermes" ;;
 muse) agent="muse"; name="Muse" ;;
@@ -166,24 +128,39 @@ confirm() { # confirm <prompt> <yes|no, when it cannot be asked>
   [ "$fallback" = yes ]
 }
 
+# A shell opened before mise left keeps its directories on PATH, where a dead shim would
+# read as an installed agent. PATH rather than the one test, because omarchy-agent
+# inherits it. A mise inside installs/ cannot vouch for itself.
+stale=false
+live_path=""
+IFS=: read -ra path_entries <<<"$PATH"
+for entry in "${path_entries[@]}"; do
+  case $entry in
+    */mise/shims | */mise/installs/* | */mise/command-wrappers/*) stale=true ;;
+    *) live_path+=${live_path:+:}$entry ;;
+  esac
+done
+if [[ $stale == true ]] && ! PATH=$live_path command -v mise &>/dev/null; then
+  export PATH=$live_path
+fi
+
 # The command each agent installs is its own id. Checked against PATH rather
 # than against a package database: what matters is whether omarchy-agent will
 # find it, and that is the same question.
 agent_cmd=$agent
-if command -v "$agent_cmd" &>/dev/null; then
+if PATH=$(omarchy-agent-real-path) command -v "$agent_cmd" &>/dev/null; then
   record
   exec omarchy-agent
+fi
+
+# A menu row runs this with no terminal, so every route below would print to nowhere.
+if [[ $installing == false && ! -t 1 ]]; then
+  exec omarchy-launch-floating-terminal-with-presentation omarchy-default-agent --install "$agent"
 fi
 
 attr=$(attr_for "$agent")
 
 if [[ -n $attr ]]; then
-  # Recorded before the rebuild, not after. The selection is the user's answer
-  # to "which agent", and it is still their answer if they close the terminal
-  # while nixos-rebuild is running -- losing it would mean asking twice for the
-  # same decision.
-  record
-
   echo
   echo "$name is not installed."
   echo
@@ -198,6 +175,10 @@ if [[ -n $attr ]]; then
     exit 1
   fi
 
+  # Recorded before the rebuild, so the answer survives closing the terminal during it,
+  # and after the add, so a failed add does not replace a working default.
+  record
+
   echo
   echo "Building it now. This takes a few minutes the first time, and asks for"
   echo "your password to rebuild the system."
@@ -208,9 +189,9 @@ if [[ -n $attr ]]; then
   # ticked menu entry beside a `claude: command not found`. Declining is still
   # possible, and says what it costs.
   #
-  # "yes" when it cannot ask: the menu's own launcher has a terminal, so the
-  # cases that cannot are scripts and tests, where finishing the job the caller
-  # asked for beats stopping half way through it.
+  # "yes" when it cannot ask: a menu row has its terminal by now, so the cases
+  # that cannot are scripts and tests, where finishing the job beats stopping
+  # half way through it.
   if confirm "Build it now?" yes; then
     exec nixarchy-apply
   fi
@@ -222,10 +203,10 @@ fi
 
 # Packaged elsewhere, and named rather than carried (#949).
 #
-# numtide/llm-agents.nix has all three. It is NOT a nixarchy input and must not
+# numtide/llm-agents.nix has all six. It is NOT a nixarchy input and must not
 # become one: lib.inputSources collects every flake's outPath and every input of
 # theirs transitively, and installer/cd.nix and installer/host.nix both carry
-# that onto the offline ISO and every installed host. llm-agents.nix pins its
+# that onto the network ISO and every installed host. llm-agents.nix pins its
 # own nixpkgs-unstable and documents being tested only against it, so `follows`
 # is not safely available -- one nixpkgs source tree measures about 486 MB, and
 # checks.iso-budget exists to refuse it.
@@ -234,66 +215,46 @@ fi
 # reads "packaged over there" as "so add the input".
 elsewhere_attr_for() {
   case "$1" in
-    cursor-agent) echo cursor-agent ;;
-    hermes)       echo hermes-agent ;;
-    muse)         echo muse-code ;;
-    *)            echo "" ;;
+    kimi)        echo kimi-code ;;
+    mcode)       echo minimax-code ;;
+    freebuff)    echo freebuff ;;
+    commandcode) echo command-code ;;
+    ori)         echo ori ;;
+    hermes)      echo hermes-agent ;;
+    *)           echo "" ;;
   esac
 }
 
 elsewhere=$(elsewhere_attr_for "$agent")
 if [[ -n $elsewhere ]]; then
-  # Recorded before the advice, like the nixpkgs path above: the selection is
-  # the user's answer to "which agent", and it stays their answer whether or
-  # not they go and install it.
-  record
+  current=""
+  if [[ -f $agent_file ]]; then
+    read -r current <"$agent_file"
+  fi
 
   echo
-  echo "$name is recorded as your default agent, and is not installed."
-  echo
-  echo "It is not in nixpkgs. numtide/llm-agents.nix packages it as"
-  echo "$elsewhere. Add that flake as an input and the package to your"
-  echo "configuration."
-  echo
-  echo "nixarchy does not carry it: llm-agents.nix pins its own nixpkgs, and"
-  echo "nixarchy puts every input's source tree on the ISO and on every"
-  echo "installed machine -- about 486 MB, for one optional agent."
-  if [[ $agent == cursor-agent ]]; then
-    echo
-    echo "Note: cursor-agent is unfree wherever it comes from, so a machine"
-    echo "with nixpkgs.config.allowUnfree = false cannot install it at all."
+  echo "$name is not installed, and nixarchy does not install it."
+  if [[ -n $current ]]; then
+    echo "Your default agent is unchanged: $current."
+  else
+    echo "No default agent is set."
   fi
   echo
-  exit 0
-fi
-
-# No nixpkgs package. mise, and honest about what that costs.
-mise_pkg=$(mise_pkg_for "$agent")
-if [[ -z $mise_pkg ]]; then
-  echo "No way to install $name is known." >&2
+  echo "It is not in nixpkgs. numtide/llm-agents.nix packages it as $elsewhere. Add that"
+  echo "flake as an input and the package to your configuration, rebuild, and choose it"
+  echo "again."
+  echo
+  echo "nixarchy does not carry it: llm-agents.nix pins its own nixpkgs, and nixarchy puts"
+  echo "every input's source tree on the ISO and on every installed machine -- about"
+  echo "486 MB, for one optional agent."
+  if [[ $agent == commandcode ]]; then
+    echo
+    echo "Note: Command Code is unfree wherever it comes from, so a machine with"
+    echo "nixpkgs.config.allowUnfree = false cannot install it at all."
+  fi
+  echo
   exit 1
 fi
 
-echo
-echo "$name has no nixpkgs package, so it is installed with mise instead."
-echo "That is imperative: it lives in ~/.local/share/mise, nothing in your"
-echo "configuration records it, and a fresh install of this flake will not"
-echo "bring it back."
-echo
-
-if ! mise use -g "$mise_pkg"; then
-  echo "Could not install $name with mise" >&2
-  exit 1
-fi
-
-record
-
-# mise activates from the shell rc, which the menu's `bash -c` never sources,
-# so the shim has to be found by path rather than by name. Without this the
-# install succeeds and the very next line claims the agent is not installed.
-shims="$HOME/.local/share/mise/shims"
-if [[ -x $shims/$agent ]]; then
-  export PATH="$shims:$PATH"
-fi
-
-exec omarchy-agent
+echo "No way to install $name is known." >&2
+exit 1

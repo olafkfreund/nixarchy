@@ -1,18 +1,12 @@
 { inputs, pkgs }:
-# Does the NET image install a desktop by FETCHING it?
-#
-# tests/install-iso.nix proves the offline artifact with -nic none. This is
-# the other image -- the one people download for a network install, the one
-# the NIXARCHY_4_0_2 tester was burned by, and the one #302's preflight
-# exists to protect -- and until this check it had never been installed from,
-# in CI or anywhere else. The offline path had a check; the net path had
-# nothing.
+# Does the network image install a desktop by fetching it?
+# This is the published image, and #302's preflight protects its install path.
 #
 # ## What "network" means here, and the honesty boundary
 #
 # A nix build sandbox has no internet, and this check does not pretend
-# otherwise. installer/cd.nix bakes the flake SOURCES on both images
-# ("inputSources stays on BOTH images"), so evaluation needs no GitHub; what
+# otherwise. installer/cd.nix carries the flake sources, so evaluation needs
+# no GitHub; what
 # the net image needs from its network is exactly one thing: REACHABLE
 # SUBSTITUTERS. A substituter is a thing a second VM on this test's own vlan
 # can be. So the "internet" is one declared node: dnsmasq handing the ISO its
@@ -67,16 +61,12 @@ let
   };
 
   # One cert, three SANs: every hostname the installer probes over https.
-  ca = pkgs.runCommand "iso-net-stub-ca" { nativeBuildInputs = [ pkgs.openssl ]; } ''
-    mkdir $out
-    openssl req -x509 -newkey rsa:2048 -nodes -days 36500 \
-      -keyout $out/key.pem -out $out/cert.pem \
-      -subj "/CN=cache.nixos.org" \
-      -addext "subjectAltName=DNS:cache.nixos.org,DNS:nixarchy.cachix.org,DNS:hyprland.cachix.org"
-  '';
+  # Committed: a generated one keeps its path across a GC and stops matching
+  # the CA bundles. Why: tests/AGENTS.md#a-build-that-is-not-reproducible-keeps-its-path
+  ca = ./fixtures/iso-net-stub-cert;
 
-  # Same fixed hash as tests/install-iso.nix, same reason: mkpasswd salts
-  # randomly and would make the installed system a different path every run.
+  # A fixed hash: mkpasswd salts randomly and would make the installed system
+  # a different path every run.
   passwordHash = "$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo.yhxsVpM6bgkeTdCG9D91zOaGX9Bu/YsQTlWLwuQF1SrOL0DY8Bu/V/";
 
   referenceConfigs = map (c: c.config) [
@@ -93,8 +83,7 @@ let
         ];
       }
       ''
-        # Quoted heredoc; the hash is mostly dollar signs. See
-        # tests/install-iso.nix for what an unquoted one cost.
+        # Quoted heredoc; the hash is mostly dollar signs.
         cat > answers <<'EOF'
         device=/dev/vda
         encrypt=no
@@ -125,7 +114,7 @@ let
         step STOPPED systemctl stop nixarchy-installer.service
 
         # THE marker: the one preflight_build and ask_network key on, absent
-        # from the offline image and from every seeded gate VM -- presence
+        # from every seeded gate VM -- presence
         # here is what makes this run exercise #302's code at all.
         step MARKER test -f /etc/nixarchy-iso-net
 
@@ -135,8 +124,7 @@ let
         step LEASED sh -c 'ip -4 addr show | grep -q "192\.168\.1\."'
         step PROBE curl -sfI --max-time 8 https://cache.nixos.org/nix-cache-info
 
-        # The desktop is NOT on this image -- the half the offline test
-        # cannot claim, asserted before the install rather than taken from
+        # The desktop is NOT on this image, asserted before the install rather than taken from
         # the image's name. The store on the ISO is the squashfs plus a
         # tmpfs overlay; the reference system path is on neither.
         step NOTBAKED sh -c '! test -e ${inputs.self.nixosConfigurations.reference-unencrypted.config.system.build.toplevel}'
@@ -216,8 +204,7 @@ pkgs.testers.runNixOSTest {
       # Not just the toplevels. The installer BUILDS things in the guest --
       # the diskoScript for the answered device, and the ~20 per-machine
       # derivations run_install's comment counts -- and on the net image
-      # their parts arrive by FETCH, where the offline image bakes them
-      # (installer/cd.nix's `lib.optionals offline` list; this mirrors it).
+      # their parts arrive by FETCH.
       # The first run of this test proved the gap the hard way: format_disk
       # tried to build disko from source in the guest, died at
       # make-binary-wrapper-hook, and the install failed before touching
@@ -430,11 +417,9 @@ pkgs.testers.runNixOSTest {
         # installer wrote, running from the ESP it wrote, on the disk it
         # filled by FETCHING. No multi-user wait here, deliberately: that
         # needs a serial console in the installed system, which
-        # tests/install-iso.nix obtains by rebuilding the flake in the guest
-        # -- a step that cost this test two iterations to two different
-        # substituter-flake failures while proving nothing about the net
-        # path. The full boot-to-login story is the offline test's; this
-        # test's claims all live upstream of it.
+        # Rebuilding the flake in the guest cost this test two iterations to
+        # substituter-flake failures while proving nothing about this path.
+        # This test's claims all live upstream of login.
         # The FIRMWARE's own line, not sd-boot's menu. The menu is drawn with
         # escape-sequence redraws and no trailing newline, and
         # wait_for_console_text works in lines -- v6 of this test timed out

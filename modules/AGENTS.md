@@ -245,25 +245,19 @@ safe.directory -- also measured -- and a missing include target is
 silently ignored, which is what makes the file safe to reference
 before the first activation has written it.
 
-<a id="mise-is-in-omarchys-base-packages-and-its-dev-env-"></a>
+<a id="nix-ld-stays-for-downloaded-binaries"></a>
 
-### mise is in Omarchy's base packages and its dev-env installers lean on
+### nix-ld stays for downloaded binaries
 
 ```nix
 nix-ld.enable = lib.mkDefault true;
 ```
 
-mise is in Omarchy's base packages and its dev-env installers lean on
-it heavily. It downloads prebuilt runtimes, which cannot run against
-NixOS' non-standard loader, so it detects NixOS and falls back to
-compiling from source -- which then fails, because there is no compiler
-on the session PATH. mise's own message names the fix:
-
-  "The automatic all_compile=true default on NixOS caused python to
-   compile from source. Enable nix-ld to use precompiled binaries"
-
-This is what makes `omarchy install dev-env` work rather than print a
-wall of build errors.
+Originally enabled because Omarchy's base packages and dev-env installers leaned
+on mise, whose prebuilt runtimes needed a loader on NixOS. mise is gone (#1625),
+and `programs.nix-ld` stays on for its own users: loose prebuilt binaries and pip
+wheels (`docs/manual/boxes.md`, `docs/manual/troubleshooting.md`, the
+`nixos-binaries` skill, and the curated `libraries` list in `modules/nixos.nix`).
 
 <a id="minus-hyprland-itself"></a>
 
@@ -388,9 +382,9 @@ removed, so it does not stay on here by inheritance.
 Only browsed goes: avahi stays on for driverless IPP discovery, which
 is how modern printers are found and is what cupsd does by itself.
 
-<a id="three-files-from-upstreams-etc-overlay-installed-as-themselves"></a>
+<a id="two-files-from-upstreams-etc-overlay-installed-as-themselves"></a>
 
-### Three files from upstream's /etc overlay, installed as themselves
+### Two files from upstream's /etc overlay, installed as themselves
 
 ```nix
 // lib.genAttrs installedEtc (name: {
@@ -398,18 +392,13 @@ is how modern printers are found and is what cupsd does by itself.
 
 Omarchy's Arch package copies `etc/` into `/etc`. This port carries the same
 tree in `$out/share/omarchy/etc` and, until #649, installed none of it —
-`modules/home.nix` seeds `config/` and `default/`, never `etc/`. Three of the
-forty files were user-visible by their absence: the seeded
+`modules/home.nix` seeds `config/` and `default/`, never `etc/`. Two of the
+files were user-visible by their absence: the seeded
 `~/.config/kitty/kitty.conf` is a stub whose own comment sends the reader to
-`/etc/xdg/kitty/kitty.conf`; `omarchy-launch-about` rendered fastfetch's
-stock layout instead of the About screen, and the one patch this repository
+`/etc/xdg/kitty/kitty.conf`; and `omarchy-launch-about` rendered fastfetch's
+stock layout instead of the About screen, while the one patch this repository
 applies to the etc tree (the "Nixarchy" OS line) was applied to a file
-nothing read; and `mise use -g cursor-agent` failed because the alias it
-resolves through lives only in `etc/mise/conf.d/omarchy.toml`.
-
-On edge a fourth row is installed the same way: `mise/conf.d/omarchy-agent-accounts.toml`,
-the `[wrappers]` that make `omarchy agent account use` reach a typed `claude`,
-`codex` or `grok` (#1386).
+nothing read.
 
 Mechanism, and why this one:
 

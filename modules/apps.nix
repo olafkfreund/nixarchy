@@ -387,6 +387,12 @@ let
 
     # Offered by the Omarchy menu but with no nixpkgs equivalent:
     ${unavailableNote}'';
+  # summon would run upstream's action otherwise (omacom/omarchy#15742)
+  devenvRow = lang: {
+    disabled = "true";
+    action = "true";
+    description = "Not available on NixOS — use `languages.${lang}` in a project's devenv.nix";
+  };
   # Why: modules/AGENTS.md#the-menu-defaults
   overrideSpec = pkgs.writeText "nixarchy-menu-overrides.json" (
     builtins.toJSON (
@@ -669,12 +675,6 @@ let
           description = "A bootable image that reinstalls this machine's system on new hardware. Not a backup: it carries none of your files";
         };
 
-        # Upstream gates these on Arch's binary names (#1303): nixpkgs' helix
-        # installs `hx`, nixarchy's Zen is the flake's `zen-beta`. The setter and
-        # launcher patches in pkgs/omarchy/default.nix name the same binaries.
-        "setup.default.editor.helix".when = "omarchy-cmd-present hx";
-        "setup.default.browser.zen".when = "omarchy-cmd-present zen-beta";
-
         "install.aur" = {
           when = "false";
         };
@@ -931,9 +931,17 @@ let
           when = "nixarchy-vm --check && ! nixarchy-plugin --enabled nixarchy.microvm";
           description = "The panel is off: what you have created, in a terminal";
         };
-        # #1304: hidden. Its omarchy-remove-dev-env arm is `elixir|phoenix`, so
-        # removing Phoenix uninstalls Elixir and Erlang with it.
+        # #1304: hidden. There is nothing to remove: upstream's arm was `elixir|phoenix`.
         "remove.development.elixir.phoenix".when = "false";
+        "install.development.rails" = devenvRow "ruby";
+        "install.development.php.laravel" = devenvRow "php";
+        "install.development.elixir.phoenix" = devenvRow "elixir";
+        "remove.development.rails" = devenvRow "ruby" // {
+          when = "true";
+        };
+        "remove.development.php.laravel" = devenvRow "php" // {
+          when = "true";
+        };
         # #1304: omarchy-dns now explains instead of switching, and these
         # three ran with no terminal to show it in.
         "setup.network.dns.dhcp".action =
@@ -2016,6 +2024,150 @@ in
                   fi
                   echo "enabled $id in $file ($queued queued)"
                   echo "run 'nixarchy-apply' when you have picked everything you want"
+                '';
+              })
+
+              (pkgs.writeShellApplication {
+                name = "nixarchy-default-install";
+                runtimeInputs = [ pkgs.coreutils ];
+                text = ''
+                  allowunfree=${lib.boolToString (config.nixpkgs.config.allowUnfree or false)}
+                  haspredicate=${lib.boolToString (config.nixpkgs.config ? allowUnfreePredicate)}
+                  state="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy"
+
+                  if [ "''${1:-}" = --settle ]; then
+                    PATH=/run/current-system/sw/bin:$PATH
+                    rc=0
+                    for kind in browser editor; do
+                      file="$state/pending-default-$kind"
+                      [ -f "$file" ] || continue
+                      {
+                        IFS= read -r selection || true
+                        IFS= read -r command || true
+                      } < "$file"
+                      probe=$command
+                      [ "$command" != helix ] || probe=hx
+                      if ! command -v "$probe" >/dev/null 2>&1; then
+                        rm -f "$file"
+                        echo "nixarchy: the rebuild did not provide $command; $kind default was not set" >&2
+                        continue
+                      fi
+                      if ! "omarchy-default-$kind" "$selection"; then
+                        echo "nixarchy: could not set the $kind default; it remains pending" >&2
+                        rc=1
+                      fi
+                    done
+                    exit "$rc"
+                  fi
+
+                  if [ "$#" -ne 3 ]; then
+                    echo "usage: nixarchy-default-install <browser|editor> <selection> <command>" >&2
+                    exit 2
+                  fi
+                  kind=$1 selection=$2 command=$3
+                  case "$kind:$selection" in
+                    ${
+                      let
+                        choices = [
+                          [
+                            "browser"
+                            "chrome"
+                            "chrome"
+                          ]
+                          [
+                            "browser"
+                            "brave"
+                            "brave"
+                          ]
+                          [
+                            "browser"
+                            "brave-origin"
+                            "brave-origin"
+                          ]
+                          [
+                            "browser"
+                            "edge"
+                            "edge"
+                          ]
+                          [
+                            "browser"
+                            "firefox"
+                            "firefox"
+                          ]
+                          [
+                            "browser"
+                            "zen"
+                            "zen"
+                          ]
+                          [
+                            "editor"
+                            "code"
+                            "vscode"
+                          ]
+                          [
+                            "editor"
+                            "sublime_text"
+                            "sublime"
+                          ]
+                          [
+                            "editor"
+                            "cursor"
+                            "cursor"
+                          ]
+                          [
+                            "editor"
+                            "zed"
+                            "zed"
+                          ]
+                          [
+                            "editor"
+                            "helix"
+                            "helix"
+                          ]
+                          [
+                            "editor"
+                            "vim"
+                            "vim"
+                          ]
+                          [
+                            "editor"
+                            "emacs"
+                            "emacs"
+                          ]
+                        ];
+                      in
+                      lib.concatMapStringsSep "\n" (
+                        choice:
+                        let
+                          kind = builtins.elemAt choice 0;
+                          selection = builtins.elemAt choice 1;
+                          row = builtins.elemAt choice 2;
+                        in
+                        "${kind}:${selection}) row=${row}; unavailable=${
+                          lib.escapeShellArg (apps.${row}.unavailable or "")
+                        }; unfree=${lib.boolToString (apps.${row}.unfree or false)} ;;"
+                      ) choices
+                    }
+                    browser:chromium | editor:nvim)
+                      echo "nixarchy: $selection already ships in the session" >&2
+                      exit 1
+                      ;;
+                    *) echo "nixarchy: unknown $kind default '$selection'" >&2; exit 1 ;;
+                  esac
+
+                  if [ -n "$unavailable" ]; then
+                    echo "nixarchy: $unavailable" >&2
+                    exit 1
+                  fi
+                  if [ "$unfree" = true ] && [ "$allowunfree" = false ] && [ "$haspredicate" = false ]; then
+                    echo "nixarchy: $row needs programs.nixarchy.allowUnfree = true" >&2
+                    exit 1
+                  fi
+                  nixarchy-app-enable "$row" || exit 1
+                  mkdir -p "$state"
+                  printf '%s\n%s\n' "$selection" "$command" > "$state/pending-default-$kind"
+                  echo "The $kind default takes effect when a rebuild finishes, now or at the next 'nixarchy apply'."
+                  exec nixarchy-apply
                 '';
               })
 
@@ -4555,6 +4707,10 @@ in
                         echo "  rebuild will fail the same way until it is removed:"
                         echo "    nixarchy app remove                    take out what you just picked"
                         echo "    nh os switch $flake 2>&1 | nixarchy explain   what the error means"
+                      fi
+                      if [ "$rc" -eq 0 ]; then
+                        PATH=/run/current-system/sw/bin:$PATH nixarchy-default-install --settle ||
+                          echo "A default you chose is still pending; the next 'nixarchy apply' tries again."
                       fi
                       exit "$rc"
                       ;;

@@ -42,6 +42,12 @@ pkgs.runCommand "nixarchy-try-nixarchy"
     shellcheck ./try-nixarchy.sh || { echo "shellcheck rejected it" >&2; fail=1; }
     echo "  shellcheck clean"
 
+    res=$(bash ./try-nixarchy.sh --full 2>&1 || true)
+    case "$res" in
+      *"full image is gone"*"network image"*) echo "  --full explains the network image" ;;
+      *) echo "--full did not explain that the full image is gone" >&2; fail=1 ;;
+    esac
+
     # ---- a missing tool names the package, per distribution ---------------
     # "install qemu" is not one command anywhere, and somebody who has to go
     # and search for it is somebody who stops here.

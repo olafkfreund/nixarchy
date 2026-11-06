@@ -113,7 +113,7 @@
     # nixpkgs marks sublimetext4 broken -- "Packages, including core ones, do
     # not run without plug-in host depending on insecure OpenSSL" -- and
     # enabling it aborts the whole rebuild rather than failing on its own.
-    unavailable = "nixpkgs marks sublimetext4 broken over an insecure OpenSSL dependency; enabling it fails the rebuild.";
+    unavailable = "nixpkgs marks sublimetext4 broken over an insecure OpenSSL dependency; enabling it fails the rebuild. Zed and VSCode are in the catalogue.";
     arch = "sublime-text-4";
   };
 
@@ -729,8 +729,7 @@
   #
   # As selection entries they go through the same Install / Remove / Apply
   # loop as every other app, and the compiler comes from the same nixpkgs the
-  # rest of the system does. mise is still installed and still works for
-  # anything not listed here.
+  # rest of the system does. nixarchy does not ship mise (#1625).
   go = {
     menuId = "install.development.go";
     label = "Go";

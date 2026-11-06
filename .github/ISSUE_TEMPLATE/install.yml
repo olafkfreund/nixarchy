@@ -41,7 +41,7 @@ body:
       description: >
         The release tag, or the ISO filename. An image older than the tree it
         installs is a common cause, and this is what tells us.
-      placeholder: "v4.0.4-1, or nixarchy-2026-09-16.iso"
+      placeholder: "v4.5.0-1, or nixarchy-v4.5.0-1-net.iso"
     validations:
       required: true
   - type: dropdown

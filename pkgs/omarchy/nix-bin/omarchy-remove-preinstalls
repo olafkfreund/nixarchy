@@ -10,20 +10,15 @@ set -uo pipefail
 apps="$HOME/.local/share/applications"
 bindir="$HOME/.local/bin"
 
-# Exactly the four lines omarchy-mise-install writes for this command name,
-# and nothing else: same package on lines 3 and 4, and the file's own name as
-# the binary (its bin defaults to the command).
-is_mise_stub() {
-  local f=$1 cmd=$2 pkg
-  local -a l
-  [[ -f $f && ! -L $f ]] || return 1
-  mapfile -t -n 5 l <"$f"
-  ((${#l[@]} == 4)) || return 1
-  [[ ${l[0]} == '#!/bin/bash' && ${l[1]} == 'export MISE_MINIMUM_RELEASE_AGE=0' ]] || return 1
-  [[ ${l[2]} == 'mise use -g --quiet '*' || exit 1' ]] || return 1
-  pkg=${l[2]#mise use -g --quiet }
-  pkg=${pkg% || exit 1}
-  [[ ${l[3]} == "exec mise x $pkg -- \"$cmd\" \"\$@\"" ]]
+# The retired mise wrapper, byte for byte as upstream generated it (#1623). Its
+# marker line proves nothing: a copy somebody edited is theirs, and stays.
+is_retired_hermes() {
+  [[ -f $1 && ! -L $1 ]] || return 1
+  case $(sha256sum <"$1") in
+  "fb39d493342b6451c2963ace4b22a60c2c6c782f88210f9247af4131cb605f63 "* | \
+    "5cf93ae0bef941bb308facdf8c74e0e29c82bd038ea73cef5f0a327ab5e45bb3 "*) return 0 ;;
+  esac
+  return 1
 }
 
 if gum confirm "Are you sure you want to remove all preinstalled web apps, TUI wrappers, and desktop applications?"; then
@@ -44,22 +39,15 @@ if gum confirm "Are you sure you want to remove all preinstalled web apps, TUI w
 
   mkdir -p ~/.local/state/omarchy
   touch ~/.local/state/omarchy/preinstalls-removed
-  hyprctl reload
+  omarchy-restart-hyprctl
 
-  for cmd in codex claude gemini copilot gh opencode playwright playwright-cli \
-    pi omp grok crush ghui hunk cursor-agent muse; do
-    f=$bindir/$cmd
-    [[ -e $f || -L $f ]] || continue
-    if is_mise_stub "$f" "$cmd"; then
+  f=$bindir/hermes
+  if [[ -e $f || -L $f ]]; then
+    if is_retired_hermes "$f"; then
       rm -f "$f" && removed+=("$f")
     else
-      kept+=("$f (not an Omarchy mise launcher)")
+      kept+=("$f (not the wrapper Omarchy wrote, or edited since)")
     fi
-  done
-
-  # Only the wrapper omarchy-install-hermes-cli wrote is a preinstall.
-  if omarchy-install-hermes-cli --owns; then
-    rm -f "$bindir/hermes" && removed+=("$bindir/hermes")
   fi
 
   if omarchy-cmd-present update-desktop-database; then

@@ -25,13 +25,14 @@
   username,
 }:
 {
-  config,
   inputs,
   lib,
   pkgs,
   ...
 }:
 {
+  imports = [ ./keyboard.nix ];
+
   programs.nixarchy = {
     enable = true;
 
@@ -587,31 +588,6 @@
   time.timeZone = lib.mkDefault "UTC";
   i18n.defaultLocale = lib.mkDefault "en_US.UTF-8";
   console.keyMap = lib.mkDefault "us";
-
-  # Upstream's session reads XKBLAYOUT here; NixOS writes only KEYMAP=. Not in modules/nixos.nix,
-  # because a Mode A machine keeps its layout. Why: installer/AGENTS.md
-  environment.etc."vconsole.conf" =
-    let
-      inherit (config.services.xserver) xkb;
-    in
-    lib.mkIf
-      (
-        config.console.enable && !config.i18n.imperativeLocale && (xkb.layout != "us" || xkb.variant != "")
-      )
-      {
-        source = lib.mkOverride 90 (
-          pkgs.writeText "vconsole.conf" ''
-            KEYMAP=${config.console.keyMap}
-            ${lib.optionalString (config.console.font != null) "FONT=${config.console.font}"}
-            XKBLAYOUT=${xkb.layout}
-            XKBVARIANT=${xkb.variant}
-          ''
-        );
-      };
-
-  services.xserver.xkb.options = lib.mkIf (lib.hasInfix "," config.services.xserver.xkb.layout) (
-    lib.mkDefault "terminate:ctrl_alt_bksp,grp:alts_toggle"
-  );
 
   # Redundant with the module's own default since #57, and deliberately so: this
   # file becomes the user's own configuration.nix, and a licence policy they

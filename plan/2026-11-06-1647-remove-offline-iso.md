@@ -101,6 +101,12 @@ PR: "The offline ISO goes: releases publish one network image, and reinstall fet
 
 Then: rebase #1619 and drop its step 6 and the offline sentences of step 7, update #1646, and tag `v4.5.0-1`.
 
+## Deviations
+
+- `tests/firmware-guard.nix` and `tests/swap-guard.nix` read `iso` indirectly, and `docs/manual/security.md` named `.#iso`. Both checks now read `iso-net`, and the page names it.
+- `tests/install-iso-net.nix` generated its stub certificate, the flaw #1645 fixed in `installer-refusal`. It now reads a committed fixture.
+- The coverage-guard break leaves a check claimed with no workflow naming it, as the table says; an unclaimed check would be built by the generated step instead.
+
 ## Tests
 
 | Command | Expected |

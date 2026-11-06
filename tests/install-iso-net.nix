@@ -61,13 +61,9 @@ let
   };
 
   # One cert, three SANs: every hostname the installer probes over https.
-  ca = pkgs.runCommand "iso-net-stub-ca" { nativeBuildInputs = [ pkgs.openssl ]; } ''
-    mkdir $out
-    openssl req -x509 -newkey rsa:2048 -nodes -days 36500 \
-      -keyout $out/key.pem -out $out/cert.pem \
-      -subj "/CN=cache.nixos.org" \
-      -addext "subjectAltName=DNS:cache.nixos.org,DNS:nixarchy.cachix.org,DNS:hyprland.cachix.org"
-  '';
+  # Committed: a generated one keeps its path across a GC and stops matching
+  # the CA bundles. Why: tests/AGENTS.md#a-build-that-is-not-reproducible-keeps-its-path
+  ca = ./fixtures/iso-net-stub-cert;
 
   # A fixed hash: mkpasswd salts randomly and would make the installed system
   # a different path every run.

@@ -255,7 +255,7 @@ pkgs.testers.runNixOSTest {
     untop()
     arm("case3")
     log = journal()
-    assert "snapshotting @factory-home" in log and "btrfs" in log, log
+    assert "snapshotting @factory-home" in log and "Could not create subvolume" in log, log
     failed("nothing changed")
     old()
     machine.fail("test -e /var/lib.before-reset-case3")

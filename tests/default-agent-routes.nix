@@ -3,7 +3,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   set -euo pipefail
   script=${../pkgs/omarchy/nix-bin/omarchy-default-agent}
   menu=${omarchySrc}/default/omarchy/omarchy-menu.jsonc
-  tools=${pkgs.coreutils}/bin
+  tools=${pkgs.coreutils}/bin:${pkgs.bash}/bin
   grep_bin=${pkgs.gnugrep}/bin/grep
   sed_bin=${pkgs.gnused}/bin/sed
   real_home=$HOME
@@ -27,7 +27,8 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "launcher %s\n" "$*" >> "$log"' > "$TMPDIR/stubs/omarchy-launch-floating-terminal-with-presentation"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo mise >> "$log"' > "$TMPDIR/mise-bin/mise"
   chmod +x "$TMPDIR"/stubs/* "$TMPDIR/mise-bin/mise"
-  ln -s ${../pkgs/omarchy/nix-bin/omarchy-agent-real-path} "$TMPDIR/stubs/omarchy-agent-real-path"
+  cp ${../pkgs/omarchy/nix-bin/omarchy-agent-real-path} "$TMPDIR/stubs/omarchy-agent-real-path"
+  chmod +x "$TMPDIR/stubs/omarchy-agent-real-path"
 
   make_agent() {
     mkdir -p "$1"
@@ -131,7 +132,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   fi
 
   "$sed_bin" '/pi) *echo pi-coding-agent/d' "$script" > "$TMPDIR/no-pi"
-  cmp -s "$script" "$TMPDIR/no-pi" && fail "pi break did not land"
+  ${pkgs.diffutils}/bin/cmp -s "$script" "$TMPDIR/no-pi" && fail "pi break did not land"
   run_case pi --install "$TMPDIR/mise-bin" "$TMPDIR/no-pi"
   [ "$rc" -eq 1 ] || fail "unknown route: exited $rc"
   has "$out_file" 'No way to install Pi is known.' 'unknown route'

@@ -26,8 +26,11 @@ pkgs.runCommand "nixarchy-agent-account-routing"
 
         D=${omarchy}/share/omarchy/agent-dispatch
         mkdir -p stub withclaude withcodex user
-        for n in omarchy-agent-usage-update omarchy-i18n omarchy-launch-floating-terminal-with-presentation omarchy-launch-tui; do
+        for n in omarchy-agent-usage-update omarchy-i18n; do
           printf '%s\n' '#!/bin/sh' 'exit 0' > stub/$n
+        done
+        for n in omarchy-launch-floating-terminal-with-presentation omarchy-launch-tui; do
+          printf '%s\n' '#!/bin/sh' 'printf "%s %s\n" "''${0##*/}" "$*" >> "$PWD/terminal-calls"' > stub/$n
         done
         printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$*" >> "$PWD/notifications"' > stub/omarchy-notification-send
         printf '%s\n' '#!/bin/sh' 'echo claude' > stub/omarchy-default-agent
@@ -103,8 +106,9 @@ pkgs.runCommand "nixarchy-agent-account-routing"
         test ! -s mise-calls || bad 'case 9: mise was called'
 
         # Case 10: the full-path default-agent command must not mistake dispatch for an installed CLI.
+        : > terminal-calls
         rc=0; PATH=$D:$base "${omarchy}/share/omarchy/bin/omarchy-default-agent" claude >out 2>err || rc=$?
-        test "$rc" -ne 0 || bad 'case 10: absent CLI was accepted'
+        grep -Fxq 'omarchy-launch-floating-terminal-with-presentation omarchy-default-agent --install claude' terminal-calls || bad 'case 10: terminal was not requested'
         test ! -f "$HOME/.config/omarchy/defaults/agent" || bad 'case 10: absent CLI was recorded'
 
         # Case 11: a primary login clears the selected account's home first.
@@ -114,6 +118,7 @@ pkgs.runCommand "nixarchy-agent-account-routing"
         grep -q '^CFG=unset PIN=$' login || bad "case 11: login inherited a pin: $(cat login)"
 
         # Case 12: the launcher carries dispatch even if its caller did not.
+        mkdir -p "$HOME/.config/omarchy/defaults"
         printf '%s\n' codex > "$HOME/.config/omarchy/defaults/agent"
         got=$(PATH=$base:$PWD/withcodex omarchy-agent --inline 2>err) \
           || bad "case 12: launcher exited $?: $(cat err)"

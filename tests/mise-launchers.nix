@@ -96,7 +96,7 @@ pkgs.runCommand "nixarchy-mise-launchers"
     cp after before
     "${omarchy}/bin/omarchy-mise-unshadow" > second.log
     state > after
-    changes before after ''
+    changes before after ""
     [ ! -s second.log ]
 
     mkdir -p "$TMPDIR/stubs"
@@ -110,7 +110,7 @@ pkgs.runCommand "nixarchy-mise-launchers"
     state > before
     PATH=$TMPDIR/stubs:$PATH "${omarchy}/bin/omarchy-mise-unshadow" --notify
     state > after
-    changes before after ''
+    changes before after ""
     [ "$(wc -l < "$TMPDIR/sends")" -eq 1 ]
 
     launcher quiet pkg:later later > "$bin/later"

@@ -118,6 +118,7 @@
       on_exit() {
         rc=$?
         set +e
+        [ "$rc" -eq 0 ] || echo "failed while $step" >&2
         case $phase in
           guard)
             report "nothing changed" "Failed while $step. See: journalctl -u nixarchy-factory-reset"
@@ -220,7 +221,7 @@
         "" \
         "An earlier failed attempt can leave more of these. To list them:" \
         "" \
-        "  ls -d /var/lib.before-reset-* /mnt/@home-before-reset-*" \
+        "  sudo bash -c 'ls -d /var/lib.before-reset-* /mnt/@home-before-reset-*'" \
         "" \
         "/etc/nixos was not touched. The system half resets by rebuilding from" \
         "the first commit in that repository; see omarchy-system-factory-reset." \

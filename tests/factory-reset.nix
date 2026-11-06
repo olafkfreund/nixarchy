@@ -1,9 +1,33 @@
 { pkgs, ... }:
 # Why: tests/AGENTS.md#factory-reset
+let
+  exchWrapper = pkgs.writeShellScriptBin "exch" ''
+    calls=$(cat /run/test-exch-calls 2>/dev/null || echo 0)
+    calls=$((calls + 1))
+    printf '%s\n' "$calls" > /run/test-exch-calls
+    if [ -e /test-control/exch-fail-from ] && [ "$calls" -ge "$(cat /test-control/exch-fail-from)" ]; then
+      echo "injected exch failure on call $calls" >&2
+      exit 1
+    fi
+    exec ${pkgs.util-linux}/bin/exch "$@"
+  '';
+  dateWrapper = pkgs.writeShellScriptBin "date" ''
+    if [ -e /test-control/date ]; then
+      cat /test-control/date
+    else
+      exec ${pkgs.coreutils}/bin/date "$@"
+    fi
+  '';
+in
 pkgs.testers.runNixOSTest {
   name = "nixarchy-factory-reset";
 
   nodes.machine = {
+    imports = [ ../installer/factory-reset.nix ];
+    systemd.services.nixarchy-factory-reset.path = pkgs.lib.mkBefore [
+      exchWrapper
+      dateWrapper
+    ];
     virtualisation = {
       useDefaultFilesystems = false;
       rootDevice = "/dev/vda";
@@ -92,6 +116,197 @@ pkgs.testers.runNixOSTest {
 
     machine.succeed("btrfs subvolume delete /top/@spike /top/@spike-ro")
     machine.succeed("rm /var/lib.spike/spike-sentinel /var/lib/spike-sentinel /home/spike-sentinel")
-    machine.succeed("rmdir /var/lib.spike && umount /top && rmdir /top")
+    machine.succeed("rmdir /var/lib.spike")
+
+    machine.succeed("btrfs subvolume snapshot -r /top/@ /top/@factory")
+    machine.succeed("btrfs subvolume snapshot -r /top/@home /top/@factory-home")
+    machine.succeed("umount /top && rmdir /top")
+
+    def boot():
+        machine.shutdown()
+        machine.start()
+        machine.wait_for_unit("multi-user.target")
+
+    def top():
+        machine.succeed("mkdir -p /top && mount -o subvol=/ /dev/disk/by-label/storage /top")
+
+    def untop():
+        machine.succeed("umount /top && rmdir /top")
+
+    def arm(name, fail_from=None):
+        machine.succeed("mkdir -p /test-control /var/lib/nixarchy")
+        machine.succeed(f"printf '%s\\n' {name} > /test-control/date")
+        machine.succeed("rm -f /run/test-exch-calls /test-control/exch-fail-from")
+        if fail_from is not None:
+            machine.succeed(f"printf '%s\\n' {fail_from} > /test-control/exch-fail-from")
+        machine.succeed("install -m 600 /dev/null /var/lib/nixarchy/factory-reset.request")
+        boot()
+
+    def unit_ran(result):
+        state = machine.succeed(
+            "systemctl show nixarchy-factory-reset.service -p ConditionResult -p Result"
+        ).split()
+        assert "ConditionResult=yes" in state, state
+        assert f"Result={result}" in state, state
+
+    def journal():
+        return machine.succeed("journalctl -b -u nixarchy-factory-reset.service --no-pager")
+
+    def failed(first):
+        report = machine.succeed("cat /var/lib/nixarchy/factory-reset.failed")
+        assert report.splitlines()[0] == first, report
+        unit_ran("exit-code")
+        return report
+
+    def old():
+        assert machine.succeed("cat /home/reset-sentinel").strip() == "old-home"
+        assert machine.succeed("cat /var/lib/reset-sentinel").strip() == "old-var"
+
+    def clean():
+        machine.succeed("rm -f /var/lib/nixarchy/factory-reset.failed /test-control/date /test-control/exch-fail-from /run/test-exch-calls")
+        machine.succeed("printf old-home > /home/reset-sentinel")
+        machine.succeed("printf old-var > /var/lib/reset-sentinel")
+
+    machine.succeed("mkdir -p /etc/nixos && printf keep > /etc/nixos/reset-sentinel")
+    clean()
+
+    # 1: successful reset, including the receipt's own recovery commands.
+    arm("case1")
+    unit_ran("success")
+    assert "phase=done" in journal()
+    machine.fail("test -e /home/reset-sentinel")
+    machine.fail("test -e /var/lib/reset-sentinel")
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.failed")
+    assert machine.succeed("cat /etc/nixos/reset-sentinel").strip() == "keep"
+    receipt = machine.succeed("cat /var/lib/nixarchy/factory-reset.done")
+    assert "@home-before-reset-case1" in receipt and "/var/lib.before-reset-case1" in receipt
+    assert "ls /mnt/@home-before-reset-case1" in receipt
+    for command in receipt.split("To read the old home directory:\n", 1)[1].splitlines()[1:4]:
+        output = machine.succeed(command.strip())
+        if command.strip().startswith("ls "):
+            assert "reset-sentinel" in output, output
+    assert machine.succeed("cat /var/lib.before-reset-case1/reset-sentinel").strip() == "old-var"
+    machine.fail("test -e /var/lib.before-reset-case1/nixarchy/factory-reset.failed")
+    machine.succeed("umount /mnt")
+
+    # 11: occupied names are a guard failure, never staged data to remove.
+    clean()
+    top()
+    machine.succeed("mkdir /var/lib.before-reset-case11 && printf keep > /var/lib.before-reset-case11/guard-sentinel")
+    machine.succeed("btrfs subvolume snapshot /top/@home /top/@home-before-reset-case11")
+    machine.succeed("printf keep > /top/@home-before-reset-case11/guard-sentinel")
+    untop()
+    arm("case11")
+    assert "checking the names are free" in journal()
+    failed("nothing changed")
+    old()
+    assert machine.succeed("cat /var/lib.before-reset-case11/guard-sentinel").strip() == "keep"
+    top()
+    assert machine.succeed("cat /top/@home-before-reset-case11/guard-sentinel").strip() == "keep"
+    machine.succeed("btrfs subvolume delete /top/@home-before-reset-case11")
+    untop()
+    machine.succeed("rm -rf /var/lib.before-reset-case11")
+
+    # 11b: -e misses a dangling symlink, but the guard must retain it.
+    clean()
+    machine.succeed("ln -s /missing /var/lib.before-reset-case11b")
+    arm("case11b")
+    assert "checking the names are free" in journal()
+    failed("nothing changed")
+    old()
+    machine.succeed("test -L /var/lib.before-reset-case11b")
+    machine.succeed("rm /var/lib.before-reset-case11b")
+
+    # 6: a plain directory cannot stand in for the factory home subvolume.
+    clean()
+    top()
+    machine.succeed("mv /top/@factory-home /top/@factory-home.saved && mkdir /top/@factory-home")
+    untop()
+    arm("case6")
+    assert "@factory-home is not a subvolume" in journal()
+    report = failed("nothing changed")
+    assert "Failed while checking @factory-home" in report, report
+    assert "copying the factory" not in journal()
+    old()
+    top()
+    machine.succeed("rmdir /top/@factory-home && mv /top/@factory-home.saved /top/@factory-home")
+    untop()
+
+    # 2: the copy fails before either exchange, then cannot retry on next boot.
+    clean()
+    machine.succeed("chattr +i /var")
+    arm("case2")
+    log = journal()
+    assert "cp:" in log and "copying the factory /var/lib" in log, log
+    failed("nothing changed")
+    old()
+    machine.succeed("chattr -i /var")
+    boot()
+    state = machine.succeed("systemctl show nixarchy-factory-reset.service -p ConditionResult -p Result").split()
+    assert "ConditionResult=no" in state, state
+    old()
+
+    # 3: the snapshot fails after copy, and stage cleanup removes both names.
+    clean()
+    top()
+    machine.succeed("chattr +i /top")
+    untop()
+    arm("case3")
+    log = journal()
+    assert "snapshotting @factory-home" in log and "btrfs" in log, log
+    failed("nothing changed")
+    old()
+    machine.fail("test -e /var/lib.before-reset-case3")
+    top()
+    machine.fail("test -e /top/@home-before-reset-case3")
+    machine.succeed("chattr -i /top")
+    untop()
+
+    # 4: the second exchange fails; the first must be rolled back.
+    clean()
+    machine.succeed("chattr +i /var/lib")
+    arm("case4")
+    log = journal()
+    assert "phase=home-swapped" in log and "exchanging /var/lib" in log and "exch:" in log, log
+    failed("rolled back")
+    old()
+    machine.succeed("chattr -i /var/lib")
+
+    # 5: the second exchange and rollback both fail; run the printed repair.
+    clean()
+    arm("case5", fail_from=2)
+    log = journal()
+    assert "phase=home-swapped" in log and "injected exch failure on call 2" in log, log
+    assert "injected exch failure on call 3" in log, log
+    report = failed("rollback failed")
+    assert "@home-before-reset-case5" in report, report
+    assert machine.succeed("cat /var/lib/reset-sentinel").strip() == "old-var"
+    top()
+    assert machine.succeed("cat /top/@home-before-reset-case5/reset-sentinel").strip() == "old-home"
+    untop()
+    repair = report.split("To repair:\n", 1)[1].split("Then @home-before", 1)[0].splitlines()
+    for command in repair:
+        if command.strip() == "systemctl reboot":
+            break
+        machine.succeed(command.strip().split("    #", 1)[0])
+    boot()
+    old()
+    machine.fail("test -e /var/lib/nixarchy/factory-reset.failed")
+    for command in report.split("Then @home-before", 1)[1].splitlines()[1:]:
+        if command.strip().startswith("sudo "):
+            machine.succeed(command.strip())
+    machine.succeed("umount /mnt")
+
+    # 12: a failed first exchange cleans the staged directory and subvolume.
+    clean()
+    arm("case12", fail_from=1)
+    log = journal()
+    assert "injected exch failure on call 1" in log and "exchanging @home" in log, log
+    failed("nothing changed")
+    old()
+    machine.fail("test -e /var/lib.before-reset-case12")
+    top()
+    machine.fail("test -e /top/@home-before-reset-case12")
+    untop()
   '';
 }

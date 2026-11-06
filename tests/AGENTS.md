@@ -2168,5 +2168,4 @@ logging in at the weston greeter (including Left Alt + Right Alt on `ru`), and
 unlocking `omarchy-shell lock` on `de`. What no VM here can reach is a
 **physical ISO keyboard** (key 86 scancodes from real firmware/USB HID rather
 than QEMU's `send_chars` qcodes) and **Plymouth on a real KMS driver** on a
-non-US encrypted install, plus the offline ISO's network build path for a
-non-US layout (`off-whole-de` in `tests/install-matrix.py`).
+non-US encrypted install.

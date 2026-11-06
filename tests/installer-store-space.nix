@@ -301,28 +301,20 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
   grep -q 'preflight_build()' pf.sh \
     || { echo "preflight_build is not in install.sh any more" >&2; exit 1; }
   grep '^on_net_image()' ${installScript} >> pf.sh
-  sed -n '/^keyboard_needs_network()/,/^}/p' ${installScript} >> pf.sh
-  sed -n '/^keyboard_refusal()/,/^}/p' ${installScript} >> pf.sh
-  grep '^on_offline_image()' ${installScript} >> pf.sh
-  sed -n '/^not_baked_reason()/,/^}/p' ${installScript} >> pf.sh
 
   cat > pt.sh <<'EOF'
   NIX_FLAGS=() SUBSTITUTE_FLAGS=()
   SUBSTITUTERS="https://nixarchy.cachix.org"
-  RESCUE_SUBSTITUTERS="https://rescue.invalid" RESCUE_TRUSTED_KEYS="rescue:key"
-  keymap=us from_repo="" from_host_exists=false disk_mode=whole
   work=/nonexistent hostname=h
   . ./pf.sh
   # The one thing that must never happen before the probes pass.
   wipefs() { touch wipefs-called; }
   git() { :; }
-  curl() { touch curl-called; [ "$CURL_OK" = 1 ]; }
-  network_ready() { [ "$NETWORK_OK" = 1 ]; }
+  curl() { [ "$CURL_OK" = 1 ]; }
   ui_interactive() { [ "$UI" = 1 ]; }
   ui_gum_pad() { echo "0 0"; }
   gum() { [ "$GUM_YES" = 1 ]; }
   nix() {
-    touch nix-called
     if [ "$NIX_OK" = 1 ]; then echo 'these 0 derivations will be built'; else
       # Long on purpose: a real dry-run of a desktop closure is thousands of
       # lines, which is what makes an early-exiting reader (`grep -m1`, `grep
@@ -362,46 +354,6 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
   ! grep -qi 'broken pipe' out || { echo "  FAILED  refusal is preceded by Broken pipe noise"; fails=$((fails+1)); }
   # And a network that works installs as before.
   t proceed "net image, everything answers"      net  1 1
-
-  k() {
-    want=$1 name=$2 key=$3 host=$4 network=$5 curlok=$6
-    rm -f curl-called nix-called wipefs-called
-    if (
-      on_offline_image() { return 0; }
-      on_net_image() { return 1; }
-      keymap=$key from_host_exists=$host NETWORK_OK=$network CURL_OK=$curlok NIX_OK=1
-      preflight_build || exit $?
-      printf '%s\n' "''${SUBSTITUTE_FLAGS[*]}" >flags
-    ) >out 2>&1; then got=proceed; else got=refuse; fi
-    if [ "$got" = "$want" ]; then
-      echo "  ok      $name ($got)"
-    else
-      echo "  FAILED  $name: wanted $want, got $got"; sed 's/^/            /' out
-      fails=$((fails + 1))
-    fi
-    [ ! -e wipefs-called ] || { echo "  FAILED  $name wiped the disk"; fails=$((fails + 1)); }
-  }
-  k refuse "offline German, no network" de-latin1 false 0 0
-  grep -q 'disk has not been touched' out || { echo "  FAILED  keyboard refusal missing"; fails=$((fails + 1)); }
-  [ ! -e curl-called ] || { echo "  FAILED  offline refusal probed a cache"; fails=$((fails + 1)); }
-  [ ! -e nix-called ] || { echo "  FAILED  offline refusal planned a build"; fails=$((fails + 1)); }
-  k proceed "offline German, network ready" de-latin1 false 1 1
-  grep -q 'https://rescue.invalid' flags || { echo "  FAILED  rescue substituter not passed to nix"; fails=$((fails + 1)); }
-  [ -e curl-called ] || { echo "  FAILED  rescue cache was not probed"; fails=$((fails + 1)); }
-  k proceed "offline US needs no network" us false 0 0
-  [ ! -e curl-called ] || { echo "  FAILED  US probed the network"; fails=$((fails + 1)); }
-  from_repo=file:///repo
-  k refuse "new --from host uses answer" de-latin1 false 0 0
-  k proceed "existing --from host brings layout" de-latin1 true 0 0
-  [ ! -e curl-called ] || { echo "  FAILED  existing host probed the network"; fails=$((fails + 1)); }
-
-  from_repo=""
-  [ -z "$(not_baked_reason)" ] || { echo "  FAILED  US whole-disk build reason"; fails=$((fails + 1)); }
-  keymap=de-latin1
-  [[ $(not_baked_reason) == *"asked for de-latin1"* ]] || { echo "  FAILED  keyboard build reason"; fails=$((fails + 1)); }
-  disk_mode=free
-  [[ $(not_baked_reason) == *"free-space install"* ]] || { echo "  FAILED  free-space build reason"; fails=$((fails + 1)); }
-  keymap=us disk_mode=whole
 
   # preflight_report_builds (#483): a plan that SUCCEEDS can still be mostly
   # a build -- a user's reinstall-iso-net closure holds unfree and locally

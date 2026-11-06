@@ -118,64 +118,31 @@ pkgs.testers.runNixOSTest {
   # guard runs against a real absent /sys/firmware/efi, as root, the way it
   # would on a user's machine. Same answers file and a spare disk, so "refused
   # AND the disk is bare" is assertable the same way as above.
-  nodes = {
-    bios =
-      { pkgs, ... }:
-      {
-        environment = {
-          systemPackages = [
-            inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
-          ];
-          etc."nixarchy/answers".text = ''
-            device=/dev/vdb
-            encrypt=no
-            recovery_passphrase=rescue-me
-            hostname=installed
-            username=omarchy
-            password_hash=${passwordHash}
-            timezone=UTC
-            keymap=us
-          '';
-        };
-        virtualisation.emptyDiskImages = [
-          {
-            size = 32768;
-            driveConfig.deviceExtraOpts.serial = "nixarchy-bios-refusal-target";
-          }
+  nodes.bios =
+    { pkgs, ... }:
+    {
+      environment = {
+        systemPackages = [
+          inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
         ];
+        etc."nixarchy/answers".text = ''
+          device=/dev/vdb
+          encrypt=no
+          recovery_passphrase=rescue-me
+          hostname=installed
+          username=omarchy
+          password_hash=${passwordHash}
+          timezone=UTC
+          keymap=us
+        '';
       };
-
-    offlinede =
-      { pkgs, ... }:
-      {
-        environment = {
-          systemPackages = [
-            inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
-          ];
-          etc."nixarchy-iso".text = "";
-          etc."nixarchy/answers".text = ''
-            device=/dev/vdb
-            encrypt=no
-            recovery_passphrase=rescue-me
-            hostname=installed
-            username=omarchy
-            password_hash=${passwordHash}
-            timezone=UTC
-            keymap=de-latin1
-          '';
-        };
-        virtualisation = {
-          useEFIBoot = true;
-          emptyDiskImages = [
-            {
-              size = 32768;
-              driveConfig.deviceExtraOpts.serial = "nixarchy-offline-keyboard-target";
-            }
-          ];
-        };
-      };
-
-  };
+      virtualisation.emptyDiskImages = [
+        {
+          size = 32768;
+          driveConfig.deviceExtraOpts.serial = "nixarchy-bios-refusal-target";
+        }
+      ];
+    };
 
   testScript = ''
     # The BIOS machine first: its whole test is one command, and a refusal
@@ -191,22 +158,6 @@ pkgs.testers.runNixOSTest {
     # Refused at the door, before any question or wipe: the disk stays bare.
     bios.succeed("test -z \"$(blkid /dev/vdb 2>/dev/null)\"")
     bios.shutdown()
-
-    offlinede.wait_for_unit("multi-user.target")
-    before_de = offlinede.succeed("lsblk -no NAME /dev/vdb").strip()
-    assert before_de == "vdb", f"offline target is not bare before install:\n{before_de}"
-    rc_de, out_de = offlinede.execute(
-        "nixarchy-install --answers /etc/nixarchy/answers 2>&1", timeout=120)
-    print(out_de)
-    assert rc_de != 0, "offline German install proceeded without a network"
-    assert "this image carries a US system, and you chose de-latin1" in out_de, (
-        "the keyboard gate did not refuse:\n" + out_de)
-    assert "disk has not been touched" in out_de, (
-        "the keyboard refusal did not promise an intact disk:\n" + out_de)
-    after_de = offlinede.succeed("lsblk -no NAME /dev/vdb").strip()
-    assert after_de == "vdb", f"offline target was touched:\n{after_de}"
-    offlinede.succeed("test -z \"$(blkid /dev/vdb 2>/dev/null)\"")
-    offlinede.shutdown()
 
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("nginx.service")

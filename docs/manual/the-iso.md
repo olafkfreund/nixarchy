@@ -64,19 +64,16 @@ There are two images, and the difference is what they carry:
 
 | | Size | Needs a network | |
 |---|---|---|---|
-| `#iso` | about 7 GB | no (US keyboard) | carries the desktop; installs by copying |
+| `#iso` | about 7 GB | no | carries the desktop; installs by copying |
 | `#iso-net` | about 2 GB | yes | downloads the desktop as it installs |
 
 Take `#iso` unless the download is the thing you mind. It is the one the tests
-boot every night, it works on a machine that has never had a network (with an
-English (US) keyboard), and it is
+boot every night, it works on a machine that has never had a network, and it is
 faster once you have it. `#iso-net` is a quarter of the download and asks you
 to get online first — its first screen offers Wi-Fi if there is no cable.
 
-Offline covers a US-keyboard install, not the first rebuild. `#iso` installs the system
-it carries by copying it, and carries no compiler to build a different one — a
-non-US keyboard has to be built over the network, and is refused before the disk
-is touched without one. So
+Offline covers the install, not the first rebuild. `#iso` installs the system
+it carries by copying it, and carries no compiler to build a different one. So
 until the first rebuild of your own configuration, the account is named
 `omarchy` (with your password) and the detected `hardware-configuration.nix` is
 not yet in effect — and that rebuild needs a network, once.
@@ -108,13 +105,11 @@ Reboot and you are at the desktop. An encrypted install goes straight there —
 the passphrase you typed at boot already proved who you are, so there is no
 second password.
 
-**`#iso` does not need a network for an English (US) keyboard.** The image carries the desktop rather than
-downloading it — about 7 GB of ISO holding an 18.3 GB closure — so a US
+**`#iso` does not need a network.** The image carries the desktop rather than
+downloading it — about 7 GB of ISO holding an 18.3 GB closure — so an
 install is a store copy and an activation, not a download. Unplug the cable and
 it still works; `checks.install-iso` proves that by installing with no network
-device present at all. Choosing another keyboard layout builds a system with
-that layout over the network, or refuses before touching the disk if there is no
-network. `#iso-net` trades the offline copy away altogether: it fetches the same
+device present at all. `#iso-net` trades exactly this away: it fetches the same
 closure from `nixarchy.cachix.org` instead, which is why it is about 2 GB
 rather than 7, and why it stops at a Wi-Fi prompt on a machine with no cable.
 The 75 selectable apps are the exception, and are meant to be: they come from the Install
@@ -247,5 +242,3 @@ wired keyboard for the first boot, or do not encrypt.
 **The login screen and lock screen change at that rebuild, and your password was set under the old layout.** Before rebuilding, with `passwd`, choose one whose keys type the same on both layouts, for example letters that do not move. Afterwards, keep your session open and test it on a text console with Ctrl+Alt+F3, then at the login screen. The disk prompt does not change, because `console.keyMap` does not. Keyboard Layouts and `~/.config/hypr/input.lua` still win in the session.
 
 Four menu entries changed: French, Swedish and Czech use another console map, Lithuanian starts on `lt(us)`.
-
-**The offline image now needs a network for any keyboard but English (US),** and refuses before touching the disk without one.

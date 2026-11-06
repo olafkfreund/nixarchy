@@ -96,3 +96,8 @@ Revert the squash commit. Nothing ships.
 ## Deviation: the floor is five, not six
 
 Decision 3 kept the floor of six. On the combined tree `session` failed that floor with five readings of `#ED0C0C`: the lock screen held still and blanked before a sixth, on a host at load 15. Six existed to span a whole loop for the old spread test. `holds_still` needs five, which outlast one colour of the video, so the floor follows it. A screen that blanks sooner still fails.
+## Deviation: one pull request (owner, 2026-11-06)
+
+This lands with #1623, #1624 and #1636 in one pull request, merged with a merge commit and one commit per issue, because they share six files and each separate pull request costs a CI round. Local proofs ran on the combined tree. Local VM checks ran in two slots, under `AGENTS.md` section 6's new gate.
+
+The two `holds_still` breaks ran against the function outside a VM, since it is plain Python. The third, on real playback, ran in a VM as written.

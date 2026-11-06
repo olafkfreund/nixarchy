@@ -55,7 +55,7 @@ starts.
 
 It exists because the automated checks install as username **`omarchy`**.
 On 2026-09-07 the full
-matrix ran 6/6 green against the published `v4.0.2-8` offline image; the same
+matrix ran 6/6 green against the published `v4.0.2-8` image; the same
 file, driven by hand with the username `olaf`, died in the source bootstrap:
 
 ```
@@ -63,12 +63,12 @@ hm_hmfontconfigfonts.xml -> libxml2+py -> doxygen -> cmake
   -> libarchive -> attr -> download.savannah.gnu.org
 ```
 
-home-manager's per-user fontconfig file is in no baked closure, and the offline
+home-manager's per-user fontconfig file was in no baked closure, and that
 image had `substituters = lib.mkForce [ ]`, so it could not fetch that path and
 had to build it — and building anything with no compiler on the medium is the
 stdenv bootstrap. Two users hit the same bootstrap by a different route, an
-Intel NPU. #384 gave both images substituters; the same cells against an image
-built from that fix installed and booted clean.
+Intel NPU. #384 gave the images published then substituters; the same cells
+against an image built from that fix installed and booted clean.
 
 So, when changing what the ISO carries or how the installer writes a machine:
 
@@ -105,7 +105,7 @@ MATRIX_NVME=1 MATRIX_NET_ISO=result/iso/nixarchy-*.iso \
 ```
 
 Run it when changing anything that builds a partition name, mounts by path, or
-touches `installer/disk-config.nix`. Both an online and an offline whole-disk
+touches `installer/disk-config.nix`. Both an online and a former offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
@@ -935,8 +935,8 @@ cannot fetch an unfree or locally built path — cannot be produced by any
 layer here. What IS covered: the prediction's classification against real
 `nix path-info` shapes (`substitutable`), the build-machine verdict wiring
 (`reinstall-iso`), and the target-side plan report with plans nix really
-prints (`installer-store-space`). What is not: a real `reinstall-iso-net`
-image, booted against real caches, missing a real unfree package. That run
+prints (`installer-store-space`). What is not: a personal network image,
+booted against real caches, missing a real unfree package. That run
 needs a human with vscode in their closure and a machine to lose; until one
 reports back, the prediction is tested and the event it predicts is not.
 

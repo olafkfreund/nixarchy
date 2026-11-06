@@ -6,32 +6,19 @@ title: The ISO in depth
 
 [Getting Started](getting-started) walks the installer's seven questions.
 This page is everything around them: writing the stick from Windows or macOS,
-the two images and what each carries, answering the questions ahead of time,
+what the image carries, answering the questions ahead of time,
 what the installer leaves in `/etc/nixos`, and the caveats people hit. It used
-to be the README's install section, and moved here unchanged.
+to be the README's install section.
 
 ## Writing the stick from Windows or macOS
 
-**Use [balenaEtcher](https://etcher.balena.io/), and take the network image.**
+**Use [balenaEtcher](https://etcher.balena.io/) with the network image.**
 That combination has no wrong answer in it: Etcher only ever writes an image
 byte-for-byte -- no filesystem to choose, no partition scheme, no mode prompt --
-and the network image is one file that needs no reassembly.
+and the image is one file.
 
-If you want the offline image on Windows, join the parts first. The `/b` is
-load-bearing: without it `copy` treats them as text and stops at the first
-`0x1A` byte, leaving a file that looks complete and is not.
-
-```
-copy /b PART-aa + PART-ab + PART-ac + PART-ad nixarchy.iso
-certutil -hashfile nixarchy.iso SHA256
-```
-
-substituting the real names, and comparing that hash against `SHA256SUMS`
-yourself -- `certutil` will not read a sums file for you.
-
-**If you use Rufus instead**, it will ask one question and its recommended
-answer is the wrong one here; the next caveat explains why. Choose **DD Image
-mode**.
+**If you use Rufus instead**, choose **DD Image mode** to write the image
+byte-for-byte.
 
 **Turn Secure Boot off** in your firmware before booting the stick. This
 project does not sign its bootloader, which is
@@ -46,7 +33,7 @@ Or build it yourself, which is the same image from the same commit:
 
 ```
 nix build --extra-experimental-features 'nix-command flakes' \
-  github:olafkfreund/nixarchy#iso
+  github:olafkfreund/nixarchy#iso-net
 sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
@@ -60,23 +47,8 @@ not finish; do not create it by hand, because a multi-user store wants
 `root:nixbld` and mode `1775` rather than whatever `mkdir` leaves behind.
 
 
-There are two images, and the difference is what they carry:
-
-| | Size | Needs a network | |
-|---|---|---|---|
-| `#iso` | about 7 GB | no | carries the desktop; installs by copying |
-| `#iso-net` | about 2 GB | yes | downloads the desktop as it installs |
-
-Take `#iso` unless the download is the thing you mind. It is the one the tests
-boot every night, it works on a machine that has never had a network, and it is
-faster once you have it. `#iso-net` is a quarter of the download and asks you
-to get online first — its first screen offers Wi-Fi if there is no cable.
-
-Offline covers the install, not the first rebuild. `#iso` installs the system
-it carries by copying it, and carries no compiler to build a different one. So
-until the first rebuild of your own configuration, the account is named
-`omarchy` (with your password) and the detected `hardware-configuration.nix` is
-not yet in effect — and that rebuild needs a network, once.
+`#iso-net` is about 2 GB. It needs a network to download the desktop during
+the install; its first screen offers Wi-Fi if there is no cable.
 
 No boot menu, no login prompt: the installer is what comes up.
 
@@ -96,8 +68,7 @@ can act on.
 *The whole install, four minutes at four-second intervals.*
 
 Measured, not estimated: `checks.install` reports the installer's own figure
-every run — around eight minutes in a VM with no network, and faster on real
-hardware. The number on the finish screen is the same one.
+every run from its seeded VM. The number on the finish screen is the same one.
 
 ![Installed nixarchy in 7m 32s](../img/installer/03-finish.png)
 
@@ -105,15 +76,10 @@ Reboot and you are at the desktop. An encrypted install goes straight there —
 the passphrase you typed at boot already proved who you are, so there is no
 second password.
 
-**`#iso` does not need a network.** The image carries the desktop rather than
-downloading it — about 7 GB of ISO holding an 18.3 GB closure — so an
-install is a store copy and an activation, not a download. Unplug the cable and
-it still works; `checks.install-iso` proves that by installing with no network
-device present at all. `#iso-net` trades exactly this away: it fetches the same
-closure from `nixarchy.cachix.org` instead, which is why it is about 2 GB
-rather than 7, and why it stops at a Wi-Fi prompt on a machine with no cable.
-The 75 selectable apps are the exception, and are meant to be: they come from the Install
-menu after first boot, from your own nixpkgs.
+**`#iso-net` needs a network.** It fetches the system from binary caches,
+which is why it stops at a Wi-Fi prompt on a machine with no cable.
+The 75 selectable apps come from the Install menu after first boot, from your
+own nixpkgs.
 
 **You can answer the questions ahead of time.** `nixarchy-install --answers
 <file>` takes every answer from a file and asks nothing, which is how the VM
@@ -158,44 +124,24 @@ install builds nothing, because everything it did is described there.
 Installing a second machine from that same repository, and letting them keep
 themselves current, is [many machines, one repo](many-machines).
 
-**Five caveats worth knowing before you write the stick.**
+**Caveats worth knowing before you write the stick.**
 
-**In Rufus, answer the ISOHybrid question with DD — not the recommended
-default.** Rufus asks once:
+**In Rufus, answer the ISOHybrid question with DD.** Rufus asks once:
 
 > This image is an ISOHybrid image … Write in ISO Image mode (Recommended)
 > / Write in DD Image mode
 
-**ISO Image mode is the default and it is the wrong answer here**, and the
-reason is a file size. The offline image contains one 5.8 GB file, the Nix
-store it installs from, which is larger than FAT32 can hold -- so ISO mode
-falls back to NTFS, and because UEFI firmware cannot boot NTFS, Rufus adds its
-own bootloader to chain-load from it. *That* bootloader then tries to load this
-image's GRUB modules, cannot parse them, and stops with:
-
-```
-kern/x86_64/dl.c:grub_arch_dl_relocate_symbols:114:
-  relocation 0x18d570 is not implemented yet
-Aborted. Press any key to exit.
-```
-
-`0x18d570` is not a relocation type — real ones are small integers, and
-`R_X86_64_64` is 1 — which is how you know the loader is reading modules from
-a different build rather than that the download is corrupt. **Nothing is wrong
-with the image.** It boots under UEFI whenever the firmware runs the
-bootloader that is on it.
-
-So: **DD Image mode**. The stick then looks empty or unreadable to Windows,
+**DD Image mode** writes the image without changing its bootloader or partition
+layout. The stick then looks empty or unreadable to Windows,
 which is correct. [balenaEtcher](https://etcher.balena.io/) never asks — it
 only does raw writes — so it is the safer choice if you would rather not have
 to catch a dialog. On Linux, `dd` as above.
 
 Tools that boot the image with their own loader are a different question, and
-the honest answer is "sometimes". **Ventoy** does boot the offline image: a
+the honest answer is "sometimes". **Ventoy** booted a previous image: a
 tester's install log shows `NIXARCHY_4_0_2` mounted at `/iso` from Ventoy's
 exfat partition, with the installer running and disko partitioning the disk.
-So it is not in the same category as the NTFS shim above, and this text used to
-say it was.
+That is evidence for that image, not a guarantee for a new one.
 
 It is still not what to reach for first. Ventoy, unetbootin, YUMI, multiboot
 sticks and "loopback this ISO" entries in an existing GRUB all interpose their

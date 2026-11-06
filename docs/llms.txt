@@ -64,12 +64,10 @@ Key facts an assistant should know before answering questions about nixarchy:
   NixOS option and the app selection (~137k rows), indexed from the machine's
   own nixpkgs rather than search.nixos.org.
 - Install: download the ISO from the GitHub Releases page (or build it with
-  `nix build github:olafkfreund/nixarchy#iso`), write it to a USB stick, and
+  `nix build github:olafkfreund/nixarchy#iso-net`), write it to a USB stick, and
   boot it — the installer asks Omarchy's questions and produces a flake you
-  own at `/etc/nixos`. The `#iso` image carries the whole system closure and
-  installs with no network at all (the first rebuild of your own configuration
-  needs one, once); `#iso-net` is a quarter of the size and downloads the
-  closure instead. UEFI only. On a machine already running
+  own at `/etc/nixos`. The `#iso-net` image downloads the system during the
+  install, so the target needs a network. UEFI only. On a machine already running
   NixOS, add nixarchy as a flake input instead of using the ISO.
 - The guide: nixi is on by default, a card over the desktop with a tour and a
   tutor grounded in the machine, from the ✨ in the bar or `nixi`, with an

@@ -2280,8 +2280,8 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
-          # Edge carry (#1386): mise's [wrappers] route claude through the selected
-          # account, and the exec refuses a mise install.
+          # Typed agents and their children route through Nix dispatch;
+          # absent CLIs refuse without invoking mise.
           agent-account-routing = import ./tests/agent-account-routing.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

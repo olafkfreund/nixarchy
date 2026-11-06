@@ -1207,6 +1207,24 @@ let
         off = kept != "10s";
       };
 
+    # #1624: on a Mode A machine that turns fcitx5 on itself. loaderOff has no input method,
+    # so it could not see the entry leave cfg.enable.
+    fcitx5ThemesLinked = {
+      on = builtins.elem "/share/fcitx5/themes" adopter.config.environment.pathsToLink;
+      off =
+        builtins.elem "/share/fcitx5/themes"
+          (modeAOff.extendModules {
+            modules = [
+              {
+                i18n.inputMethod = {
+                  enable = true;
+                  type = "fcitx5";
+                };
+              }
+            ];
+          }).config.environment.pathsToLink;
+    };
+
     # #1620: deleting prints leaves a machine as one that never enrolled, so a stack with a
     # password must still reach it past pam_fprintd, and the fingerprint one must have none.
     # Auth lines only: pam_unix is in account, password and session whatever auth does.
@@ -2310,6 +2328,17 @@ let
       on = defaultMachine.nixpkgs.config.allowUnfree or false;
       off = (configWith { allowUnfree = false; }).nixpkgs.config.allowUnfree or false;
     };
+
+    viCommand =
+      let
+        hasVi = c: pkgs.lib.any (p: (p.name or "") == "vi") c.environment.systemPackages;
+      in
+      {
+        on = hasVi defaultMachine;
+        off = hasVi (configWith {
+          enable = false;
+        });
+      };
 
     browserThemeUser = {
       # null is the default, so this one reads the other way round: the rules
@@ -3572,6 +3601,15 @@ let
   pkgAddUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (pkgAddTextWith {
     allowUnfree = false;
   });
+  defaultInstallTextWith =
+    settings:
+    (pkgs.lib.findFirst (p: (p.name or "") == "nixarchy-default-install")
+      (throw "no nixarchy-default-install in systemPackages")
+      (configWith settings).environment.systemPackages
+    ).text;
+  defaultInstallUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (defaultInstallTextWith {
+    allowUnfree = false;
+  });
 
   # otherChannel.config's DEFAULT, every value forced, on the usual machine:
   # allowUnfree and no predicate. `inherit (pkgs.config) allowUnfreePredicate`
@@ -3761,6 +3799,7 @@ pkgs.runCommand "nixarchy-options-files"
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     flatpakExplicitDisable = pkgs.lib.boolToString flatpakDisabled.services.flatpak.enable;
     pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
+    defaultInstallUnfreeOff = pkgs.lib.boolToString defaultInstallUnfreeOffBaked;
     inherit otherChannelConfigKeys;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
     fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
@@ -4914,6 +4953,12 @@ pkgs.runCommand "nixarchy-options-files"
         test "$pkgAddUnfreeOff" = true || {
           echo "with allowUnfree = false the built nixarchy-pkg-add does not carry allowunfree=false:" >&2
           echo "  the baked policy constant no longer follows the option, so the unfree help" >&2
+          echo "  fires never or always" >&2
+          exit 1
+        }
+        test "$defaultInstallUnfreeOff" = true || {
+          echo "with allowUnfree = false the built nixarchy-default-install does not carry allowunfree=false:" >&2
+          echo "  the baked policy constant no longer follows the option, so the unfree refusal" >&2
           echo "  fires never or always" >&2
           exit 1
         }

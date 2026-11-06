@@ -2007,6 +2007,8 @@ pkgs.testers.runNixOSTest {
     for app in ["hype", "signed", "monologue", "omacalc", "omacut", "omawrite", "aether", "disktree"]:
         machine.succeed(user % f"command -v {app}")
     machine.fail(user % "command -v dua")
+    # This machine has real vim, whose vi beats the wrapper; checks.coexistence holds the wrapper.
+    machine.succeed(user % "vi --version > /dev/null")
     # Left with Omarchy 4.5 (#1612). obs-studio's binary is obs.
     for app in ["obs", "kdenlive", "xournalpp"]:
         machine.fail(user % f"command -v {app}")
@@ -2657,6 +2659,30 @@ pkgs.testers.runNixOSTest {
             for j in range(i + 1, len(readings))
         )
 
+    # A handoff, fade included, ends. The video changes every 1 s, so five
+    # readings at least 0.4 s apart (1.6 s) cannot be one colour while it plays.
+    def holds_still(readings):
+        changes = [
+            i for i in range(1, len(readings))
+            if spread(readings[i - 1:i + 1]) > 60
+        ]
+        settled = readings[changes[-1]:] if changes else readings
+        return len(settled) >= 5 and spread(settled) <= 60
+
+    R, B = (237, 12, 12), (1, 1, 251)
+    for readings, expected in [
+        ([B] + [R] * 5, True),  # the recorded failure, run 42072346082
+        ([B, (119, 6, 131)] + [R] * 5, True),  # a handoff caught mid-fade
+        ([R] * 6, True),
+        ([R] * 5, True),  # blanked before a sixth, on a loaded host
+        ([R] * 4, False),  # too short to call still
+        ([R] * 2 + [B] * 3 + [R] * 3, False),  # playback
+        ([R] * 3 + [B] * 3, False),  # one change, then too short to call still
+        ([(237 - 25 * i, 12, 12 + 25 * i) for i in range(6)], False),  # a slow drift
+    ]:
+        assert holds_still(readings) == expected, f"holds_still({readings}) is not {expected}"
+    print("owe: holds_still's own cases pass")
+
     # 1. owed is a user unit (modules/home.nix), gated on programs.nixarchy
     # .owe.enable, which the installer-managed reference turns on by default.
     machine.wait_until_succeeds(as_user("systemctl --user is-active owed"), timeout=30)
@@ -2834,16 +2860,13 @@ pkgs.testers.runNixOSTest {
     # The lock screen blanks the display about 5s after locking, which can land
     # inside the series; a blank is not playback, and the video has no black.
     lock_readings = [r for r in shot_series("owe-lock") if not near_black(r)]
-    # Six readings 0.4s apart still span one 2s loop.
-    assert len(lock_readings) >= 6, (
+    # holds_still needs five readings: longer than one colour of the video lasts.
+    assert len(lock_readings) >= 5, (
         f"the lock screen blanked before one video loop could be watched: {lock_readings}")
-    lock_spread = spread(lock_readings)
-    print(f"owe: lock screen series spread {lock_spread}")
-
-    # settle() has already seen the poster: a saturated frame of the video.
+    print(f"owe: lock screen readings {lock_readings}")
     # The outcome a user sees: it holds still rather than playing (#15289).
-    assert lock_spread <= 60, (
-        f"the locked screen plays the video over 2.8s (spread {lock_spread}); "
+    assert holds_still(lock_readings), (
+        f"the locked screen plays the video over 2.8s ({lock_readings}); "
         f"since quattro 1381fa0 it shows the still")
 
     # Unlock. The lock screen blanks after a few seconds, and a keystroke
@@ -3195,6 +3218,11 @@ pkgs.testers.runNixOSTest {
     input_driver("stock-profile")
     machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
     machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
+    machine.succeed(desktop_user("rm -f ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    machine.succeed(desktop_user("omarchy-theme-set-fcitx5 --activate"))
+    # -e follows the link, so a dangling one fails.
+    machine.succeed(desktop_user("test -e ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    print("#1624: the candidate window's theme has its glyphs")
     print("#1614: keyboard and input-method state restored")
 
     # A QML engine that resolves a singleton to the wrong type (omarchy#14811,

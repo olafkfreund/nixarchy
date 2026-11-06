@@ -103,10 +103,9 @@ if set -q __omarchy_skipped
 end
 
 # --- the tools, in fish ----------------------------------------------------
-# Same guards as upstream's bash init, asking each tool for fish instead.
-if command -q mise
-    mise activate fish | source
-end
+# Add agent dispatch, then ask each tool for fish support with upstream's guards.
+contains -- "$OMARCHY_PATH/agent-dispatch" $PATH
+or set -gx PATH "$OMARCHY_PATH/agent-dispatch" $PATH
 
 if test "$TERM" != dumb; and command -q starship
     starship init fish | source

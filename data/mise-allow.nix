@@ -21,22 +21,19 @@
     ];
   };
   "tree/bin/omarchy-agent" = {
-    reason = "reads, never runs, and only when a person's own mise is on PATH (row 12)";
+    reason = "reads a generated launcher without running it";
     lines = [
       "[[ ! -L $1 ]] && head -c 4096 \"$1\" | grep -qaE 'mise (use|x) '"
-      "! mise_wrapper \"$user_install\" && ! MISE_OFFLINE=1 mise which \"$agent\" &>/dev/null; then"
     ];
   };
   "tree/bin/omarchy-agent-usage-codex" = {
-    reason = "reads, never runs, and only when a person's own mise is on PATH (row 12)";
+    reason = "rejects generated launchers and mise shims without running them";
     lines = [
       "data_home = ENV.get(\"MISE_DATA_DIR\") or os.path.join("
       "ENV.get(\"XDG_DATA_HOME\") or os.path.join(str(Path.home()), \".local\", \"share\"), \"mise\")"
       "mise = find_command(\"mise\")"
       "return bool(mise) and os.path.realpath(path) == os.path.realpath(mise)"
       "return b\"mise use\" in head or b\"mise x \" in head"
-      "if mise:"
-      "out = subprocess.run([mise, \"which\", \"codex\"], capture_output=True, text=True, env=dict(ENV, MISE_OFFLINE=\"1\"), timeout=10)"
     ];
   };
   "tree/bin/omarchy-default-agent" = {

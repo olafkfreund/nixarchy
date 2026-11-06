@@ -117,7 +117,23 @@
    exit 1
  fi
  
-@@ -258,6 +259,10 @@
+@@ -220,13 +221,11 @@
+ }
+ 
+ # The user's own install in ~/.local/bin, which omarchy-default-agent counts as
+-# installed, still wins over mise's lazy shim earlier on PATH, which would
+-# install and run mise's copy instead. Once mise has installed its own, a
+-# terminal runs that one, so the launcher does too. OpenClaw's command runs its
++# installed, wins over a lazy shim earlier on PATH. OpenClaw's command runs its
+ # launcher, so its prompt is the only argument that could match the name.
+ user_install="$HOME/.local/bin/$agent"
+ if [[ $agent != "openclaw" && -f $user_install && -x $user_install ]] &&
+-  ! mise_wrapper "$user_install" && ! MISE_OFFLINE=1 mise which "$agent" &>/dev/null; then
++  ! mise_wrapper "$user_install"; then
+   for i in "${!command[@]}"; do
+     if [[ ${command[i]} == "$agent" ]]; then
+       command[i]=$user_install
+@@ -258,6 +257,10 @@
    fi
  fi
  
@@ -139,7 +155,27 @@
    # omarchy-mise-install writes a regular file whose first step is `mise use
    # -g`, and mise's shims exec `mise x`; running either installs the tool it
    # wraps. A shim is a symlink to the mise binary itself, so the symlink
-@@ -793,8 +795,7 @@
+@@ -118,19 +120,6 @@
+     candidate = os.path.join(directory, "codex")
+     if os.path.isfile(candidate) and os.access(candidate, os.X_OK) and not is_lazy_launcher(candidate):
+       return candidate
+-  # `mise which` only prints a binary that is already installed, so it is the
+-  # safe way to resolve a codex managed by mise without running the launcher.
+-  # `mise which` can resolve a configured `latest` over the network; the usage
+-  # probe stays offline.
+-  mise = find_command("mise")
+-  if mise:
+-    try:
+-      out = subprocess.run([mise, "which", "codex"], capture_output=True, text=True, env=dict(ENV, MISE_OFFLINE="1"), timeout=10)
+-      resolved = out.stdout.strip()
+-      if out.returncode == 0 and os.path.isfile(resolved) and not is_lazy_launcher(resolved):
+-        return resolved
+-    except Exception:
+-      pass
+   return None
+ 
+ 
+@@ -793,8 +782,7 @@
  # Only then is a missing sign-in or binary worth saying.
  def codex_in_use(stats):
    return (

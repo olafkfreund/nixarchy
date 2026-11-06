@@ -126,6 +126,17 @@ pkgs.runCommand "nixarchy-agent-account-routing"
     test "$got" = 'PIN=' || bad "case 12: got '$got'"
     test "$(cat child-codex 2>/dev/null)" = "$D/codex" || bad "case 12: child resolved '$(cat child-codex 2>/dev/null)'"
 
+    # Case 12b: a user's own binary wins without consulting mise.
+    mkdir -p "$HOME/.local/bin"
+    printf '%s\n' '#!/bin/sh' 'echo USER-CODEX' > "$HOME/.local/bin/codex"
+    chmod +x "$HOME/.local/bin/codex"
+    : > mise-calls
+    got=$(PATH=$base:$PWD/withcodex omarchy-agent --inline 2>err) \
+      || bad "case 12b: launcher exited $?: $(cat err)"
+    test "$got" = USER-CODEX || bad "case 12b: got '$got'"
+    test ! -s mise-calls || bad 'case 12b: mise was called'
+    rm "$HOME/.local/bin/codex"
+
     # Case 13: the usage probe ignores dispatch, but accepts a real binary.
     mkdir -p empty-codex # the home for the real-binary run; the dispatch run's must not exist
     printf '%s\n' \
@@ -138,6 +149,7 @@ pkgs.runCommand "nixarchy-agent-account-routing"
       'assert not usage.codex_in_use({})' > no-codex.py
     CODEX_HOME=$PWD/no-codex-home PATH=$D:$base python3 no-codex.py \
       || bad 'case 13: dispatch counted as a real binary'
+    test ! -s mise-calls || bad 'case 13: mise was called for absent codex'
     printf '%s\n' \
       'import importlib.machinery, importlib.util, os' \
       'loader = importlib.machinery.SourceFileLoader("usage", "${omarchy}/share/omarchy/bin/omarchy-agent-usage-codex")' \
@@ -147,6 +159,7 @@ pkgs.runCommand "nixarchy-agent-account-routing"
       'assert usage.find_codex_binary() == os.path.join(os.getcwd(), "withcodex", "codex")' > with-codex.py
     CODEX_HOME=$PWD/empty-codex PATH=$D:$base:$PWD/withcodex python3 with-codex.py \
       || bad 'case 13: real codex was not found'
+    test ! -s mise-calls || bad 'case 13: mise was called for real codex'
 
     # Case 14: a recorded but absent agent reports itself in a notification.
     printf '%s\n' grok > "$HOME/.config/omarchy/defaults/agent"

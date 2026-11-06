@@ -16,7 +16,8 @@
 # workload to observe it. checks.install would pass on a swapless machine
 # forever, because installing does not need swap -- rebuilding later does.
 let
-  inherit (inputs.self.nixosConfigurations) reference iso;
+  inherit (inputs.self.nixosConfigurations) reference;
+  iso = inputs.self.nixosConfigurations.iso-net;
 
   # A machine that has real swap already, or hibernates, must be able to say
   # so. mkDefault is what makes that one line rather than an mkForce.

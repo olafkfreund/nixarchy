@@ -25,7 +25,7 @@
     };
 
     # Declarative runtime theme switching and application bridges. The input
-    # stays pinned so the offline image and installed systems agree on the
+    # stays pinned so the network image and installed systems agree on the
     # plugin manifest and module interface.
     nixarchy-omatheme = {
       url = "github:olafkfreund/nixarchy-omatheme/51fb12943b66389da778af42926e06e80691dd53";
@@ -111,7 +111,7 @@
     # It carries a nixpkgs of its own for its tests. Without the follows the
     # lock grows a SECOND nixpkgs node -- measured: adding this input pulled
     # in nixos-26.05pre924538 alongside ours -- and every one of those is a
-    # tarball the offline image copies into inputSources for nothing.
+    # tarball the network image copies into inputSources for nothing.
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -979,11 +979,8 @@
               ncurses # clear and tput, which the screens are drawn with
               kbd # loadkeys, and the keymap list
               tzdata # the timezone list
-              # Both only used by ask_network, which the offline image returns
-              # from before it reaches either. Carried anyway rather than
-              # conditionally: this is one script, `nix run .#install` on a stock
-              # ISO needs them, and a runtime input that is missing on one image
-              # is a class of bug that only shows up on that image.
+              # Both are used by ask_network. `nix run .#install` on a stock
+              # ISO needs them as runtime inputs.
               curl # the connectivity test -- can we reach the binary cache
               networkmanager # nmcli, for joining a wireless network
               # The failure and finish screens offer a way out of both. Present
@@ -1646,22 +1643,13 @@
               virtualisation.virtualbox.guest.enable = true;
 
               # Every nixos-hardware module installer/hardware-modules.sh can
-              # select, so the packages behind them are on the offline image.
-              #
-              # This is the same argument as the attributes above, and the same
-              # one #382 made the hard way: a real machine's generated config is
-              # not the reference's, and where the difference is a PACKAGE, an
-              # offline install has to build it from parts with no compiler.
-              # common-gpu-intel alone pulls intel-media-driver, the compute
-              # runtime and vpl-gpu-rt.
+              # select. Keep this union for the hardware evaluation checks.
               #
               # The UNION, not a machine: no real machine has an Intel and an
               # AMD GPU and both microcode sets. Every entry is mkDefault config
-              # and this host is never installed -- it exists so the medium
-              # carries the parts, which is exactly what the header above says.
+              # and this host is never installed.
               #
-              # checks.hardware-modules asserts these names exist; the ISO budget
-              # check is what says whether they FIT.
+              # checks.hardware-modules asserts these names exist.
               imports = with inputs.nixos-hardware.nixosModules; [
                 common-cpu-intel-cpu-only
                 common-cpu-amd
@@ -1693,8 +1681,8 @@
           {
             flake,
             host,
-            # Accepted for generated flakes that still pass the old argument.
-            offline ? false,
+            # Accept stale generated flakes that still pass offline.
+            ...
           }:
           let
             machine =

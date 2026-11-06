@@ -2,8 +2,8 @@
 # Boot the nixarchy installer in a local virtual machine, for someone who
 # knows nothing about this repository:
 #
-#   nix run github:olafkfreund/nixarchy#try            the offline image
-#   nix run github:olafkfreund/nixarchy#try -- --net   the network image
+#   nix run github:olafkfreund/nixarchy#try            the network image
+#   nix run github:olafkfreund/nixarchy#try -- --net   the same image (legacy flag)
 #
 # The qemu line is the small part of this file. The large part is refusing
 # early, in sentences, on the machines this will actually meet: no /dev/kvm,

@@ -1,14 +1,14 @@
 { inputs, pkgs }:
 # Two machines whose only difference is their name build the same system parts.
 #
-# This is the property the offline image lives or dies by, and until #404 it
-# was not true. `networking.hostName` reaches further than it looks:
+# The former offline image depended on this property, and until #404 it was
+# not true. `networking.hostName` reaches further than it looks:
 # nixos/modules/system/boot/systemd/initrd.nix:597 writes it into the INITRD
 # unconditionally, and top-level.nix:60 names the toplevel derivation
 # "nixos-system-${system.name}-${label}" with system.name defaulting to the
 # hostname. So a machine called `isotest` and a machine called `nixarchy`
 # had different initrds and different system store paths -- and a system the
-# image does not carry has to be BUILT, which with no network is the stage0
+# former image did not carry had to be BUILT, which with no network was the stage0
 # source bootstrap: 677 derivations, measured, dying on a Debian patch.
 #
 # The fix is to keep the name out of the evaluation and apply it at first
@@ -46,7 +46,7 @@ let
   a = machine "alpha";
   b = machine "omega-two";
 
-  # The three that decide whether an offline install has to build anything.
+  # The three that formerly decided whether an offline install had to build anything.
   # unsafeDiscardStringContext, and it is the difference between a check that
   # answers in seconds and one that builds two entire NixOS systems.
   #
@@ -96,8 +96,8 @@ pkgs.runCommand "nixarchy-machine-name-free"
       printf '%s\n' "$bad" >&2
       echo >&2
       echo "A part that differs per machine has to be BUILT by the installer." >&2
-      echo "On the offline image there is nothing to build it FROM, so nix walks" >&2
-      echo "back to the source bootstrap and the install dies. See #404, and the" >&2
+      echo "The former offline image could not fetch them, so nix walked" >&2
+      echo "back to the source bootstrap and the install died. See #404, and the" >&2
       echo "note on networking.hostName in installer/host.nix." >&2
       exit 1
     fi

@@ -208,8 +208,7 @@ pkgs.testers.runNixOSTest {
       # Not just the toplevels. The installer BUILDS things in the guest --
       # the diskoScript for the answered device, and the ~20 per-machine
       # derivations run_install's comment counts -- and on the net image
-      # their parts arrive by FETCH, where the offline image bakes them
-      # (installer/cd.nix's `lib.optionals offline` list; this mirrors it).
+      # their parts arrive by FETCH.
       # The first run of this test proved the gap the hard way: format_disk
       # tried to build disko from source in the guest, died at
       # make-binary-wrapper-hook, and the install failed before touching

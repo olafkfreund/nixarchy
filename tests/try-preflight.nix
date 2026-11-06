@@ -139,8 +139,9 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   [ "$(release_urls rel.json iso-net)" = "https://example.invalid/nixarchy-v9.9.9-9-net.iso" ] \
     && ok "an old release selects its network image" \
     || no "an old release selects its network image"
-  [ -z "$(release_urls rel.json iso)" ] \
-    && ok "offline parts are not selectable" || no "offline parts are not selectable"
+  [ "$(release_urls rel.json iso-net | wc -l)" -eq 1 ] \
+    && ok "offline parts do not join the network image selection" \
+    || no "offline parts do not join the network image selection"
   [ "$(release_urls rel.json sums)" = "https://example.invalid/SHA256SUMS" ] \
     && ok "the checksum file is found" || no "the checksum file is found"
 

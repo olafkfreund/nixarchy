@@ -1940,6 +1940,7 @@
             "menu-conditions"
             # The menu's guards through its own model, absent and present (#1301).
             "menu-guards"
+            "mise-free"
             # And the same idea aimed at the menu: every action string checked
             # against the subcommands the CLI it invokes actually has. See
             # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.

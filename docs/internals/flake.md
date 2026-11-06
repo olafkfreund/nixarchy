@@ -1505,7 +1505,7 @@ sequence -- rebuild, THEN omarchy-restart-shell, because a rebuild does not
 reach a shell already running (#710).
 
 This is the runtime half of #741. The build-time half cannot exist: a
-Claude installed by mise into ~/.local/bin is recorded only in
+Claude installed by a user's own mise or into ~/.local/bin is recorded only in
 ~/.config/omarchy/defaults/agent, which no module can read.
 
 The previous pin, 6d7a61b, was nixi-nixarchy#15: nixi's mark is sparkles rather than the pixel

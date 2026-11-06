@@ -729,8 +729,7 @@
   #
   # As selection entries they go through the same Install / Remove / Apply
   # loop as every other app, and the compiler comes from the same nixpkgs the
-  # rest of the system does. mise is still installed and still works for
-  # anything not listed here.
+  # rest of the system does. nixarchy does not ship mise (#1625).
   go = {
     menuId = "install.development.go";
     label = "Go";

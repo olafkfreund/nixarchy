@@ -1162,7 +1162,7 @@ in
         withUWSM = true;
       };
 
-      # Why: modules/AGENTS.md#mise-is-in-omarchys-base-packages-and-its-dev-env-
+      # Why: modules/AGENTS.md#nix-ld-stays-for-downloaded-binaries
       nix-ld = {
         enable = lib.mkDefault true;
 
@@ -1732,7 +1732,7 @@ in
       # `installed`: the file itself, at the path Omarchy's Arch package puts
       # it, so a source bump carries upstream's edits. tests/options.nix names
       # each one in both states.
-      # Why: modules/AGENTS.md#three-files-from-upstreams-etc-overlay-installed-as-themselves
+      # Why: modules/AGENTS.md#two-files-from-upstreams-etc-overlay-installed-as-themselves
       // lib.genAttrs installedEtc (name: {
         source = "${cfg.package}/share/omarchy/etc/${name}";
       })

@@ -1139,7 +1139,7 @@ stdenvNoCC.mkDerivation {
                     ${python3}/bin/python3 ${./check-menu.py} $menu $out/share/omarchy/bin/omarchy-default-agent
 
                     # Antigravity has no upstream case.
-                    # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
+                    # Why: pkgs/AGENTS.md#omarchy-agent-gets-antigravity
                     substituteInPlace $out/share/omarchy/bin/omarchy-agent \
                       --replace-fail 'omp)' 'antigravity) command=(agy --dangerously-skip-permissions) ;; omp)'
 

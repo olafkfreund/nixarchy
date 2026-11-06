@@ -1233,21 +1233,34 @@ Getting a command name wrong here fails SAFE: the row simply
 never ticks, which reads as "that agent is not installed".
 The direction that would matter -- ticking for an agent that
 
-<a id="omarchy-agent-gets-mise-shims-and-antigravity"></a>
-## omarchy-agent gets the mise shims and Antigravity (#1398)
+<a id="omarchy-agent-gets-antigravity"></a>
+## omarchy-agent gets Antigravity (#1398)
 
-omarchy-agent, twice.
+Google deprecated gemini-cli in favour of Antigravity (`agy`), and upstream's
+launcher has no case for that name -- which is an "Unsupported default agent"
+rather than an agent.
 
-First: mise activates from the shell rc, and the menu launches an
-agent through `bash -c` inside a floating terminal, which sources no
-rc. An agent mise had installed perfectly was therefore reported as
-"not installed" by the very next line, while running fine one shell
-over.
+<a id="typed-agents-go-through-a-nix-dispatch-directory"></a>
+## Typed agents go through a Nix dispatch directory (#1625)
 
-Second: Antigravity. Google deprecated gemini-cli in favour of it,
-mise carries it as a prebuilt `aqua:` binary, and upstream's launcher
-has no case for a name it has never heard of -- which is an
-"Unsupported default agent" rather than an agent.
+Upstream routes a typed `claude`, `codex` or `grok` to the selected account
+through mise's `[wrappers]` (`etc/mise/conf.d/omarchy-agent-accounts.toml`).
+nixarchy ships no mise, so `$out/share/omarchy/agent-dispatch/{claude,codex,grok}`
+takes its place, prepended once by `default/bash/init`, `zsh-rc` and `fish-rc`,
+and carried on `omarchy-agent`'s launch command because the menu's `bash -c`
+sources no rc and a terminal started through uwsm does not inherit its
+environment.
+
+- **A directory, not shell functions:** a function does not reach an agent's
+  subprocesses when one agent spawns another.
+- **Exec, not a function:** each wrapper execs this generation's
+  `omarchy-agent-account-exec`, which resolves the real CLI under the stripped
+  PATH and puts this generation's dispatch directory back before execing the
+  agent, so subprocesses are routed too.
+- **Stripped by suffix (`*/agent-dispatch`), not by store path:** after a
+  rebuild, a long-lived shell still holds the directory of the generation it
+  started in, and an exact store-path match would leave that one on PATH and
+  loop forever (`omarchy-agent-real-path`).
 
 <a id="sddm-lastuser-is-seeded-in-main-qml"></a>
 ## SDDM lastUser is seeded in Main.qml (#1398)

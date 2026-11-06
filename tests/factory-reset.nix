@@ -142,12 +142,15 @@ pkgs.testers.runNixOSTest {
         machine.succeed("install -m 600 /dev/null /var/lib/nixarchy/factory-reset.request")
         boot()
 
+    # Not ConditionResult: local-fs.target re-queues the unit once the request has gone,
+    # so that field reads "no" after a run as well as instead of one.
     def unit_ran(result):
-        state = machine.succeed(
-            "systemctl show nixarchy-factory-reset.service -p ConditionResult -p Result"
-        ).split()
-        assert "ConditionResult=yes" in state, state
-        assert f"Result={result}" in state, state
+        log = journal()
+        assert "Starting Restore /home" in log, log
+        if result == "success":
+            assert "Finished Restore /home" in log, log
+        else:
+            assert "Failed with result" in log, log
 
     def journal():
         return machine.succeed("journalctl -b -u nixarchy-factory-reset.service --no-pager")
@@ -242,8 +245,7 @@ pkgs.testers.runNixOSTest {
     old()
     machine.succeed("chattr -i /var")
     boot()
-    state = machine.succeed("systemctl show nixarchy-factory-reset.service -p ConditionResult -p Result").split()
-    assert "ConditionResult=no" in state, state
+    assert "Starting Restore /home" not in journal(), journal()
     old()
 
     # 3: the snapshot fails after copy, and stage cleanup removes both names.

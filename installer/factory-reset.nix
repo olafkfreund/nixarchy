@@ -26,8 +26,9 @@
   #
   # So nothing at all changes while the system is running. The script writes a
   # request and reboots; this runs on the next boot, after / is writable and
-  # BEFORE /home is mounted, and either the whole reset happens or none of it
-  # does.
+  # BEFORE /home is mounted. A single failing command leaves /home and /var/lib
+  # both reset or both untouched. A failed rollback is reported for repair;
+  # power loss is outside that promise.
   #
   # WHY HERE AND NOT IN modules/nixos.nix
   #
@@ -95,65 +96,136 @@
       set -euo pipefail
 
       request=/var/lib/nixarchy/factory-reset.request
+      failed=/var/lib/nixarchy/factory-reset.failed
       stamp=$(date +%Y%m%d-%H%M%S)
+      oldvar=/var/lib.before-reset-$stamp
+      top=""
+      oldhome=""
+      device=""
+      phase=guard
+      step="moving the request aside"
 
-      # Removed FIRST, before anything else can fail. A request that survived a
-      # failed attempt would be retried on every subsequent boot, and a reset
-      # that retries forever turns a machine that merely could not be reset
-      # into one that cannot finish booting.
-      rm -f "$request"
+      # A failed report must not change the unit's result.
+      report() {
+        printf '%s\n' "$@" >"$failed" || echo "could not write $failed" >&2
+      }
+      remove_staged() {
+        rm -rf "$oldvar" || echo "could not remove $oldvar" >&2
+        if [ -e "$oldhome" ]; then
+          btrfs subvolume delete "$oldhome" || echo "could not remove $oldhome" >&2
+        fi
+      }
+      on_exit() {
+        rc=$?
+        set +e
+        case $phase in
+          guard)
+            report "nothing changed" "Failed while $step. See: journalctl -u nixarchy-factory-reset"
+            ;;
+          stage)
+            remove_staged
+            report "nothing changed" "Failed while $step. See: journalctl -u nixarchy-factory-reset"
+            ;;
+          home-swapped)
+            if exch "$top/@home" "$oldhome"; then
+              remove_staged
+              report "rolled back" "Failed while $step, and /home was put back. Nothing changed."
+            else
+              # $oldhome holds the person's home. Nothing is removed.
+              report "rollback failed" "Failed while $step, and /home could not be put back." \
+                "/home is reset and /var/lib is not. Your home is @home-before-reset-$stamp. To repair:" \
+                "  sudo mkdir -p /mnt" \
+                "  sudo mount -o subvol=/ $device /mnt" \
+                "  sudo exch /mnt/@home /mnt/@home-before-reset-$stamp" \
+                "  sudo rm -rf $oldvar    # the unused factory copy" \
+                "  sudo rm $failed        # so this is not repeated: a second exch undoes the first" \
+                "  systemctl reboot" \
+                "Then @home-before-reset-$stamp holds only the factory copy, and can be deleted:" \
+                "  sudo mount -o subvol=/ $device /mnt" \
+                "  sudo btrfs subvolume delete /mnt/@home-before-reset-$stamp"
+            fi
+            ;;
+          done) ;;
+        esac
+        if [ -n "$top" ]; then
+          umount "$top" 2>/dev/null
+          rmdir "$top" 2>/dev/null
+        fi
+        exit "$rc"
+      }
+      trap on_exit EXIT
+
+      # One rename removes the trigger and creates the record, so a crash still leaves one.
+      mv "$request" "$failed"
 
       # findmnt reports a btrfs source as DEVICE[/subvol]; the bracket is the
       # subvolume, not part of the device path.
+      step="mounting the top level"
       device=$(findmnt -no SOURCE / | sed 's/\[.*\]//')
-
       top=$(mktemp -d)
-      cleanup() {
-        umount "$top" 2>/dev/null || true
-        rmdir "$top" 2>/dev/null || true
-      }
-      trap cleanup EXIT
-
       # The baseline is not mounted by the running system -- see the comment on
       # take_factory_snapshot in installer/install.sh -- so the top level is
       # mounted here for the length of this unit and unmounted again.
       mount -o subvol=/ "$device" "$top"
+      oldhome=$top/@home-before-reset-$stamp
 
-      for sub in @factory @factory-home; do
-        if [ ! -d "$top/$sub" ]; then
-          echo "no $sub on this filesystem: nothing has been changed." >&2
+      for sub in @factory @factory-home @home; do
+        step="checking $sub"
+        if ! btrfs subvolume show "$top/$sub" >/dev/null 2>&1; then
+          echo "$sub is not a subvolume here: nothing has been changed." >&2
           exit 1
         fi
       done
+      step="checking the names are free"
+      if [ -e "$oldvar" ] || [ -L "$oldvar" ] || [ -e "$oldhome" ] || [ -L "$oldhome" ]; then
+        echo "$oldvar or $oldhome already exists: nothing has been changed." >&2
+        exit 1
+      fi
 
       # ---- /var/lib -----------------------------------------------------
       #
-      # Copied, not swapped. /var/lib is a plain directory inside `@` rather
-      # than a subvolume of its own, and rename(2) between two btrfs
-      # subvolumes is EXDEV -- there is no swap available at any price.
-      # --reflink makes the copy share extents with the baseline, so it costs
-      # about what the snapshot did.
-      #
-      # Copied aside and then moved into place in two renames, rather than
-      # written over /var/lib directly: a copy that dies halfway leaves a
-      # /var/lib that is neither the machine's nor the factory's, with no way
-      # afterwards to tell which files are which.
-      #
+      # /var/lib and its staged copy share /, so exch swaps them atomically.
+      # A failed copy only removes the staged directory.
       # /etc/nixos is NOT touched, here or anywhere in this unit. It is on the
       # same subvolume and it is the user's configuration repository: a reset
       # that ate their commits would destroy the one thing that makes a
       # reinstall recoverable.
-      rm -rf /var/lib.factory-new
-      cp -a --reflink=auto "$top/@factory/var/lib" /var/lib.factory-new
-      mv /var/lib "/var/lib.before-reset-$stamp"
-      mv /var/lib.factory-new /var/lib
+      phase=stage
+      step="copying the factory /var/lib"
+      cp -a --reflink=auto "$top/@factory/var/lib" "$oldvar"
 
-      # ---- /home --------------------------------------------------------
-      #
-      # A writable clone of the read-only baseline, then two renames at the
-      # top level. Instant, and atomic in the only sense that matters: at no
-      # point is there no @home.
-      #
+      # The receipt is staged with the factory copy so the exchange commits it.
+      step="writing the receipt"
+      mkdir -p "$oldvar/nixarchy"
+      printf '%s\n' \
+        "This machine was factory-reset on $stamp." \
+        "" \
+        "/home and /var/lib were restored from the snapshots the installer took" \
+        "before anyone logged in. What was there instead is still on the disk:" \
+        "" \
+        "  the home directory   @home-before-reset-$stamp, a btrfs subvolume at" \
+        "                       the top level of this filesystem" \
+        "  the service state    /var/lib.before-reset-$stamp" \
+        "" \
+        "Neither is mounted. To read the old home directory:" \
+        "" \
+        "  sudo mkdir -p /mnt" \
+        "  sudo mount -o subvol=/ $device /mnt" \
+        "  ls /mnt/@home-before-reset-$stamp" \
+        "" \
+        "To delete it once you are sure:" \
+        "" \
+        "  sudo btrfs subvolume delete /mnt/@home-before-reset-$stamp" \
+        "  sudo rm -rf /var/lib.before-reset-$stamp" \
+        "" \
+        "An earlier failed attempt can leave more of these. To list them:" \
+        "" \
+        "  ls -d /var/lib.before-reset-* /mnt/@home-before-reset-*" \
+        "" \
+        "/etc/nixos was not touched. The system half resets by rebuilding from" \
+        "the first commit in that repository; see omarchy-system-factory-reset." \
+        >"$oldvar/nixarchy/factory-reset.done"
+
       # The old @home is renamed, never deleted. "Factory reset" here means
       # the data is no longer in /home, not that it has been shredded --
       # omarchy-system-factory-reset says exactly that before it asks, twice,
@@ -161,38 +233,22 @@
       # person's entire home directory with no way back is not something to do
       # as a side effect of a boot, and the machine being sold is the case the
       # refusal text already answers with "wipe the disk".
-      btrfs subvolume snapshot "$top/@factory-home" "$top/@home-factory-$stamp"
-      mv "$top/@home" "$top/@home-before-reset-$stamp"
-      mv "$top/@home-factory-$stamp" "$top/@home"
+      step="snapshotting @factory-home"
+      btrfs subvolume snapshot "$top/@factory-home" "$oldhome"
+      step="syncing the filesystem"
+      btrfs filesystem sync "$top"
 
-      # The receipt, written into the /var/lib that was just restored so that
-      # it survives -- and so that a person watching their machine come back
-      # empty has something to read that says what happened and where their
-      # files went.
-      mkdir -p /var/lib/nixarchy
-      cat >/var/lib/nixarchy/factory-reset.done <<EOF
-      This machine was factory-reset on $stamp.
-
-      /home and /var/lib were restored from the snapshots the installer took
-      before anyone logged in. What was there instead is still on the disk:
-
-        the home directory   @home-before-reset-$stamp, a btrfs subvolume at
-                             the top level of this filesystem
-        the service state    /var/lib.before-reset-$stamp
-
-      Neither is mounted. To read the old home directory:
-
-        sudo mount -o subvol=/ $device /mnt
-        ls /mnt/@home-before-reset-$stamp
-
-      To delete it once you are sure:
-
-        sudo btrfs subvolume delete /mnt/@home-before-reset-$stamp
-        sudo rm -rf /var/lib.before-reset-$stamp
-
-      /etc/nixos was not touched. The system half resets by rebuilding from
-      the first commit in that repository; see omarchy-system-factory-reset.
-      EOF
+      step="exchanging @home"
+      exch "$top/@home" "$oldhome"
+      phase=home-swapped
+      echo "phase=$phase"
+      step="exchanging /var/lib"
+      exch /var/lib "$oldvar"
+      phase=done
+      echo "phase=$phase"
+      # Created by this run. Left there, restoring that directory would report a crashed reset.
+      rm -f "$oldvar/nixarchy/factory-reset.failed" || true
+      btrfs filesystem sync "$top" || true
 
       echo "factory reset complete: /home and /var/lib are as the installer left them."
     '';

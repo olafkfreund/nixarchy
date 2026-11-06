@@ -137,7 +137,9 @@ hand; no PR boots it.
 `nixarchy-factory-reset.service` runs before `home.mount` when
 `/var/lib/nixarchy/factory-reset.request` exists. Its order is what makes a
 single failing command leave `/home` and `/var/lib` both reset or both
-untouched:
+untouched. There is one exception: if the second exchange and its rollback both
+fail, `/home` is reset and `/var/lib` is not, and the unit prints the repair. A
+power cut is outside the promise altogether.
 
 1. Rename `.request` to `/var/lib/nixarchy/factory-reset.failed` first, so the
    unit never retries on the next boot and a crash still leaves a record.

@@ -265,14 +265,16 @@ echo
 bold "Factory reset"
 echo
 echo "  This machine has a factory baseline: snapshots of / and /home taken by"
-echo "  the installer before anyone logged in. Resetting puts them back."
+echo "  the installer before anyone logged in. Resetting puts /home and"
+echo "  /var/lib back from them. The rest of / stays as it is."
 echo
 bold "  What comes back"
 echo
-echo "    /home         as the installer created it. Empty."
-echo "    /var/lib      as the installer left it. Every service forgets"
-echo "                  everything: wifi passwords, bluetooth pairings,"
-echo "                  container images, databases, the lot."
+echo "    /home         as the installer created it."
+echo "    /var/lib      as the installer left it. Services forget what they"
+echo "                  keep there: bluetooth pairings, container images,"
+echo "                  databases. Wi-Fi profiles are in /etc/NetworkManager,"
+echo "                  and stay."
 echo
 bold "  What does NOT come back"
 echo
@@ -281,8 +283,8 @@ echo "                  your commits, and it is what makes a reinstall"
 echo "                  recoverable. A reset that ate it would be worse than"
 echo "                  no reset at all."
 echo "    The system    a NixOS closure is not a subvolume and swapping one"
-echo "                  would not reset it. It resets by rebuilding from the"
-echo "                  first commit in $FLAKE -- see below."
+echo "                  would not reset it. An earlier one comes back by"
+echo "                  rebuilding a commit in $FLAKE -- see below."
 echo
 bold "  Where your data goes"
 echo
@@ -321,9 +323,10 @@ fi
 bold "  The system half"
 echo
 if [ -n "$first_commit" ]; then
-  echo "    $FLAKE's first commit is the configuration this machine was"
-  echo "    installed with. Building it and making it the boot default is the"
-  echo "    system's equivalent of this reset, and it is reversible -- the"
+  echo "    $FLAKE's first commit is the configuration you first committed."
+  echo "    The installer makes no commit, so it is what this machine was"
+  echo "    installed with only if you committed before changing anything."
+  echo "    Building it and making it the boot default is reversible -- the"
   echo "    generation you are on now stays in the boot menu."
   echo
   dim "      sudo nixos-rebuild boot --flake \"git+file://$FLAKE?rev=$first_commit#\$(hostname)\""

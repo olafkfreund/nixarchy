@@ -2175,7 +2175,7 @@ plus unprivileged `btrfs subvolume list -r /` failing with `EPERM`), takes
 
 Two thin wrappers (`exchWrapper` and `dateWrapper`) sit first on the unit's
 `path` and are no-ops until `/test-control/exch-fail-from` or
-`/test-control/date` is written. They are the only stubs, because no real
+`/test-control/date` is written. With case 8's fake `gum`, on the caller's `PATH` to prove it is not reached, and case 9's `NIXARCHY_BTRFS=false`, they are the only stubs, because no real
 filesystem state makes `exch "$top/@home" "$oldhome"` succeed in `phase=stage`
 and its exact reverse fail milliseconds later in `phase=home-swapped` (case 5),
 or makes the first `exch` fail after `btrfs subvolume snapshot` on the same

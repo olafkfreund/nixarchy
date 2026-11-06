@@ -317,7 +317,6 @@ let
         esac
       '';
 
-<<<<<<< HEAD
   miseOwnScript =
     if miseOwnCheck then
       ''
@@ -328,7 +327,6 @@ let
         echo "mise-own: FAIL the user's mise package or etc file did not stand" >&2
         fail=1
       '';
-=======
   viScript =
     name: c: needle: present:
     let
@@ -353,7 +351,6 @@ let
     (viScript "neovim-vialias" (configOf fixtures.neovim-vialias) "exec nvim" false)
     (viScript "reference-vi" reference.config "exec nvim" true)
   ];
->>>>>>> origin/main
 
   ownHypeScript =
     let
@@ -396,11 +393,8 @@ pkgs.runCommand "nixarchy-coexistence"
     fail=0
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
-<<<<<<< HEAD
     ${miseOwnScript}
-=======
     ${lib.concatStrings viScripts}
->>>>>>> origin/main
     ${ownHypeScript}
     ${nmScript}
     ${hyprlandScript}

@@ -46,7 +46,6 @@
       environment.systemPackages = [ pkgs.ffmpeg-full ];
     };
 
-<<<<<<< HEAD
   # A person's own mise and a file at the path nixarchy used to own (#1625).
   mise-own =
     { pkgs, ... }:
@@ -59,7 +58,6 @@
       environment.etc."mise/conf.d/omarchy.toml".text = "# theirs\n";
     };
 
-=======
   systempkg-own-vi =
     { pkgs, ... }:
     {
@@ -73,7 +71,6 @@
     };
   };
 
->>>>>>> origin/main
   # #1612: a machine that already opted out of an app Omarchy 4.5 retired.
   preinstalls-exclude-retired = {
     programs.nixarchy.preinstallsExclude = [

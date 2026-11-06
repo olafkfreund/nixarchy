@@ -4,6 +4,13 @@ title: A reinstall image of this machine
 
 # A reinstall image of this machine
 
+**Not available right now.** The command runs its checks and then refuses to
+build, because the image would install a stock system rather than this machine
+([#1649](https://github.com/olafkfreund/nixarchy/issues/1649)). To get a machine
+back today, boot the published network image with `nixarchy.from=<your config
+repo> nixarchy.host=<name>` on its kernel command line. The rest of this page
+describes the command once that is fixed.
+
 `nixarchy reinstall iso` builds a bootable image **from this machine's own
 configuration**. Boot it on new hardware and you get this system back: the same
 packages, the same desktop, the same services, the same settings.

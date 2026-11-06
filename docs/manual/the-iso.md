@@ -78,8 +78,8 @@ second password.
 
 **`#iso-net` needs a network.** It fetches the system from binary caches,
 which is why it stops at a Wi-Fi prompt on a machine with no cable.
-The 75 selectable apps come from the Install menu after first boot, from your
-own nixpkgs.
+The 75 selectable apps are the exception, and are meant to be: they come from the Install
+menu after first boot, from your own nixpkgs.
 
 **You can answer the questions ahead of time.** `nixarchy-install --answers
 <file>` takes every answer from a file and asks nothing, which is how the VM

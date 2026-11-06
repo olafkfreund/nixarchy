@@ -105,6 +105,7 @@ Then: rebase #1619 and drop its step 6 and the offline sentences of step 7, upda
 
 - `tests/firmware-guard.nix` and `tests/swap-guard.nix` read `iso` indirectly, and `docs/manual/security.md` named `.#iso`. Both checks now read `iso-net`, and the page names it.
 - `tests/install-iso-net.nix` generated its stub certificate, the flaw #1645 fixed in `installer-refusal`. It now reads a committed fixture.
+- Codex found on #1648 that a personal image never names its machine, so without `--from` and `--host` the installer writes a stock flake. The owner chose to land this first and fix it in #1649. Until then `nixarchy reinstall iso` runs its preflights and refuses to build, and `reinstall-iso` requires that call.
 - The coverage-guard break leaves a check claimed with no workflow naming it, as the table says; an unclaimed check would be built by the generated step instead.
 
 ## Tests

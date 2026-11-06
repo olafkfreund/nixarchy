@@ -330,6 +330,21 @@ case "$(substitutable_verdict "${NIXARCHY_SUBSTITUTABLE:-$(substitutable_script)
     ;;
 esac
 
+# Until #1649: the image does not name this machine, so booting it would erase
+# a disk and install a stock system. The preflights above still run.
+refuse_stock_image() {
+  echo
+  red "This image cannot reinstall this machine yet, so nothing was built."
+  echo "  It would erase the target disk and install a stock nixarchy instead"
+  echo "  of this configuration. Tracked in #1649."
+  echo
+  echo "  To get this machine back now, boot the published network image with"
+  echo "  nixarchy.from=<your config repo> nixarchy.host=<this machine's name>"
+  echo "  on its kernel command line."
+  exit 1
+}
+refuse_stock_image
+
 # ---------------------------------------------------------------------------
 # Confirm, build, report.
 # ---------------------------------------------------------------------------

@@ -1543,12 +1543,17 @@ in
       ''
     );
 
-    # #707: first login's mise launchers in ~/.local/bin shadow the Nix package
-    # of the same name. New ones are no longer written for a Nix command; this
-    # removes the ones already there, and any a later Install-menu pick shadows.
+    # #1625: removes upstream's exact generated mise launchers, which can only fail now,
+    # and records what mise left. Nothing else is deleted.
     home.activation.nixarchyMiseUnshadow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      run ${omarchyPath}/bin/omarchy-mise-unshadow \
-        /etc/profiles/per-user/${config.home.username}/bin /run/current-system/sw/bin
+      run env PATH=${
+        lib.makeBinPath [
+          pkgs.coreutils
+          pkgs.diffutils
+          pkgs.gnugrep
+        ]
+      }:$PATH ${omarchyPath}/bin/omarchy-mise-unshadow ||
+        echo "nixarchy: omarchy-mise-unshadow failed; mise launchers not checked" >&2
     '';
 
     # #1491: register the copy-url and yt-dlp native hosts. The scripts write
@@ -1566,14 +1571,6 @@ in
           }:$PATH OMARCHY_PATH=${omarchyPath} ${omarchyPath}/bin/omarchy-install-chromium-$s ||
             echo "nixarchy: omarchy-install-chromium-$s failed; the browser extension host is not registered" >&2
         done
-      fi
-    '';
-
-    # #1386: upstream's installer and migration 1791112479 run `mise reshim` to
-    # build the [wrappers] dispatch links; nixarchy runs neither.
-    home.activation.nixarchyAgentWrappers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      if [ -e /etc/mise/conf.d/omarchy-agent-accounts.toml ]; then
-        run ${pkgs.mise}/bin/mise reshim || echo "nixarchy: mise reshim failed; agent account wrappers not rebuilt" >&2
       fi
     '';
 
@@ -2441,6 +2438,16 @@ in
               printf '%s: %s\n' "$id" "$out" | systemd-cat -t nixarchy-default-plugins
             fi
           done
+        '';
+      };
+
+      # #1625: activation's stdout lands in the journal under the NixOS module, so this
+      # is what a person actually sees.
+      "omarchy/hooks/post-boot.d/mise-notice" = {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          exec ${cfg.package}/bin/omarchy-mise-unshadow --notify
         '';
       };
 

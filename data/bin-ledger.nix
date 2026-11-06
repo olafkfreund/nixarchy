@@ -402,7 +402,7 @@
   };
   "omarchy-mise-unshadow" = {
     class = "new";
-    reason = "Not in upstream. Run on every activation: removes upstream's exact mise wrapper from ~/.local/bin when a Nix profile has the same command, for launchers written before omarchy-mise-install's patch (#707).";
+    reason = "Not in upstream. Run on every activation: removes upstream's exact generated mise launchers from ~/.local/bin, because mise is gone and they can only fail and shadow their replacement, and records what mise left (#707, #1625).";
   };
   "omarchy-network-speedtest" = {
     class = "patch";

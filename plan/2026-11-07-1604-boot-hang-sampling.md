@@ -81,9 +81,9 @@ reviewers:
      `info cpus` then `info registers -a`, then: for each `CPU #(\d+)` in this
      sample's `info cpus` reply, `cpu <n>` then `info lapic`; then `info pic`,
      `info irq`, `info virtio`; for each `re.findall(r"^(/\S+) \[", reply, re.M)`,
-     `info virtio-status <path>`, parse `num_vqs:\s*(\d+)`; if absent, one entry
-     `num_vqs not found for <path>; its queues are skipped` and continue; else
-     `info virtio-queue-status <path> <q>` for `q in range(num_vqs)`. Every
+     `info virtio-queue-status <path> <q>` for `q` from 0 until the reply says
+     `Invalid virtqueue number` (capped at 64). Never `info virtio-status`: it
+     segfaults QEMU 11.1.2 (see Deviations). Every
      command goes through one local helper that does what lines 97-103 do today
      (send, strip `\r`, record `monitor command failed: {error!r}`, append
      `monitor sample {sample} ({command}):\n{response}`, print). Keep the 5 s
@@ -140,10 +140,13 @@ reviewers:
      |---|---|
      | drop `info pic` | 4 (`info pic` count) |
      | `info lapic` without `cpu` | 4 (`cpu 0` order) |
-     | `range(2)` instead of `num_vqs` | 4 (device[1] queue 2) |
+     | stop each device after two queues | 4 (device[1] queue 2) |
+     | send `info virtio-status <path>` per device | 4 (`info virtio-status` sent) |
      | only the first `info virtio` path (`[:1]`) | 4 (device[1] queues) |
      | drop the `monitor replied:` line from `_poke` | 6 |
      | swap poke order | 4 (order) |
+     | no echo filter in `_poke` | 4 (`monitor replied:` on an echo) |
+     | no escape stripping in `_poke` | 4 (`monitor replied:` on an echo) |
      | take `before` after sending | 4 (`poke nmi: 1 console lines`) |
      | drop the sendkey poke | 4 (sendkey line) |
      | remove the `abandoned` check | 5 |
@@ -212,6 +215,47 @@ reviewers:
    - Verify: `git diff tests/AGENTS.md` reads as prose; no section inserted or
      renumbered (the root CLAUDE.md's numbered sections are untouched).
    - Traps: agy cannot run commands headless; the session checks the diff.
+
+## Deviations found while implementing
+
+- **`info virtio-status` segfaults QEMU 11.1.2** (the pinned
+  `qemu-for-vm-tests`). The first run of `checks.boot-hang-detect` on the
+  passing tree lost case A's frozen guest to SIGSEGV right after the reply's
+  `Backend features:` line, and every later monitor command failed with
+  `BrokenPipeError`. Reproduced outside the test with
+  `qemu-system-x86_64 -S -nodefaults -monitor stdio -device virtio-rng-pci`
+  (and with `virtio-net-pci`): exit 139 on both. A diagnostic that kills the
+  hung guest destroys the evidence it exists to collect, so step 1 no longer
+  sends it. Queues are walked instead: `info virtio-queue-status <path> <q>`
+  for `q` from 0 until the reply says `Invalid virtqueue number` (capped at
+  64), which needs no `num_vqs`. Step 2's stub answers queue indices past each
+  device's count with that error, and case 4 asserts the exact sequence (every
+  queue plus the one past the end, per device, per sample) and that
+  `info virtio-status` is never sent. Break table rows changed accordingly:
+  `range(2)` became "stop after two queues", and a new row "send
+  `info virtio-status`" must turn case 4 red. Step 4 records the crash in
+  `tests/AGENTS.md`.
+
+- **An HMP reply is never empty.** The driver returns the monitor's echo of
+  the command (readline redraws, `n ESC[K ESC[D nm ESC[K ...`, which a log
+  shows as `nnmnmi`) and the next `(qemu)` prompt, so on the first passing run
+  every poke carried a `monitor replied:` line made of its own echo. `_poke` now
+  strips terminal escapes and `\r`, then drops blank lines, `(qemu)` and any
+  line ending with the command before deciding there was a reply. A filter
+  without the escape stripping passed the stub and still failed in the VM,
+  because the redraw line ends in `ESC[D`, not in the command.
+  So step 3's case A also asserts that its dump holds no `monitor replied:`:
+  the real QEMU's echo is the one shape a stub can get wrong.
+- **Step 3's third break moved.** With that assertion, "replace `nmi` with
+  `info status`" goes red in case A (`'monitor replied:' in dump`, the reply
+  `VM status: paused`), before case C runs. Case C's NMI assertion is proven
+  instead by sending `sendkey shift` in place of `nmi` to the healthy guest
+  only (`machine.name == "healthy"`): `AssertionError: NMI poke unanswered`.
+  A misspelt `info lapic` fails case A on the APIC header assertion, which
+  runs before the `unknown command:` one. Both recorded in `tests/AGENTS.md`. The stub's `nmi` and
+  `sendkey` replies are now that real shape, so case 4's "no `monitor
+  replied:`" assertion fails if the filter goes; it is a new break-table row
+  ("no echo filter" -> 4).
 
 ## Tests (by §6 tier)
 

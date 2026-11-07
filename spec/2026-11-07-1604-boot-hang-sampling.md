@@ -68,7 +68,7 @@ builds (`qemu-for-vm-tests-11.1.2`). It has `info lapic` (`apic-id:i?`),
 `info virtio-queue-status` (`path:s,queue:i`, with `inuse`,
 `last_avail_idx` and `used_idx`).
 
-**Pokes.** A module-level `_poke(machine, watch)` returns the entries, so
+**Pokes.** A module-level `_poke(machine, watch, abandoned)` returns the entries, so
 that case C below can call it directly. `sample_monitor` calls it in the
 same monitor thread, after sample 2, and only when `poke_watch` is set. For
 each of `nmi` and `sendkey alt-sysrq-w`, in that order:
@@ -86,7 +86,12 @@ fails this check`. `BootHang` is raised regardless (intent constraint).
 **Budget.** The join at line 109 becomes `30 + 2 * poke_watch` (60 s by
 default, 30 s on the exception path), and so does its message. A monitor
 that stops answering still ends the probe at the join. The thread is a
-daemon, as it is today. The #1365 systemd probe runs after this, unchanged,
+daemon, as it is today. The thread outlives a timed-out join, so a monitor
+that answers late could otherwise inject a poke after diagnosis has
+returned. To stop that, `_diagnose` sets a `threading.Event` (`abandoned`)
+when the join times out, and `_poke(machine, watch, abandoned)` checks it
+before each send, then returns without poking. The only thing left is a
+command already in flight when the join expired. The #1365 systemd probe runs after this, unchanged,
 and at worst a hang now costs 150 s instead of 120 s.
 
 **Size.** The NixOS test backdoor is a virtconsole on a default
@@ -146,7 +151,8 @@ environment that a user's configuration could share is touched.
   can't be read on this guest.
 - **Log volume.** Covered under Size above. It only appears on failure.
 - **Wall time on the install job.** A hang takes about 30 s longer to fail.
-  `globalTimeout` isn't approached.
+  `globalTimeout` is 85 min in `tests/install.nix:166` and
+  `tests/free-space.nix:166`, so 150 s doesn't approach it.
 - **A monitor that answers slowly.** About 150 monitor commands per sample
   share the 30 s of the old join, now 30 + 2 × watch. A monitor that
   answers each command in tens of ms fits easily. One that stalls is cut
@@ -179,7 +185,8 @@ break that must turn it red:
 | `info virtio-queue-status …/virtio-backend 0` and `… 1` each sent twice | loop `range(1)` instead of `num_vqs` |
 | `nmi` sent before `sendkey alt-sysrq-w` | swap the poke order |
 | dump has `poke nmi: 1 console lines` and the NMI line | take `before` after sending |
-| dump has `poke sendkey alt-sysrq-w: no console output` | (same break inverts it) |
+| dump has `poke sendkey alt-sysrq-w: no console output` | drop the sendkey poke |
+| with `abandoned` already set, `_poke` sends nothing | remove the `abandoned` check |
 | `elapsed < 15` still holds | none needed: the watch is 0.2 s |
 
 Cases 2 and 3 (exception path) assert that `nmi` was **not** sent. Break:
@@ -187,14 +194,26 @@ pass `poke_watch` at line 86.
 
 **`checks.boot-hang-detect`** (VM, tier per §6: no self-hosted runner busy).
 
-- **Case A** passes `poke_watch=2`, so the existing `elapsed < 60` bound and
-  its documented break (`took 130 s to notice`) still hold. It adds asserts
-  that `raised.monitor_dump` contains `info lapic`, `info pic` and
-  `virtio-queue-status`, and both `poke nmi:` and
-  `poke sendkey alt-sysrq-w:`. Break: delete the poke block, and
-  `poke nmi:` is missing.
+- **Case A** passes `poke_watch=2`. Here is the expected time: about 20 s
+  of silence, then about 10 s for the samples (the 5 s sleep and the
+  pokes), then 5 s for the systemd probe on a stopped guest. That is about
+  35 s, so the existing `elapsed < 60` bound and its documented break
+  (`took 130 s to notice`) still hold. The 34 s join cap is only reached if
+  the monitor stalls, and failing then is correct.
+- Case A adds asserts on the *replies*, not on the command headers, because
+  a rejected command still writes its header. `raised.monitor_dump` must
+  contain:
+  - `dumping local APIC state for CPU` (from `info lapic`)
+  - `ioapic0: ver=` (from `info pic`)
+  - `used_idx:` (from `info virtio-queue-status`)
+  - both `poke nmi:` and `poke sendkey alt-sysrq-w:`
+
+  It must not contain `unknown command:` or `monitor command failed`. These
+  reply strings come from the pinned QEMU 11.1.2 binary. Breaks: misspell
+  `info lapic` (`unknown command:` appears and the marker goes missing), or
+  delete the poke block (`poke nmi:` goes missing).
 - **Case C (new)**, on the healthy guest after case B reaches multi-user:
-  run the poke helper directly, with a 15 s watch, and assert that the NMI's
+  run `_poke(healthy, 15, threading.Event())` directly and assert that the NMI's
   new console lines contain `NMI received for unknown reason` and the key's
   contain `This sysrq operation is disabled`. That proves, on a real QEMU
   and kernel, that each poke prints from a live guest and that the watch

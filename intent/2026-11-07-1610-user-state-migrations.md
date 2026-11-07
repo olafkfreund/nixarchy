@@ -16,8 +16,9 @@ in `~/.config` and `~/.local/state`. Those are the problem here.
 nixarchy never runs migrations. `pkgs/omarchy/nix-bin/omarchy-migrate` tells
 `--pending` callers that nothing is pending and refuses a bare run. Its
 reasoning is that the pin moves "with the packaging updated to match". For
-user files that has not happened. `main` went from Omarchy v4.0.6 to v4.5.0 in
-#1606, which adds 98 migrations. 44 of them touch `$HOME`, `~/.config` or
+user files that has not happened. `main` went from Omarchy v4.0.6 to
+v4.5.0-rc1 in #1405 (2026-10-21), then to v4.5.0 in #1606. Between v4.0.6 and
+v4.5.0 upstream added 98 migrations. 44 of them touch `$HOME`, `~/.config` or
 `shell.json` (listed at the end). Only three are named anywhere outside
 `intent/`, `spec/` and `plan/`, and only Disktree's
 (`migrations/1791345484.sh`, `pkgs/AGENTS.md`) is handled in code.
@@ -35,9 +36,10 @@ The v4.5.0 shell no longer reads `centerAnchor` (it appears nowhere under
   `omarchy-bar put omarchy.elsewhen --after omarchy.clock` in
   `migrations/1790042972.sh`, which also does not run here.
 
-A new install is unaffected, because it is seeded from v4.5.0's `shell.json`.
-This only reaches people who installed before #1606, which is every current
-user.
+A new install is unaffected, because it is seeded from v4.5.0's `shell.json`,
+and `modules/home.nix` seeds only a file that does not exist yet. This reaches
+everyone whose `shell.json` was seeded by an older release and has been
+updated since.
 
 `omacom/omarchy#15517` turned up this gap. It is one of the 58 PATCHED-CHECK
 rows in #1610. Of those rows, it is the only one where a real behaviour change
@@ -46,10 +48,13 @@ audit table in the #1610 review).
 
 ## Proposed outcome
 
-- A machine upgraded from v4.0.6 gets the same bar a v4.5.0 install gets: the
-  clock centred, its neighbours in `centerBegin` and `centerEnd`, and Elsewhen
-  after the clock. This happens once, without the user doing anything, and
-  leaves alone a layout the user has changed.
+- On a machine upgraded from v4.0.6, the bar looks as it did before the
+  upgrade, as upstream's own migration leaves it. The clock is centred, the
+  widgets that were around it move into `centerBegin` and `centerEnd`, and
+  Elsewhen sits after the clock. This is not the same as a fresh v4.5.0 bar,
+  which puts the keyboard layout on the right; upstream's migration does not
+  either. It happens once for each user, without them doing anything. A user
+  who later removes Elsewhen keeps it removed.
 - Every 4.5 migration that touches user files has a written decision: ported,
   not needed here (with the reason), or declined. A future bump finds that
   list and adds to it, instead of starting again.
@@ -60,8 +65,11 @@ audit table in the #1610 review).
 
 - Everyone on `main` who installed before #1606 (v4.0.x seeds). New installs
   are not affected.
-- `~/.config/omarchy/shell.json`, which the shell itself rewrites. Writing it
-  while the shell is running is the risk to handle.
+- `~/.config/omarchy/shell.json`, which the shell itself rewrites. Writing
+  the file while the shell is running leaves the bar's IPC targets dead, even
+  when the bytes are identical (`docs/internals/shell-json-reload.md`, #847).
+  `build.yml`'s step "Nothing we ship writes shell.json" fails on any such
+  writer.
 - Other user files named by the 44 migrations: theme and background state,
   herdr, Neovim, Chromium flags, web app launchers, dictation bindings,
   OpenCode.
@@ -71,10 +79,14 @@ audit table in the #1610 review).
 ## Constraints
 
 - Never overwrite a user's choice. A port acts only on the state upstream's
-  migration acts on, and is a no-op otherwise. A layout that has no
-  `centerAnchor` is the user's own and stays as it is.
-- Runs once per machine and is idempotent. Running it twice gives the same
-  file.
+  migration acts on, and changes nothing otherwise. That covers a layout the
+  user has edited around the anchor, which upstream's split keeps as it is,
+  and a layout with no `centerAnchor`, which upstream leaves alone.
+- Never write `shell.json` directly. Changes go through the running shell's
+  own writer, as the post-boot hook in `modules/home.nix` (around line 2285)
+  already does for plugins.
+- Runs once per user, with a marker in that user's home, and is idempotent.
+  Running it twice gives the same file.
 - Mode A: someone importing `nixosModules.nixarchy` with Omarchy turned off
   sees no change (§7).
 - Do not run upstream's migrations wholesale. 29 use sudo, 12 write under
@@ -90,11 +102,14 @@ audit table in the #1610 review).
 1. **Scope.** Port only the bar (`1791969355`, `1791968925`, `1790042972`,
    `1790528634`) and record a decision for the other 40, or port every one
    that changes something visible?
-2. **Where it runs.** Home Manager activation, which runs with no session and
-   while the shell may be running, or the session's first start after a
-   rebuild, when `omarchy-bar` and `omarchy-shell` can be asked?
-3. **Marker.** Use upstream's own migration state directory, so a later
-   `omarchy-migrate` port could share it, or a nixarchy marker?
+2. **Where it runs.** Activation cannot edit the live file (see Constraints).
+   Should the bar migrations reuse the existing post-boot hook path, which
+   waits for the shell and uses its IPC writer? Or should they run before the
+   shell starts in the session, when nothing holds the file yet?
+3. **Marker.** Each user has their own marker, either way. Should it go in
+   upstream's own migration state directory under the user's home, so a later
+   port of `omarchy-migrate` could share it, or should nixarchy keep a marker
+   of its own?
 
 ### The 44 migrations that touch user files (v4.0.6 → v4.5.0)
 

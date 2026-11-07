@@ -938,8 +938,8 @@ pkgs.testers.runNixOSTest {
         l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
     remove_sw = rows["remove.dictation.superwhisper"]["action"]
     setup_sw = rows["setup.default.dictation.superwhisper"]["action"]
-    assert "omarchy-remove-dictation-superwhisper" in remove_sw
-    assert "omarchy-default-dictation superwhisper" in setup_sw
+    assert "omarchy-remove-dictation-superwhisper" in remove_sw, f"Remove > Dictation > Superwhisper skips the removal script: {remove_sw}"
+    assert "omarchy-default-dictation superwhisper" in setup_sw, f"Setup > Default > Dictation > Superwhisper skips the consent script: {setup_sw}"
     assert "nixarchy-app-enable" not in setup_sw and "nixarchy-app-disable" not in remove_sw
     machine.succeed("test -x " + menu_tree + "/bin/omarchy-install-dictation-superwhisper")
     machine.succeed("test -x " + menu_tree + "/bin/omarchy-remove-dictation-superwhisper")

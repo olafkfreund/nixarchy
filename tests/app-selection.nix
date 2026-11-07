@@ -36,7 +36,7 @@ pkgs.runCommand "nixarchy-app-selection"
     file=$XDG_CONFIG_HOME/nixarchy/apps.nix
     templates=$PWD/templates
     mkdir -p "$templates"
-    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    # brave.enable = true;  #@ brave' '  };' '}' > "$templates/apps-template.nix"
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    # firefox.enable = true;  #@ firefox' '  };' '}' > "$templates/apps-template.nix"
     export NIXARCHY_TEMPLATES=$templates
     cp "$templates/apps-template.nix" "$file"
     chmod 640 "$file"
@@ -52,36 +52,36 @@ pkgs.runCommand "nixarchy-app-selection"
     # A missing row is inserted, and the file keeps its mode. (Whether that
     # write was a rename is not visible here: enable's own sed -i replaces the
     # inode straight after. The catalogue-diff case below shows the rename.)
-    sed -i '/#@ brave/d' "$file"
+    sed -i '/#@ firefox/d' "$file"
     inode=$(stat -c %i "$file")
-    "$enable" brave >/dev/null || bad 'enable brave failed'
-    grep -q 'brave.enable = true' "$file" || bad 'enable did not insert the missing row'
+    "$enable" firefox >/dev/null || bad 'enable firefox failed'
+    grep -q 'firefox.enable = true' "$file" || bad 'enable did not insert the missing row'
     test "$(stat -c %a "$file")" = 640 && test "$(stat -c %i "$file")" != "$inode" || bad 'enable did not rename a same-directory temp with the original mode'
 
     # A live false is a selection to turn on, not an already-enabled result.
-    sed -i 's/brave.enable = true/brave.enable = false/' "$file"
-    "$enable" brave >/dev/null || bad 'enable brave failed'
-    grep -q 'brave.enable = true' "$file" || bad 'enable left a false row false'
+    sed -i 's/firefox.enable = true/firefox.enable = false/' "$file"
+    "$enable" firefox >/dev/null || bad 'enable firefox failed'
+    grep -q 'firefox.enable = true' "$file" || bad 'enable left a false row false'
     before=$(sha256sum < "$file")
-    rc=0; "$disable" 'brave.*' >/dev/null 2>&1 || rc=$?
+    rc=0; "$disable" 'firefox.*' >/dev/null 2>&1 || rc=$?
     test "$rc" -eq 2 && test "$(sha256sum < "$file")" = "$before" || bad 'disable accepted an invalid regex id or changed the file'
-    "$disable" brave >/dev/null || bad 'disable brave failed'
-    grep -q '# brave.enable' "$file" || bad 'disable did not comment the row'
+    "$disable" firefox >/dev/null || bad 'disable firefox failed'
+    grep -q '# firefox.enable' "$file" || bad 'disable did not comment the row'
 
     # catalogue-diff must report a refusal, and a successful --add also renames.
     printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '  };' '}' > "$file"
     inode=$(stat -c %i "$file")
     "$diff" --add >/dev/null || bad 'catalogue-diff --add failed'
-    grep -q '#@ brave' "$file" && test "$(stat -c %i "$file")" != "$inode" &&
+    grep -q '#@ firefox' "$file" && test "$(stat -c %i "$file")" != "$inode" &&
       test "$(stat -c %a "$file")" = 640 || bad 'catalogue-diff did not rename with the original mode'
     # --add writes rows as programs.nixarchy.apps.<id>; enable and disable
     # must both recognise that form (#1276 review).
-    "$enable" brave >/dev/null 2>&1 || bad 'enable failed on a full-path row'
-    grep -qE '^[[:space:]]*programs\.nixarchy\.apps\.brave\.enable = true' "$file" ||
-      bad "enable did not turn on a full-path row: $(grep brave "$file")"
-    "$disable" brave >/dev/null 2>&1 || bad 'disable failed on a full-path row'
-    grep -qE '^[[:space:]]*#[[:space:]]*programs\.nixarchy\.apps\.brave\.enable' "$file" ||
-      bad "disable left a full-path row on: $(grep brave "$file")"
+    "$enable" firefox >/dev/null 2>&1 || bad 'enable failed on a full-path row'
+    grep -qE '^[[:space:]]*programs\.nixarchy\.apps\.firefox\.enable = true' "$file" ||
+      bad "enable did not turn on a full-path row: $(grep firefox "$file")"
+    "$disable" firefox >/dev/null 2>&1 || bad 'disable failed on a full-path row'
+    grep -qE '^[[:space:]]*#[[:space:]]*programs\.nixarchy\.apps\.firefox\.enable' "$file" ||
+      bad "disable left a full-path row on: $(grep firefox "$file")"
     printf '%s\n' '{ ... }: {' > "$file"
     rc=0; "$diff" --add > refuse.out 2>&1 || rc=$?
     test "$rc" -ne 0 || bad 'catalogue-diff reported success after refusing a file'
@@ -89,13 +89,13 @@ pkgs.runCommand "nixarchy-app-selection"
 
     # Every name redirected to a curated app is an unsuccessful pkg-add.
     printf '%s\n' '{ ... }: {' '}' > "$file"
-    rc=0; "$pkgadd" brave > pkgadd.out 2>&1 || rc=$?
+    rc=0; "$pkgadd" firefox > pkgadd.out 2>&1 || rc=$?
     test "$rc" -ne 0 || bad 'pkg-add reported success for a redirected name'
     grep -q 'curated' pkgadd.out || bad "pkg-add failed for some other reason: $(cat pkgadd.out)"
 
     hypetpl=$PWD/hype-templates
     mkdir -p "$hypetpl"
-    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    # hype.enable = false;  #@ hype  # on by default' '    # brave.enable = true;  #@ brave' '  };' '}' > "$hypetpl/apps-template.nix"
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    # hype.enable = false;  #@ hype  # on by default' '    # firefox.enable = true;  #@ firefox' '  };' '}' > "$hypetpl/apps-template.nix"
     hypeoff='^[[:space:]]*(programs\.nixarchy\.apps\.)?hype\.enable[[:space:]]*=[[:space:]]*false'
     # A full-path row sits outside the block, where catalogue-diff --add writes it.
     start() { printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' "    $1" '  };' "  $2" '}' > "$file"; }
@@ -119,11 +119,11 @@ pkgs.runCommand "nixarchy-app-selection"
     : > offered; PATH=${appDisable}/bin:$PATH "$remove" >/dev/null || bad 'remove failed on disabled hype'
     if grep -qP '^app\thype$' offered; then bad 'remove offered disabled hype'; fi
 
-    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    hype.enable = false;  #@ hype' '    omacut.enable = true;  #@ omacut' '    # signed.enable = true;  #@ signed' '  };' '  programs.nixarchy.apps.brave.enable = true;  #@ brave' '}' > "$file"
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    hype.enable = false;  #@ hype' '    omacut.enable = true;  #@ omacut' '    # signed.enable = true;  #@ signed' '  };' '  programs.nixarchy.apps.firefox.enable = true;  #@ firefox' '}' > "$file"
     NIXARCHY_TEMPLATES=$hypetpl "$disable" omacut > disable.out || bad 'disable omacut failed'
-    grep -qF '(1 still enabled)' disable.out || bad 'disable count included hype or missed full-path brave'
+    grep -qF '(1 still enabled)' disable.out || bad 'disable count included hype or missed full-path firefox'
     "$enable" signed > enable.out || bad 'enable signed failed'
-    grep -qF '(2 queued)' enable.out || bad 'enable count included hype or missed full-path brave'
+    grep -qF '(2 queued)' enable.out || bad 'enable count included hype or missed full-path firefox'
 
     sed -n '/^mark_live() {/,/^}/p' ${search}/bin/nixarchy-search > mark-live-function
     grep -q 'mark_live()' mark-live-function || { echo 'mark_live function extraction failed' >&2; exit 1; }
@@ -213,7 +213,6 @@ pkgs.runCommand "nixarchy-app-selection"
     def_row() {
       case "$1:$2" in
         browser:chrome) echo chrome ;;
-        browser:brave) echo brave ;;
         browser:edge) echo edge ;;
         browser:firefox) echo firefox ;;
         browser:zen) echo zen ;;
@@ -228,14 +227,13 @@ pkgs.runCommand "nixarchy-app-selection"
     }
     def_refused() {
       case "$1:$2" in
-        browser:brave-origin | browser:chromium | editor:sublime_text | editor:nvim) return 0 ;;
+        browser:brave | browser:brave-origin | browser:chromium | editor:sublime_text | editor:nvim) return 0 ;;
         *) return 1 ;;
       esac
     }
 
     printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' \
       '    # chrome.enable = true;  #@ chrome' \
-      '    # brave.enable = true;  #@ brave' \
       '    # edge.enable = true;  #@ edge' \
       '    # firefox.enable = true;  #@ firefox' \
       '    # zen.enable = true;  #@ zen' \
@@ -292,6 +290,7 @@ pkgs.runCommand "nixarchy-app-selection"
     }
 
     refuse_case "$definstall" browser brave-origin "AUR-only"
+    refuse_case "$definstall" browser brave "nixpkgs removed Brave"
     refuse_case "$definstall" editor sublime_text "sublimetext4 broken"
     refuse_case "$definstall" browser chromium "already ships in the session"
     refuse_case "$definstall" editor nvim "already ships in the session"

@@ -504,8 +504,8 @@ keep working.
 [nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice) · [its own site](https://olafkfreund.github.io/nixarchy-voice/)
 
 **What it solves.** Operating the desktop by talking to it. It turns voice into
-actions, not only text; [dictation](ai) (Voxtype) stays for typing. Turn that
-on with `dictation` and hold F9, or toggle it with Super+Ctrl+X.
+actions, not only text; [dictation](ai) stays for typing. Turn that
+on with `dictation` and use Alt+Space (toggle) or Right Alt (hold).
 
 **What it does.** A wake word or toggle key is heard locally, whisper.cpp
 transcribes it on your CPU, a model you have signed in to decides, and a local

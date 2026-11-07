@@ -331,19 +331,19 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_file("/home/omarchy/.config/nixarchy/apps.nix")
     # #1342: held back until login
     machine.succeed("test ! -e /home/omarchy/.config/hyprland-mimeapps.list")
-    machine.succeed("su omarchy -c 'nixarchy-app-enable brave'")
+    machine.succeed("su omarchy -c 'nixarchy-app-enable firefox'")
     machine.succeed("su omarchy -c 'nixarchy-app-enable helix'")
     enabled = machine.succeed(
         "grep -E '^[[:space:]]*[a-z0-9_-]+\\.enable' /home/omarchy/.config/nixarchy/apps.nix"
     )
     print(enabled)
-    assert "brave.enable" in enabled, "brave was not enabled"
+    assert "firefox.enable" in enabled, "firefox was not enabled"
     assert "helix.enable" in enabled, "helix was not enabled"
     # A pick that leaves the file unparseable would break the next rebuild.
     machine.succeed("nix-instantiate --parse /home/omarchy/.config/nixarchy/apps.nix >/dev/null")
 
     # Picking the same app twice must be a no-op, not a second uncomment.
-    machine.succeed("su omarchy -c 'nixarchy-app-enable brave'")
+    machine.succeed("su omarchy -c 'nixarchy-app-enable firefox'")
     machine.succeed("nix-instantiate --parse /home/omarchy/.config/nixarchy/apps.nix >/dev/null")
 
     # Answering "no" to the prompt asserts the copy, not a full rebuild.
@@ -353,7 +353,7 @@ pkgs.testers.runNixOSTest {
     # AND nixarchy-apps.nix has to import it. A copy nothing imports is the
     # exact failure the warning in nixarchy-apply exists for -- apps marked
     # enabled, a rebuild running to completion, and nothing installed.
-    machine.succeed("grep -q 'brave.enable' /etc/nixos/nixarchy/apps.nix")
+    machine.succeed("grep -q 'firefox.enable' /etc/nixos/nixarchy/apps.nix")
     machine.succeed("grep -q './nixarchy/apps.nix' /etc/nixos/nixarchy-apps.nix")
     print("selection reached /etc/nixos/nixarchy/apps.nix, and the stub imports it")
 
@@ -936,6 +936,13 @@ pkgs.testers.runNixOSTest {
     menu_text = (machine.out_dir / "menu" / "omarchy-menu.jsonc").read_text()
     rows = json.loads("\n".join(
         l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
+    remove_sw = rows["remove.dictation.superwhisper"]["action"]
+    setup_sw = rows["setup.default.dictation.superwhisper"]["action"]
+    assert "omarchy-remove-dictation-superwhisper" in remove_sw, f"Remove > Dictation > Superwhisper skips the removal script: {remove_sw}"
+    assert "omarchy-default-dictation superwhisper" in setup_sw, f"Setup > Default > Dictation > Superwhisper skips the consent script: {setup_sw}"
+    assert "nixarchy-app-enable" not in setup_sw and "nixarchy-app-disable" not in remove_sw
+    machine.succeed("test -x " + menu_tree + "/bin/omarchy-install-dictation-superwhisper")
+    machine.succeed("test -x " + menu_tree + "/bin/omarchy-remove-dictation-superwhisper")
     def click(row):
         action = rows[row]["action"]
         b64 = base64.b64encode(action.encode()).decode()
@@ -1453,6 +1460,21 @@ pkgs.testers.runNixOSTest {
     # Red before green: on the pre-#278 tree this fails on the first assertion,
     # because the marker is precisely what never got written.
     machine.succeed("su - omarchy -c 'omarchy-done check first-run-user'")
+    machine.succeed("test -f /home/omarchy/.local/state/omarchy/done/superwhisper-notice")
+    machine.fail("su - omarchy -c 'command -v superwhisper'")
+    machine.fail("test -e /home/omarchy/.config/systemd/user/superwhisper.service")
+    machine.fail("su - omarchy -c 'systemctl --user cat superwhisper.service'")
+    # Run the installed first-run script twice with a selected, missing backend.
+    # The stub records delivery, while the marker proves the second run is silent.
+    machine.succeed("mkdir -p /tmp/sw-notice/bin /tmp/sw-notice/config/omarchy/defaults /tmp/sw-notice/state")
+    machine.succeed("printf '%s\\n' '#!/bin/sh' 'printf x >> /tmp/sw-notice/calls' > /tmp/sw-notice/bin/omarchy-notification-send && chmod +x /tmp/sw-notice/bin/omarchy-notification-send")
+    machine.succeed("printf '%s\\n' superwhisper > /tmp/sw-notice/config/omarchy/defaults/dictation")
+    notice = ("HOME=/tmp/sw-notice XDG_CONFIG_HOME=/tmp/sw-notice/config "
+              "XDG_STATE_HOME=/tmp/sw-notice/state PATH=/tmp/sw-notice/bin:/run/current-system/sw/bin "
+              "bash " + tree + "/install/user/first-run/superwhisper.sh")
+    machine.succeed(notice)
+    machine.succeed(notice)
+    machine.succeed("test -f /tmp/sw-notice/state/omarchy/done/superwhisper-notice && test $(wc -c < /tmp/sw-notice/calls) -eq 1")
     print("first-run wrote its completion marker")
 
     # And the marker is USED, not merely present. A machine that records
@@ -2178,11 +2200,9 @@ pkgs.testers.runNixOSTest {
                "omarchy-launch-browser", "omarchy-launch-webapp",
                # Arch installers for apps that are mapped, excepted or absent
                # here: Claude Desktop (data/menu-exceptions.nix), its Chromium
-               # extension, Superwhisper, and the hermes/openclaw CLIs: omarchy-default-agent
+               # extension, and the hermes/openclaw CLIs: omarchy-default-agent
                # installs openclaw from nixpkgs and declines hermes.
                "omarchy-install-ai-claude", "omarchy-install-chromium-claude",
-               "omarchy-install-dictation-superwhisper",
-               "omarchy-remove-dictation-superwhisper",
                "omarchy-install-dictation-voxtype",
                "omarchy-install-hermes-cli", "omarchy-install-openclaw-cli",
                # The /usr/bin/python3 here runs on the REMOTE machine an account is

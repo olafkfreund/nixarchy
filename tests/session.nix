@@ -331,19 +331,19 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_file("/home/omarchy/.config/nixarchy/apps.nix")
     # #1342: held back until login
     machine.succeed("test ! -e /home/omarchy/.config/hyprland-mimeapps.list")
-    machine.succeed("su omarchy -c 'nixarchy-app-enable brave'")
+    machine.succeed("su omarchy -c 'nixarchy-app-enable firefox'")
     machine.succeed("su omarchy -c 'nixarchy-app-enable helix'")
     enabled = machine.succeed(
         "grep -E '^[[:space:]]*[a-z0-9_-]+\\.enable' /home/omarchy/.config/nixarchy/apps.nix"
     )
     print(enabled)
-    assert "brave.enable" in enabled, "brave was not enabled"
+    assert "firefox.enable" in enabled, "firefox was not enabled"
     assert "helix.enable" in enabled, "helix was not enabled"
     # A pick that leaves the file unparseable would break the next rebuild.
     machine.succeed("nix-instantiate --parse /home/omarchy/.config/nixarchy/apps.nix >/dev/null")
 
     # Picking the same app twice must be a no-op, not a second uncomment.
-    machine.succeed("su omarchy -c 'nixarchy-app-enable brave'")
+    machine.succeed("su omarchy -c 'nixarchy-app-enable firefox'")
     machine.succeed("nix-instantiate --parse /home/omarchy/.config/nixarchy/apps.nix >/dev/null")
 
     # Answering "no" to the prompt asserts the copy, not a full rebuild.
@@ -353,7 +353,7 @@ pkgs.testers.runNixOSTest {
     # AND nixarchy-apps.nix has to import it. A copy nothing imports is the
     # exact failure the warning in nixarchy-apply exists for -- apps marked
     # enabled, a rebuild running to completion, and nothing installed.
-    machine.succeed("grep -q 'brave.enable' /etc/nixos/nixarchy/apps.nix")
+    machine.succeed("grep -q 'firefox.enable' /etc/nixos/nixarchy/apps.nix")
     machine.succeed("grep -q './nixarchy/apps.nix' /etc/nixos/nixarchy-apps.nix")
     print("selection reached /etc/nixos/nixarchy/apps.nix, and the stub imports it")
 

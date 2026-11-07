@@ -383,8 +383,8 @@ in
     # into desktop ACTIONS, dictation is speech into the focused window. They
     # are different packages and the manual keeps them distinct.
     dictation.enable = lib.mkEnableOption ''
-      voxtype dictation: hold F9 to speak into the focused window, or toggle
-      with Super+Ctrl+X. Downloads a ~150 MB whisper model on first activation,
+      voxtype dictation: Alt+Space toggles it and Right Alt holds it, typing
+      into the focused window. Downloads a ~150 MB whisper model on first activation,
       into your data directory rather than the store, so a machine with no
       network gets a failed unit you can see rather than a feature that
       silently does nothing
@@ -1043,9 +1043,14 @@ in
     # Why: modules/AGENTS.md#most-of-what-the-install-menu-offers-is-unfree
     nixpkgs.config = lib.mkIf cfg.allowUnfree (lib.mkDefault { allowUnfree = true; });
 
-    # Derived, not chosen -- see the option. Published here so modules/home.nix
-    # can write the same settings into every editor it configures.
-    programs.nixarchy.nixdSettings = nixdSettings;
+    programs.nixarchy = {
+      # Superwhisper is unfree, so without it dictation falls back to Voxtype (#1613).
+      dictation.enable = lib.mkIf (!cfg.allowUnfree) (lib.mkDefault true);
+
+      # Derived, not chosen -- see the option. Published here so modules/home.nix
+      # can write the same settings into every editor it configures.
+      inherit nixdSettings;
+    };
 
     nix.settings =
       let

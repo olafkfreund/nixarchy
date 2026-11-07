@@ -98,8 +98,11 @@ A bash script that runs the three bar steps in upstream's order. It reads
   with `fromSection` and `fromIndex` to index 0 (`right`) or to the end. Extra
   trays in one section are not removed. Upstream deletes them, but IPC has no
   delete short of disabling the plugin. This is recorded in the ledger as a
-  partial port. A v4.0.6 seed has a single tray, already first in `right`, so
-  this step is a no-op there.
+  partial port, and it is the one place where this design falls short of the
+  intent's "as upstream's own migration leaves it": a layout that lists more
+  than one tray in a section keeps the extras, and the 4.5 bar draws them all.
+  No seed nixarchy ever shipped has more than one tray. A v4.0.6 seed has a
+  single tray, already first in `right`, so this step is a no-op there.
 - **`1791969355` (split).** Skip if the marker exists or the bar is not
   built-in. Read `center` once and find the anchor's index `k` among `n`
   entries. If it is absent, move nothing. This matches upstream, which keeps
@@ -147,18 +150,23 @@ minus the intent's 44. The other rows are the 44, decided as follows:
   `1787342993`, `1787573629`, `1788941927`, `1789310715`, `1790457067`,
   `1790863209`, `1791382872`, `1792343225`. nixarchy ships no mise, and
   `omarchy-mise-install` refuses (#1625).
-- **not-needed: packages and the system (12):** `1788129995`,
-  `1789764927`, `1790539857`, `1790542069`, `1791345484` (Disktree, already
-  handled, `pkgs/AGENTS.md`), `1791708587`, `1792345511`, `1791723398`,
-  `1791479273`, `1793667581`, `1788261467` (the portal is configured by
-  `modules/nixos.nix`), `1791769486` (no nixarchy release shipped the USB
-  approval units). On NixOS, apps and system state come from the flake. Each
-  of these is gated on `omarchy-pkg-*`, pacman or `/var/lib`, and does not
-  apply here. `1788129995`'s imv line is verified per row during the plan.
+- **not-needed: packages and the system (10):** `1789764927`,
+  `1790539857`, `1790542069`, `1791345484` (Disktree, already handled,
+  `pkgs/AGENTS.md`), `1791708587`, `1792345511`, `1791479273`, `1793667581`,
+  `1788261467` (the portal is configured by `modules/nixos.nix`), `1791769486`
+  (no nixarchy release shipped the USB approval units). On NixOS, apps and
+  system state come from the flake. Each of these is gated on `omarchy-pkg-*`,
+  pacman or `/var/lib`, and does not apply here.
 - **not-needed: other (2):** `1790528634` (see above) and `1793315076`
   (Apple Silicon `~/.bashrc`; bash setup comes from `/etc/bashrc`, at
   `modules/nixos.nix:1236`).
-- **declined, follow-up (16):** `1787679775`, `1788281348`, `1791123731`,
+- **declined, follow-up (18):** `1788129995` (it rewrites imv's Ctrl+E from
+  `tensaku-edit` to `omasnap`; the v4.0.6 seed's `config/imv/config:16`
+  names `tensaku-edit`, which nixarchy does not ship, and the seed never
+  replaces an existing file, `modules/home.nix:1162`), `1791723398` (it adds
+  two files to a Neovim config that was copied once; nixarchy seeds
+  `~/.config/nvim` only into nothing, at `modules/home.nix:459`, so seeded
+  users miss them), `1787679775`, `1788281348`, `1791123731`,
   `1791376887`, `1791470456`, `1791676907`, `1791696584`, `1791698594`,
   `1791705142`, `1791722809`, `1791875754`, `1792259038`, `1792474908`,
   `1792648436`, `1793477875`, `1793565796`. These are real user-file edits
@@ -167,7 +175,9 @@ minus the intent's 44. The other rows are the 44, decided as follows:
   is ported (§2, §3). The PR lists them for a human to file. An agent does not
   file issues in this workflow.
 
-Each reason is checked against the code when its row is written. Where a
+Each reason is checked against the code when its row is written. The check
+below proves that every row exists, not that its reason is true. The reasons
+are reviewed in the pull request. Where a
 reason fails, the row becomes `declined` and is not argued.
 
 ### 4. `pkgs/omarchy/nix-bin/omarchy-migrate` and `data/bin-ledger.nix`
@@ -188,8 +198,10 @@ environment, and `tests/coexistence/fixtures.nix` gains no fixture. The one
 case of the user's own config meeting this is a `shell.json` that home-manager
 manages as a read-only store link. There the shell's write fails, the poll
 never sees the result, no marker is written, and one journal line appears per
-login. Nothing is overwritten. Fixture (f) below covers the "no marker
-without the file changing" rule.
+login. Nothing is overwritten. What Quickshell's writer does with a store
+symlink has not been measured. The design does not depend on it, because no
+marker is written unless the file shows the result. Fixture (f) below covers
+that rule.
 
 ## Alternatives rejected
 
@@ -216,9 +228,15 @@ without the file changing" rule.
   the wrong id at `fromIndex` is refused, the step stops without a marker, and
   the next login recomputes from the file. The worst case is a split left half
   done until the next login, which the same rule then completes.
-- **Users on v4.0.x who already fixed their bar by hand.** If they removed the
-  clock from `center`, the anchor is absent and nothing moves, as upstream
-  would do. Elsewhen is still put once, which is upstream's behaviour too.
+- **Users on v4.0.x who already fixed their bar by hand.** If they took the
+  clock out of `center` but left the `centerAnchor` key, nothing moves, as
+  upstream would do, and Elsewhen is still put once, which is upstream's
+  behaviour too. If they deleted the `centerAnchor` key itself, the gate reads
+  their file as a 4.5 one, and they get no Elsewhen. Upstream would put it
+  there. This is accepted: nothing else in the file tells a pre-4.5 file
+  without the key apart from a 4.5 user who removed Elsewhen. Putting it on
+  the second would overwrite a choice, and missing the first only leaves out
+  a widget.
 - **The Elsewhen put happens at a login after the rebuild**, not at the
   rebuild. Nothing user-visible depends on that timing.
 
@@ -235,8 +253,12 @@ A stub `omarchy-shell` on `PATH` answers `ping`, `rescanPlugins`,
 jq. It logs every call, and the line that writes the file carries `847-allow`.
 The oracle is upstream's own `migrations/1790042972.sh`, `1791968925.sh` and
 `1791969355.sh`, run in order from `inputs.omarchy` on a copy of the same
-fixture with the same stub behind the vendored `omarchy-bar`. The two results
-are compared as `jq -S 'del(.bar.centerAnchor)'`. Fixtures are under
+fixture with the same stub behind the vendored `omarchy-bar`. The real shell's
+`ensureConfigShape` (`services/PluginRegistry.qml:405-413`) adds every bar
+section, `tray` included, and `plugins`, which upstream's jq does not. So the
+stub does the same, and both results are normalised before comparing: every
+`Util.barSections` array and `plugins` filled in, `version` and
+`.bar.centerAnchor` dropped, keys sorted. Fixtures are under
 `tests/fixtures/shell-json/`:
 
 | fixture | asserts | break that must turn it red |
@@ -248,6 +270,7 @@ are compared as `jq -S 'del(.bar.centerAnchor)'`. Fixtures are under
 | (e) (a) again after removing Elsewhen | stays removed | ignore the marker for `1790042972` |
 | (f) stub that answers ok but does not write | no markers; a rerun with a working stub completes | write the marker on the IPC reply instead of the file |
 | (g) anchor not in `center` | equals the oracle (nothing moves) | treat a missing anchor as index 0 |
+| (h) `right: [tray, widget, tray]` | the last tray is first in `right`; the other tray stays (the documented partial port); marker written | pin the first tray instead of the last |
 
 **B. `checks.user-migrations-ledger`** (same file or a sibling,
 `runCommand`): the set of triage hits in `${inputs.omarchy}/migrations` equals
@@ -260,10 +283,9 @@ print it).
 hooks (lines 700-717). This is VM tier, run only when no self-hosted runner is
 busy. Stop the shell, copy fixture (a) into place (the shell is not running,
 so this is not #847, and the line still carries `847-allow` for the guard),
-start the shell, and run the hook. Then `cmp` the file, `jq -S
-'del(.bar.centerAnchor)'`, against check A's expected output for (a), and
-check the three markers. Break: swap the step order in the script, and this
-step must fail.
+start the shell, and run the hook. Then `cmp` the file, normalised as in A,
+against check A's expected output for (a), and check the three markers.
+Break: swap the step order in the script, and this step must fail.
 
 **D. Existing guards stay green:** `build.yml` "Nothing we ship writes
 shell.json" (the script has no writer), the `bin-ledger` check (new row), the

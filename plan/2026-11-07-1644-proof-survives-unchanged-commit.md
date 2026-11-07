@@ -110,6 +110,20 @@ reviewers:
    - Run as a script under bash, not pasted into zsh (§1).
    - Two processes must not share the scratch tree (§5).
 
+   **Step 1 measurement (2026-11-07, guard at `56559805`, probe `24397c26`).**
+   - Red, as expected: **79 of 193** non-exempt checks moved. Exit 1.
+   - Wall time **~66 min** for the guard itself (15:19 to 16:25, 3916 s of per-check `nix eval`; the 6120 s total includes 34 min waiting at the VM-tier gate). Peak anon in the scope: **13.28 GB** (`memory.stat`, sampled every 5 s).
+   - Carriers, read from each moved check's drv closure (grep for the source path, the short rev and the `omarchy` drv) and `nix-diff` against the probe commit where that found nothing:
+     - **`omarchy` splice (rev and date), 70:** account-copy agent-account-routing agent-local-memlock android app-selection appimage-extract bin-ledger bluetooth-pairing box-boot branch-guard channel coexist coexistence crash-report-repo doctor-channel etc-overlay factory-reset hibernate-resume home-activation-writes home-profile input-methods install-font-terminal integration keybindings-lua-timeout keyboard-boot language-edge launch-browser-self-call location manifest-has-kind menu-actions menu-close menu-conditions menu-guards menu-guidance menu-keys menu-model-merge menu-verbs microvm-boot microvm-template mise-free mise-launchers omarchy omarchy-app-template omarchy-package-ledger panel-loaders passwordless-sudo-hidden plugin provision-launchers qml qml-color-qualified reference-initrd release-notes remove-fingerprint remove-fingerprint-vm remove-preinstalls restart-terminal-wrapped retroarch-paths runtime-profile session shell-ipc-resolve shell-restart-race shell-restart-tree shell-session shell-session-launch sleep-lock-generation sshd-enable stale-scripts text-size-managed theme-set-zed update-available.
+     - **`installer/mkFlake.nix` rev (`nixarchy-flake-template.drv`), 4:** initrd-pin-guard, installer-input-validation, installer-wizard, reinstall-image.
+     - **rev in a script (`nixarchy-try.drv`), 1:** try-preflight.
+     - **rev through a drvPath embedded as a string (no closure edge), 2:** install-seed-shape (the install configurations' `system-path` drvPaths), stable-eval (a `nixos-system` drvPath).
+     - **rev and `self.outPath`, 1: options-files.** `omarchy`, `options.json`, `nixarchy-vm` carry the rev; `activate.drv` carries `inputs.nixarchy.url = "path:/nix/store/…-source"` (`vm/configuration.nix:173`), and `nixos-system-nixarchy` has the source in its inputs.
+     - **Whole-tree content, 1: cache-keys.** `tests/cache-keys.nix:11-16` takes `lib.fileset.difference ../. (intent spec plan)` as its `source`. The probe's new `.commit-probe` file is in that set. No rev, date or `self.outPath` carrier.
+   - Guard failure modes: a bound name that is not a check → exit 1 naming it; a `throw` in one check → exit 1, "does not evaluate"; restored → "1 checks, none moved", exit 0. No scratch tree or worktree left behind.
+
+   **Stop-gate hit.** The spec's remedies (placeholder rev and date) leave two non-exempt checks moving: `options-files` through the `self.outPath` carrier at `vm/configuration.nix:173`, and `cache-keys` through whole-tree content, a carrier the spec does not name. Both go to the owner as a spec amendment. Steps 2 onward wait.
+
 2. **`modules/revision.nix` (new) and `flake.nix:529-548`, `:843`.**
    - Move the body of `nixarchyRev`/`nixarchyDate` verbatim into `self: { shortRev = …; date = …; }`. Use `builtins.substring`, because there's no `lib` argument.
    - Move the offline-install comment with it, and move the `# Why:` pointer at `:530` to the new file.

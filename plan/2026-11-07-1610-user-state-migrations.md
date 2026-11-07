@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1610
 spec: spec/2026-11-07-1610-user-state-migrations.md
 coders:

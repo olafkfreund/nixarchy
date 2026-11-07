@@ -1700,18 +1700,19 @@
                 mkUserIso: this flake has no machine called "${host}".
                 It has: ${lib.concatStringsSep ", " (lib.attrNames flake.nixosConfigurations)}
               '');
-          in
-          builtins.seq machine
-            (nixpkgs.lib.nixosSystem {
+            # host reaches the launcher, which is what makes the image this machine's (#1649).
+            iso = nixpkgs.lib.nixosSystem {
               system = "x86_64-linux";
               specialArgs = {
                 inherit inputs;
-                source = {
-                  inherit flake;
-                };
+                source = { inherit flake host; };
               };
               modules = [ ./installer/cd.nix ];
-            }).config.system.build.isoImage;
+            };
+          in
+          builtins.seq machine (
+            iso.config.system.build.isoImage // { inherit (iso.config.system.build) installerLauncher; }
+          );
 
         mkMicrovm =
           {
@@ -2035,6 +2036,12 @@
             removeScript = ./pkgs/omarchy/nix-bin/omarchy-remove-dictation-superwhisper;
           };
 
+          reinstall-image = import ./tests/reinstall-image.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # nixarchy-try's lookup and probe expressions run against the REAL
           # data/apps.nix and nixpkgs, plus the binary fallback ladder, the
           # unfree seasoning, the honest footer and the try-to-keep hand-off
@@ -2249,6 +2256,11 @@
           # mode touches a user's config repository and had never executed
           # under any test.
           installer-from-repo = import ./tests/installer-from-repo.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
+          installer-disk-list = import ./tests/installer-disk-list.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
           };

@@ -37,9 +37,10 @@ VM tests run from `/mnt/data/vmtest`, never `/tmp` — `/tmp` is a 32G tmpfs and
 a VM test that runs out of room does not fail cleanly, it wedges.
 
 No check installs a personal network image end to end. `install-iso-net` boots
-the stock image; `reinstall-iso` exercises the personal-image preflights with
-stubs. `install-matrix.py` also uses the published stock image. A personal
-image must be built and installed manually to cover that path.
+the stock image; `reinstall-iso` exercises its preflights and `reinstall-image`
+checks its launcher and carried repository with stubs. `install-matrix.py` also
+uses the published stock image. A personal image must be built and installed
+manually to cover that path.
 
 `checks.coexistence` (`tests/coexistence/`, AGENTS.md §14) proves nixarchy's
 own fixtures still build and don't get silently shadowed — it cannot see
@@ -108,6 +109,8 @@ Run it when changing anything that builds a partition name, mounts by path, or
 touches `installer/disk-config.nix`. Both an online and a former offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
+
+Real USB and SD-reader ordering is unmeasured; `checks.installer-disk-list` stubs `lsblk`.
 
 ## A check that dies before its first echo tells you nothing at all
 

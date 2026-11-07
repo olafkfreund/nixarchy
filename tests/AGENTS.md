@@ -37,9 +37,10 @@ VM tests run from `/mnt/data/vmtest`, never `/tmp` — `/tmp` is a 32G tmpfs and
 a VM test that runs out of room does not fail cleanly, it wedges.
 
 No check installs a personal network image end to end. `install-iso-net` boots
-the stock image; `reinstall-iso` exercises the personal-image preflights with
-stubs. `install-matrix.py` also uses the published stock image. A personal
-image must be built and installed manually to cover that path.
+the stock image; `reinstall-iso` exercises its preflights and `reinstall-image`
+checks its launcher and carried repository with stubs. `install-matrix.py` also
+uses the published stock image. A personal image must be built and installed
+manually to cover that path.
 
 `checks.coexistence` (`tests/coexistence/`, AGENTS.md §14) proves nixarchy's
 own fixtures still build and don't get silently shadowed — it cannot see

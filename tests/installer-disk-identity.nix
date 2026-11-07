@@ -1,6 +1,6 @@
 { pkgs, installScript }:
 pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
-  for fn in disk_rows ask_device remember_disk check_disks confirm_repo_disks check_free_partitions partition_free_space format_disk read_answers install_attempts main; do
+  for fn in disk_rows ask_device remember_disk check_disks replace_missing_disk confirm_repo_disks check_free_partitions partition_free_space format_disk read_answers install_attempts main; do
     sed -n "/^$fn()/,/^}/p" ${installScript} > "$fn.sh"
     test -s "$fn.sh" || { echo "missing installer function: $fn" >&2; exit 1; }
   done

@@ -1698,18 +1698,19 @@
                 mkUserIso: this flake has no machine called "${host}".
                 It has: ${lib.concatStringsSep ", " (lib.attrNames flake.nixosConfigurations)}
               '');
-          in
-          builtins.seq machine
-            (nixpkgs.lib.nixosSystem {
+            # host reaches the launcher, which is what makes the image this machine's (#1649).
+            iso = nixpkgs.lib.nixosSystem {
               system = "x86_64-linux";
               specialArgs = {
                 inherit inputs;
-                source = {
-                  inherit flake;
-                };
+                source = { inherit flake host; };
               };
               modules = [ ./installer/cd.nix ];
-            }).config.system.build.isoImage;
+            };
+          in
+          builtins.seq machine (
+            iso.config.system.build.isoImage // { inherit (iso.config.system.build) installerLauncher; }
+          );
 
         mkMicrovm =
           {
@@ -2025,6 +2026,12 @@
           reinstall-iso = import ./tests/reinstall-iso.nix {
             pkgs = pkgsFor.${system};
             reinstallScript = ./pkgs/omarchy/nix-bin/nixarchy-reinstall-iso;
+          };
+
+          reinstall-image = import ./tests/reinstall-image.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
           };
 
           # nixarchy-try's lookup and probe expressions run against the REAL

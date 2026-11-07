@@ -27,14 +27,16 @@ vCPUs are halted (`HLT=1`) at one idle RIP: `ffffffff8d47d5cf`, and
 same offset modulo KASLR's 2 MiB alignment.
 The #1365 systemd probe then got no answer within 90 s.
 
-What that rules in and out:
+What that rules in and out, as far as two snapshots can:
 
-- **Not a spin or a livelock.** Neither would show every vCPU halted twice.
-- **Starvation doesn't fit.** A starved guest has runnable work. Every vCPU
-  of this one is idle. On 2026-11-06 the guest kernel also ran a timer about
-  60 s into the silence and printed from it, so it was getting CPU time.
-- **So the guest is waiting for a wakeup that never comes**: a device
-  completion, an IPI, or a timer that never fires. The register dump can't
+- **No continuous spin or livelock.** Either would show a vCPU running in at
+  least one sample. Two snapshots can't exclude work that ran between them.
+- **Sustained starvation doesn't fit well.** A starved guest has runnable
+  work, and every vCPU here is idle in both samples. On 2026-11-06 the guest
+  kernel also ran a timer about 60 s into the silence and printed from it,
+  so it got CPU time then. Starvation that comes and goes isn't excluded.
+- **Working hypothesis: the guest waits for a wakeup that never comes**,
+  whether a device completion, an IPI or a timer. The register dump can't
   say which, because a halted vCPU looks the same in all three cases.
 
 Two readings of these logs were wrong, and #1594 and #1604 still carry them:
@@ -57,30 +59,42 @@ variables separate them, and neither has been tested.
 
 ## Proposed outcome
 
-The next hang's log says which of timer, IPI or device it is. On
-`BootHang`, `_diagnose` in `tests/vm-cleanup.py` (`sample_monitor`, around
-line 94) also records:
+The next hang's log narrows down which of timer, IPI or device it is. The
+evidence is suggestive, not a verdict. On `BootHang`, `_diagnose` in
+`tests/vm-cleanup.py` (`sample_monitor`, around line 94) also records:
 
-1. **Interrupt-controller state, in both samples:** `info lapic <n>` for
-   each vCPU (pending IRR/ISR bits, LVT timer mode and current count),
-   `info pic` (IOAPIC redirection entries and the i8259), and `info irq`.
-   Comparing the two samples shows whether the timer is counting, whether a
-   vector is stuck pending or in service, and whether a level-triggered line
-   is waiting on an EOI that never came.
+1. **Interrupt-controller state, in both samples:**
+   - `info lapic <n>` for each vCPU: pending IRR/ISR bits and the LVT timer
+     mode.
+   - `info pic`: IOAPIC redirection entries and the i8259.
+   - `info irq`.
+
+   Comparing the two samples shows two things: whether a vector is stuck
+   pending or in service, and whether a level-triggered legacy line is
+   waiting on an EOI that never came. Two limits apply:
+   - The target uses the TSC-deadline timer (`TSC deadline timer
+     available` in its log), so the LAPIC's current count doesn't show
+     whether a deadline is armed.
+   - virtio devices interrupt through MSI-X, which bypasses the IOAPIC, so
+     `info pic` can't see a lost virtio-blk completion.
 2. **A poke, then a watch.** After the samples, the probe injects one event
    through the monitor and watches the console for about 15 s, recording
    whether the guest prints anything:
-   - `nmi`. This reaches every vCPU without going through the IOAPIC. A
-     kernel that wakes prints its unknown-NMI message.
-   - `sendkey alt-sysrq-w`. This takes the device path (i8042 → IOAPIC →
-     LAPIC). With `kernel.sysrq=16` the kernel still prints `This sysrq
-     operation is disabled`, and that line is the signal.
+   - `nmi`. This reaches every vCPU without going through the IOAPIC.
+     Linux usually prints its unknown-NMI message, but a registered handler
+     can claim the NMI silently.
+   - `sendkey alt-sysrq-w`. This takes the legacy device path (i8042 on
+     IRQ 1 → IOAPIC → LAPIC; the target's log shows the i8042). With
+     `kernel.sysrq=16` and `loglevel=7`, the kernel should still print
+     `This sysrq operation is disabled`, provided the key sequence reaches
+     the sysrq handler.
 
-   If the guest prints after the NMI but not after the key, interrupt
-   delivery works and a device interrupt went missing. If it prints after
-   neither, the vCPUs are not being woken at all. If it resumes booting,
-   that names the cause outright, and the check still fails (see
-   Constraints).
+   Output after a poke is strong evidence: the vCPUs can be woken, and a
+   guest that then resumes booting names its cause. Silence after a poke is
+   weak evidence. It is consistent with vCPUs that don't wake, but also with
+   an NMI that was handled quietly or a key that never reached sysrq. The
+   reading guide has to say so. A guest that resumes still fails the check
+   (see Constraints).
 
 The log states the outcome in one line per poke. `tests/AGENTS.md#boot-hang-detect`
 gains a reading guide for it, the same way it has one for the registers.
@@ -121,9 +135,12 @@ This doesn't fix the hang. It makes the next occurrence say where to look.
    interrupt was lost". If the NMI unsticks the guest, the key's result is
    moot, and the log should say that.
 2. **`info virtio-queue-status` for the root disk?** In-flight requests
-   with no completion would name the disk directly. It needs the device's
-   QOM path. Recommendation: add it if the spec can find the path without
-   guessing (`info virtio` lists them), and skip it otherwise.
+   with no completion would name the disk directly, and MSI-X makes this
+   the only view of it (point 1). It takes both a QOM path and a queue
+   index, and the target's virtio-blk has four queues. `info virtio` lists
+   the paths. Recommendation: query every queue of the root disk, if the spec
+   can get the path from `info virtio` without guessing. Otherwise skip it
+   and record the gap.
 3. **Symbolise the idle RIP once?** Recommendation: yes, once, in the spec,
    against that kernel's `System.map`, to confirm it is the idle loop. Not
    in the check.
@@ -132,8 +149,12 @@ This doesn't fix the hang. It makes the next occurrence say where to look.
    and has captured one hang. The reasons:
    - Changing the clock now confounds the next dump.
    - The base rate is about one hang in 25-30 install runs (2/55 by
-     #1594's count), so "no hang since" needs about 75 clean runs to mean
-     anything at 95%.
+     #1594's count), so "no hang since" needs about 81 clean runs to mean
+     anything at 95% (75 still leave a 6% chance of luck).
+   - `clocksource=` picks what the kernel reads time from, not the device
+     that fires timer interrupts (the clock event device, here the
+     TSC-deadline LAPIC timer). A clean run under `kvm-clock` therefore
+     wouldn't prove that a timer interrupt was being lost.
    - The installer guests also boot `acpi_pm` and don't hang, which weakens
      it as the sole factor.
 
@@ -142,5 +163,5 @@ This doesn't fix the hang. It makes the next occurrence say where to look.
    7.x-versus-6.18 kernel difference is a second candidate experiment with
    the same caveats, and it should not run at the same time.
 5. **Correct #1594 and #1604 now, or with the PR?** Recommendation: now,
-   with the comment text below. Both issues currently say "no dump has
+   with the correction comment drafted alongside this intent (not posted). Both issues currently say "no dump has
    arrived" or "starvation likely", and the next agent will act on that.

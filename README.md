@@ -160,7 +160,7 @@ from a terminal:
 ```
 
 **About 137,000 rows on a default install: some 25,000 NixOS options, 112,000
-packages, and 71 of the 76 apps** (the five with no nixpkgs equivalent cannot be
+packages, and 70 of the 76 apps** (the six with no nixpkgs equivalent cannot be
 indexed). The exact count is each machine's own, because the index is built from
 that system's options and package set. Three kinds,
 one picker, because you should not have to know which kind you want before you
@@ -489,7 +489,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 562 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
-| 76 apps in the selection | 51 from nixpkgs, 7 as NixOS modules, 13 built here, 5 with no equivalent |
+| 76 apps in the selection | 50 from nixpkgs, 7 as NixOS modules, 13 built here, 6 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
@@ -559,7 +559,7 @@ behind the split, and the measurements behind refusing a CPU-only model, are in
 
 Almost nothing here waits on a maintainer.
 
-**58 of the 76 apps never touch this repo.** Brave, VSCode, Signal and the rest
+**57 of the 76 apps never touch this repo.** Chrome, VSCode, Signal and the rest
 are installed as `pkgs.<name>` from **your** nixpkgs, and the five
 module-backed ones (Steam, 1Password, Tailscale, Firefox, Xbox controllers)
 come from there too — the module is NixOS', not this repo's. Your own
@@ -654,7 +654,7 @@ Most of it is not our job, and should not be:
 
 | where the app comes from | who updates it |
 |---|---|
-| nixpkgs (58 of 69 apps) | **nobody** — your own `nix flake update` |
+| nixpkgs (57 of 76 apps) | **nobody** — your own `nix flake update` |
 | pinned in this repo (2) | a nightly bot, opening a PR |
 | `zen` | upstream's own flake |
 | `retroarch` | nixpkgs, via this flake's own pin — it is a rebuild with cores |

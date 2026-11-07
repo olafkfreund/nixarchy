@@ -754,6 +754,7 @@
         # holes in it.
         nixarchy-apps = {
           once = final.callPackage ./pkgs/apps/once.nix { };
+          superwhisper = final.callPackage ./pkgs/apps/superwhisper.nix { };
 
           # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
           # simply follow nixpkgs the way most apps here do.
@@ -1251,6 +1252,7 @@
 
           inherit (pkgsFor.${system}.nixarchy-apps)
             once
+            superwhisper
             retroarch
             hey-cli
             omawrite

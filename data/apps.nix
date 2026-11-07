@@ -282,6 +282,15 @@
     unfree = true;
     arch = "lmstudio-bin";
   };
+  superwhisper = {
+    label = "Superwhisper";
+    category = "AI";
+    attr = "superwhisper";
+    ours = true;
+    unfree = true;
+    prebuilt = true;
+    note = "Installs only after you choose it in Setup > Default > Dictation. Proprietary software; enable allowUnfree to use it.";
+  };
 
   # ── Development ─────────────────────────────────────────────────────────
   php = {

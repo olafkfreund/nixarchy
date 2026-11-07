@@ -10,6 +10,7 @@ pkgs.runCommand "nixarchy-installer-answers"
       pkgs.gnused
       pkgs.diffutils
       pkgs.mkpasswd
+      pkgs.nix
     ];
   }
   ''
@@ -21,6 +22,18 @@ pkgs.runCommand "nixarchy-installer-answers"
     grep -q '^resolve_answers()' rs.sh || { echo "resolve_answers is not in install.sh any more" >&2; exit 1; }
     sed -n '/^validate_answers()/,/^}/p' ${installScript} > va.sh
     grep -q '^validate_answers()' va.sh || { echo "validate_answers is not in install.sh any more" >&2; exit 1; }
+    for fn in set_keyboard xkb_for_keymap ask_keymap; do
+      sed -n "/^$fn()/,/^}/p" ${installScript} >> va.sh
+      grep -q "^$fn()" va.sh || { echo "$fn is not in install.sh any more" >&2; exit 1; }
+    done
+    sed -n '/^subst()/,/^}/p' ${installScript} >> va.sh
+    sed -n '/^substitute_host_files()/,/^}/p' ${installScript} >> va.sh
+    for fn in password_moved_char ask_password load_repo_keymap; do
+      sed -n "/^$fn()/,/^}/p" ${installScript} >> pw.sh
+      grep -q "^$fn()" pw.sh || { echo "$fn is not in install.sh any more" >&2; exit 1; }
+    done
+    printf 'German\tde-latin1\tde\t\t\nSwedish\tfi\tse\t\t\n' > menu
+    printf 'de de pc105 - -\nru ru pc105 winkeys -\nbg bg,us pc105 ,phonetic -\n' > model-map
 
     fails=0
     failed() { echo "  FAILED  $1"; fails=$((fails + 1)); }
@@ -135,6 +148,192 @@ pkgs.runCommand "nixarchy-installer-answers"
       validate_answers
     ) > from.out 2>&1 && failed "--from accepted a plaintext password_hash"
     if grep -q 'not a crypt(3) hash' from.out; then ok "--from refuses a non-hash password_hash"; else failed "--from refusal gave: $(cat from.out)"; fi
+
+    # The answers path reads the menu first, then systemd's map, then falls back to US.
+    for item in 'de-latin1|de|' 'de|de|' 'ru|us,ru|,winkeys' 'bg|us,bg|'; do
+      IFS='|' read -r cmap want_layout want_variant <<<"$item"
+      got=$(
+        . ./va.sh
+        UI_KEYMAPS=$PWD/menu KBD_MODEL_MAP=$PWD/model-map NONLATIN='ru bg'
+        xkb=$(xkb_for_keymap "$cmap") || exit 2
+        set_keyboard "$xkb"
+        printf '%s|%s' "$xkb_layout" "$xkb_variant"
+      )
+      if [ "$got" = "$want_layout|$want_variant" ]; then ok "$cmap maps to $got"; else failed "$cmap mapped to $got"; fi
+    done
+
+    # Exercise the validation path, including its summary and unreadable-table refusal.
+    answers_keyboard() (
+      . ./va.sh
+      UI_KEYMAPS=$1 KBD_MODEL_MAP=$PWD/model-map NONLATIN='ru bg'
+      function [() { if builtin [ "$1" = ! ] && builtin [ "$2" = -b ]; then return 1; fi; builtin [ "$@"; }
+      boot_medium() { :; }
+      lsblk() { echo disk; }
+      disk_under_floor() { return 1; }
+      validate_hostname() { :; }
+      validate_username() { :; }
+      validate_timezone() { :; }
+      validate_keymap() { :; }
+      from_host_exists=false device=/dev/test disk_mode=whole encrypt=no
+      hostname=box username=user password_hash='$6$test$hash' recovery_hash=
+      timezone=UTC keymap=nosuch build_store_choice=auto
+      validate_answers
+      printf 'layout=%s variant=%s\n' "$xkb_layout" "$xkb_variant"
+    )
+    if answers_keyboard "$PWD/menu" > fallback.out 2>&1 &&
+      grep -qF 'Desktop keyboard: us (no XKB equivalent of nosuch)' fallback.out &&
+      grep -qF 'layout=us variant=' fallback.out; then
+      ok "unknown keymap falls back to US and says so"
+    else failed "unknown keymap fallback: $(cat fallback.out)"; fi
+    if answers_keyboard "$PWD/missing-menu" > missing.out 2>&1; then
+      failed "unreadable keymap table was accepted"
+    elif grep -qF 'cannot read the keymap tables' missing.out; then
+      ok "unreadable keymap table is refused"
+    else failed "unreadable table refused for the wrong reason: $(cat missing.out)"; fi
+
+    (
+      . ./va.sh
+      UI_KEYMAPS=$PWD/menu
+      ui_screen() { :; }
+      ui_widget_height() { echo 8; }
+      ui_gum_pad() { echo 0; }
+      gum() { if [ "$1" = choose ]; then echo Swedish; else return 0; fi; }
+      loadkeys() { :; }
+      ask_keymap
+      printf '%s|%s' "$keymap" "$xkb_layout"
+    ) > swedish.out
+    if [ "$(cat swedish.out)" = 'fi|se' ]; then ok "Swedish menu row supplies se"; else failed "Swedish menu gave $(cat swedish.out)"; fi
+
+    (
+      . ./va.sh
+      UI_KEYMAPS=$PWD/menu
+      ui_screen() { :; }
+      ui_widget_height() { echo 8; }
+      ui_gum_pad() { echo 0; }
+      gum() {
+        if [ "$1" = choose ]; then echo Swedish >> choices; echo Swedish
+        else echo confirm >> choices; [ "$(grep -c '^confirm$' choices)" -eq 2 ]; fi
+      }
+      loadkeys() { return 1; }
+      ask_keymap
+    ) > /dev/null
+    if [ "$(grep -c '^Swedish$' choices)" -eq 2 ] && [ "$(grep -c '^confirm$' choices)" -eq 2 ]; then
+      ok "failed loadkeys retries after a declined confirmation"
+    else failed "failed loadkeys did not repeat the choice and confirmation"; fi
+
+    (
+      . ./va.sh
+      work=$PWD/render hostdir=$PWD/render/hosts/test
+      mkdir -p "$hostdir"
+      cp ${../installer/template/host/configuration.nix} "$hostdir/configuration.nix"
+      chmod u+w "$hostdir/configuration.nix"
+      export NIX_STATE_DIR=$PWD/nix-state NIX_LOG_DIR=$PWD/nix-log
+      hostname=test username=user device=/dev/test disk_mode=whole timezone=UTC
+      keymap=de-latin1 xkb_layout=de xkb_variant= encrypt=false recovery_hash=
+      substitute_host_files
+      # && and not separate lines: this subshell is left of &&, so set -e does not apply in it.
+      nix-instantiate --parse "$hostdir/configuration.nix" > /dev/null &&
+        grep -qF 'layout = "de";' "$hostdir/configuration.nix" &&
+        grep -qF 'variant = "";' "$hostdir/configuration.nix"
+    ) && ok "template writes the selected XKB layout and variant" || failed "template lost an XKB substitution"
+
+    password_case() { # label, moved, dead, first answer, accepted answer, refusal count
+      local label=$1 moved=$2 dead=$3 first=$4 accepted=$5 refusals=$6
+      printf '%s\n' "$first" "$first" > pw-input
+      if [ "$refusals" -ne 0 ]; then printf '%s\n' "$accepted" "$accepted" >> pw-input; fi
+      rm -f gum-argv mk-argv mk-stdin
+      (
+        . ./pw.sh
+        keymap_moved=$moved keymap_dead=$dead
+        printf '0\n' > gum-count
+        gum() {
+          printf '%s\n' "$*" >> gum-argv
+          gum_n=$(cat gum-count)
+          gum_n=$((gum_n + 1))
+          printf '%s\n' "$gum_n" > gum-count
+          # Past the fixture's answers, a fixed one: an unexpected refusal must fail the case, not loop.
+          answer=$(sed -n "''${gum_n}p" pw-input)
+          printf '%s\n' "''${answer:-zz}"
+        }
+        ui_gum_pad() { echo 0; }
+        ui_left() { printf '%s\n' "$*"; }
+        mkpasswd() { printf '%s\n' "$*" >> mk-argv; cat > mk-stdin; echo HASHED; }
+        ask_password
+        [ "$password_hash" = HASHED ] && [ "$luks_passphrase" = "$accepted" ]
+      ) > pw.out 2>&1 || { failed "$label did not accept the safe password"; return; }
+      if [ "$(grep -c 'types differently' pw.out || true)" -eq "$refusals" ] &&
+        [ "$(wc -l < gum-argv)" -eq $(((refusals + 1) * 2)) ] &&
+        [ "$(wc -l < mk-argv)" -eq 1 ] &&
+        [ "$(cat mk-stdin)" = "$accepted" ] &&
+        ! grep -qF "$first" gum-argv && ! grep -qF "$first" mk-argv &&
+        ! grep -qF "$accepted" gum-argv && ! grep -qF "$accepted" mk-argv &&
+        ! grep -qF 'types differently' gum-argv mk-argv; then
+        ok "$label password handling and argv"
+      else failed "$label password handling or argv"; fi
+    }
+    norwegian=$(grep -F $'\tno-latin1\t' ${../installer/brand/keymaps.txt} | cut -f4)
+    latvian=$(grep -F $'\tlv\t' ${../installer/brand/keymaps.txt} | cut -f5)
+    icelandic=$(grep -F $'\tis-latin1\t' ${../installer/brand/keymaps.txt} | cut -f4)
+    password_case 'Norwegian moved characters' "$norwegian" "" 'a~' ab 1
+    password_case 'Latvian dead keys' "" "$latvian" 'á' ab 1
+    password_case 'Icelandic multibyte unaffected' "$icelandic" "" 'ä' 'ä' 0
+    # ° is C2 B0 and ± is C2 B1: only a byte-wise match refuses this one.
+    password_case 'Icelandic shares a byte with a moved character' "$icelandic" "" '±' '±' 0
+    password_case 'Icelandic moved character' "$icelandic" "" '°' ab 1
+    printable=""
+    for ((i = 32; i <= 126; i++)); do
+      printf -v octal '\\%03o' "$i"
+      printf -v c '%b' "$octal"
+      printable+=$c
+    done
+    password_case 'US printable password' "" "" "$printable" "$printable" 0
+
+    mkdir -p repo-host
+    printf '  console.keyMap = "de-latin1";\n' > repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { [ "$1" = de-latin1 ]; }
+      loadkeys() { printf '%s\n' "$1" >> loaded; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-keymap.out
+    if [ "$(cat loaded)" = de-latin1 ] && grep -qF 'disk-prompt layout, de-latin1' repo-keymap.out; then
+      ok "repository keymap is loaded and named"
+    else failed "repository keymap was not loaded and named"; fi
+    rm -f loaded repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { return 1; }
+      loadkeys() { echo called >> loaded; return 1; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-missing.out
+    printf '  console.keyMap = "bad-map";\n' > repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { return 1; }
+      loadkeys() { echo called >> loaded; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-invalid.out
+    printf '  console.keyMap = "de-latin1";\n' > repo-host/configuration.nix
+    (
+      . ./pw.sh
+      hostdir=$PWD/repo-host
+      validate_keymap() { :; }
+      loadkeys() { return 1; }
+      ui_left() { printf '%s\n' "$*"; }
+      load_repo_keymap
+    ) > repo-load-failed.out
+    if [ ! -e loaded ] &&
+      grep -qF 'Typing with a US keyboard' repo-missing.out &&
+      grep -qF 'Typing with a US keyboard' repo-invalid.out &&
+      grep -qF 'Typing with a US keyboard' repo-load-failed.out; then
+      ok "missing, invalid and unloadable repository keymaps warn"
+    else failed "repository keymap warning or validation"; fi
 
     # A read that refuses the file must not leave the fetched copy behind.
     rm -f fetched-path

@@ -55,6 +55,12 @@ Forty-three layouts, English variants first. Not the several hundred files under
 `share/keymaps` — `mod-dh-ansi-us-fatz-wide` is not a thing to put in front of
 someone who has just booted a disk.
 
+Your choice sets the text console, the disk prompt, the login screen and the
+desktop. Non-Latin layouts start on US so your password still types, with
+**Left Alt + Right Alt** to switch. On layouts where a key types one character
+in the installer and another at the login screen, the password prompt refuses
+that character so the password you set here works at every prompt.
+
 ### 2. Your account
 
 ![Username, then password twice](../img/installer/step-02-account.png)

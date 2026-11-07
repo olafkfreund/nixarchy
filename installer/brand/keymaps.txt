@@ -1,43 +1,43 @@
-English (US)	us
-English (US, Dvorak)	dvorak
-English (US, Colemak)	colemak
-English (US, International)	us-acentos
-English (UK)	uk
-Belarusian	by
-Belgian	be-latin1
-Bulgarian	bg_bds-utf8
-Croatian	croat
-Czech	cz-qwertz
-Danish	dk-latin1
-Dutch	nl
-Estonian	et
-Finnish	fi
-French	fr
-French (Canada)	cf
-French (Switzerland)	fr_CH-latin1
-Georgian	ge
-German	de-latin1
-German (Switzerland)	de_CH-latin1
-Greek	gr
-Hebrew	il-heb
-Hungarian	hu101
-Icelandic	is-latin1
-Italian	it
-Japanese	jp106
-Latvian	lv
-Lithuanian	lt
-Macedonian	mk-utf
-Norwegian	no-latin1
-Polish	pl
-Portuguese	pt-latin1
-Portuguese (Brazil)	br-abnt2
-Romanian	ro
-Russian	ru
-Serbian	sr-cy
-Slovak	sk-qwerty
-Slovenian	slovene
-Spanish	es
-Spanish (Latin America)	la-latin1
-Swedish	se-lat6
-Turkish	trq
-Ukrainian	ua-utf
+English (US)	us	us
+English (US, Dvorak)	dvorak	us:dvorak
+English (US, Colemak)	colemak	us:colemak
+English (US, International)	us-acentos	us:intl	<>Çç
+English (UK)	uk	gb
+Belarusian	by	us,by
+Belgian	be-latin1	be
+Bulgarian	bg_bds-utf8	us,bg
+Croatian	croat	hr	¨¸
+Czech	cz-us-qwertz	cz	;\`|	dead
+Danish	dk-latin1	dk
+Dutch	nl	nl	~
+Estonian	et	ee	ÂÊÎÔÛâêîôû€
+Finnish	fi	fi
+French	fr-latin1	fr	²
+French (Canada)	cf	ca
+French (Switzerland)	fr_CH-latin1	ch:fr
+Georgian	ge	us,ge
+German	de-latin1	de	¦¨´¸ÇÐÑ×çðñ
+German (Switzerland)	de_CH-latin1	ch
+Greek	gr	us,gr
+Hebrew	il-heb	us,il
+Hungarian	hu101	hu:qwerty	Íí
+Icelandic	is-latin1	is	^°
+Italian	it	it
+Japanese	jp106	jp
+Latvian	lv	lv:apostrophe	'	dead
+Lithuanian	lt	lt:us
+Macedonian	mk-utf	us,mk
+Norwegian	no-latin1	no	$^`~
+Polish	pl	pl
+Portuguese	pt-latin1	pt
+Portuguese (Brazil)	br-abnt2	br
+Romanian	ro	ro	<>
+Russian	ru	us,ru
+Serbian	sr-cy	us,rs
+Slovak	sk-qwerty	sk:qwerty	!"#$%&'()*+-/0123456789:;<=>?@[\]^_`{|}~
+Slovenian	slovene	si
+Spanish	es	es
+Spanish (Latin America)	la-latin1	latam
+Swedish	fi	se
+Turkish	trq	tr
+Ukrainian	ua-utf	us,ua

@@ -180,3 +180,11 @@ exists**. A wireless keyboard that pairs after the desktop is up cannot type
 into the initrd, so the machine sits there waiting for a key you have no way to
 press. Upstream's manual carries the same warning because people hit it. Use a
 wired keyboard for the first boot, or do not encrypt.
+
+## Machines installed earlier: keyboard layout
+
+**The installer's keyboard choice now reaches the login screen and the desktop.** A machine installed before this release has it on the text console only. To fix one, add to `configuration.nix`, using your layout, and rebuild: `services.xserver.xkb = { layout = "de"; variant = ""; };` Non-Latin layouts use `layout = "us,ru";`, so Left Alt + Right Alt switches and your password still types.
+
+**The login screen and lock screen change at that rebuild, and your password was set under the old layout.** Before rebuilding, with `passwd`, choose one whose keys type the same on both layouts, for example letters that do not move. Afterwards, keep your session open and test it on a text console with Ctrl+Alt+F3, then at the login screen. The disk prompt does not change, because `console.keyMap` does not. Keyboard Layouts and `~/.config/hypr/input.lua` still win in the session.
+
+Four menu entries changed: French, Swedish and Czech use another console map, Lithuanian starts on `lt(us)`.

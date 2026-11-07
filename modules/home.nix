@@ -1413,6 +1413,17 @@ in
 
     # Why: modules/AGENTS.md#the-first-run-theme-above-is-applied-headless-whic
     systemd.user.services = {
+      # The unit exists only after the consent script enables the app (#1613).
+      superwhisper = lib.mkIf (appEnabled "superwhisper") {
+        Unit = {
+          Description = "Superwhisper dictation";
+          After = [ "graphical-session.target" ];
+          PartOf = [ "graphical-session.target" ];
+        };
+        Service.ExecStart = "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.superwhisper}/bin/superwhisper daemon";
+        Install.WantedBy = [ "graphical-session.target" ];
+      };
+
       omarchy-theme-gnome = {
         Unit = {
           Description = "Apply the current Omarchy theme's light/dark mode to GTK";
@@ -1542,6 +1553,22 @@ in
         fi
       ''
     );
+
+    home.activation.nixarchyDictationSelection =
+      lib.mkIf (!(osConfig.programs.nixarchy.allowUnfree or true))
+        (
+          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            selection="${config.xdg.configHome}/omarchy/defaults/dictation"
+            if [ -f "$selection" ] && [ "$(cat "$selection")" = superwhisper ] &&
+              ! command -v superwhisper >/dev/null 2>&1; then
+              if [[ -v DRY_RUN ]]; then
+                echo "nixarchy: would switch missing Superwhisper selection to Voxtype"
+              else
+                printf '%s\n' voxtype > "$selection"
+              fi
+            fi
+          ''
+        );
 
     # #1625: removes upstream's exact generated mise launchers, which can only fail now,
     # and records what mise left. Nothing else is deleted.

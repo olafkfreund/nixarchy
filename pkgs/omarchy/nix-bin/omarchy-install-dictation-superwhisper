@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# omarchy:summary=Choose and install Superwhisper dictation
+# omarchy:args=[--background]
+
+set -euo pipefail
+
+background=false
+if [[ ${1:-} == --background ]]; then background=true; shift; fi
+if (($#)); then
+  echo 'Usage: omarchy install dictation superwhisper [--background]' >&2
+  exit 1
+fi
+
+flake=${NIXARCHY_FLAKE:-/etc/nixos}
+host=$(hostname)
+allowed=$(nix eval --json "$flake#nixosConfigurations.$host.config.programs.nixarchy.allowUnfree") || {
+  echo 'Could not check this machine’s unfree setting; no changes made.' >&2
+  exit 1
+}
+if [[ $allowed != true ]]; then
+  echo 'Superwhisper needs programs.nixarchy.allowUnfree = true in your flake. Set it, rebuild, then choose Superwhisper again.' >&2
+  exit 0
+fi
+
+cat <<'NOTICE'
+Superwhisper is proprietary software. Cloud sends audio, transcripts and any
+needed prompt or context for processing; Offline runs models on this device.
+The vendor says cloud content is processed transiently and not retained.
+The app may contact the vendor on startup even before a recording. Crash reports
+will be turned off before startup. Read the vendor's terms and privacy policy:
+https://superwhisper.com/terms
+https://superwhisper.com/privacy
+NOTICE
+mode=$(gum choose 'Cloud' 'Offline') || exit 0
+gum confirm "Install Superwhisper and use $mode?" || exit 0
+
+preferences=${XDG_CONFIG_HOME:-$HOME/.config}/superwhisper/preferences.json
+mkdir -p "${preferences%/*}"
+tmp=$(mktemp "$preferences.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+if [[ -f $preferences ]]; then
+  jq '.errorLoggingEnabled = false' "$preferences" > "$tmp"
+else
+  jq -n '{errorLoggingEnabled: false}' > "$tmp"
+fi
+mv "$tmp" "$preferences"
+
+nixarchy-app-enable superwhisper
+nixarchy-apply --yes --no-preview
+systemctl --user start superwhisper.service
+superwhisper models select "${mode,,}" >/dev/null
+omarchy-dictation-use superwhisper
+omarchy-restart-hyprctl
+
+shortcuts=$(superwhisper shortcuts show) || exit 1
+if [[ $(jq -r '.shortcuts.hold' <<< "$shortcuts") == RightAlt ]]; then
+  if [[ -z $(jq -r '.shortcuts.toggle' <<< "$shortcuts") ]]; then
+    superwhisper shortcuts set hold RightSuper >/dev/null
+  else
+    superwhisper shortcuts set hold none >/dev/null
+  fi
+fi
+superwhisper shortcuts set toggle Ctrl+Alt+Space >/dev/null
+superwhisper shortcuts set hold none >/dev/null
+if [[ $background == false ]]; then
+  omarchy-notification-send -g  "$(omarchy-i18n dictation.superwhisperReady)" "$(omarchy-i18n dictation.hint)" -t 10000
+  superwhisper settings
+fi

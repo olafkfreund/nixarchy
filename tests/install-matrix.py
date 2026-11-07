@@ -50,12 +50,18 @@ directory:
   this class of bug and never will. No check installs a personal network
   image end to end; this matrix also uses the stock published image.
 
+  Personal reinstall image (#1649): build one from a configured host, boot it,
+  install onto a scratch disk, and boot the result. This full-install cell is
+  still manual; the stubbed reinstall-image check stops before formatting.
+
   Input methods (#1614) split the same way: `checks.input-methods` and
   `checks.session` cover the five fcitx5 engines (`mozc`, `hangul`, `pinyin`,
   `chewing`, `cangjie5`) and terminal composition over virtual keys, while
   physical 한/영 and 全角/半角 keys and composition in real GTK/Qt/browser
   apps cannot be reached by QMP `send-key` and stay with `pkgs/verify.sh` and
   a human.
+
+  Disk list (#1653): real USB and SD-reader ordering is unmeasured; `checks.installer-disk-list` stubs `lsblk`.
 
   Factory reset (#1621) is covered on a real btrfs guest by
   `checks.factory-reset` (every staging, exchange, rollback, repair and

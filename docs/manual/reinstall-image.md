@@ -4,13 +4,6 @@ title: A reinstall image of this machine
 
 # A reinstall image of this machine
 
-**Not available right now.** The command runs its checks and then refuses to
-build, because the image would install a stock system rather than this machine
-([#1649](https://github.com/olafkfreund/nixarchy/issues/1649)). To get a machine
-back today, boot the published network image with `nixarchy.from=<your config
-repo> nixarchy.host=<name>` on its kernel command line. The rest of this page
-describes the command once that is fixed.
-
 `nixarchy reinstall iso` builds a bootable image **from this machine's own
 configuration**. Boot it on new hardware and you get this system back: the same
 packages, the same desktop, the same services, the same settings.
@@ -105,19 +98,32 @@ Boot the stick. There is no boot menu and no login prompt — the installer is
 what comes up, the same one the [normal ISO](getting-started) runs, and it asks
 the same questions.
 
+It asks you to consent to running the configuration's Nix code, connect to a
+network, set your password and recovery password, and confirm the disks it will
+erase. It already knows the machine name from the image, so it does not ask for
+a username.
+
 The difference is what it installs. A normal ISO installs a fresh nixarchy. This
 one installs **the system that built it**. The target needs a network to fetch
 that system from caches. A package no cache holds is compiled during the
 install, or the install fails.
 
-After it finishes, the machine has your system and `/etc/nixos` is your
-repository. What it does not have is your files — bring those back with
+After it finishes, the machine has your system. `/etc/nixos` starts as a git
+repository with one commit of the configuration the image was built from: no
+earlier history and no remote. Run `nixarchy config repo` to connect it to your
+remote. What it does not have is your files — bring those back with
 [`nixarchy home backup restore`](dotfiles) and your own backups.
 
 ## Using it: a machine that already has something on it
 
 **The installer erases the disk you point it at.** There is no in-place upgrade
 here and no merge with what is already there.
+
+If the saved disk is missing on the new machine, an interactive install can
+offer another disk when the host configuration names one whole disk by a literal
+path. You still see and confirm the disk before it is erased. An answers-file
+install, a free-space layout, or a host with several disks keeps the saved
+layout and refuses a missing disk; edit the host configuration before retrying.
 
 If the target has something you want, you have two honest options:
 

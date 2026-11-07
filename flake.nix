@@ -2393,6 +2393,15 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
+          user-migrations = import ./tests/user-migrations.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
+          user-migrations-ledger = import ./tests/user-migrations-ledger.nix {
+            pkgs = pkgsFor.${system};
+            omarchySrc = omarchy;
+          };
           # #1381: no shipped plugin reads Color unqualified (Qt 6.12 shadows it). The
           # defaults come from defaultPluginSet; nixi and voice install through their own
           # Home Manager modules (modules/home.nix), so they are named here.

@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fixture_a=$FIXTURE_A
+fixture_c=$FIXTURE_C
+script=$MIGRATE_SCRIPT
+oracle=$ORACLE_SOURCE
+work=$PWD/cases
+mkdir -p "$work"
+
+fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+marker_count() {
+  local state=$HOME/.local/state/omarchy/migrations
+  if [[ -d $state ]]; then
+    find "$state" -maxdepth 1 -name '*.sh' | wc -l
+  else
+    printf '0\n'
+  fi
+}
+assert_markers() { [[ $(marker_count) -eq $1 ]] || fail "$case: expected $1 markers, found $(marker_count)"; }
+normalise() {
+  jq -S '
+    .bar.layout as $layout
+    | .bar.layout = (["left","centerBegin","center","centerEnd","right","tray"] | map({key:., value:($layout[.] // [])}) | from_entries)
+    | .plugins //= [] | del(.version, .bar.centerAnchor)
+  ' "$1" > "$2"
+}
+setup() {
+  local name=$1 fixture=$2
+  export HOME="$work/$name"
+  export XDG_CONFIG_HOME="$HOME/.config" XDG_STATE_HOME="$HOME/.local/state"
+  export XDG_DATA_HOME="$HOME/.local/share" XDG_CACHE_HOME="$HOME/.cache"
+  export OMARCHY_MIGRATION_STATE="$HOME/.local/state/omarchy/migrations"
+  mkdir -p "$XDG_CONFIG_HOME/omarchy" "$XDG_STATE_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
+  cp "$fixture" "$XDG_CONFIG_HOME/omarchy/shell.json"
+  : > "$HOME/ipc.log"
+  : > "$HOME/journal.log"
+}
+run_port() { bash "$script"; }
+run_oracle() {
+  bash "$oracle/migrations/1790042972.sh"
+  bash "$oracle/migrations/1791968925.sh"
+  bash "$oracle/migrations/1791969355.sh"
+}
+compare_oracle() {
+  local fixture=$1
+  normalise "$XDG_CONFIG_HOME/omarchy/shell.json" "$work/$case.actual.json"
+  setup "$case.oracle" "$fixture"
+  run_oracle
+  normalise "$XDG_CONFIG_HOME/omarchy/shell.json" "$work/$case.oracle.json"
+  diff -u "$work/$case.oracle.json" "$work/$case.actual.json" || fail "$case differs from upstream"
+}
+case_a() {
+  case=a
+  setup a "$fixture_a"
+  run_port
+  assert_markers 3
+  jq -e '.bar.layout.centerEnd[0].id == "omarchy.elsewhen"' "$XDG_CONFIG_HOME/omarchy/shell.json" >/dev/null || fail 'a: Elsewhen is not first in centerEnd'
+  compare_oracle "$fixture_a"
+  cp "$work/a.actual.json" "$out"
+}
+
+case_a
+[[ ${1:-} == expected ]] && exit 0
+cmp "$out" "$EXPECTED_A" || fail 'a: expectedA differs from check result'
+
+case=b
+jq '.bar.layout.centerBegin = [{id:"local.before"}] | .bar.layout.centerEnd = [{id:"local.after"}] | .bar.layout.center = [{id:"local.one"}] + .bar.layout.center + [{id:"local.two"}] | .bar.layout.right = [{id:"local.right"}] + .bar.layout.right' "$fixture_a" > "$work/b.fixture.json"
+setup b "$work/b.fixture.json"
+run_port
+compare_oracle "$work/b.fixture.json"
+
+case=c
+setup c "$fixture_c"
+run_port
+cmp "$fixture_c" "$XDG_CONFIG_HOME/omarchy/shell.json" || fail 'c: new seed changed'
+[[ ! -s $HOME/ipc.log && ! -d $OMARCHY_MIGRATION_STATE ]] || fail 'c: IPC or markers on new seed'
+
+case=d
+jq '.bar.id = "local.neon-bar"' "$fixture_a" > "$work/d.fixture.json"
+setup d "$work/d.fixture.json"
+run_port
+assert_markers 1
+[[ $(grep -cE 'putBarWidget|moveBarWidget' "$HOME/ipc.log" || true) -eq 1 ]] || fail 'd: unexpected layout call'
+grep 'putBarWidget omarchy.elsewhen' "$HOME/ipc.log" >/dev/null || fail 'd: Elsewhen put missing'
+compare_oracle "$work/d.fixture.json"
+
+case=e
+setup e "$fixture_a"
+run_port
+cfg=$XDG_CONFIG_HOME/omarchy/shell.json
+jq '.bar.layout |= with_entries(.value |= map(select(.id != "omarchy.elsewhen")))' "$cfg" > "$cfg.tmp"
+mv "$cfg.tmp" "$cfg"
+: > "$HOME/ipc.log"
+run_port
+jq -e '[.bar.layout[]?[]? | .id] | index("omarchy.elsewhen") == null' "$cfg" >/dev/null || fail 'e: Elsewhen restored despite marker'
+[[ ! -s $HOME/ipc.log ]] || fail 'e: second run made IPC calls'
+
+case=f
+setup f "$fixture_a"
+STUB_NOWRITE=1 run_port
+assert_markers 0
+[[ -s $HOME/journal.log ]] || fail 'f: missing journal line'
+run_port
+assert_markers 3
+normalise "$XDG_CONFIG_HOME/omarchy/shell.json" "$work/f.actual.json"
+diff -u "$EXPECTED_A" "$work/f.actual.json" || fail 'f: recovery differs from a'
+
+case=g
+jq '.bar.layout.right += [.bar.layout.center[1]] | .bar.layout.center |= del(.[1])' "$fixture_a" > "$work/g.fixture.json"
+setup g "$work/g.fixture.json"
+run_port
+assert_markers 3
+[[ $(grep -c 'moveBarWidget' "$HOME/ipc.log" || true) -eq 0 ]] || fail 'g: moved with missing anchor'
+compare_oracle "$work/g.fixture.json"
+
+case=h
+jq '.bar.layout.right = [{id:"omarchy.tray",t:1},{id:"local.x"},{id:"omarchy.tray",t:2}]' "$fixture_a" > "$work/h.fixture.json"
+setup h "$work/h.fixture.json"
+run_port
+[[ -e $OMARCHY_MIGRATION_STATE/1791968925.sh ]] || fail 'h: tray marker missing'
+jq -e '.bar.layout.right == [{id:"omarchy.tray",t:2},{id:"omarchy.tray",t:1},{id:"local.x"}]' "$XDG_CONFIG_HOME/omarchy/shell.json" >/dev/null || fail 'h: duplicate tray order wrong'
+
+case=drift
+setup drift "$fixture_a"
+STUB_DRIFT=1 run_port
+[[ ! -e $OMARCHY_MIGRATION_STATE/1791969355.sh ]] || fail 'drift: split marker despite refused move'
+grep 'widget at center\[0\] is not omarchy.indicators' "$HOME/journal.log" >/dev/null || fail 'drift: refusal not observed'
+printf '%s\n' 'user migrations: all cases passed'

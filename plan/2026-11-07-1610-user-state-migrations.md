@@ -232,11 +232,18 @@ build; the session runs every check command below after their edit.
    |---|---|---|
    | ported | `1790042972`, `1791969355` | `omarchy-migrate-user` |
    | partial | `1791968925` | order ported; duplicate trays kept (no IPC delete; no seed had two) |
-   | not-needed (mise) | `1786719479` `1786967403` `1787215824` `1787342993` `1787573629` `1788941927` `1789310715` `1790457067` `1790863209` `1791382872` `1792343225` | no mise here; `omarchy-mise-install` refuses (#1625) |
-   | not-needed (packages/system) | `1789764927` `1790539857` `1790542069` `1791345484` `1791708587` `1792345511` `1791479273` `1793667581` `1788261467` `1791769486` | gated on `omarchy-pkg-*`, pacman or `/var/lib`; apps and system state come from the flake. `1791345484`: handled, `pkgs/AGENTS.md` (Disktree). `1788261467`: portal set by `modules/nixos.nix`. `1791769486`: no nixarchy release shipped the USB approval units |
+   | not-needed (mise) | `1786967403` `1787215824` `1787342993` `1787573629` `1788941927` `1789310715` `1790457067` `1790863209` `1791382872` `1792343225` | no mise here; `omarchy-mise-install` refuses (#1625) |
+   | not-needed (packages/system) | `1789764927` `1790539857` `1790542069` `1791345484` `1791708587` `1792345511` `1793667581` `1788261467` `1791769486` | gated on `omarchy-pkg-*`, pacman or `/var/lib`; apps and system state come from the flake. `1791345484`: handled, `pkgs/AGENTS.md` (Disktree). `1788261467`: portal set by `modules/nixos.nix`. `1791769486`: no nixarchy release shipped the USB approval units |
    | not-needed (other) | `1790528634` | no seed ever had `omacom.elsewhen` |
    | not-needed (other) | `1793315076` | Apple Silicon `~/.bashrc`; bash setup comes from `/etc/bashrc` (`modules/nixos.nix:1236`) |
-   | declined | `1788129995` `1791723398` `1787679775` `1788281348` `1791123731` `1791376887` `1791470456` `1791676907` `1791696584` `1791698594` `1791705142` `1791722809` `1791875754` `1792259038` `1792474908` `1792648436` `1793477875` `1793565796` | real user-file edit that may apply; needs its own fixture first (§2, §3). Follow-up drafted per group (step 8) |
+   | declined | `1786719479` `1791479273` `1788129995` `1791723398` `1787679775` `1788281348` `1791123731` `1791376887` `1791470456` `1791676907` `1791696584` `1791698594` `1791705142` `1791722809` `1791875754` `1792259038` `1792474908` `1792648436` `1793477875` `1793565796` | real user-file edit that may apply; needs its own fixture first (§2, §3). Follow-up drafted per group (step 8) |
+
+   **Deviation (implementation):** the not-needed audit moved two rows to
+   `declined`. `1786719479` also rewrites `defaults/agent` from `gemini` to
+   `agy` and links skills under `~/.gemini`, beyond its mise install.
+   `1791479273` gates on `omarchy-pkg-present voxtype-bin`, which on nixarchy
+   tests `command -v voxtype` and so succeeds when dictation is on. Counts are
+   now 9 mise, 9 packages/system, 20 declined.
 
    The implementer checks each `not-needed` reason against the migration
    text and the code it names; a reason that does not hold becomes
@@ -412,7 +419,8 @@ build; the session runs every check command below after their edit.
      `1791470456`, `1791705142`, `1792259038`
    - Web apps: `1791696584`, `1791875754`
    - Browser flags: `1791376887`, `1792474908`
-   - Input and dictation: `1791676907`, `1793477875`
+   - Input and dictation: `1791676907`, `1793477875`, `1791479273`
+   - Default coding agent (Gemini to Antigravity): `1786719479`
    - herdr: `1791722809`
    - OpenCode: `1793565796`
    - Notifications: `1792648436`

@@ -389,8 +389,12 @@
   };
   "omarchy-migrate" = {
     class = "replace";
-    reason = "Upstream's 86 migration scripts use sudo, write under /usr and call pacman, and with no state directory every one counts as pending. --pending reports nothing to do; a bare run is told why.";
+    reason = "Upstream's migration scripts use sudo, write under /usr and call pacman, and with no state directory every one counts as pending. --pending reports nothing to do; a bare run is told why. The user-file ones are decided in data/user-migrations.nix, and those that apply are ported into omarchy-migrate-user (#1610).";
     pacman = "Ours, in pkgs/omarchy/nix-bin. The pacman line is heredoc prose or upstream code left dead after an early exit -- neither of which comment-stripping can see.";
+  };
+  "omarchy-migrate-user" = {
+    class = "new";
+    reason = "Not in upstream. Run once per user from a post-boot hook: ports the bar's three 4.5 migrations through the shell's IPC on a v4.0.x seed, with upstream's own migration markers (#1610).";
   };
   "omarchy-mise-default-tools" = {
     class = "replace";

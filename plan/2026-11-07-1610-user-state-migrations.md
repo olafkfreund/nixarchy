@@ -312,6 +312,13 @@ build; the session runs every check command below after their edit.
    Every call is appended to `$HOME/ipc.log`. A `STUB_NOWRITE=1` mode answers
    `ok` and writes nothing (fixture f).
 
+   **Deviation (review):** the stubs reach `PATH` through a `runCommand` that
+   runs `patchShebangs`, and `OMARCHY_PATH` is set to
+   `${omarchy}/share/omarchy`. The sandbox has no `/usr/bin/env`, so an
+   unpatched stub never executed. `ping` never answered and the port exited 0
+   with no markers ("a: expected 3 markers, found 0"). The oracle's
+   `omarchy-shell-config` also reads `OMARCHY_PATH` under `set -u`.
+
    **Oracle:** upstream's `migrations/1790042972.sh`, `1791968925.sh`,
    `1791969355.sh` from `omarchySrc`, run in that order with `bash` on a copy
    of the same fixture, with the same stub and the vendored

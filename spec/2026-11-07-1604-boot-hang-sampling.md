@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1604
 intent: intent/2026-11-07-1604-boot-hang-sampling.md
 ---

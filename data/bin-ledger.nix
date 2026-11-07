@@ -291,6 +291,11 @@
     class = "patch";
     reason = "It registers the native-messaging host at $OMARCHY_PATH/bin, a store path that is garbage-collected after an Omarchy update, so the registered host dangles. Registers /run/current-system/sw/bin instead (#1491).";
   };
+  "omarchy-install-dictation-superwhisper" = {
+    class = "replace";
+    reason = "Shows vendor terms and asks before enabling the unfree app; writes crash-report preferences before the first daemon start (#1613).";
+    allow = "systemctl-user";
+  };
   "omarchy-install-dev-env" = {
     class = "replace";
     reason = "Upstream installs languages and frameworks globally through mise and pacman. nixarchy ships no mise, so this refuses and names Install > Development and nixarchy dev init (#1625).";
@@ -799,8 +804,8 @@
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-superwhisper" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Disables superwhisper.service, a user unit installed under the user's own tree, and asks whether fcitx5 is running.";
+    class = "replace";
+    reason = "Disables the declarative app and clears only its selected backend after a successful rebuild (#1613).";
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-voxtype" = {

@@ -719,7 +719,7 @@
     skip = "Not installed by default.";
   };
   "superwhisper-bin" = {
-    skip = "Unfree binary, not packaged here.";
+    skip = "Packaged here, but arrives only when the person chooses it.";
   };
   "system-config-printer" = {
     skip = "Not installed by default.";

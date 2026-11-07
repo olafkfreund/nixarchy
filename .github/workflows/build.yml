@@ -1309,14 +1309,14 @@ jobs:
         env:
           # Broken is NOT allowed, as in the menu-mapping job above: a package
           # nixpkgs marks broken aborts the user's whole rebuild rather than
-          # just its own install. No unfree override: none of the apps built
-          # here is unfree since grok-bot went (#1201).
+          # just its own install. Unfree apps of ours are skipped: no runner
+          # may build one, and the public cache must never hold it (#1613).
           NIXPKGS_ALLOW_BROKEN: "0"
         run: |
           mapfile -t attrs < <(nix eval --raw --impure --expr '
             let
               cat = import ./data/apps.nix;
-              ours = builtins.filter (n: (cat.${n}.ours or false)) (builtins.attrNames cat);
+              ours = builtins.filter (n: (cat.${n}.ours or false) && !(cat.${n}.unfree or false)) (builtins.attrNames cat);
             in builtins.concatStringsSep "\n" (map (n: cat.${n}.attr or n) ours)
           ')
 

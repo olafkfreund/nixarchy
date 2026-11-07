@@ -71,11 +71,11 @@ reviewers:
 
      ```
      printf '%s\n' "probe" > .commit-probe && git add .commit-probe &&
-       GIT_COMMITTER_DATE=$(( $(git log -1 --format=%ct) + 172800 )) \
+       GIT_COMMITTER_DATE="@$(( $(git log -1 --format=%ct) + 172800 ))" \
        git -c user.name=commit-probe -c user.email=probe@invalid commit -q -m probe
      ```
 
-     It runs in `$scratch/tree`. Use `--date`/`@<epoch>` form.
+     It runs in `$scratch/tree`. Git takes `@<epoch>`; a bare number is not read as a date.
    - Then `evalall after`. `join`/`awk` the two files and print each name whose out differs, as `name  before  after`.
    - The floor: the line counts of both files must equal the requested count, or it exits 1 ("compared N of M").
    - Exit 1 if anything moved, else print `commit-independent: N checks, none moved`.

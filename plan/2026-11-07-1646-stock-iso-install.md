@@ -256,6 +256,12 @@ which the check already does.
   - **Break (VM tier):** restore the marker gate in `ask_network` and
     `preflight_build` → the install reaches `format_disk` → `after == "vdb"`
     fails with partitions. That red is the stock-ISO hazard reproduced.
+    **Deviation, measured while implementing:** the break goes red at (c)
+    instead, `the refusal does not name the unreachable substituter`: with both
+    guards skipped, `format_disk`'s layout evaluation fetches the flake, fails
+    offline and refuses ("could not inspect the disko layout; nothing was
+    formatted") before the wipe, so `after == "vdb"` holds. The `:172-177`
+    comment says so rather than naming a red that does not happen.
 - **`tests/installer-wizard.nix:30`**, in `nodes.machine`: add
   `nix.settings.substituters = pkgs.lib.mkForce [ ];` with one comment line:
   this VM has no network, and saying so is what keeps `ask_network` from

@@ -99,18 +99,18 @@ pkgs.runCommand "nixarchy-installer-network"
 
     ${pkgs.bash}/bin/bash t.sh
 
-    # Markerless checks.install skips the network prompt; unattended installs on
-    # the network image refuse when no connection is available.
+    # No substituter configured (checks.install's shape) skips the network prompt;
+    # unattended installs with one refuse when no connection is available.
     sed -n '/^ask_network()/,/^}/p' ${installScript} > ask_network.txt || true
     if ! [ -s ask_network.txt ]; then
       echo "could not extract ask_network() from the installer at all." >&2
       exit 1
     fi
-    grep -Fq 'on_net_image || return 0' ask_network.txt || {
-      echo "markerless installs no longer skip the network prompt" >&2; exit 1; }
+    grep -Fq 'offline_by_design && return 0' ask_network.txt || {
+      echo "installs with no substituter configured no longer skip the network prompt" >&2; exit 1; }
     grep -Fq 'if [ -n "$answers_file" ]; then' ask_network.txt || {
       echo "unattended network installs no longer have a refusal path" >&2; exit 1; }
-    echo "  ok      markerless installs skip the prompt; unattended network installs refuse"
+    echo "  ok      installs with no substituter skip the prompt; unattended network installs refuse"
 
     # And the sentence that misled the tester: it may only be said when there is
     # genuinely no wireless interface. Asserted on the source, because the branch

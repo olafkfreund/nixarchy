@@ -1,6 +1,6 @@
 # The history rules in the notifications plugin's Store.js, run under node
 # against the shipped (patched) package. See #1663.
-{ inputs, pkgs }:
+{ pkgs, ... }:
 let
   script = pkgs.writeText "notification-store-check.js" ''
     // Loads the notifications plugin's .pragma library files into node and checks

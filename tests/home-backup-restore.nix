@@ -261,7 +261,8 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     HOME=$home git -C "$repo" commit -qm first
     HOME=$home git -C "$repo" ls-files --error-unmatch .local/state/omarchy/notifications/history.json >/dev/null 2>&1 || fail "$case_name: fixture not tracked"
     backup || fail "$case_name: backup failed: $(cat "$log")"
-    if HOME=$home git -C "$repo" ls-files | grep -q notifications; then fail "$case_name: notifications still tracked: $(cat "$log")"; fi
+    tracked=$(HOME=$home git -C "$repo" ls-files)
+    case $tracked in *notifications*) fail "$case_name: notifications still tracked: $(cat "$log")" ;; esac
     HOME=$home git -C "$repo" ls-files --error-unmatch .local/state/omarchy/theme.name >/dev/null 2>&1 || fail "$case_name: theme.name not committed"
 
     # #1270: an allowlist directory that is itself a symlink (stow's layout).

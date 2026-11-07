@@ -13,6 +13,11 @@
 
   time.timeZone = "@timezone@";
   console.keyMap = "@keymap@";
+  # The login screen and the desktop. console.keyMap above is the text console and the disk prompt.
+  services.xserver.xkb = {
+    layout = "@xkblayout@";
+    variant = "@xkbvariant@";
+  };
 
   # Most of what the Install menu offers is unfree. nixarchy defaults this on
   # already; it is repeated here because it is your file, and a licence policy

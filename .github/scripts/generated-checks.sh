@@ -40,7 +40,7 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # integration that added the check is what surfaced it.
 # factory-reset is a nixosTest and needs /dev/kvm, as wifi-hwsim.
 # sshd-login is a nixosTest and needs /dev/kvm, as wifi-hwsim.
-claimed="wifi-hwsim factory-reset remove-fingerprint-vm hibernate-resume boot-hang-detect sshd-login install free-space installer-refusal
+claimed="wifi-hwsim factory-reset remove-fingerprint-vm hibernate-resume boot-hang-detect sshd-login keyboard-boot install free-space installer-refusal
   install-encrypted install-iso-net iso-budget microvm-boot
   box-boot box-template coexist coexistence dashboard-clock installer-ui
   installer-wizard integration microvm-template
@@ -71,9 +71,10 @@ exempt="omarchy omarchy-runtime reference-unencrypted-toplevel"
 #                    two of those against a 90-minute job and that pair grazed
 #                    the timeout on 2026-09-03
 #   microvm-boot     a nested VM on the -tcg runner
+#   keyboard-boot    two desktop VMs that boot through LUKS and type at the greeter
 # It is also the list a keep-alive must never rebuild: a nightly that rebuilt
 # install-iso-net to refresh a proof would spend hours doing it.
-nightly_only="iso-budget microvm-boot install-iso-net install-encrypted"
+nightly_only="iso-budget microvm-boot install-iso-net install-encrypted keyboard-boot"
 
 # Collapsed to single spaces before anything tests membership.
 # `case " $claimed " in *" $c "*)` wants a space on BOTH sides, and the lists

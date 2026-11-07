@@ -36,6 +36,8 @@ ui_palette
 TEMPLATE=@template@
 TZDIR=@tzdata@/share/zoneinfo
 KEYMAPS=@kbd@/share/keymaps
+KBD_MODEL_MAP=@kbdmodelmap@
+NONLATIN="@nonlatin@"
 RESERVED_USERS="@reservedusers@"
 
 # Flakes are not guaranteed enabled on the live medium, and every nix call here
@@ -120,6 +122,10 @@ build_store_choice="auto"
 luks_passphrase=""
 timezone=""
 keymap=""
+xkb_layout=us
+xkb_variant=""
+keymap_moved=""
+keymap_dead=""
 
 # The generated flake, and this machine's directory inside it. Both are set by
 # write_flake and read by every step after it; hostdir exists so the
@@ -517,13 +523,54 @@ ask_network() {
   done
 }
 
+# layout[:variant], split for the template.
+set_keyboard() {
+  xkb_layout=${1%%:*}
+  case $1 in
+    *:*) xkb_variant=${1#*:} ;;
+    *) xkb_variant="" ;;
+  esac
+}
+
+# The XKB name of a console keymap from an answers file, or nothing. Not for the
+# menu: Finnish and Swedish share fi, so a lookup by console name finds Finnish.
+xkb_for_keymap() {
+  local label cmap spec rest l v
+  # The caller's || clears set -e here, so a failed redirect would read as "no match".
+  [ -r "$UI_KEYMAPS" ] && [ -r "$KBD_MODEL_MAP" ] || return 1
+  while IFS=$'\t' read -r label cmap spec rest; do
+    if [ "$cmap" = "$1" ]; then
+      printf '%s' "$spec"
+      return 0
+    fi
+  done <"$UI_KEYMAPS"
+  while read -r cmap l _ v _; do
+    [ "$cmap" = "$1" ] || continue
+    l=${l%%,*} v=${v%%,*}
+    [ "$v" != - ] || v=""
+    case " $NONLATIN " in
+      *" $l "*) printf 'us,%s%s' "$l" "${v:+:,$v}" ;;
+      *) printf '%s%s' "$l" "${v:+:$v}" ;;
+    esac
+    return 0
+  done <"$KBD_MODEL_MAP"
+}
+
 ask_keymap() {
-  ui_screen "Let's set up your keyboard..."
-  local choice
-  choice=$(cut -f1 "$UI_KEYMAPS" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select keyboard layout") || ui_abort
-  [ -n "$choice" ] || ui_abort
-  keymap=$(grep -F "$choice"$'\t' "$UI_KEYMAPS" | cut -f2)
-  loadkeys "$keymap" 2>/dev/null || true
+  local choice row
+  while :; do
+    ui_screen "Let's set up your keyboard..."
+    choice=$(cut -f1 "$UI_KEYMAPS" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select keyboard layout") || ui_abort
+    [ -n "$choice" ] || ui_abort
+    row=$(grep -F "$choice"$'\t' "$UI_KEYMAPS")
+    keymap=$(cut -f2 <<<"$row")
+    set_keyboard "$(cut -f3 <<<"$row")"
+    keymap_moved=$(cut -f4 <<<"$row")
+    keymap_dead=$(cut -f5 <<<"$row")
+    loadkeys "$keymap" 2>/dev/null && return 0
+    # ask_identity clears the screen, so a printed line alone would not be read.
+    gum confirm "Could not load $keymap. Typing with a US keyboard: if this machine uses another layout, pick a password that types the same in both. Carry on?" && return 0
+  done
 }
 
 # Shared by both paths on purpose: two copies of "what is a valid username"
@@ -586,6 +633,25 @@ validate_keymap() {
   return 1
 }
 
+# The first character of $1 the login screen would read differently, or fail.
+# C.UTF-8 because the columns hold multi-byte characters; byte by byte, one would match another's bytes.
+password_moved_char() {
+  local LC_ALL=C.UTF-8 i c
+  for ((i = 0; i < ${#keymap_moved}; i++)); do
+    c=${keymap_moved:i:1}
+    if [[ $1 == *"$c"* ]]; then
+      printf '%s' "$c"
+      return 0
+    fi
+  done
+  if [ "$keymap_dead" = dead ] && [[ $1 == *[![:ascii:]]* ]]; then
+    c=${1//[[:ascii:]]/}
+    printf '%s' "${c:0:1}"
+    return 0
+  fi
+  return 1
+}
+
 # The password, on its own.
 #
 # Split out of ask_identity because --from with a machine the repository
@@ -603,6 +669,11 @@ ask_password() {
     fi
     if [ -z "$pw" ]; then
       ui_left "\e[31mAn empty password would lock you out of sudo.\e[0m"
+      continue
+    fi
+    local moved
+    if moved=$(password_moved_char "$pw"); then
+      ui_left "\e[31mOn this layout, $moved types differently at the login screen. Choose a password without it.\e[0m"
       continue
     fi
     # One password for the user, root and the disk, as upstream does: the
@@ -667,6 +738,17 @@ ask_recovery() {
     unset pw pw2
     break
   done
+}
+
+load_repo_keymap() {
+  local found
+  found=$(sed -n 's/^[[:space:]]*console\.keyMap = "\([^"]*\)";.*/\1/;T;p;q' "$hostdir/configuration.nix" 2>/dev/null) || found=""
+  if [ -n "$found" ] && validate_keymap "$found" && loadkeys "$found" 2>/dev/null; then
+    ui_left "Typing with this machine's disk-prompt layout, $found. Its login screen uses"
+    ui_left "services.xserver.xkb, which may differ."
+    return 0
+  fi
+  ui_left "Typing with a US keyboard. If this machine uses another layout, pick a password that types the same in both."
 }
 
 ask_identity() {
@@ -1407,6 +1489,13 @@ validate_answers() {
     exit 2
   fi
 
+  if [ "$from_host_exists" != true ]; then
+    local xkb
+    xkb=$(xkb_for_keymap "$keymap") || { echo "nixarchy-install: cannot read the keymap tables" >&2; exit 2; }
+    set_keyboard "${xkb:-us}"
+    [ -n "$xkb" ] || echo "Desktop keyboard: us (no XKB equivalent of $keymap)"
+  fi
+
   # The file is the consent; there is no confirmation prompt. The summary is
   # still printed so a test log shows what was about to happen.
   printf 'hostname=%s username=%s device=%s disk_mode=%s encrypt=%s timezone=%s keymap=%s\n' \
@@ -1437,6 +1526,8 @@ substitute_host_files() {
     subst "$f" '@diskmode@' "$disk_mode"
     subst "$f" '@timezone@' "$timezone"
     subst "$f" '@keymap@' "$keymap"
+    subst "$f" '@xkblayout@' "$xkb_layout"
+    subst "$f" '@xkbvariant@' "$xkb_variant"
     # Quoted in the template because a bare token is not parseable Nix; the
     # quotes go with the token. An encrypted disk has already authenticated the
     # user by the time a greeter would ask, so autologin follows encryption.
@@ -2822,6 +2913,7 @@ main() {
     # repository then overrules, which is worse than not asking.
     ui_greeter
     ask_network
+    load_repo_keymap
     ask_password
     ask_recovery
   else

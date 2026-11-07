@@ -31,7 +31,10 @@
   ...
 }:
 {
-  imports = [ ./factory-reset.nix ];
+  imports = [
+    ./factory-reset.nix
+    ./keyboard.nix
+  ];
 
   programs.nixarchy = {
     enable = true;

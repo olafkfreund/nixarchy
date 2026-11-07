@@ -108,6 +108,7 @@ let
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
   # distinction this file exists to assert.
   defaultMachine = configWith { };
+  modeAKeyboard = configBeside { services.xserver.xkb.layout = "de"; };
   unitLinkNormalHome = "/srv/nixarchy unit's home";
   unitLinkSystemHome = "/srv/nixarchy-system-probe";
   unitLinkMachine = configBeside {
@@ -3768,6 +3769,7 @@ pkgs.runCommand "nixarchy-options-files"
       pkgs.writeText "box-templates.ini"
         boxesOn.environment.etc."nixarchy/box-templates.ini".text;
     boxTemplateCount = builtins.length (builtins.attrNames (import ../data/box-templates.nix));
+    modeAVconsole = modeAKeyboard.environment.etc."vconsole.conf".source;
     # #912: the menu the session reads, to find nixarchy's own row in it.
     flatsnapMenu =
       inputs.self.nixosConfigurations.vm.config.environment.etc."nixarchy/omarchy-menu.jsonc".source;
@@ -4002,6 +4004,11 @@ pkgs.runCommand "nixarchy-options-files"
       ''
           echo "the services catalogue is well formed ($serviceCount entries)"
           echo "the flatpak catalogue is well formed ($flatpakCount entries)"
+
+          if grep -q '^XKBLAYOUT=' "$modeAVconsole"; then
+            echo "Mode A wrote XKBLAYOUT to vconsole.conf" >&2
+            exit 1
+          fi
 
           # ---- Flathub survives a custom remote ---------------------------
           case " $flatpakRemotes " in

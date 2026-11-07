@@ -1346,6 +1346,13 @@ thing and meant another. None of them was a bug in this repo.
   evidence that nothing failed (#1602).
   `edge-report.sh` puts the bounded `failure-digest.sh` excerpt in the issue
   body or comment so the failure reason survives when the run link is dead.
+- **A keymap source file is not what the kernel loads.** kbd's `et.map` names
+  `dead_caron` on the grave key, matching XKB's `ee`, so reading the `.map`
+  file says Estonian has no dead-key mismatch. `loadkeys --unicode --mktable`
+  compiles `dead_caron` into the `dead_circumflex` slot (`0xf102`), which is
+  what the kernel actually runs — so pressing that key then `e` produces `ê` on
+  the console and `ě` under XKB (#1619). Compare the compiled table a tool
+  hands the kernel, not the source text before compilation.
 
 ## 14. Coexist with the user's own config
 

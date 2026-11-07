@@ -28,6 +28,21 @@ let
   # installed host roots its inputs with (#701); see lib.inputSources in flake.nix.
   inputSources = inputs.self.lib.inputSources { inherit (source) flake; };
 
+  repo =
+    lib.optionalString ((source.host or null) != null)
+      "${pkgs.runCommand "nixarchy-reinstall-repo" { nativeBuildInputs = [ pkgs.git ]; } ''
+        cp -r ${source.flake.outPath}/. source
+        chmod -R u+w source
+        git -C source init -q
+        # --force: the source is exactly what was tracked, ignored files included.
+        git -C source add -A --force
+        GIT_AUTHOR_NAME=nixarchy GIT_AUTHOR_EMAIL=nixarchy@localhost GIT_AUTHOR_DATE=1970-01-01T00:00:00Z \
+          GIT_COMMITTER_NAME=nixarchy GIT_COMMITTER_EMAIL=nixarchy@localhost GIT_COMMITTER_DATE=1970-01-01T00:00:00Z \
+          git -C source commit -qm 'Reinstall image source'
+        git clone --bare -q source "$out"
+        git -C "$out" remote remove origin
+      ''}";
+
   version = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.omarchy.version;
 
   # See the plymouth-start override below. Upstream's own ExecStart, plus the
@@ -66,10 +81,14 @@ let
     for p in $(cat /proc/cmdline); do
       case "$p" in
         nixarchy.answers=*) args+=(--answers "''${p#nixarchy.answers=}") ;;
-        nixarchy.from=*) args+=(--from "''${p#nixarchy.from=}") ;;
-        nixarchy.host=*) args+=(--host "''${p#nixarchy.host=}") ;;
+        nixarchy.from=*) named=1; args+=(--from "''${p#nixarchy.from=}") ;;
+        nixarchy.host=*) named=1; args+=(--host "''${p#nixarchy.host=}") ;;
       esac
     done
+
+    ${lib.optionalString ((source.host or null) != null) ''
+      [ "''${named:-}" = 1 ] || args+=(--from file://${repo} --host ${lib.escapeShellArg source.host})
+    ''}
 
     exec ${
       lib.getExe inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
@@ -376,7 +395,10 @@ in
     # asset limit.
   };
 
-  system.extraDependencies = inputSources;
+  system = {
+    build.installerLauncher = nixarchyInstallerLauncher;
+    extraDependencies = inputSources;
+  };
 
   nix.settings = {
     # flake-registry is a flakes setting, and nix.conf is validated at build

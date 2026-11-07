@@ -33,6 +33,8 @@ pkgs.runCommand "nixarchy-installer-from-repo"
     test -s fr.sh || { echo "clone_repo is not in install.sh any more" >&2; exit 1; }
     sed -n '/^finish_clone()/,/^}/p' ${installScript} >> fr.sh
     grep -q '^finish_clone()' fr.sh || { echo "finish_clone is not in install.sh any more" >&2; exit 1; }
+    sed -n '/^replace_missing_disk()/,/^}/p' ${installScript} > replace.sh
+    test -s replace.sh || { echo "replace_missing_disk is not in install.sh" >&2; exit 1; }
 
     export HOME=$PWD
     git config --global user.email test@test
@@ -305,6 +307,56 @@ pkgs.runCommand "nixarchy-installer-from-repo"
     pb=$(grep -n '^  preflight_build || exit 1$' main.sh | cut -d: -f1 | head -1 || true)
     [ -n "$fc" ] && [ -n "$cr" ] && [ -n "$pb" ] && [ "$fc" -lt "$cr" ] && [ "$cr" -lt "$pb" ] ||
       failed "main does not run confirm_repo_disks between finish_clone and preflight_build"
+    replace_line=$(grep -n '^  replace_missing_disk || exit 1$' main.sh | cut -d: -f1 || true)
+    [ -n "$replace_line" ] && [ "$fc" -lt "$replace_line" ] && [ "$replace_line" -lt "$cr" ] ||
+      failed "main does not replace a missing disk just before confirmation"
+
+    . ./replace.sh
+    NIX_FLAGS=()
+    from_host_exists=true hostname=alpha
+    saved='/dev/disk/by-id/old.[disk]'
+    nix() { printf '%s\n' "$DEVS"; }
+    ui_interactive() { [ -z "$ANSWERS" ] && [ "$TTY" = yes ]; }
+    disk_rows() { printf '/dev/vdb 64G test\n'; }
+    ui_widget_height() { echo 10; }
+    ui_gum_pad() { echo 0; }
+    gum() { printf '/dev/vdb 64G test\n'; }
+    disk_fixture() {
+      git clone -q "file://$HOME/repo" "disk-$1"
+      work=$PWD/disk-$1
+      hostdir=$work/hosts/alpha
+      disk_file=$hostdir/default.nix
+      printf '%s\n' "$2" > "$disk_file"
+      git -C "$work" add hosts/alpha/default.nix
+    }
+    disk_case() {
+      name=$1
+      before=$(cat "$disk_file")
+      staged=$(git -C "$work" show :hosts/alpha/default.nix)
+      replace_missing_disk || failed "$name aborted before the existing refusal"
+      [ "$(cat "$disk_file")" = "$before" ] || failed "$name changed the host file"
+      [ "$(git -C "$work" show :hosts/alpha/default.nix)" = "$staged" ] || failed "$name staged a change"
+    }
+    literal=$(printf 'device = "%s";\nmode = "whole";' "$saved")
+    disk_fixture missing "$literal"
+    DEVS=$saved ANSWERS= TTY=yes replace_missing_disk || failed "missing single disk was not replaced"
+    grep -Fq 'device = "/dev/vdb";' "$disk_file" || failed "replacement disk was not written"
+    [ "$(git -C "$work" show :hosts/alpha/default.nix)" = "$(cat "$disk_file")" ] || failed "replacement was not staged"
+    touch present-disk
+    disk_fixture present "$(printf 'device = "%s";\nmode = "whole";' "$PWD/present-disk")"
+    DEVS=$PWD/present-disk ANSWERS= TTY=yes disk_case present
+    disk_fixture several "$literal"
+    DEVS=$'/dev/gone\n/dev/other' ANSWERS= TTY=yes disk_case several
+    disk_fixture free "$(printf 'device = "%s";\nmode = "free";' "$saved")"
+    DEVS=$saved ANSWERS= TTY=yes disk_case free
+    disk_fixture nonliteral 'device = diskPath; mode = "whole";'
+    DEVS=$saved ANSWERS= TTY=yes disk_case nonliteral
+    disk_fixture answers "$literal"
+    DEVS=$saved ANSWERS=/answers TTY=yes disk_case answers
+    disk_fixture twice "$(printf '%s\n# was: device = "%s";' "$literal" "$saved")"
+    DEVS=$saved ANSWERS= TTY=yes disk_case twice
+    disk_fixture no-terminal "$literal"
+    DEVS=$saved ANSWERS= TTY=no disk_case no-terminal
 
     [ "$fails" = 0 ] || exit "$fails"
     echo "clone_repo takes both branches, refuses both bad repositories, and pushes nothing back"

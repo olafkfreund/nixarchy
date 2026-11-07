@@ -312,6 +312,7 @@ pkgs.testers.runNixOSTest {
 
   testScript = builtins.readFile ./session-journal.py + ''
     import os
+    import re
     import time
 
     # A note on order, because the config-repo block below cost a CI run to
@@ -324,6 +325,36 @@ pkgs.testers.runNixOSTest {
 
     machine.wait_for_unit("multi-user.target")
 
+    # ---- notification files from before this shell (#1663) ------------------
+    # Seeded as root while no shell runs, with the VM's own clock, so the first
+    # start has to cut them: only the 6 newest history rows keep their text, and
+    # nothing older than 24 hours survives. The fresh live card is critical so
+    # it stays on screen through the 75 s wait below (a normal one would lapse).
+    # The stale one is critical too: unpatched, it would stay in live.json
+    # rather than expire into history, so the check below proves the cut.
+    seed220_dir = "/home/omarchy/.local/state/omarchy/notifications"
+    seed220_jq = "${pkgs.jq}/bin/jq"
+    seed220_row = (
+        '{app: "nixarchy-probe", summary: ("seed " + $k), body: ("body " + $k),'
+        ' rawBody: ("<b>body " + $k + "</b>"),'
+        ' execArgv: (["xdg-open", "https://x"] | tojson),'
+        ' execActions: ([{label: "Open", argv: ["xdg-open", "https://x"]}] | tojson),'
+        ' closed_reason: "closed"}')
+    seed220_hist = (
+        'def row($k; $age): ' + seed220_row + ' + {key: $k, ts: ($now - $age - 5), closed_ts: ($now - $age)};'
+        ' [range(0; 10) | row("s220-" + tostring; 60 * .)] + [row("s220-stale"; 90000)]')
+    seed220_live = (
+        'def row($k; $age; $u): ' + seed220_row + ' + {key: $k, ts: ($now - $age), urgency: $u};'
+        ' [row("live-220-stale"; 90000; 2), row("live-220-fresh"; 60; 2)]')
+    machine.succeed("su omarchy -c 'mkdir -p " + seed220_dir + " && chmod 700 " + seed220_dir + "'")
+    machine.succeed(
+        "now=$(date +%s); "
+        + seed220_jq + " -n --argjson now \"$now\" " + shlex.quote(seed220_hist) + " > " + seed220_dir + "/history.json; "
+        + seed220_jq + " -n --argjson now \"$now\" " + shlex.quote(seed220_live) + " > " + seed220_dir + "/live.json; "
+        + "chown omarchy: " + seed220_dir + "/history.json " + seed220_dir + "/live.json; "
+        + "chmod 600 " + seed220_dir + "/history.json " + seed220_dir + "/live.json")
+    machine.succeed(seed220_jq + " -e 'length == 11' " + seed220_dir + "/history.json")
+
     # ---- app selection -------------------------------------------------
     # Deliberately before anything graphical: Home Manager seeds apps.nix at
     # system activation, so none of this needs a session, and a slow login
@@ -331,19 +362,19 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_file("/home/omarchy/.config/nixarchy/apps.nix")
     # #1342: held back until login
     machine.succeed("test ! -e /home/omarchy/.config/hyprland-mimeapps.list")
-    machine.succeed("su omarchy -c 'nixarchy-app-enable brave'")
+    machine.succeed("su omarchy -c 'nixarchy-app-enable firefox'")
     machine.succeed("su omarchy -c 'nixarchy-app-enable helix'")
     enabled = machine.succeed(
         "grep -E '^[[:space:]]*[a-z0-9_-]+\\.enable' /home/omarchy/.config/nixarchy/apps.nix"
     )
     print(enabled)
-    assert "brave.enable" in enabled, "brave was not enabled"
+    assert "firefox.enable" in enabled, "firefox was not enabled"
     assert "helix.enable" in enabled, "helix was not enabled"
     # A pick that leaves the file unparseable would break the next rebuild.
     machine.succeed("nix-instantiate --parse /home/omarchy/.config/nixarchy/apps.nix >/dev/null")
 
     # Picking the same app twice must be a no-op, not a second uncomment.
-    machine.succeed("su omarchy -c 'nixarchy-app-enable brave'")
+    machine.succeed("su omarchy -c 'nixarchy-app-enable firefox'")
     machine.succeed("nix-instantiate --parse /home/omarchy/.config/nixarchy/apps.nix >/dev/null")
 
     # Answering "no" to the prompt asserts the copy, not a full rebuild.
@@ -353,7 +384,7 @@ pkgs.testers.runNixOSTest {
     # AND nixarchy-apps.nix has to import it. A copy nothing imports is the
     # exact failure the warning in nixarchy-apply exists for -- apps marked
     # enabled, a rebuild running to completion, and nothing installed.
-    machine.succeed("grep -q 'brave.enable' /etc/nixos/nixarchy/apps.nix")
+    machine.succeed("grep -q 'firefox.enable' /etc/nixos/nixarchy/apps.nix")
     machine.succeed("grep -q './nixarchy/apps.nix' /etc/nixos/nixarchy-apps.nix")
     print("selection reached /etc/nixos/nixarchy/apps.nix, and the stub imports it")
 
@@ -562,6 +593,36 @@ pkgs.testers.runNixOSTest {
     # Long enough for omarchy-launch-shell to exhaust its supervision budget:
     # it gives up after 5 relaunches inside one minute.
     machine.sleep(75)
+
+    # ---- the first start cut the seeded files (#1663) ----------------------
+    # Before any block that sends notifications. By key, not by position: rows
+    # that arrived since login may sit above the seeded ones. as_user is defined
+    # further down, so this block has its own.
+    def seed220_user(cmd):
+        return ("su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+                " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus " + cmd + "'")
+    seed220_hfile = seed220_dir + "/history.json"
+    seed220_lfile = seed220_dir + "/live.json"
+    seed220_empty = ('.summary == "" and .body == "" and .rawBody == ""'
+                     ' and .execArgv == "" and .execActions == ""')
+    # A cut writes the file (the row count changed), so wait for it.
+    machine.wait_until_succeeds(
+        "test -s " + seed220_hfile + " && " + seed220_jq
+        + " -e 'all(.[]; .key != \"s220-stale\")' " + seed220_hfile, timeout=60)
+    machine.succeed(
+        seed220_jq + " -e '[.[] | select(.key | IN(\"s220-6\", \"s220-7\", \"s220-8\", \"s220-9\"))]"
+        + " | length == 4 and all(" + seed220_empty + ")' " + seed220_hfile)
+    machine.succeed(
+        seed220_jq + " -e '.[6:] | all(.summary == \"Verification notification\" or ("
+        + seed220_empty + "))' " + seed220_hfile)
+    machine.wait_until_succeeds(
+        "test -s " + seed220_lfile + " && " + seed220_jq
+        + " -e 'all(.[]; .key != \"live-220-stale\")' " + seed220_lfile, timeout=30)
+    machine.succeed(seed220_jq + " -e 'all(.[]; .key != \"live-220-stale\")' " + seed220_hfile)
+    assert machine.succeed(seed220_user(
+        "omarchy-shell notifications dismissKey live-220-fresh")).strip() == "ok", (
+        "the seeded critical card was not on screen after the first start")
+    print("the first start cut the seeded history and live files (#1663)")
 
     # #1342: the post-boot.d hook seeded it at login
     machine.wait_for_file("/home/omarchy/.config/hyprland-mimeapps.list")
@@ -936,6 +997,13 @@ pkgs.testers.runNixOSTest {
     menu_text = (machine.out_dir / "menu" / "omarchy-menu.jsonc").read_text()
     rows = json.loads("\n".join(
         l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
+    remove_sw = rows["remove.dictation.superwhisper"]["action"]
+    setup_sw = rows["setup.default.dictation.superwhisper"]["action"]
+    assert "omarchy-remove-dictation-superwhisper" in remove_sw, f"Remove > Dictation > Superwhisper skips the removal script: {remove_sw}"
+    assert "omarchy-default-dictation superwhisper" in setup_sw, f"Setup > Default > Dictation > Superwhisper skips the consent script: {setup_sw}"
+    assert "nixarchy-app-enable" not in setup_sw and "nixarchy-app-disable" not in remove_sw
+    machine.succeed("test -x " + menu_tree + "/bin/omarchy-install-dictation-superwhisper")
+    machine.succeed("test -x " + menu_tree + "/bin/omarchy-remove-dictation-superwhisper")
     def click(row):
         action = rows[row]["action"]
         b64 = base64.b64encode(action.encode()).decode()
@@ -1257,6 +1325,56 @@ pkgs.testers.runNixOSTest {
     machine.succeed(as_user("omarchy-shell notifications dismissAll"))
     print("a notification is queued for the companion under a lease, and pops up when it lapses")
 
+    # ---- the text window holds in quiet mode (#1663) ------------------------
+    # Quiet mode writes history without a card, through the same retain() as
+    # every other path: the 6 newest rows keep their text, the older ones do not.
+    machine.succeed(as_user("omarchy-shell notifications setDnd on"))
+    assert machine.succeed(as_user("omarchy-shell notifications isDnd")).strip() == "on"
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    machine.wait_until_succeeds(
+        "test \"$(" + as_user("omarchy-shell notifications count") + ")\" = 0", timeout=30)
+    keys220 = {}
+    for i220 in range(1, 9):
+        machine.succeed(as_user(
+            "${pkgs.libnotify}/bin/notify-send -a nixarchy-probe -- hist-220-" + str(i220) + " body-" + str(i220)))
+        machine.wait_until_succeeds(
+            "test -s " + state + "/history.json && test \"$(" + jq + " -r '.[0].summary' "
+            + state + "/history.json)\" = hist-220-" + str(i220), timeout=30)
+        keys220[i220] = machine.succeed(
+            jq + " -r '.[0].key' " + state + "/history.json").strip()
+    for i220 in range(3, 9):
+        machine.succeed(
+            jq + " -e --arg k " + shlex.quote(keys220[i220])
+            + " 'any(.[]; .key == $k and .summary != \"\" and .body != \"\")' " + state + "/history.json")
+    for i220 in (1, 2):
+        machine.succeed(
+            jq + " -e --arg k " + shlex.quote(keys220[i220])
+            + " 'any(.[]; .key == $k and .summary == \"\" and .body == \"\" and .rawBody == \"\""
+            + " and .execArgv == \"\" and .execActions == \"\" and .closed_reason != \"\")' "
+            + state + "/history.json")
+    machine.succeed(as_user("omarchy-shell notifications setDnd off"))
+    machine.wait_until_succeeds(
+        "test \"$(" + as_user("omarchy-shell notifications isDnd") + ")\" = off", timeout=30)
+    print("quiet mode keeps text on the newest 6 history rows only (#1663)")
+
+    # ---- the replay shows the rows that have text (#1663) -------------------
+    # replayCount reads Store.HISTORY_TEXT_ROWS; here it has to resolve to 6.
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    machine.succeed(as_user("omarchy-shell notifications showHistory"))
+    machine.wait_until_succeeds(
+        "test \"$(" + as_user("omarchy-shell notifications count") + ")\" = 6", timeout=30)
+    machine.sleep(2)
+    assert machine.succeed(as_user("omarchy-shell notifications count")).strip() == "6", (
+        "the replay did not stay at 6 cards")
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    # Since boot: the binding runs when the component loads, so a cursor taken
+    # just before the replay would miss a failure to resolve it.
+    seed220_journal = machine.succeed("journalctl -b -t omarchy-shell -o cat --no-pager")
+    seed220_bad = [l for l in seed220_journal.splitlines()
+                   if re.search(r"notifications/Service\.qml.*(Unable to assign|HISTORY_TEXT_ROWS)", l)]
+    assert not seed220_bad, "replayCount did not resolve: " + "\n".join(seed220_bad)
+    print("the replay shows 6 cards and the shell logged no binding error (#1663)")
+
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it
     # reads it as `2>/dev/null` with a fallback: with no UPower the call fails
@@ -1453,6 +1571,21 @@ pkgs.testers.runNixOSTest {
     # Red before green: on the pre-#278 tree this fails on the first assertion,
     # because the marker is precisely what never got written.
     machine.succeed("su - omarchy -c 'omarchy-done check first-run-user'")
+    machine.succeed("test -f /home/omarchy/.local/state/omarchy/done/superwhisper-notice")
+    machine.fail("su - omarchy -c 'command -v superwhisper'")
+    machine.fail("test -e /home/omarchy/.config/systemd/user/superwhisper.service")
+    machine.fail("su - omarchy -c 'systemctl --user cat superwhisper.service'")
+    # Run the installed first-run script twice with a selected, missing backend.
+    # The stub records delivery, while the marker proves the second run is silent.
+    machine.succeed("mkdir -p /tmp/sw-notice/bin /tmp/sw-notice/config/omarchy/defaults /tmp/sw-notice/state")
+    machine.succeed("printf '%s\\n' '#!/bin/sh' 'printf x >> /tmp/sw-notice/calls' > /tmp/sw-notice/bin/omarchy-notification-send && chmod +x /tmp/sw-notice/bin/omarchy-notification-send")
+    machine.succeed("printf '%s\\n' superwhisper > /tmp/sw-notice/config/omarchy/defaults/dictation")
+    notice = ("HOME=/tmp/sw-notice XDG_CONFIG_HOME=/tmp/sw-notice/config "
+              "XDG_STATE_HOME=/tmp/sw-notice/state PATH=/tmp/sw-notice/bin:/run/current-system/sw/bin "
+              "bash " + tree + "/install/user/first-run/superwhisper.sh")
+    machine.succeed(notice)
+    machine.succeed(notice)
+    machine.succeed("test -f /tmp/sw-notice/state/omarchy/done/superwhisper-notice && test $(wc -c < /tmp/sw-notice/calls) -eq 1")
     print("first-run wrote its completion marker")
 
     # And the marker is USED, not merely present. A machine that records
@@ -2178,11 +2311,9 @@ pkgs.testers.runNixOSTest {
                "omarchy-launch-browser", "omarchy-launch-webapp",
                # Arch installers for apps that are mapped, excepted or absent
                # here: Claude Desktop (data/menu-exceptions.nix), its Chromium
-               # extension, Superwhisper, and the hermes/openclaw CLIs: omarchy-default-agent
+               # extension, and the hermes/openclaw CLIs: omarchy-default-agent
                # installs openclaw from nixpkgs and declines hermes.
                "omarchy-install-ai-claude", "omarchy-install-chromium-claude",
-               "omarchy-install-dictation-superwhisper",
-               "omarchy-remove-dictation-superwhisper",
                "omarchy-install-dictation-voxtype",
                "omarchy-install-hermes-cli", "omarchy-install-openclaw-cli",
                # The /usr/bin/python3 here runs on the REMOTE machine an account is
@@ -3187,6 +3318,8 @@ pkgs.testers.runNixOSTest {
         input_driver("terminal")
         machine.wait_for_file("/tmp/typed")
 
+    # Return only commits Mozc's and Chewing's conversion: the first ctrl-d hands
+    # cat the unterminated line, the second ends it.
     def finish_typing(keys, expected, label):
         machine.send_chars(keys)
         machine.send_key("ret")
@@ -3196,9 +3329,15 @@ pkgs.testers.runNixOSTest {
         assert typed.rstrip("\n") == expected, (
             f"{label}: expected {expected!r}, got {typed.rstrip(chr(10))!r}")
 
+    # The new terminal has no input context until it is focused, and a picker
+    # apply restarts fcitx5: retry until the focused context holds the method.
+    def select_method(method):
+        machine.wait_until_succeeds(desktop_user(
+            'fcitx5-remote -s ' + method + ' && test "$(fcitx5-remote -n)" = ' + method), timeout=60)
+
     def type_keys(keys, expected, label, method):
         open_typing_terminal()
-        machine.succeed(desktop_user("fcitx5-remote -s " + method))
+        select_method(method)
         finish_typing(keys, expected, label)
 
     unitctl = "systemctl --user "
@@ -3218,7 +3357,7 @@ pkgs.testers.runNixOSTest {
     # With the terminal focused, cycle through the shell's QML input reader.
     input_driver("input", "mozc")
     open_typing_terminal()
-    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    select_method("mozc")
     before = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
     machine.succeed(desktop_user("omarchy-input-method cycle"))
     machine.wait_until_succeeds(desktop_user(
@@ -3231,7 +3370,7 @@ pkgs.testers.runNixOSTest {
         "hyprctl -j getoption input:kb_layout | grep de"), timeout=30)
     type_keys("y", "z", "German keyboard picker", "keyboard-de")
     open_typing_terminal()
-    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    select_method("mozc")
     active = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
     machine.send_key("shift")
     machine.wait_until_succeeds(desktop_user(
@@ -3271,8 +3410,7 @@ pkgs.testers.runNixOSTest {
     input_driver("input", "mozc")
     # fcitx5-remote -n is empty until something focused has an input context.
     open_typing_terminal()
-    machine.wait_until_succeeds(desktop_user(
-        'fcitx5-remote -s mozc && test "$(fcitx5-remote -n)" = mozc'), timeout=60)
+    select_method("mozc")
     machine.send_key("ctrl-d")
     print("#1614: picking Mozc replaces a stale addon-less unit")
 

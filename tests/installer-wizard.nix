@@ -29,6 +29,8 @@ pkgs.testers.runNixOSTest {
 
   nodes.machine = _: {
     environment.systemPackages = [ install ];
+    # No network here, and saying so keeps ask_network from asking (as tests/install.nix does).
+    nix.settings.substituters = pkgs.lib.mkForce [ ];
 
     virtualisation = {
       memorySize = 2048;

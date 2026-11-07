@@ -754,6 +754,7 @@
         # holes in it.
         nixarchy-apps = {
           once = final.callPackage ./pkgs/apps/once.nix { };
+          superwhisper = final.callPackage ./pkgs/apps/superwhisper.nix { };
 
           # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
           # simply follow nixpkgs the way most apps here do.
@@ -1251,6 +1252,7 @@
 
           inherit (pkgsFor.${system}.nixarchy-apps)
             once
+            superwhisper
             retroarch
             hey-cli
             omawrite
@@ -1698,18 +1700,19 @@
                 mkUserIso: this flake has no machine called "${host}".
                 It has: ${lib.concatStringsSep ", " (lib.attrNames flake.nixosConfigurations)}
               '');
-          in
-          builtins.seq machine
-            (nixpkgs.lib.nixosSystem {
+            # host reaches the launcher, which is what makes the image this machine's (#1649).
+            iso = nixpkgs.lib.nixosSystem {
               system = "x86_64-linux";
               specialArgs = {
                 inherit inputs;
-                source = {
-                  inherit flake;
-                };
+                source = { inherit flake host; };
               };
               modules = [ ./installer/cd.nix ];
-            }).config.system.build.isoImage;
+            };
+          in
+          builtins.seq machine (
+            iso.config.system.build.isoImage // { inherit (iso.config.system.build) installerLauncher; }
+          );
 
         mkMicrovm =
           {
@@ -1748,6 +1751,8 @@
             "home-activation-writes"
             "language-locale"
             "language-select"
+            # The notification history keeps text for the newest rows only (#1663).
+            "notification-store"
             # data/bin-ledger.nix, held to its own claim. Also the home of the
             # pacman allowlist that used to live inline in build.yml. See
             # tests/bin-ledger.nix and #447.
@@ -2027,6 +2032,18 @@
             reinstallScript = ./pkgs/omarchy/nix-bin/nixarchy-reinstall-iso;
           };
 
+          superwhisper-choice = import ./tests/superwhisper-choice.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./pkgs/omarchy/nix-bin/omarchy-install-dictation-superwhisper;
+            removeScript = ./pkgs/omarchy/nix-bin/omarchy-remove-dictation-superwhisper;
+          };
+
+          reinstall-image = import ./tests/reinstall-image.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # nixarchy-try's lookup and probe expressions run against the REAL
           # data/apps.nix and nixpkgs, plus the binary fallback ladder, the
           # unfree seasoning, the honest footer and the try-to-keep hand-off
@@ -2245,6 +2262,11 @@
             installScript = ./installer/install.sh;
           };
 
+          installer-disk-list = import ./tests/installer-disk-list.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # The bus redaction hook blocks what a pattern can decide, and only
           # that (#272). A security hook that passes everything looks
           # identical to a working one, which is why this exists.
@@ -2428,6 +2450,7 @@
           # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
           cache-budget = import ./tests/cache-budget.nix {
             pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
           };
 
           # The release guard and the weekly release-candidate body, against a

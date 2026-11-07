@@ -300,21 +300,32 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
   sed -n '/^preflight_build()/,/^}/p' ${installScript} >> pf.sh
   grep -q 'preflight_build()' pf.sh \
     || { echo "preflight_build is not in install.sh any more" >&2; exit 1; }
-  grep '^on_net_image()' ${installScript} >> pf.sh
+  grep -E '^(SUBSTITUTERS|TRUSTED_KEYS|SUBSTITUTE_FLAGS)=' ${installScript} >> pf.sh
+  grep -q '^SUBSTITUTE_FLAGS=' pf.sh \
+    || { echo "SUBSTITUTE_FLAGS is not in install.sh any more" >&2; exit 1; }
+  sed -n '/^offline_by_design()/,/^}/p' ${installScript} >> pf.sh
+  grep -q 'offline_by_design()' pf.sh \
+    || { echo "offline_by_design is not in install.sh any more" >&2; exit 1; }
 
   cat > pt.sh <<'EOF'
-  NIX_FLAGS=() SUBSTITUTE_FLAGS=()
-  SUBSTITUTERS="https://nixarchy.cachix.org"
+  NIX_FLAGS=()
   work=/nonexistent hostname=h
   . ./pf.sh
   # The one thing that must never happen before the probes pass.
   wipefs() { touch wipefs-called; }
   git() { :; }
-  curl() { [ "$CURL_OK" = 1 ]; }
+  curl() { touch curl-called; [ "$CURL_OK" = 1 ]; }
   ui_interactive() { [ "$UI" = 1 ]; }
   ui_gum_pad() { echo "0 0"; }
   gum() { [ "$GUM_YES" = 1 ]; }
   nix() {
+    if [ "$1" = config ]; then
+      [ "$SUBS_FAIL" != 1 ] || return 1
+      printf '%s\n' "$SUBS"
+      return 0
+    fi
+    printf '%s\n' "$@" > nix-args
+    touch nix-called
     if [ "$NIX_OK" = 1 ]; then echo 'these 0 derivations will be built'; else
       # Long on purpose: a real dry-run of a desktop closure is thousands of
       # lines, which is what makes an early-exiting reader (`grep -m1`, `grep
@@ -327,9 +338,9 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
   }
   fails=0
   t() {
-    want=$1 name=$2 img=$3 curlok=$4 nixok=$5
-    if [ "$img" = net ]; then on_net_image() { return 0; }; else on_net_image() { return 1; }; fi
-    if CURL_OK=$curlok NIX_OK=$nixok preflight_build >out 2>&1; then got=proceed; else got=refuse; fi
+    want=$1 name=$2 subs=$3 curlok=$4 nixok=$5
+    rm -f curl-called nix-called nix-args
+    if SUBS=$subs SUBS_FAIL=''${6:-0} CURL_OK=$curlok NIX_OK=$nixok preflight_build >out 2>&1; then got=proceed; else got=refuse; fi
     if [ "$got" = "$want" ]; then
       echo "  ok      $name ($got)"
     else
@@ -338,22 +349,55 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
     fi
   }
 
-  # No marker: checks.install's shape -- no network, seeded store. Probing
+  # No substituters: checks.install's shape -- no network, seeded store. Probing
   # here would fail a passing check, so nothing may be probed at all.
-  t proceed "no image marker, network dead"      none 0 0
-  # The filed case: net image, cache dark. Refused, and the message names
+  t proceed "no substituters, network dead" "" 0 0
+  ! test -e curl-called && ! test -e nix-called || {
+    echo "  FAILED  offline install probed the network or planned a build"; fails=$((fails+1));
+  }
+  t proceed "only whitespace in substituters" " " 0 0
+  # The filed case: substituters present, cache dark. Refused, and the message names
   # the network rather than emitting a dependency cascade.
-  t refuse  "net image, substituter unreachable" net  0 1
+  t refuse  "substituters present, substituter unreachable" "https://cache.nixos.org/" 0 1
   grep -qi 'network' out || { echo "  FAILED  refusal does not name the network"; fails=$((fails+1)); }
   # The network died after ask_network let it through: evaluation fails.
-  t refuse  "net image, flake input unreachable" net  1 0
+  t refuse  "substituters present, flake input unreachable" "https://cache.nixos.org/" 1 0
   grep -qi 'network' out || { echo "  FAILED  eval refusal does not name the network"; fails=$((fails+1)); }
   # The #273 regression, which reached a user: an early-exiting grep killing
   # its producer puts "printf: Broken pipe" immediately above the refusal, on
   # the one screen where noise costs the most.
   ! grep -qi 'broken pipe' out || { echo "  FAILED  refusal is preceded by Broken pipe noise"; fails=$((fails+1)); }
+  t refuse "nix config show fails" "" 0 1 1
   # And a network that works installs as before.
-  t proceed "net image, everything answers"      net  1 1
+  t proceed "substituters present, everything answers" "https://cache.nixos.org/" 1 1
+  grep -Fxq -- extra-substituters nix-args \
+    || { echo "  FAILED  plan omits extra-substituters"; fails=$((fails+1)); }
+  grep -Fxq -- 'https://nixarchy.cachix.org https://hyprland.cachix.org' nix-args \
+    || { echo "  FAILED  plan omits the project caches"; fails=$((fails+1)); }
+  grep -Fxq -- extra-trusted-public-keys nix-args \
+    || { echo "  FAILED  plan omits extra-trusted-public-keys"; fails=$((fails+1)); }
+
+  sed -n '/^run_install()/,/^}/p' ${installScript} > ri-flags.sh
+  ri_builds=$(grep -F 'nix "''${NIX_FLAGS[@]}" build' ri-flags.sh || true)
+  [ "$(printf '%s\n' "$ri_builds" | grep -c .)" -ge 2 ] || {
+    echo "  FAILED  run_install has fewer than two nix builds"; fails=$((fails+1));
+  }
+  ! grep -Fv '"''${SUBSTITUTE_FLAGS[@]}"' <<<"$ri_builds" || {
+    echo "  FAILED  a run_install build omits SUBSTITUTE_FLAGS"; fails=$((fails+1));
+  }
+  sed -n '/^  nixos-install /,/return 1$/p' ri-flags.sh > ni-flags.sh
+  test -s ni-flags.sh && grep -Fq '"''${SUBSTITUTE_FLAGS[@]}"' ni-flags.sh || {
+    echo "  FAILED  nixos-install omits SUBSTITUTE_FLAGS"; fails=$((fails+1));
+  }
+
+  sed -n '/^format_disk()/,/^}/p' ${installScript} > fd-flags.sh
+  fd_builds=$(grep -F 'nix "''${NIX_FLAGS[@]}" build' fd-flags.sh || true)
+  [ "$(printf '%s\n' "$fd_builds" | grep -c .)" -ge 1 ] || {
+    echo "  FAILED  format_disk has no nix build"; fails=$((fails+1));
+  }
+  ! grep -Fv '"''${SUBSTITUTE_FLAGS[@]}"' <<<"$fd_builds" || {
+    echo "  FAILED  the diskoScript build omits SUBSTITUTE_FLAGS"; fails=$((fails+1));
+  }
 
   # preflight_report_builds (#483): a plan that SUCCEEDS can still be mostly
   # a build -- a user's reinstall-iso-net closure holds unfree and locally

@@ -40,7 +40,7 @@ pkgs.runCommand "nixarchy-apply-imports"
         # The selection apply reads.
         mkdir -p "$HOME/.config/nixarchy"
         cat > "$HOME/.config/nixarchy/apps.nix" <<'EOF'
-    { programs.nixarchy.apps.brave.enable = true; }
+    { programs.nixarchy.apps.firefox.enable = true; }
     EOF
 
         # apply ends by rebuilding, which this check has no business doing.

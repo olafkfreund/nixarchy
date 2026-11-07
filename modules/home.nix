@@ -101,7 +101,6 @@ let
   # to resolve.
   owe = (pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe;
 
-  opencodeHashFixed = import ../pkgs/opencode-hash-fixed.nix pkgs;
   aiMirrorConfig =
     args:
     inputs.mcp-servers-nix.lib.mkConfig pkgs (
@@ -877,22 +876,8 @@ in
       nixi = {
         enable = lib.mkDefault true;
         # Nixi's menu search merges rows with the stock menu's patched file (#1314).
-        # Nixi's module calls .override with an opencodeAcp from pkgs, so correct it there.
-        # Why: modules/AGENTS.md#opencode-hash-until-the-channel-catches-up
         package = lib.mkDefault (
-          let
-            nixi = inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override {
-              omarchySrc = menuModelSrc;
-            };
-          in
-          nixi
-          // {
-            override =
-              args:
-              nixi.override (
-                args // lib.optionalAttrs ((args.opencodeAcp or null) != null) { opencodeAcp = opencodeHashFixed; }
-              );
-          }
+          inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override { omarchySrc = menuModelSrc; }
         );
         # Off unless the user enables it; nixi pins its bridge into this package.
         companion.package =
@@ -1078,8 +1063,8 @@ in
             has no services.voxtype -- it arrived after release-26.05.
 
             voxtype is on PATH, but nothing starts the daemon, downloads the
-            whisper model or seeds the config, so F9 and Super+Ctrl+X do
-            nothing.
+            whisper model or seeds the config, so Alt+Space and Right Alt
+            do nothing.
 
             Follow home-manager's unstable branch (see the manual's "Stable or
             unstable"), or turn programs.nixarchy.dictation off.
@@ -1413,6 +1398,17 @@ in
 
     # Why: modules/AGENTS.md#the-first-run-theme-above-is-applied-headless-whic
     systemd.user.services = {
+      # The unit exists only after the consent script enables the app (#1613).
+      superwhisper = lib.mkIf (appEnabled "superwhisper") {
+        Unit = {
+          Description = "Superwhisper dictation";
+          After = [ "graphical-session.target" ];
+          PartOf = [ "graphical-session.target" ];
+        };
+        Service.ExecStart = "${osConfig.programs.nixarchy.apps.superwhisper.package}/bin/superwhisper daemon";
+        Install.WantedBy = [ "graphical-session.target" ];
+      };
+
       omarchy-theme-gnome = {
         Unit = {
           Description = "Apply the current Omarchy theme's light/dark mode to GTK";
@@ -1542,6 +1538,23 @@ in
         fi
       ''
     );
+
+    home.activation.nixarchyDictationSelection =
+      lib.mkIf (!(osConfig.programs.nixarchy.allowUnfree or true))
+        (
+          # After the seed, which copies upstream's default (`superwhisper`) into a new home.
+          lib.hm.dag.entryAfter [ "writeBoundary" "nixarchySeed" ] ''
+            selection="${config.xdg.configHome}/omarchy/defaults/dictation"
+            if [ -f "$selection" ] && [ ! -L "$selection" ] && [ "$(cat "$selection")" = superwhisper ] &&
+              ! command -v superwhisper >/dev/null 2>&1; then
+              if [[ -v DRY_RUN ]]; then
+                echo "nixarchy: would switch missing Superwhisper selection to Voxtype"
+              else
+                printf '%s\n' voxtype > "$selection"
+              fi
+            fi
+          ''
+        );
 
     # #1625: removes upstream's exact generated mise launchers, which can only fail now,
     # and records what mise left. Nothing else is deleted.

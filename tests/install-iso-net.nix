@@ -113,9 +113,9 @@ let
 
         step STOPPED systemctl stop nixarchy-installer.service
 
-        # THE marker: the one preflight_build and ask_network key on, absent
-        # from every seeded gate VM -- presence
-        # here is what makes this run exercise #302's code at all.
+        # The marker is still written by the image and asserted here; the
+        # guards (preflight_build, ask_network) key on a configured
+        # substituter, which this run's NIX_CONFIG supplies (#1646).
         step MARKER test -f /etc/nixarchy-iso-net
 
         # The stub internet is up before the installer asks: DHCP gave us a

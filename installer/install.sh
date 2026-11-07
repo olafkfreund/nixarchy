@@ -68,7 +68,9 @@ TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM=
 # always-allow-substitutes tells nix to ignore that attribute and take the copy
 # when a copy is available. It still builds when it is not, so nothing is lost
 # where the reasoning did hold.
-SUBSTITUTE_FLAGS=(--option always-allow-substitutes true)
+# Our caches ride along on every plan and build: a stock ISO's nix.conf names
+# only cache.nixos.org, and the preflight must plan with the caches the build uses.
+SUBSTITUTE_FLAGS=(--option always-allow-substitutes true --option extra-substituters "$SUBSTITUTERS" --option extra-trusted-public-keys "$TRUSTED_KEYS")
 
 # Derivations every machine assembles for itself -- /etc fragments, units,
 # activation scripts. Expected in any build plan and cheap anywhere, so
@@ -461,8 +463,8 @@ connect_wifi() {
 }
 
 ask_network() {
-  # Markerless checks.install has a seeded store and no network prompt.
-  on_net_image || return 0
+  # No substituter configured (checks.install's shape): no network to ask for.
+  offline_by_design && return 0
 
   if network_ready; then
     return 0
@@ -471,14 +473,14 @@ ask_network() {
   # Unattended. There is nobody to ask, so say what is wrong rather than
   # hanging on a prompt no one will answer.
   if [ -n "$answers_file" ]; then
-    echo "nixarchy-install: this image installs over the network and there is none." >&2
+    echo "nixarchy-install: this install downloads the desktop, and there is no network." >&2
     echo "nixarchy-install: connect a cable or configure the network before running with --answers." >&2
     exit 1
   fi
 
   while true; do
     ui_screen "Let's get you online..."
-    ui_left "This image downloads the desktop as it installs, so it needs a network."
+    ui_left "This install downloads the desktop as it runs, so it needs a network."
 
     # WHICH failure, not just that there is one. The same screen used to greet
     # a cable that was not plugged in and a laptop associated to a captive
@@ -808,9 +810,8 @@ boot_medium() {
   fi
 }
 
-ask_device() {
-  ui_screen "Let's choose where to install nixarchy..."
-  local exclude list
+disk_rows() {
+  local exclude dev rm tran row internal="" removable=""
   exclude=$(boot_medium)
   # TYPE=="disk" drops the ISO's loop devices; the exclusion drops the stick.
   #
@@ -819,8 +820,8 @@ ask_device() {
   # default -- offered a 4K device as the install target, first in the list and
   # selected by default. Two presses of Return and the summary said
   # "Disk: /dev/fd0". Anything under the supported minimum is not a target.
-  list=$(
-    lsblk -dnpo NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}' | while read -r dev; do
+  lsblk -dnpo NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}' | {
+    while read -r dev; do
       # zram is compressed RAM and fd is a floppy controller every qemu machine
       # has. Both answer "disk" and neither is somewhere to put an operating
       # system.
@@ -828,14 +829,29 @@ ask_device() {
         /dev/zram* | /dev/fd*) continue ;;
       esac
       disk_under_floor "$dev" && continue
-      printf '%s %s %s\n' "$dev" \
+      row=$(printf '%s %s %s\n' "$dev" \
         "$(lsblk -dno SIZE "$dev" 2>/dev/null | tr -d ' ')" \
-        "$(lsblk -dno MODEL "$dev" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-    done | sed 's/[[:space:]]*$//'
-  )
+        "$(lsblk -dno MODEL "$dev" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" | sed 's/[[:space:]]*$//')
+      read -r rm tran < <(lsblk -dnro RM,TRAN "$dev" 2>/dev/null) || true
+      if [ "$rm" = 1 ] || [ "$tran" = usb ]; then
+        removable+="$row"$'\n'
+      else
+        internal+="$row"$'\n'
+      fi
+    done
+    printf '%s' "$internal$removable"
+  } |
   if [ -n "$exclude" ]; then
-    list=$(printf '%s\n' "$list" | grep -v "^$exclude ") || true
+    grep -v "^$exclude " || true
+  else
+    cat
   fi
+}
+
+ask_device() {
+  ui_screen "Let's choose where to install nixarchy..."
+  local list
+  list=$(disk_rows)
   if [ -z "$list" ]; then
     echo "nixarchy-install: no disk large enough to install onto." >&2
     echo "nixarchy needs at least ${MIN_DISK_GIB} GiB; nothing attached qualifies." >&2
@@ -1564,6 +1580,10 @@ clone_repo() {
     echo "nixarchy-install: could not clone $from_repo" >&2
     exit 1
   }
+  # A reinstall image's own repository: its remote is a path in the live system's store (#1649).
+  case $from_repo in
+    file:///nix/store/*) git -C "$work" remote remove origin ;;
+  esac
 
   [ -d "$work/hosts" ] || {
     echo "nixarchy-install: $from_repo has no hosts/ directory." >&2
@@ -1614,6 +1634,34 @@ finish_clone() {
   printf '{ ... }:\n{ }\n' >"$hostdir/nixarchy-hardware.nix"
 
   git -C "$work" add -A
+}
+
+# Offer another disk only for a single, literal whole-disk host in an interactive install.
+replace_missing_disk() {
+  [ "$from_host_exists" = true ] && ui_interactive || return 0
+  local devs old new row file tmp
+  devs=$(nix "${NIX_FLAGS[@]}" eval --raw \
+    "$work#nixosConfigurations.$hostname.config.disko.devices.disk" \
+    --apply 'd: builtins.concatStringsSep "\n" (map (x: x.device) (builtins.attrValues d))') || return 0
+  [ -n "$devs" ] && [[ "$devs" != *$'\n'* ]] && [ ! -e "$devs" ] || return 0
+  file="$hostdir/default.nix"
+  old="device = \"$devs\";"
+  [ "$(grep -cF "$old" "$file" || true)" = 1 ] &&
+    [ "$(grep -cF 'mode = "whole";' "$file" || true)" = 1 ] || return 0
+  echo "The saved disk $devs is missing from this machine. Choose its replacement:"
+  row=$(disk_rows | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk") || return 1
+  new=${row%% *}
+  [ -n "$new" ] || return 1
+  tmp=$(mktemp "$hostdir/.default.nix.XXXXXX") || return 1
+  OLD_DEVICE="$old" NEW_DEVICE="device = \"$new\";" awk '
+    BEGIN { old = ENVIRON["OLD_DEVICE"]; new = ENVIRON["NEW_DEVICE"] }
+    { p = index($0, old); if (p) $0 = substr($0, 1, p - 1) new substr($0, p + length(old)); print }
+  ' "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
+  if ! { chmod --reference="$file" "$tmp" && mv "$tmp" "$file"; }; then
+    rm -f "$tmp"
+    return 1
+  fi
+  git -C "$work" add "hosts/$hostname/default.nix"
 }
 
 # --from a machine the repository already describes: its disk-config.nix picks
@@ -1904,7 +1952,7 @@ format_disk() {
   # an hour later at the bootloader step, naming bootctl instead of disko, on
   # a disk that was erased in the first minute.
   local script rc=0
-  script=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths \
+  script=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
     "$work#nixosConfigurations.$hostname.config.system.build.diskoScript") || rc=$?
   if [ "$rc" -ne 0 ] || [ -z "$script" ]; then
     rm -f /tmp/nixarchy-luks.key
@@ -2453,14 +2501,18 @@ check_store_space() {
   echo "  slower -- every path is written to the disk as it is produced rather" >&2
   echo "  than copied there at the end -- and it is not a failure." >&2
   echo >&2
-  echo "  This image downloads the desktop as it installs, so a fetch this" >&2
+  echo "  This install downloads the desktop as it runs, so a fetch this" >&2
   echo "  size is expected and is not a fault." >&2
   return 1
 }
 
-# One line so the store-space check can extract it with a grep; the test stubs
-# it to say "network image" without an /etc to write a marker into.
-on_net_image() { [ -f /etc/nixarchy-iso-net ]; }
+# No substituter configured means the machine says it has no network
+# (checks.install and its siblings), so there is nothing to probe or ask.
+offline_by_design() {
+  local subs
+  subs=$(nix "${NIX_FLAGS[@]}" config show substituters 2>/dev/null) || return 1
+  [ -z "${subs//[[:space:]]/}" ]
+}
 
 # Prove the build could start BEFORE the disk is wiped (#300).
 #
@@ -2487,8 +2539,8 @@ on_net_image() { [ -f /etc/nixarchy-iso-net ]; }
 #     run_install repeats this dry-run after the wipe; by then evaluation is
 #     cached and the repeat is close to free.
 #
-# Only the network image. checks.install runs with no network, no marker
-# and a seeded store; its preflight must remain skipped.
+# Skipped only when no substituter is configured. checks.install runs with no
+# network, no substituters and a seeded store; its preflight must remain skipped.
 
 # The plan succeeded; now what does it SAY (#483). `nix build --dry-run`
 # lists what no reachable cache could supply under "will be built", and on
@@ -2511,7 +2563,7 @@ preflight_report_builds() {
   echo >&2
   echo "nixarchy-install: not everything can be fetched." >&2
   echo >&2
-  echo "  No cache this image can reach has these $count, so they would be" >&2
+  echo "  No cache this machine can reach has these $count, so they would be" >&2
   echo "  BUILT on this machine, over the install:" >&2
   printf '%s\n' "$builds" | head -12 | sed 's|^/nix/store/[^-]*-|    |' >&2
   [ "$count" -gt 12 ] && echo "    ... and $((count - 12)) more" >&2
@@ -2524,14 +2576,14 @@ preflight_report_builds() {
 }
 
 preflight_build() {
-  on_net_image || return 0
+  offline_by_design && return 0
 
   local sub
   for sub in https://cache.nixos.org $SUBSTITUTERS; do
     curl -sfI --max-time 8 "$sub/nix-cache-info" >/dev/null 2>&1 && continue
     echo "nixarchy-install: cannot reach $sub." >&2
     echo >&2
-    echo "  This image downloads the desktop from that cache as it installs," >&2
+    echo "  This install downloads the desktop from that cache as it runs," >&2
     echo "  and it is not answering. Check the network connection, then run" >&2
     echo "  nixarchy-install again." >&2
     echo >&2
@@ -2683,8 +2735,6 @@ run_install() {
   # a nix subcommand and rejects the flag outright.
   nixos-install --root /mnt --system "$system" --no-root-password \
     --option extra-experimental-features "nix-command flakes" \
-    --option extra-substituters "$SUBSTITUTERS" \
-    --option extra-trusted-public-keys "$TRUSTED_KEYS" \
     "${SUBSTITUTE_FLAGS[@]}" || return 1
 }
 
@@ -2961,6 +3011,7 @@ main() {
     exit 0
   fi
 
+  replace_missing_disk || exit 1
   confirm_repo_disks || exit 1
 
   # Refusal is free until format_disk runs; after it there is no OS to go

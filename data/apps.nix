@@ -30,7 +30,7 @@
     menuId = "install.browser.brave";
     label = "Brave";
     category = "Browser";
-    attr = "brave";
+    unavailable = "nixpkgs removed Brave on 2026-11-03 over security issues nobody could unblock; Chrome, Chromium, Zen and Firefox remain.";
     arch = "brave-bin";
   };
   chrome = {
@@ -282,6 +282,15 @@
     unfree = true;
     arch = "lmstudio-bin";
   };
+  superwhisper = {
+    label = "Superwhisper";
+    category = "AI";
+    attr = "superwhisper";
+    ours = true;
+    unfree = true;
+    prebuilt = true;
+    note = "Installs only after you choose it in Setup > Default > Dictation. Proprietary software; enable allowUnfree to use it.";
+  };
 
   # ── Development ─────────────────────────────────────────────────────────
   php = {
@@ -332,7 +341,7 @@
     menuId = "install.browser.brave-origin";
     label = "Brave Origin";
     category = "Browser";
-    unavailable = "Brave's managed build is AUR-only with no published source; enable apps.brave and put policies in /etc/brave/policies/managed, which stock Brave honours identically.";
+    unavailable = "Brave's managed build is AUR-only with no published source, and nixpkgs has since removed stock Brave too.";
     arch = "brave-origin-bin";
   };
   chatgpt = {

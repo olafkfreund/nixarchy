@@ -160,7 +160,10 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
   # ------------------------------------------------------------------------
   build_line=$(grep -n 'nix build "$REINSTALL_ATTR"' ${reinstallScript} | cut -d: -f1 | head -1 || true)
   [ -n "$build_line" ] || { echo "the script no longer builds via REINSTALL_ATTR; retarget this check" >&2; exit 1; }
-  for probe in '^refuse_stock_image$' 'check_disk /nix/store' 'committed_verdict "$FLAKE"' 'drift_verdict "$running"' 'case "$(substitutable_verdict'; do
+  grep -Fq 'REINSTALL_ATTR="''${NIXARCHY_REINSTALL_ATTR:-$FLAKE#$(cat /proc/sys/kernel/hostname)}"' ${reinstallScript} || {
+    echo "the default reinstall attribute no longer names this host" >&2; exit 1;
+  }
+  for probe in 'check_disk /nix/store' 'committed_verdict "$FLAKE"' 'drift_verdict "$running"' 'case "$(substitutable_verdict'; do
     line=$(grep -n "$probe" ${reinstallScript} | cut -d: -f1 | head -1 || true)
     [ -n "$line" ] || { echo "main() never calls: $probe" >&2; exit 1; }
     [ "$line" -lt "$build_line" ] || {

@@ -3961,9 +3961,11 @@ pkgs.runCommand "nixarchy-options-files"
     splashIsoDir = splashPaths isoSplash;
     splashIsoOn = pkgs.lib.boolToString isoSplash.boot.plymouth.enable;
     splashIsoTheme = isoSplash.boot.plymouth.theme;
+    # A personal image differs from the published one by design (#1649): it
+    # carries its host. The old `offline` argument must still change nothing.
     legacyIsoSame = pkgs.lib.boolToString (
       (legacyIso true).drvPath == (legacyIso false).drvPath
-      && (legacyIso true).drvPath == inputs.self.packages.${system}.iso-net.drvPath
+      && pkgs.lib.hasInfix "-net-" (legacyIso true).name
     );
     # What the assets are measured against. The vendored tree, at the version
     # this flake pins -- so a bump that changes an asset changes what "still
@@ -5166,13 +5168,14 @@ pkgs.runCommand "nixarchy-options-files"
           exit 1
         fi
 
-        # The three things inside an allowlisted directory that must not
+        # The things inside an allowlisted directory that must not
         # travel. clipboard-history.json is the sharpest: password managers
         # paste through the clipboard, and it sits inside
         # ~/.local/state/omarchy, which the epic asks for by name.
         for never in .local/state/omarchy/clipboard-history.json \
           .local/state/omarchy/current/theme/ \
-          .local/state/omarchy/done/; do
+          .local/state/omarchy/done/ \
+          .local/state/omarchy/notifications/; do
           <<<"$allowlist" grep -qxF "!$never" || {
             echo "the allowlist no longer excludes $never" >&2
             exit 1

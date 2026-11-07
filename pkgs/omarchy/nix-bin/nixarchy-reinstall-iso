@@ -39,9 +39,9 @@ set -euo pipefail
 
 FLAKE="${NIXARCHY_FLAKE:-/etc/nixos}"
 
-# The generated flake's network image output. Keep the override for tests and
-# configurations that name the output differently.
-REINSTALL_ATTR="${NIXARCHY_REINSTALL_ATTR:-$FLAKE#reinstall-iso-net}"
+# This machine's own image: every generated flake has the bare per-host
+# attribute, and the installer names hosts/<name> after the hostname (#1649).
+REINSTALL_ATTR="${NIXARCHY_REINSTALL_ATTR:-$FLAKE#$(cat /proc/sys/kernel/hostname)}"
 
 red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
 dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
@@ -329,21 +329,6 @@ case "$(substitutable_verdict "${NIXARCHY_SUBSTITUTABLE:-$(substitutable_script)
     case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
     ;;
 esac
-
-# Until #1649: the image does not name this machine, so booting it would erase
-# a disk and install a stock system. The preflights above still run.
-refuse_stock_image() {
-  echo
-  red "This image cannot reinstall this machine yet, so nothing was built."
-  echo "  It would erase the target disk and install a stock nixarchy instead"
-  echo "  of this configuration. Tracked in #1649."
-  echo
-  echo "  To get this machine back now, boot the published network image with"
-  echo "  nixarchy.from=<your config repo> nixarchy.host=<this machine's name>"
-  echo "  on its kernel command line."
-  exit 1
-}
-refuse_stock_image
 
 # ---------------------------------------------------------------------------
 # Confirm, build, report.

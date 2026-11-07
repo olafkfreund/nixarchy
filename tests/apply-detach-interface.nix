@@ -26,7 +26,7 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     apply=${apply}/bin/nixarchy-apply
     mkdir -p "$HOME/.config/nixarchy" stub flake
     printf '{ }\n' > flake/flake.nix
-    printf '{ programs.nixarchy.apps.brave.enable = true; }\n' > "$HOME/.config/nixarchy/apps.nix"
+    printf '{ programs.nixarchy.apps.firefox.enable = true; }\n' > "$HOME/.config/nixarchy/apps.nix"
     export NIXARCHY_FLAKE=$PWD/flake
 
     # printf, not a heredoc: a heredoc body inside an indented Nix string has to

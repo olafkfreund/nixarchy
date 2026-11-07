@@ -160,8 +160,14 @@ system's closure is unchanged.
   The ISO is about 1.3 GB, fetched once per store from `channels.nixos.org`
   and kept out of the cachix allowlist (it is not ours, and the budget is
   2.5 GB).
-- **The `iso-net` install path changes only in its wording.** Its `nix.conf`
-  already lists both caches, so the extra flags repeat what it has.
+- **A real `iso-net` install changes only in its wording**: its `nix.conf`
+  already lists both caches. `checks.install-iso-net` does change. Its driver
+  overrides `substituters` with the local http stub alone
+  (`tests/install-iso-net.nix:132-140`), so the https names, which resolve to
+  the probe stub, reach its toplevel build for the first time. `nixos-install`
+  already passes them in that same run, and the daemon disables them on the
+  TLS failure (`:35-38`). Watch: that check's next nightly, its `FETCHED`
+  step and its run time.
 
 ## Verification
 
@@ -184,6 +190,10 @@ Part A, cheap tier:
     drop `|| return 1` → proceeds → red.
   - the dry-run's arguments contain `extra-substituters` with both cache
     URLs. **Break:** take them out of `SUBSTITUTE_FLAGS` → red.
+  - every `nix … build` in `run_install` carries `"${SUBSTITUTE_FLAGS[@]}"`,
+    asserted on the extracted function, so the toplevel build fetches from
+    the caches the preflight planned with. **Break:** drop it from the
+    toplevel build (`:2708`) → red.
   - the existing cases keep their meaning, with "net image" spelled as
     "substituters present".
 - `checks.installer-network`: the grep at `:109` matches

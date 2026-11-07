@@ -227,6 +227,11 @@ pkgs.runCommand "nixarchy-installer-from-repo"
     [ "$(cat hostname-wizard)" = someone-else ] || failed "without --from the typed hostname is no longer used"
     sed -n '/^main()/,/^}/p' ${installScript} > main.sh
     grep -q 'validate_hostname "$from_host"' main.sh || failed "main does not validate --host (#1098)"
+    sed -n '/^  elif \[ "$from_host_exists" = true \]; then/,/^  else/p' main.sh > existing-host.sh
+    grep -q '^    load_repo_keymap$' existing-host.sh || failed "--from existing host does not load its keymap before the password"
+    load_line=$(grep -n '^    load_repo_keymap$' existing-host.sh | cut -d: -f1)
+    password_line=$(grep -n '^    ask_password$' existing-host.sh | cut -d: -f1)
+    [ -n "$password_line" ] && [ "$load_line" -lt "$password_line" ] || failed "--from loads its keymap after the password prompt"
 
     # ---- #1084: --from names the disk before erasing it -----------------
     sed -n '/^confirm_repo_disks()/,/^}/p' ${installScript} > crd.sh

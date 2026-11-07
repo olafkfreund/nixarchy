@@ -393,6 +393,7 @@ jobs:
           #                    already runs two of those against a 90-minute job
           #                    and that pair grazed the timeout on 2026-09-03
           #   microvm-boot     a nested VM on the -tcg runner
+          #   keyboard-boot    two desktop VMs that boot through LUKS and type at the greeter
           # Ask Nix, do not parse the file -- and the implausible-count floor
           # that goes with it. Both moved into generated-checks.sh with the
           # reasoning; see its header.

@@ -1005,6 +1005,8 @@
                   "@dashboard@"
                   "@tzdata@"
                   "@kbd@"
+                  "@kbdmodelmap@"
+                  "@nonlatin@"
                   "@reservedusers@"
                   "@initrdmodules@"
                   "@initrdforced@"
@@ -1024,6 +1026,12 @@
                   "${./installer/lib/dashboard.sh}"
                   "${pkgsFor.${system}.tzdata}"
                   "${pkgsFor.${system}.kbd}"
+                  "${pkgsFor.${system}.systemd}/share/systemd/kbd-model-map"
+                  (builtins.head (
+                    builtins.match ".*local non_latin_layouts =[[:space:]]*\"([^\"]*)\".*" (
+                      builtins.readFile "${omarchy}/default/hypr/input.lua"
+                    )
+                  ))
                   (
                     let
                       users = builtins.attrValues self.nixosConfigurations.reference.config.users.users;
@@ -2066,6 +2074,7 @@
             pkgs = pkgsFor.${system};
             menu = ./installer/brand/keymaps.txt;
             kbd = pkgsFor.${system}.kbd;
+            inherit omarchy;
           };
 
           # The doctor's GPU rules, against fixture machines. checks.install's
@@ -2749,6 +2758,11 @@
             pkgs = pkgsFor.${system};
             imagePin = boxImagePins.archlinux;
             image = images.archlinux;
+          };
+
+          keyboard-boot = import ./tests/keyboard-boot.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
           };
 
           # The other disk mode, built so the cache has it: installer/cd.nix

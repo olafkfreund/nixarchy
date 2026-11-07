@@ -112,7 +112,6 @@ login, fully populated and **entirely commented out**:
 {
   programs.nixarchy.apps = {
     # ── Browser ───────────────────────────
-    # brave.enable      = true;  #@ brave
     # firefox.enable    = true;  #@ firefox    # a NixOS module, so policies are declarative too
     # ── Service ───────────────────────────
     # tailscale.enable  = true;  #@ tailscale  # a daemon
@@ -126,7 +125,7 @@ as you like — **nothing is built until you apply**, which is the point of a
 declarative system:
 
 ```
-Install ▸ Brave          →  "brave queued — not installed yet"
+Install ▸ Zen            →  "zen queued — not installed yet"
 Install ▸ VSCode         →  "2 app(s) selected"
 Install ▸ Apply changes  →  nh os switch <flake>
 ```

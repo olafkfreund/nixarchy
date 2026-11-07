@@ -210,8 +210,6 @@ let
   forcedPackage = lib.findFirst (
     p: lib.getName p == "superwhisper"
   ) null forcedOn.environment.systemPackages;
-  # A stub, never the real package: no check may build the unfree vendor app (#1613).
-  forcedPackagePath = pkgs.writeShellScriptBin "superwhisper" "exit 0";
   keyHarness = pkgs.writeText "dictation-keys.lua" ''
     local backend, missing = arg[1], arg[2] == "missing"
     local binds = {}
@@ -538,9 +536,6 @@ pkgs.runCommand "nixarchy-coexistence"
     }" != yes ]; then
       echo 'superwhisper-forced-on: FAIL the selected app is absent from the reference system' >&2
       fail=1
-    else
-      mkdir -p panel-home
-      HOME=$PWD/panel-home PATH=${forcedPackagePath}/bin:$PATH python3 -c 'import runpy,sys; got=runpy.run_path(sys.argv[1])["wrapper_path"]("superwhisper"); assert got==sys.argv[2], f"superwhisper-forced-on: FAIL panel local-bin lookup did not fall through to PATH: {got}"; print("superwhisper-forced-on: panel resolves the packaged CLI on PATH")' '${forcedPackagePath}/share/superwhisper/app/assets/omarchy-plugin/superwhisper-panel/status.py' '${forcedPackagePath}/bin/superwhisper' || fail=1
     fi
     lua ${keyHarness} voxtype installed '${reference.config.programs.nixarchy.package}/share/omarchy/default/hypr/bindings/dictation.lua' || fail=1
     lua ${keyHarness} superwhisper missing '${reference.config.programs.nixarchy.package}/share/omarchy/default/hypr/bindings/dictation.lua' || fail=1

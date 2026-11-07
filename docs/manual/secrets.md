@@ -156,6 +156,35 @@ The command says so each time. Clear the history when you are done with a
 secret, and treat that file as sensitive — `nixarchy home backup` already
 excludes it for the same reason.
 
+### Notification history
+
+The shell keeps two files in `~/.local/state/omarchy/notifications/`, readable
+only by you: `history.json`, the notifications that have closed, and
+`live.json`, the cards on screen, so they come back after a restart.
+
+Only the 6 newest closed notifications keep their text, which is what the
+replay key shows again. Older ones keep only who sent them and when: no message
+text and no click command. A history row goes 24 hours after it closed. The
+shell applies that every hour while it runs, when it starts, and when a new
+notification arrives, so a shell that is not running keeps what it had until it
+next starts.
+
+`live.json` keeps the full text of the cards on screen, because they need it to
+draw. A card more than a day old does not come back after a restart.
+
+An older copy can outlive all of this: a snapshot of `/home`, or the disk's free
+space after the file is rewritten. Nothing here scrubs those. `nixarchy home
+backup` excludes the whole folder, as it does the clipboard history, but backups
+made before this release may still hold it in their git history. To check that
+older rows hold no text, count them rather than reading them:
+
+```sh
+jq '[.[6:][] | select(.body != "" and .body != "[redacted]")] | length' ~/.local/state/omarchy/notifications/history.json
+```
+
+It prints `0`. A `[redacted]` row is a verification code the shell never stored
+in the first place.
+
 ## What do I have, and what reads it?
 
 ```sh

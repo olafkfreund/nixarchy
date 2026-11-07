@@ -116,6 +116,15 @@
     programs.nixarchy.dictation.enable = true;
   };
 
+  superwhisper-unfree-off = {
+    programs.nixarchy.allowUnfree = false;
+  };
+
+  superwhisper-forced-on = {
+    programs.nixarchy.allowUnfree = true;
+    programs.nixarchy.apps.superwhisper.enable = true;
+  };
+
   # #1613: their own association for the vendor's sign-in scheme.
   superwhisper-own-scheme = {
     xdg.mime.defaultApplications."x-scheme-handler/superwhisper" = "own-superwhisper.desktop";

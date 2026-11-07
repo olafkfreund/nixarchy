@@ -2436,6 +2436,7 @@
           # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
           cache-budget = import ./tests/cache-budget.nix {
             pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
           };
 
           # The release guard and the weekly release-candidate body, against a

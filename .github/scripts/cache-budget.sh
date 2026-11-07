@@ -78,6 +78,13 @@ for i in "${!entries[@]}"; do
   set +f
 done
 
+# The public cache must never redistribute the proprietary app, even when an
+# allowlisted output pulls it in indirectly.
+if grep -E '/nix/store/[^/]*-superwhisper(-|$)' "$work/paths.tsv" >&2; then
+  echo '::error::an allowlisted closure contains Superwhisper; the public cache must stay free of it' >&2
+  exit 1
+fi
+
 # One lookup per distinct path, in parallel: the union of the allowlist is
 # around 3,000 paths and nearly all of them are served upstream.
 cut -f1 "$work/paths.tsv" | sort -u >"$work/unique"

@@ -205,6 +205,31 @@ let
     && !(builtins.elem "/share/fcitx5/themes" c.environment.pathsToLink);
 
   superwhisperHm = c: c.home-manager.users.omarchy;
+  unfreeOff = configOf fixtures.superwhisper-unfree-off;
+  forcedOn = configOf fixtures.superwhisper-forced-on;
+  forcedPackage = lib.findFirst (
+    p: lib.getName p == "superwhisper"
+  ) null forcedOn.environment.systemPackages;
+  forcedPackagePath =
+    if forcedPackage == null then pkgs.writeText "absent-superwhisper" "" else forcedPackage;
+  keyHarness = pkgs.writeText "dictation-keys.lua" ''
+    local backend, missing = arg[1], arg[2] == "missing"
+    local binds = {}
+    io.popen = function()
+      return { read = function() return backend end, close = function() end }
+    end
+    o = {
+      cmd_missing = function() return missing end,
+      bind = function(key, _, command) binds[key] = command end,
+      bind_hold = function(key) binds[key] = "hold" end,
+    }
+    dofile(arg[3])
+    if missing then
+      assert(next(binds) == nil, "superwhisper-dictation-selection: FAIL a missing backend took a dictation key")
+    else
+      assert(binds["ALT + SPACE"] == "omarchy-dictation toggle", "superwhisper-unfree-off: FAIL Alt+Space does not toggle Voxtype")
+    end
+  '';
 
   agentLocalScripts = [
     (agentLocalCheck "podman-own-config" (
@@ -476,6 +501,10 @@ let
 in
 pkgs.runCommand "nixarchy-coexistence"
   {
+    nativeBuildInputs = [
+      pkgs.lua5_4
+      pkgs.python3
+    ];
     # Named so the drivers env derivations and system.path are build inputs,
     # not just strings -- see driverArgOf's comment.
     passthru.fixtures = fixtures;
@@ -491,6 +520,30 @@ pkgs.runCommand "nixarchy-coexistence"
     ${hyprlandScript}
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}
+    if [ "${
+      if
+        unfreeOff.programs.nixarchy.dictation.enable
+        && (superwhisperHm unfreeOff).services.voxtype.enable
+        && (superwhisperHm unfreeOff).home.activation ? nixarchyDictationSelection
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-unfree-off: FAIL Voxtype did not remain enabled for dictation' >&2
+      fail=1
+    fi
+    if [ "${
+      if forcedOn.programs.nixarchy.apps.superwhisper.enable && forcedPackage != null then "yes" else "no"
+    }" != yes ]; then
+      echo 'superwhisper-forced-on: FAIL the selected app is absent from the reference system' >&2
+      fail=1
+    else
+      mkdir -p panel-home
+      HOME=$PWD/panel-home PATH=${forcedPackagePath}/bin:$PATH python3 -c 'import runpy,sys; got=runpy.run_path(sys.argv[1])["wrapper_path"]("superwhisper"); assert got==sys.argv[2], f"superwhisper-forced-on: FAIL panel local-bin lookup did not fall through to PATH: {got}"; print("superwhisper-forced-on: panel resolves the packaged CLI on PATH")' '${forcedPackagePath}/share/superwhisper/app/assets/omarchy-plugin/superwhisper-panel/status.py' '${forcedPackagePath}/bin/superwhisper' || fail=1
+    fi
+    lua ${keyHarness} voxtype installed '${reference.config.programs.nixarchy.package}/share/omarchy/default/hypr/bindings/dictation.lua' || fail=1
+    lua ${keyHarness} superwhisper missing '${reference.config.programs.nixarchy.package}/share/omarchy/default/hypr/bindings/dictation.lua' || fail=1
     ${lib.concatStrings sysctlScripts}
     ${lib.concatStrings opensshScripts}
     ${opensshMkDefault}

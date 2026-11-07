@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1644
 spec: spec/2026-11-07-1644-proof-survives-unchanged-commit.md
 coders:

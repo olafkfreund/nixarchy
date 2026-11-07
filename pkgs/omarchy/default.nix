@@ -2024,6 +2024,12 @@ stdenvNoCC.mkDerivation {
                     # Sits on 902: same file. checks.session delegates one and watches.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./903-notification-delegate.patch}
 
+                    # Only the newest notifications keep their text in history; older rows keep who
+                    # and when, and day-old cards don't come back (Nixi #220, nixarchy #1663). CARRIED
+                    # until omacom/omarchy takes it; --fuzz=0 so a bump that rewords it fails here.
+                    # Sits on 902/903: same file. checks.notification-store and checks.session prove it.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./904-notification-history-text.patch}
+
                     # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
                     substituteInPlace $out/share/omarchy/shell/shell.qml \
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"

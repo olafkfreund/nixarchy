@@ -1751,6 +1751,8 @@
             "home-activation-writes"
             "language-locale"
             "language-select"
+            # The notification history keeps text for the newest rows only (#1663).
+            "notification-store"
             # data/bin-ledger.nix, held to its own claim. Also the home of the
             # pacman allowlist that used to live inline in build.yml. See
             # tests/bin-ledger.nix and #447.

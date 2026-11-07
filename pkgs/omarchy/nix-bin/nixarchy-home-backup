@@ -78,7 +78,7 @@ shipped_list() {
 .local/state/omarchy/
 
 # Which is why the exclusions below exist. `.local/state/omarchy/` is a
-# directory Omarchy writes at runtime, and three things under it must not
+# directory Omarchy writes at runtime, and five things under it must not
 # travel:
 
 # Every string this user has copied. Password managers paste through the
@@ -102,6 +102,10 @@ shipped_list() {
 # Agent token-usage telemetry. Not a credential, but it is per-machine
 # accounting nobody wants restored onto a different machine.
 !.local/state/omarchy/agents/
+
+# What notifications said. The shell keeps the newest few in full and the cards
+# on screen; per-machine, short-lived, and somebody else's words. Nixi #220.
+!.local/state/omarchy/notifications/
 
 # The list itself, so extending it is not a change you lose with the disk.
 .config/omarchy/backup.list

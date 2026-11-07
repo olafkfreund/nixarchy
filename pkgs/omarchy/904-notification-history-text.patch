@@ -1,0 +1,70 @@
+--- a/shell/plugins/notifications/Service.qml
++++ b/shell/plugins/notifications/Service.qml
+@@ -1338,6 +1338,15 @@
+     onTriggered: service.flushStore()
+   }
+ 
++  // Retention is applied on a timer too, so an idle desktop does not keep a
++  // day-old row until the next notification.
++  Timer {
++    interval: 3600000
++    repeat: true
++    running: service.historyLoaded
++    onTriggered: service.currentHistory()
++  }
++
+   // A file is written only once it has been read, so startup never
+   // overwrites what the last session left; its loader saves again.
+   function flushStore() {
+@@ -1471,7 +1480,7 @@
+   // ------------------------------------------------------------- history replay
+   //
+   // The last few come back as restored rows: no live sender, a short grace.
+-  readonly property int replayCount: 6
++  readonly property int replayCount: Store.HISTORY_TEXT_ROWS
+ 
+   function replayHistory() {
+     var rows = currentHistory().slice(0, replayCount)
+--- a/shell/plugins/notifications/Store.js
++++ b/shell/plugins/notifications/Store.js
+@@ -149,6 +149,10 @@
+ var LIVE_LIMIT = 100
+ var HISTORY_LIMIT = 100
+ var RETENTION_HOURS = 24
++// Only the newest rows keep their text: the ones the replay key shows again.
++// Older rows keep who and when, never what was said or what a click runs.
++var HISTORY_TEXT_ROWS = 6
++var TEXT_FIELDS = ["summary", "body", "rawBody", "execArgv", "execActions"]
+ // A live row is what a restored card draws; a history row only needs to
+ // come back as a short card, so its text is cut much shorter.
+ var LIVE_ROW_CHARS = 16384
+@@ -193,7 +197,15 @@
+ function retain(entries, now) {
+   var cutoff = now - RETENTION_HOURS * 3600, out = []
+   for (var i = 0; i < entries.length && out.length < HISTORY_LIMIT; i++)
+-    if (entries[i].closed_ts > cutoff) out.push(entries[i])
++    if (entries[i].closed_ts > cutoff) out.push(out.length < HISTORY_TEXT_ROWS ? entries[i] : withoutText(entries[i]))
++  return out
++}
++
++// A redacted row is already only a placeholder; its marker must survive.
++function withoutText(entry) {
++  if (redacted(entry)) return entry
++  var out = {}
++  for (var k in entry) out[k] = TEXT_FIELDS.indexOf(k) >= 0 ? "" : entry[k]
+   return out
+ }
+ 
+@@ -255,7 +267,11 @@
+   return out
+ }
+ 
+-function parseLive(text) { return parseStored(text, LIVE_LIMIT, LIVE_ROW_CHARS, false) }
++// A card left on screen longer than history would keep it does not come back.
++function parseLive(text, now) {
++  var cutoff = (now || Date.now() / 1000) - RETENTION_HOURS * 3600
++  return parseStored(text, LIVE_LIMIT, LIVE_ROW_CHARS, false).filter(function(entry) { return entry.ts > cutoff })
++}
+ function parseHistory(text) { return parseStored(text, HISTORY_LIMIT, HISTORY_ROW_CHARS, true) }
+ 
+ function serialise(entries) { return JSON.stringify(entries) + "\n" }

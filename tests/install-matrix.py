@@ -57,6 +57,8 @@ directory:
   apps cannot be reached by QMP `send-key` and stay with `pkgs/verify.sh` and
   a human.
 
+  Disk list (#1653): real USB and SD-reader ordering is unmeasured; `checks.installer-disk-list` stubs `lsblk`.
+
   Factory reset (#1621) is covered on a real btrfs guest by
   `checks.factory-reset` (every staging, exchange, rollback, repair and
   elevation case) and on the installed machine by `checks.install`. What no

@@ -109,6 +109,8 @@ touches `installer/disk-config.nix`. Both an online and a former offline whole-d
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
+Real USB and SD-reader ordering is unmeasured; `checks.installer-disk-list` stubs `lsblk`.
+
 ## A check that dies before its first echo tells you nothing at all
 
 The section below says the floor is what catches an unparseable dispatch. It

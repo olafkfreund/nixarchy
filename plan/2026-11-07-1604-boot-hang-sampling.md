@@ -71,7 +71,11 @@ reviewers:
      `time.sleep(watch)`; `new = machine.full_console_log[before:]`; entry is
      `poke <command>: <len(new)> console lines within <watch> s` or
      `poke <command>: no console output within <watch> s`, followed by
-     `new[:20]` each indented by two spaces, `\r` stripped.
+     `new[:20]` each indented by two spaces, `\r` stripped. If the monitor's
+     own reply to the poke is non-empty after `\r` stripping and `.strip()`,
+     add a line `  monitor replied: <reply>` under it, so an HMP rejection
+     (`unknown command:`, a bad key name) is visible rather than reading as
+     "no console output", and case A's `unknown command:` assertion sees it.
    - `_diagnose(machine, probe_timeout, poke_watch=None)`: create
      `abandoned = threading.Event()`. `sample_monitor`, per sample, keeps
      `info cpus` then `info registers -a`, then: for each `CPU #(\d+)` in this
@@ -101,21 +105,30 @@ reviewers:
 2. **`tests/boot-diagnostics.py`** (lines 15-28, 51-99). Coder: coder.
    - `Stub.__init__` gains `self.commands = []`. `send_monitor_command` appends
      the command, then answers: `info cpus` → `* CPU #0: thread_id=1\r\n`;
-     `info virtio` → `/machine/peripheral-anon/device[0]/virtio-backend [virtio-blk]\r\n`;
-     startswith `info virtio-status` → `  num_vqs:                 2\r\n`;
+     `info virtio` → two devices,
+     `/machine/peripheral-anon/device[0]/virtio-backend [virtio-blk]\r\n/machine/peripheral-anon/device[1]/virtio-backend [virtio-serial]\r\n`;
+     `info virtio-status …device[0]…` → `  num_vqs:                 2\r\n`,
+     `info virtio-status …device[1]…` → `  num_vqs:                 3\r\n`
+     (two devices with different counts, so "first device only" and "a fixed
+     number of queues" both go red);
      `nmi` → append `Uhhuh. NMI received for unknown reason 00 on CPU 0.` to
-     `self.full_console_log`, return `""`; else today's
+     `self.full_console_log`, return `""`; `sendkey …` → `""`; else today's
      `CPU#0\r\nEIP=000ebd8b\r\n`.
    - Case 4 passes `poke_watch=0.1` and asserts, each with a `fail(...)`:
      `info lapic`, `info pic`, `info irq` each sent exactly twice; each
      `info lapic` immediately preceded by `cpu 0`;
-     `info virtio-queue-status /machine/peripheral-anon/device[0]/virtio-backend 0`
-     and `… 1` each sent twice; index of `nmi` < index of `sendkey alt-sysrq-w`;
+     the set of `info virtio-queue-status` commands sent equals exactly
+     `{device[0] path} 0..1` and `{device[1] path} 0..2`, each sent twice (ten
+     commands); index of `nmi` < index of `sendkey alt-sysrq-w`;
      `poke nmi: 1 console lines` and `NMI received for unknown reason` in
      `raised.monitor_dump`; `poke sendkey alt-sysrq-w: no console output` in it;
      existing `elapsed < 15` kept.
    - New case 5: `ev = threading.Event(); ev.set()`; `ns["_poke"](Stub(...), 0.1, ev)`
      sends nothing (`stub.commands == []`).
+   - New case 6: a stub subclass whose `sendkey …` reply is
+     `unknown key: 'x'\r\n`; `ns["_poke"](stub, 0.1, threading.Event())` must
+     contain `monitor replied: unknown key`. Case 4's dump must not contain
+     `monitor replied:` (the normal stub replies are empty).
    - Cases 2 and 3: assert `"nmi" not in m.commands`.
    - Verify: `flock /mnt/data/vmtest/codex-build.lock nix build .#checks.x86_64-linux.boot-diagnostics --print-build-logs`
      (no pipe on it; §1 pipelines). Then run the spec's break table, one break
@@ -127,7 +140,9 @@ reviewers:
      |---|---|
      | drop `info pic` | 4 (`info pic` count) |
      | `info lapic` without `cpu` | 4 (`cpu 0` order) |
-     | `range(1)` instead of `num_vqs` | 4 (queue 1) |
+     | `range(2)` instead of `num_vqs` | 4 (device[1] queue 2) |
+     | only the first `info virtio` path (`[:1]`) | 4 (device[1] queues) |
+     | drop the `monitor replied:` line from `_poke` | 6 |
      | swap poke order | 4 (order) |
      | take `before` after sending | 4 (`poke nmi: 1 console lines`) |
      | drop the sendkey poke | 4 (sendkey line) |
@@ -201,7 +216,7 @@ reviewers:
 ## Tests (by §6 tier)
 
 - Cheap, any time, one at a time under `flock /mnt/data/vmtest/codex-build.lock`:
-  `checks.boot-diagnostics` (plus its eight breaks), `checks.install-teardown`
+  `checks.boot-diagnostics` (plus its ten breaks), `checks.install-teardown`
   (execs `vm-cleanup.py` without the driver), `checks.install-gate`,
   `checks.test-registration`, `boot-hang-detect.driver` and
   `install.driver` (pyflakes and mypy on the prepended script),

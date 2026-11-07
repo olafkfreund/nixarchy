@@ -37,10 +37,17 @@ than our image:
   preflight skipped.
 - The stock live store is a tmpfs overlay too, so `check_store_space` and the
   `--store /mnt` fallback carry the same weight as on our image, unmeasured.
-- Our image ships `/etc/gitconfig` with `safe.directory = /mnt/etc/nixos`
-  (`installer/cd.nix:432`) for root without sudo. Under `sudo` on a stock ISO
-  git exempts root only when `SUDO_UID` owns the repository. Whether any git
-  or libgit2 call during the install trips on this is not known.
+- Our image lists nixarchy.cachix.org and hyprland.cachix.org in its own
+  `nix.conf` (`installer/cd.nix:400`). The build passes them explicitly
+  (`installer/install.sh:2686`), but the preflight's dry-run passes only
+  `SUBSTITUTE_FLAGS` (`installer/install.sh:71`). On a stock ISO, once the
+  preflight runs there, it would plan without our caches and report most of
+  the desktop as "will be built".
+- Not the install itself, but a stock ISO also lacks our `/etc/gitconfig`
+  `safe.directory` entry (`installer/cd.nix:412-432`). That entry is for a
+  rescue `nixos-install` after `/etc/nixos` has been chowned to the user; the
+  chown runs after `run_install` (`installer/install.sh:3067-3069`), so the
+  install does not need it.
 
 ## Proposed outcome
 
@@ -48,16 +55,17 @@ The smallest outcome worth having: **a documented, tested `nix run` command
 that installs nixarchy from the stock NixOS minimal ISO, and is as safe as our
 image before the disk is touched.**
 
-1. The network preflight runs on any live medium that is not the seeded test
-   store, not only on ours. A dead cache or an unplannable system on stock
-   media refuses with "the disk has not been touched", the same as on
-   `iso-net`.
-2. One VM check installs from the stock minimal ISO with `--answers`, and
-   records time to the first question, bytes downloaded and peak live-store
-   use.
+1. The network preflight runs on stock media too, with our caches, not only
+   on our image. A dead cache or an unplannable system on stock media refuses
+   with "the disk has not been touched", the same as on `iso-net`.
+2. A VM check on the stock minimal ISO with two cases: an install with
+   `--answers` that records time to the first question, bytes downloaded and
+   peak live-store use; and a dark cache that is refused with the disk left
+   intact. A success alone cannot show the preflight ran (CLAUDE.md §1).
 3. One manual section (in `docs/manual/the-iso.md`, or `unattended-installs.md`
    for the `--answers` form) gives the command, says it is the advanced path,
-   and says what it does not give you.
+   says what it does not give you, and names the NixOS ISO release and
+   nixarchy revision the check last passed with.
 
 Not covered by this outcome:
 
@@ -95,13 +103,17 @@ Not covered by this outcome:
    clear, as the owner said. If only one part is taken, take the preflight
    fix: it is small, and someone running `nix run …#install` from a stock ISO
    today can lose a disk to it.
-2. **What switches the preflight on?** Recommendation: run it unless the store
-   is seeded (`checks.install`'s condition, stated directly), rather than
-   testing for our marker. Spec decides the exact test.
+2. **What switches the preflight on?** A stock ISO has a store too, so "the
+   store is seeded" is not the distinction. What separates `checks.install`
+   is that the target closure is already present and no network is expected.
+   Recommendation: the spec names that condition directly and tests both
+   sides of it, rather than testing for our marker.
 3. **Document before the VM check exists?** Recommendation: no. An untested
    documented command is a promise nobody has kept; land the check first.
-4. **Does `sudo` on the stock ISO need our `safe.directory` entry?**
-   Recommendation: answer it in the VM check rather than by reading; if it
-   does, the installer passes `-c safe.directory` itself.
+4. **Rescue from a stock ISO.** A rescue `nixos-install` against a user-owned
+   `/mnt/etc/nixos` fails without our `safe.directory` entry, and
+   `git -c` cannot fix it, because libgit2 does not read it
+   (`installer/cd.nix:425-429`). Recommendation: out of scope here; the manual
+   section tells rescuers to keep using our image, or to add the entry by hand.
 5. **Should this lead to dropping `iso-net`?** Recommendation: decide after
    the numbers from (2) and #1649, in its own issue.

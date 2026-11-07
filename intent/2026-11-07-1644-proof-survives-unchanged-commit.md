@@ -23,16 +23,32 @@ measurement below says which ones move a check):
   options catalogue's declaration URLs (`/etc/nixarchy/options.json`, #1166), so
   every system closure that imports the module moves per commit too, even with
   `omarchy` fixed.
-- `flake.nix:1381`: `self.rev` in the `try` app script. Installer-only:
-  `installer/cd.nix:437`, `installer/mkFlake.nix:22`, `pkgs/microvm.nix:65` --
-  these pin the installer to a commit on purpose and are not in scope.
+  `packages.nixarchy-options` re-exports the same catalogue.
+- `pkgs/microvm.nix:65`: `self.rev` pins `nixarchy vm` to its commit. It is not
+  installer-only: `modules/apps.nix:3924` puts it on every installed system, and
+  `checks.microvm-template` builds it (`flake.nix:2738`).
+- `self.outPath` and every input's `outPath`, collected into the install checks'
+  VM dependencies (`tests/install.nix:60-66`, `flake.nix:1585-1590`) and the
+  ISO (`installer/cd.nix`). The source tree's store path changes on any commit,
+  so these move by design, not through the rev.
+- `self.rev` / `shortRev` in the `try` app (`flake.nix:1381`) and
+  `installer/mkFlake.nix:22`, `installer/cd.nix:437`, which pin the installer to
+  a commit on purpose.
 
-Measured on 2026-11-07, `nix eval .#<attr>.outPath` before and after the
-docs-only commit that adds this file (see "Measurement" below).
+So the checks split in two. Those built from `omarchy` or a NixOS configuration
+can lose the rev and keep their proof. The real system toplevels
+(`vm-toplevel`, `reference-toplevel`) and the install/ISO checks carry the
+commit or the source tree by design, and a check of the machine a user really
+gets should go on carrying it.
 
-What it costs: every PR and every `main` push rebuilds every VM check
-(`session`, `coexist`, `integration`, `plugin`, the install trio) even when the
-diff is a comment, and the cache fills with proofs that can never be hit again.
+Measured on 2026-11-07, `nix eval .#<attr>.outPath` before and after a
+docs-only commit (see "Measurement" below).
+
+What it costs: every `main` push, and every pull request the gate
+(`.github/scripts/pr-touches-build.sh`) judges relevant, rebuilds every VM check
+(`session`, `coexist`, `integration`, `plugin`) even when the source change is
+a comment, and the cache fills with proofs that can never be hit again. Some
+documentation-only PRs already skip those jobs through that gate.
 A second effect, not yet measured: `build.yml` checks out without a `ref`, so a
 pull request run builds GitHub's merge commit (`refs/pull/N/merge`), whose rev
 is neither the branch head nor the squash commit `main` later gets. While the
@@ -42,7 +58,9 @@ rev is in the closure, a PR's proof can never serve `main`.
 
 - A commit that changes no input of a check except the commit hash leaves that
   check's `outPath` unchanged, so `already-proven.sh` reports it proven and CI
-  does not rebuild it.
+  does not rebuild it. A named, short list of checks is exempt because it must
+  carry provenance (the real toplevels, install and ISO checks), and the list
+  says why for each.
 - `nixarchy-version` still tells a user which commit and date built their
   machine (#208), and `options.json` still links declarations to the source at
   the right commit.
@@ -53,7 +71,11 @@ rev is in the closure, a PR's proof can never serve `main`.
 
 - `flake.nix` (`nixarchyRev`, `nixarchyDate`), `pkgs/omarchy/default.nix`
   (the splice and its own `nixarchy-version` self-check), `modules/nixos.nix`
-  (catalogue `rev`), and whatever small derivation takes the rev instead.
+  (catalogue `rev`), `pkgs/microvm.nix`, and whatever small derivation takes the
+  rev instead.
+- Readers of `options.json`: the picker in `modules/apps.nix:3460-3470`
+  (`to_entries[]` over the top level), `tests/nixarchy-options.nix`, and the
+  release asset (`.github/workflows/release.yml:252`).
 - CI: `build.yml`, `omarchy.yml`, `nightly.yml`, `install-check.yml` callers of
   `build-unless-proven.sh` gain hits; no script change is expected.
 - Users: none visible if `nixarchy-version` output is unchanged. A rebuild after
@@ -100,27 +122,34 @@ full list of moving checks (evaluating all of them is the memory-heavy row in
 
 ## Open questions
 
-1. **Where does the rev go?** Recommendation: a tiny `nixarchy-version`
-   derivation (or a `/etc/nixarchy/version` file written by the module) that
-   carries rev and date, with `omarchy` shipping the script with placeholders
-   resolved at that last step. Keeps `omarchy` and everything above it
-   commit-independent; only the top-level system closure changes per commit.
+1. **Where does the rev go?** Recommendation: a tiny last-step derivation (or a
+   `/etc/nixarchy/version` file written by the module) that carries rev and
+   date, with `omarchy` shipping `nixarchy-version` reading it. Keeps `omarchy`
+   and everything built from it commit-independent; the real system toplevel
+   still changes per commit, which is correct for it.
 2. **The options catalogue's `rev`.** Linking to `main` instead would point old
    machines at the wrong source, so the commit stays in the URLs.
-   Recommendation: rewrite the URLs in the same last-step derivation as (1), or
-   store repository-relative paths in `options.json` beside one `rev` field.
-   The spec chooses after reading every reader of `options.json`.
-3. **Should system-level checks (`vm-toplevel`, `session`) be commit-independent
-   too, or only checks built on `omarchy`?** Recommendation: all checks. A VM
-   check that embeds the rev only through `/etc` text gains nothing from
-   testing it, and `session` is the most expensive thing a docs PR rebuilds.
-   The rev should reach the machine's real system, not the test fixtures, or
-   the fixtures should use a fixed placeholder rev.
-4. **Merge commit vs head (issue item 2's premise).** Recommendation: measure in
-   the spec, do not change `build.yml`'s checkout here; once the rev is out of the
-   closure the merge commit and the squash commit build the same outPaths for an
-   unchanged tree content, and the question only matters for proofs reused
-   across different tree contents, which is never sound.
-5. **The guard.** Recommendation: a cheap evaluation check that evaluates a
-   chosen set of check outPaths under two fake `self` revs and asserts equality,
-   proven to fail by restoring the current splice.
+   Recommendation: rewrite the URLs at the last step and keep the file's shape.
+   A top-level `rev` field would be read as an option by the picker's
+   `to_entries[]` (`modules/apps.nix:3465`), so changing the shape needs every
+   reader migrated, the release asset included.
+3. **Which checks become commit-independent?** Recommendation: every check that
+   tests behaviour (`session`, `coexist`, `integration`, `plugin`,
+   `microvm-template`, the options shards), by giving their fixtures a fixed
+   placeholder rev; `nixarchy-version` and the catalogue keep their own check
+   that the real rev arrives. Exempt by name: `vm-toplevel`,
+   `reference-toplevel`, the install trio and ISO checks, which carry the
+   source tree by design. The cost of the placeholder is that those VM checks no
+   longer test the exact bytes a user gets in `/etc`; the spec must say where
+   the real rev is still asserted.
+4. **Merge commit vs head (issue item 2's premise).** Recommendation: leave
+   `build.yml`'s checkout alone in this task. Once the rev is out of a check's
+   closure, the merge commit and the later squash commit produce the same
+   outPath for the same tree content, so a PR's proof can serve `main` without
+   any checkout change.
+5. **The guard.** Recommendation: compare the outPaths of the non-exempt checks
+   between two real commits that differ in a docs file (not two fake revs,
+   which would miss `lastModifiedDate` and `self.outPath`), with the exempt list
+   explicit, and prove it fails against today's splice. Whether this is a
+   `checks.*` entry or a CI step is the spec's call: a flake check cannot
+   evaluate two commits of itself, so it may need to live in a workflow step.

@@ -106,16 +106,10 @@ let
   keyboardKwinGreeter = configOf fixtures.keyboard-kwin-greeter;
 
   vconsoleOf = c: c.environment.etc."vconsole.conf".source;
+  # The command ends in `-c <ini>`. Not appendContext: it requires the .drv already in the store,
+  # which holds here and not on a fresh runner.
   westonIniOf =
-    c:
-    let
-      cmd = c.services.displayManager.sddm.wayland.compositorCommand;
-      path = builtins.head (builtins.match ".* -c (/nix/store/[^ ]+-weston.ini)" cmd);
-    in
-    # Keep only the ini derivation, not weston's closure from the command.
-    builtins.appendContext path (
-      lib.filterAttrs (k: _: lib.hasSuffix "weston.ini.drv" k) (builtins.getContext cmd)
-    );
+    c: lib.last (lib.splitString " " c.services.displayManager.sddm.wayland.compositorCommand);
   keyboardCheck = name: condition: ''
     if ${condition}
     then

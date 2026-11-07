@@ -2189,6 +2189,8 @@ non-US encrypted install.
 
 **`wait_for_unit`'s `timeout` doesn't cover a guest that never boots.** It first waits for the VM's shell, with no limit, so a machine stuck at a LUKS prompt runs to `globalTimeout`. `keyboard-boot` waits for a console line first, because `wait_for_console_text` does keep its limit.
 
+**`builtins.appendContext` with a `.drv` key can pass here and fail in CI.** It requires that derivation to be in the store already. This machine has it from earlier evaluations and a fresh hosted runner doesn't, which reads as `path '…weston.ini.drv' is required, but there is no substituter that can build it`. To pull a path out of a string, use `lib.splitString`, which keeps the context.
+
 <a id="factory-reset"></a>
 ## factory-reset (#1621)
 

@@ -57,6 +57,16 @@ directory:
   apps cannot be reached by QMP `send-key` and stay with `pkgs/verify.sh` and
   a human.
 
+  Factory reset (#1621) is covered on a real btrfs guest by
+  `checks.factory-reset` (every staging, exchange, rollback, repair and
+  elevation case) and on the installed machine by `checks.install`. What no
+  layer can produce on demand is real btrfs metadata exhaustion mid-reset or a
+  real power cut between the two exchanges: if checking by hand on a scratch
+  install, run `omarchy-system-factory-reset` as the normal user (it must
+  elevate rather than claim no snapshot exists), confirm both `/home` and
+  `/var/lib` reset or both stay untouched with `/etc/nixos` intact, and read
+  `/var/lib/nixarchy/factory-reset.done` or `.failed`.
+
 Environment: MATRIX_ISO_DIR (where the published .iso files are),
 MATRIX_NET_ISO (override the image -- how a freshly built ISO gets tested),
 MATRIX_WORK (where disks live; not /tmp, which is

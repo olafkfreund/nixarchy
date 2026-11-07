@@ -393,6 +393,7 @@ jobs:
           #                    already runs two of those against a 90-minute job
           #                    and that pair grazed the timeout on 2026-09-03
           #   microvm-boot     a nested VM on the -tcg runner
+          #   keyboard-boot    two desktop VMs that boot through LUKS and type at the greeter
           # Ask Nix, do not parse the file -- and the implausible-count floor
           # that goes with it. Both moved into generated-checks.sh with the
           # reasoning; see its header.
@@ -2047,6 +2048,11 @@ jobs:
       - name: A frozen guest fails the multi-user wait fast, with registers
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.boot-hang-detect
+
+      # checks.factory-reset is a nixosTest and needs the /dev/kvm set up above (#1621).
+      - name: A failed factory reset leaves both halves untouched, on real btrfs
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.factory-reset
 
       # checks.remove-fingerprint-vm is a nixosTest and needs the /dev/kvm set up above (#1620).
       - name: A fingerprint removed through real fprintd and a virtual reader is gone

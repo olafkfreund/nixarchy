@@ -33,6 +33,15 @@ keymap=us
 It holds a password in clear. That is inherent to installing without being
 asked, and nothing copies it onto the installed machine.
 
+`keymap` is a Linux console keymap name (`de-latin1`, `fr-latin1`, `ru`), and
+the installer derives `services.xserver.xkb` for the login screen and desktop
+from the menu table or systemd's `kbd-model-map`. Because Finnish and Swedish
+share the console map `fi`, `keymap=fi` in an answers file means Finnish (`fi`);
+for Swedish on the desktop, set `services.xserver.xkb.layout = "se";` in
+`configuration.nix` afterwards. A console map with no XKB equivalent — including
+an older answers file still naming `se-lat6` or `cz-qwertz` — falls back to `us`
+on the desktop and prints a line in the summary saying so.
+
 A disk without a WWN or serial is refused by default. This can happen with
 virt-manager, GNOME Boxes, or Proxmox virtio disks; adding a serial to the VM
 disk is the preferred fix. If that is unavailable, use

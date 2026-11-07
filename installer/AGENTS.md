@@ -20,6 +20,7 @@ the bugs have been. The README and the Pages docs say so to users.
 | `mkFlake.nix` | assembles the flake and lock written to the target |
 | `template/` | that flake, with its `@tokens@` still in place |
 | `host.nix` | the installed machine's own configuration |
+| `factory-reset.nix` | `nixarchy-factory-reset.service` — restores `/home` and `/var/lib` from `@factory` on boot, imported only by `host.nix` |
 | `lib/ui.sh`, `lib/dashboard.sh` | the screens; no gum widget without a pty |
 | `try.sh` | `nix run …#try` — boots the real ISO in a local VM |
 | `try-nixarchy.sh` | the same, for a machine with no nix — see below |
@@ -81,9 +82,57 @@ prove a personal image can fetch every package it needs.
 | `installer-answers` | the answers file's secrets: parsing, argv, cleanup (#1079) |
 | `dashboard-clock` | a clock that goes backwards mid-install |
 | `try-preflight` | every refusal path of the `#try` front door |
+| `factory-reset` | `nixarchy-factory-reset.service` and `omarchy-system-factory-reset`: both halves reset or both stay untouched, plus elevation and `.failed` handling (#1621) |
 
 **Not covered:** a personal network image installed end to end. The stock
 image and the personal-image preflights have separate checks.
+
+## `factory-reset.nix` — staging first, then two exchanges (#1621)
+
+`nixarchy-factory-reset.service` runs before `home.mount` when
+`/var/lib/nixarchy/factory-reset.request` exists. Its order is what makes a
+single failing command leave `/home` and `/var/lib` both reset or both
+untouched. There is one exception: if the second exchange and its rollback both
+fail, `/home` is reset and `/var/lib` is not, and the unit prints the repair. A
+power cut is outside the promise altogether.
+
+1. Rename `.request` to `/var/lib/nixarchy/factory-reset.failed` first, so the
+   unit never retries on the next boot and a crash still leaves a record.
+2. Mount `subvol=/`, check that `@factory`, `@factory-home` and `@home` are real
+   btrfs subvolumes (`btrfs subvolume show`, not `-d`), and check that neither
+   `/var/lib.before-reset-$stamp` (`$oldvar`) nor `@home-before-reset-$stamp`
+   (`$oldhome`) exists (`-e` or `-L`). While `phase=guard`, the `EXIT` trap
+   removes nothing, because a collided name may be somebody's data.
+3. Under `phase=stage`, copy `@factory/var/lib` to `$oldvar`, write
+   `factory-reset.done` into `$oldvar/nixarchy`, snapshot `@factory-home` to
+   `$oldhome`, and `btrfs filesystem sync`. Every space-consuming or fallible
+   staging step finishes before either live path moves; if any step fails, the
+   trap removes only `$oldvar` and `$oldhome`.
+4. `exch "$top/@home" "$oldhome"`, then `phase=home-swapped`, then
+   `exch /var/lib "$oldvar"`, then `phase=done`. `exch` (`renameat2` with
+   `RENAME_EXCHANGE`) swaps two existing paths on the same mount in one kernel
+   call, so the fresh copies start under the `before-reset` names and the
+   exchanges leave the old data there with no post-commit rename. Because the
+   receipt sits inside `$oldvar`, `/var/lib` is the commit point: `.done`
+   appears in the live `/var/lib` only if both exchanges succeeded. If the
+   second exchange fails under `phase=home-swapped`, the trap exchanges `@home`
+   back and removes the staged copies; if that rollback exchange also fails, it
+   removes nothing (`$oldhome` holds the user's home) and writes the repair
+   commands into `.failed`.
+
+Two recovery cases from the pre-#1621 two-rename code cannot be printed by any
+command, because a machine in either state may not boot far enough to run one:
+
+- **No `/var/lib`** (a past `:514` failure after `/var/lib` was moved aside and
+  before the copy finished): the next activation recreates an empty `/var/lib`,
+  so from a root shell:
+  `sudo mv /var/lib /var/lib.empty && sudo mv /var/lib.before-reset-<stamp> /var/lib`,
+  then reboot.
+- **No `@home`** (a past `:531` failure after `@home` was moved aside and before
+  the snapshot landed): `/home` has no `nofail`, so the boot should stop
+  (inferred, unrun) and the emergency root account is locked
+  (`tests/install.nix:818-820`). Boot from the ISO, mount `subvol=/`,
+  `mv @home-before-reset-<stamp> @home`, and reboot.
 
 <a id="try-nixarchy-sh"></a>
 ## `try-nixarchy.sh` — the front door with no nix behind it

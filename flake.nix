@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/3c9750e20fd25605fbd2f7a71253997cc45838c5";
+      url = "github:0xc000022070/zen-browser-flake/37ba4a650eaeeb5a086114da3a2cdf7593967d12";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -1005,6 +1005,8 @@
                   "@dashboard@"
                   "@tzdata@"
                   "@kbd@"
+                  "@kbdmodelmap@"
+                  "@nonlatin@"
                   "@reservedusers@"
                   "@initrdmodules@"
                   "@initrdforced@"
@@ -1024,6 +1026,12 @@
                   "${./installer/lib/dashboard.sh}"
                   "${pkgsFor.${system}.tzdata}"
                   "${pkgsFor.${system}.kbd}"
+                  "${pkgsFor.${system}.systemd}/share/systemd/kbd-model-map"
+                  (builtins.head (
+                    builtins.match ".*local non_latin_layouts =[[:space:]]*\"([^\"]*)\".*" (
+                      builtins.readFile "${omarchy}/default/hypr/input.lua"
+                    )
+                  ))
                   (
                     let
                       users = builtins.attrValues self.nixosConfigurations.reference.config.users.users;
@@ -1773,6 +1781,8 @@
             "edge-carry"
             "edge-report"
             "edge-promote"
+            # Proves btrfs subvolume and directory exchanges before the reset uses them (#1621).
+            "factory-reset"
             "firmware-guard"
             # The dangerous one. Installs into free space on a disk that already
             # carries partitions and asserts those partitions are byte-identical
@@ -2064,6 +2074,7 @@
             pkgs = pkgsFor.${system};
             menu = ./installer/brand/keymaps.txt;
             kbd = pkgsFor.${system}.kbd;
+            inherit omarchy;
           };
 
           # The doctor's GPU rules, against fixture machines. checks.install's
@@ -2747,6 +2758,11 @@
             pkgs = pkgsFor.${system};
             imagePin = boxImagePins.archlinux;
             image = images.archlinux;
+          };
+
+          keyboard-boot = import ./tests/keyboard-boot.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
           };
 
           # The other disk mode, built so the cache has it: installer/cd.nix

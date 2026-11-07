@@ -3961,9 +3961,11 @@ pkgs.runCommand "nixarchy-options-files"
     splashIsoDir = splashPaths isoSplash;
     splashIsoOn = pkgs.lib.boolToString isoSplash.boot.plymouth.enable;
     splashIsoTheme = isoSplash.boot.plymouth.theme;
+    # A personal image differs from the published one by design (#1649): it
+    # carries its host. The old `offline` argument must still change nothing.
     legacyIsoSame = pkgs.lib.boolToString (
       (legacyIso true).drvPath == (legacyIso false).drvPath
-      && (legacyIso true).drvPath == inputs.self.packages.${system}.iso-net.drvPath
+      && pkgs.lib.hasInfix "-net-" (legacyIso true).name
     );
     # What the assets are measured against. The vendored tree, at the version
     # this flake pins -- so a bump that changes an asset changes what "still

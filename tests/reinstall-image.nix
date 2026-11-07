@@ -8,6 +8,8 @@ let
     mkdir -p $out/hosts/alpha
     printf 'fixture\n' > $out/hosts/alpha/default.nix
     printf '{ }\n' > $out/flake.nix
+    printf '*.pem\n' > $out/.gitignore
+    printf 'tracked despite the ignore rule\n' > $out/hosts/alpha/cert.pem
   '';
   flake = {
     outPath = fixture;
@@ -40,6 +42,7 @@ pkgs.runCommand "nixarchy-reinstall-image"
     git config --global --add safe.directory "$repoPath"
     [ "$(git --git-dir="$repoPath" rev-list --count HEAD)" = 1 ] || { echo "image repository has more than one commit" >&2; exit 1; }
     [ -z "$(git --git-dir="$repoPath" remote)" ] || { echo "image repository has a remote" >&2; exit 1; }
+    git --git-dir="$repoPath" cat-file -e HEAD:hosts/alpha/cert.pem 2>/dev/null || { echo "image repository dropped a tracked file its .gitignore matches" >&2; exit 1; }
 
     cat() { if [ "$1" = /proc/cmdline ]; then printf '%s\n' "$CMDLINE"; else command cat "$@"; fi; }
     exec() { shift; : > got; [ "$#" -eq 0 ] || printf '%s\n' "$@" > got; }

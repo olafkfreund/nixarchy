@@ -34,7 +34,8 @@ let
         cp -r ${source.flake.outPath}/. source
         chmod -R u+w source
         git -C source init -q
-        git -C source add -A
+        # --force: the source is exactly what was tracked, ignored files included.
+        git -C source add -A --force
         GIT_AUTHOR_NAME=nixarchy GIT_AUTHOR_EMAIL=nixarchy@localhost GIT_AUTHOR_DATE=1970-01-01T00:00:00Z \
           GIT_COMMITTER_NAME=nixarchy GIT_COMMITTER_EMAIL=nixarchy@localhost GIT_COMMITTER_DATE=1970-01-01T00:00:00Z \
           git -C source commit -qm 'Reinstall image source'

@@ -91,8 +91,10 @@ pkgs.testers.runNixOSTest {
               machine.send_chars(keys + "\n")
           else:
               machine.send_console(keys + "\n")
-          # A rejected passphrase re-prompts for ever: without a limit it fails only at globalTimeout.
-          machine.wait_for_unit("display-manager.service", timeout=600)
+          # A wrong passphrase re-prompts for ever, and wait_for_unit blocks on the shell before its
+          # own timeout starts. The root device appears only once the disk is unlocked.
+          machine.wait_for_console_text("Reached target Initrd Root Device", timeout=300)
+          machine.wait_for_unit("display-manager.service")
           machine.wait_until_succeeds("loginctl list-sessions | grep greeter >/dev/null")
           machine.succeed("test -b /dev/mapper/cryptroot")
 

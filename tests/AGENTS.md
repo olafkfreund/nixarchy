@@ -2187,6 +2187,8 @@ unlocking `omarchy-shell lock` on `de`. What no VM here can reach is a
 than QEMU's `send_chars` qcodes) and **Plymouth on a real KMS driver** on a
 non-US encrypted install.
 
+**`wait_for_unit`'s `timeout` doesn't cover a guest that never boots.** It first waits for the VM's shell, with no limit, so a machine stuck at a LUKS prompt runs to `globalTimeout`. `keyboard-boot` waits for a console line first, because `wait_for_console_text` does keep its limit.
+
 <a id="factory-reset"></a>
 ## factory-reset (#1621)
 

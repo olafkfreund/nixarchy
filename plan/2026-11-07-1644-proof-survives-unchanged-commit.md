@@ -63,16 +63,16 @@ reviewers:
    **`.github/scripts/commit-independent.sh`** (new, `#!/usr/bin/env bash`, `set -euo pipefail`) implements decision 11:
    - `git diff --quiet HEAD && git diff --cached --quiet` must hold, and there must be no untracked files other than ignored ones. Otherwise it refuses with exit 2.
    - `scratch_root=${RUNNER_TEMP:-/mnt/data/vmtest}`, then `[ -d "$scratch_root" ] || exit 2`.
-   - Set `scratch=$(mktemp -d "$scratch_root/commit-independent.XXXXXX")` as a **global**, and register `trap 'git worktree remove --force "$scratch" 2>/dev/null; rm -rf "$scratch"' EXIT` before `git worktree add --detach "$scratch/tree" HEAD`.
+   - Set `scratch=$(mktemp -d "$scratch_root/commit-independent.XXXXXX")` as a **global**, and register `trap 'git worktree remove --force "$scratch/tree" 2>/dev/null; rm -rf "$scratch"; git worktree prune' EXIT` (the worktree is `$scratch/tree`, not `$scratch`: removing the parent fails and leaves a registered worktree) before `git worktree add --detach "$scratch/tree" HEAD`.
    - `bound=$(nix eval --json --file data/commit-bound-checks.nix --apply builtins.attrNames) || exit 1`.
    - `all=$(nix eval --json "git+file://$scratch/tree#checks.x86_64-linux" --apply builtins.attrNames) || exit 1`. Use `jq` to find any bound name missing from `all` and fail naming it. The names to compare are `$@` if given, else `all - bound`.
    - `evalall <tag>` loops one name at a time with `out=$(nix eval --raw "git+file://$scratch/tree#checks.x86_64-linux.$c.outPath") || { echo "$c: does not evaluate" >&2; exit 1; }`, writing `name<TAB>out` to `$scratch/<tag>.tsv`. It also logs per-check seconds on stderr.
    - The probe commit:
 
      ```
-     printf '%s\n' "probe" > .commit-probe && git add .commit-probe &&
+     printf '%s\n' "probe" > "$scratch/tree/.commit-probe" && git -C "$scratch/tree" add .commit-probe &&
        GIT_COMMITTER_DATE="@$(( $(git log -1 --format=%ct) + 172800 ))" \
-       git -c user.name=commit-probe -c user.email=probe@invalid commit -q -m probe
+       git -C "$scratch/tree" -c user.name=commit-probe -c user.email=probe@invalid commit -q -m probe
      ```
 
      It runs in `$scratch/tree`. Git takes `@<epoch>`; a bare number is not read as a date.
@@ -165,32 +165,32 @@ reviewers:
 
 5. **`flake.nix` top-level `let` (after `stableInputs`, ~`:516`), `checks` (`:1735`), `:2743-2751`, `:2822-2827`.**
    - **Top-level `let`:** add `checkInputs` as the spec writes it (decision 5), plus `commitBound = import ./data/commit-bound-checks.nix;`. Here `inputs` is still the function argument, so `checkInputs` reads the real one.
-   - **Checks `let`:** add `realInputs`, then shadow `inputs`. **Don't** write `let realInputs = inputs; inputs = checkInputs;` in the same `let`. A Nix `let` is recursive, so `realInputs` would capture the shadowed value. Bind `realInputs = inputs;` in the **top-level** `let` instead, and only `inputs = checkInputs;` in the checks `let`.
+   - **Checks `let`:** shadow `inputs` only. **Don't** write `let realInputs = inputs; inputs = checkInputs;` in the same `let`. A Nix `let` is recursive, so `realInputs` would capture the shadowed value. Bind `realInputs = inputs;` in the **top-level** `let` instead, and only `inputs = checkInputs;` in the checks `let`.
    - **`genAttrs uniformChecks` (`:2822`):** pass `inputs = if commitBound ? ${n} then realInputs else inputs;`.
    - **Explicit entries named in `commitBound`** (`iso-source` `:2222`, `installer-lock` `:2280`, `iso-wifi`/`iso-budget` if explicit, and the toplevels, which read `self` directly and are untouched) use `realInputs` where they take `inputs`.
    - **`microvm-template`:** `nixarchyVm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit (inputs) self; };` (now `checkInputs.self`).
    - **Drift check.** `nix eval --json .#checks.x86_64-linux --apply builtins.attrNames` with `jq` against `commitBound`: every bound name is a check. The guard asserts the same at run time.
    
-   → Re-run step 1's guard (VM tier). The moved list must shrink to the configurations step 6 handles. `checks.install` is untouched: show its drvPath unchanged against step 4's commit in the same tree. `nix eval --raw .#checks.x86_64-linux.install.drvPath` before and after **this commit only**. Comparing drvPaths across commits is meaningless only when the rev is in the closure (§5). Here both sides carry the real rev, so equality is the claim.
+   → Re-run step 1's guard (VM tier). The moved list must shrink to the configurations step 6 handles. Commit-bound checks still get the real inputs. A drvPath compared across commits proves nothing here, because `installer/host.nix:289` roots every input's source path (§5). Assert a property instead: `nix derivation show -r .#checks.x86_64-linux.install` contains the real `shortRev` in the `nixarchy/version` text and not `0000000 1970-01-01`. **Break:** delete `install` from `data/commit-bound-checks.nix` (throwaway commit, `git show --stat` first) → the placeholder appears.
    Traps:
    - §5: a background build's evaluation isn't pinned. Evaluate the drv visibly before anything long starts.
    - `nix fmt`; `statix`, `deadnix`.
    - `checks.test-registration` (it reads `uniformChecks`).
 
 6. **Remedies for what step 1/5 still lists.** Only for a check moving through rev or date via a real `self.nixosConfigurations.*`:
-   - Build that configuration from `checkInputs`. If two or more need it, factor `flake.nix:1449`'s `nixosConfigurations` into `mkConfigurations = inputs: …`. `nixosConfigurations = mkConfigurations inputs;` and `checkInputs.self.nixosConfigurations = mkConfigurations checkInputs;`. Use a lazy reference, which is fine in the recursive top-level `let`.
+   - Build that configuration from `checkInputs`, **modules included**: `vmModulesWith` (`flake.nix:485`) and `mkReference` (`flake.nix:1605`) name `self.nixosModules.nixarchy` directly. Passing `checkInputs` as `specialArgs` alone would leave the real-rev module in place, so the factored function takes the module from `inputs.self.nixosModules.nixarchy`. If two or more need it, factor `flake.nix:1449`'s `nixosConfigurations` into `mkConfigurations = inputs: …`. `nixosConfigurations = mkConfigurations inputs;` and `checkInputs.self.nixosConfigurations = mkConfigurations checkInputs;`. Use a lazy reference, which is fine in the recursive top-level `let`.
    - A check that moves for a provenance reason in decision 6 instead gets a `data/commit-bound-checks.nix` entry naming its carrier.
    - Anything else returns to the owner (step 1's stop-gate).
    
    Record the final list in this plan, in the same commit.
-   → Guard green (VM tier). Then the spec's second break: remove `nixosModules` from `checkInputs.self` in a throwaway detached worktree commit (`git show --stat` first) → guard red naming `session`. The captured red must be the moved list, not the dirty-tree refusal (§1).
+   → Guard green (VM tier). **First break (spec):** in a throwaway detached worktree commit, restore the `nixarchyRev`/`nixarchyDate` arguments and `--replace-fail '@nixarchyrev@' '${nixarchyRev}'` in `pkgs/omarchy/default.nix` → guard red naming `omarchy` and its dependants. **Second break:** remove `nixosModules` from `checkInputs.self` in a throwaway detached worktree commit (`git show --stat` first) → guard red naming `session`. The captured red must be the moved list, not the dirty-tree refusal (§1).
    Traps:
    - `options-*` peak memory (§6 tier table).
-   - A check reading `self.packages.*.microvm-*` may carry `self.rev` through `pkgs/microvm.nix:65`. Handle it as here.
+   - `microvm-template`'s `templates.kvm`/`.tcg` still come from real `self.packages.*.microvm-*` (`flake.nix:2746-2748`). If the guard lists `microvm-template` after step 5, build those runners from `checkInputs` the same way. They're configurations, so this is the same remedy, not a new decision.
 
 7. **`tests/nixarchy-options.nix`, `flake.nix:2692-2696`.**
    - Add `self` and `revision` arguments: `self = self;` (real) and `revision = import ./modules/revision.nix self;`.
-   - In Nix, compute `ownUrls`: every declaration string under `https://github.com/olafkfreund/nixarchy/blob/` from `builtins.fromJSON (builtins.readFile opts…)`. Better done in `jq` in the script, with `rev` passed as an env string `${self.rev or "main"}`. Fail if the count is 0, or if any lacks `/blob/$rev/`. Flatsnap's and nixpkgs' declarations are excluded by the URL prefix.
+   - In Nix, compute `ownUrls`: every declaration **object's `.url`** under `https://github.com/olafkfreund/nixarchy/blob/` (`modules/nixos.nix:304-307` emits `{ url; name; }`, not strings, so a string-only filter finds zero) from `builtins.fromJSON (builtins.readFile opts…)`. Better done in `jq` in the script, with `rev` passed as an env string `${self.rev or "main"}`. Fail if the count is 0, or if any lacks `/blob/$rev/`. Flatsnap's and nixpkgs' declarations are excluded by the URL prefix.
    - Pass `versionOk = etc."nixarchy/version".text == "${revision.shortRev} ${revision.date}\n"` as `"1"`/`"0"`.
    - Add `(etc ? "nixarchy/version")` to `hasOn` and `|| (off ? "nixarchy/version")` to `hasOff`.
    

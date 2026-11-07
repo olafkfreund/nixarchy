@@ -1420,7 +1420,7 @@ in
           After = [ "graphical-session.target" ];
           PartOf = [ "graphical-session.target" ];
         };
-        Service.ExecStart = "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.superwhisper}/bin/superwhisper daemon";
+        Service.ExecStart = "${osConfig.programs.nixarchy.apps.superwhisper.package}/bin/superwhisper daemon";
         Install.WantedBy = [ "graphical-session.target" ];
       };
 
@@ -1557,9 +1557,10 @@ in
     home.activation.nixarchyDictationSelection =
       lib.mkIf (!(osConfig.programs.nixarchy.allowUnfree or true))
         (
-          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          # After the seed, which copies upstream's default (`superwhisper`) into a new home.
+          lib.hm.dag.entryAfter [ "writeBoundary" "nixarchySeed" ] ''
             selection="${config.xdg.configHome}/omarchy/defaults/dictation"
-            if [ -f "$selection" ] && [ "$(cat "$selection")" = superwhisper ] &&
+            if [ -f "$selection" ] && [ ! -L "$selection" ] && [ "$(cat "$selection")" = superwhisper ] &&
               ! command -v superwhisper >/dev/null 2>&1; then
               if [[ -v DRY_RUN ]]; then
                 echo "nixarchy: would switch missing Superwhisper selection to Voxtype"

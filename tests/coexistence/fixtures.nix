@@ -120,10 +120,16 @@
     programs.nixarchy.allowUnfree = false;
   };
 
-  superwhisper-forced-on = {
-    programs.nixarchy.allowUnfree = true;
-    programs.nixarchy.apps.superwhisper.enable = true;
-  };
+  superwhisper-forced-on =
+    { pkgs, ... }:
+    {
+      programs.nixarchy = {
+        allowUnfree = true;
+        apps.superwhisper.enable = true;
+        # A person's pinned or patched build: the unit must start this one, not the default.
+        apps.superwhisper.package = pkgs.writeShellScriptBin "superwhisper" "exit 0";
+      };
+    };
 
   # #1613: their own association for the vendor's sign-in scheme.
   superwhisper-own-scheme = {

@@ -532,6 +532,42 @@ pkgs.runCommand "nixarchy-coexistence"
       fail=1
     fi
     if [ "${
+      if
+        builtins.elem "nixarchySeed" (superwhisperHm unfreeOff)
+        .home.activation.nixarchyDictationSelection.after
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-unfree-off: FAIL the fallback can run before the seed writes the selection' >&2
+      fail=1
+    fi
+    if [ "${
+      if
+        lib.hasInfix "! -L" (superwhisperHm unfreeOff).home.activation.nixarchyDictationSelection.data
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-unfree-off: FAIL the fallback would write through a managed symlink' >&2
+      fail=1
+    fi
+    if [ "${
+      if
+        lib.hasPrefix "${forcedOn.programs.nixarchy.apps.superwhisper.package}/" (
+          builtins.head (superwhisperHm forcedOn).systemd.user.services.superwhisper.Service.ExecStart
+        )
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-forced-on: FAIL the unit starts a package other than the one the app option selects' >&2
+      fail=1
+    fi
+    if [ "${
       if forcedOn.programs.nixarchy.apps.superwhisper.enable && forcedPackage != null then "yes" else "no"
     }" != yes ]; then
       echo 'superwhisper-forced-on: FAIL the selected app is absent from the reference system' >&2

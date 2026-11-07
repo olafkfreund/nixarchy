@@ -1412,6 +1412,8 @@ in
           builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
         )
         ++ [ (lib.lowPrio (pkgs.writeShellScriptBin "vi" ''exec nvim "$@"'')) ]
+        # Omarchy's pipewire-jack: nixpkgs deprecated the global jack.enable for the pw-jack wrapper.
+        ++ map lib.lowPrio (lib.optional config.services.pipewire.enable pkgs.pipewire.jack)
         # sessionPackages alone does not populate
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.
@@ -1620,7 +1622,6 @@ in
         alsa.enable = lib.mkDefault true;
         alsa.support32Bit = lib.mkDefault true;
         pulse.enable = lib.mkDefault true;
-        jack.enable = lib.mkDefault true;
         # Clients ask rtkit directly: a portal started before rtkit reports a zero realtime budget.
         extraConfig = {
           client."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" = false;

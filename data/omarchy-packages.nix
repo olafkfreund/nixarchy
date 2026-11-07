@@ -393,7 +393,7 @@
     module = "services.pipewire.alsa.enable";
   };
   "pipewire-jack" = {
-    module = "services.pipewire.jack.enable";
+    nix = "pipewire.jack";
   };
   "pipewire-pulse" = {
     module = "services.pipewire.pulse.enable";

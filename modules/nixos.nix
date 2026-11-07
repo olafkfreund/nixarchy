@@ -1043,12 +1043,14 @@ in
     # Why: modules/AGENTS.md#most-of-what-the-install-menu-offers-is-unfree
     nixpkgs.config = lib.mkIf cfg.allowUnfree (lib.mkDefault { allowUnfree = true; });
 
-    # Superwhisper is unfree, so without it dictation falls back to Voxtype (#1613).
-    programs.nixarchy.dictation.enable = lib.mkIf (!cfg.allowUnfree) (lib.mkDefault true);
+    programs.nixarchy = {
+      # Superwhisper is unfree, so without it dictation falls back to Voxtype (#1613).
+      dictation.enable = lib.mkIf (!cfg.allowUnfree) (lib.mkDefault true);
 
-    # Derived, not chosen -- see the option. Published here so modules/home.nix
-    # can write the same settings into every editor it configures.
-    programs.nixarchy.nixdSettings = nixdSettings;
+      # Derived, not chosen -- see the option. Published here so modules/home.nix
+      # can write the same settings into every editor it configures.
+      inherit nixdSettings;
+    };
 
     nix.settings =
       let

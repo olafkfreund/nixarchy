@@ -5,7 +5,7 @@ spec: spec/2026-11-07-1646-stock-iso-install.md
 coders:
   1: codex  # the gate and the flags in install.sh: small, and a slip either wipes a stock-ISO disk or makes checks.install refuse
   2: codex  # stubs whose breaks must really fail, inside a Nix indented string where `${` needs escaping
-  3: coder  # three small test edits whose content this plan spells out line by line
+  3: coder  # small test and comment edits whose content this plan spells out line by line
 reviewers:
   - codex  # reads the diff against this plan and the code, independent of the coders
   - agy    # a second model's read of the gate's edge cases (empty, whitespace, failing `nix config show`)
@@ -62,7 +62,7 @@ section) is a later plan; see Follow-up.
 `checks.installer-wizard` (`tests/installer-wizard.nix`) runs
 `nixarchy-install --dry-run` interactively in a VM with no network and no
 marker. `main()` calls `ask_network` after the greeter
-(`installer/install.sh:2961`), before the dry-run exits (`:2997`). Today the
+(`installer/install.sh:2967`, the interactive branch), before the dry-run exits (`:2997`). Today the
 marker gate returns at once. After step 1 its node, which keeps the default
 `cache.nixos.org`, is not offline by design, `network_ready` fails, and the
 wizard sits on "Let's get you online..." while the test waits 180 s for
@@ -81,7 +81,8 @@ only tracked files).
 ### 1. `installer/install.sh`: the gate, the flags, the wording
 
 All line numbers are against the branch head at plan time (`origin/main`
-`23d70d4c` merged).
+`23d70d4c` merged). Edits shift later lines, so find each place by the quoted
+text, or edit bottom-up.
 
 - **`:65-71`, `SUBSTITUTE_FLAGS`.** Keep it **one line** (the store-space
   check extracts it with `grep '^SUBSTITUTE_FLAGS='`):
@@ -101,8 +102,14 @@ All line numbers are against the branch head at plan time (`origin/main`
   `--option name value` pairs (it is given `always-allow-substitutes` that way
   today).
 - **`:2594`, `:2628`, `:2708`** need no edit: each already passes
-  `"${SUBSTITUTE_FLAGS[@]}"`. Do not touch the diskoScript build at `:1953`
-  (not in the spec).
+  `"${SUBSTITUTE_FLAGS[@]}"`.
+- **`:1953`, the diskoScript build in `format_disk`,** gains
+  `"${SUBSTITUTE_FLAGS[@]}"` after `--print-out-paths`: the spec puts our
+  caches on every nix call that builds, and on a stock ISO this build
+  otherwise sees only `cache.nixos.org`. It runs before the wipe and already
+  refuses with "Nothing was formatted", so the change can only make it fetch
+  rather than build. (The `nix eval` calls at `:1641`, `:1672`, `:1886` build
+  nothing and stay.)
 - **`:2507-2509`, the gate.** Replace the two-line comment and
   `on_net_image() { [ -f /etc/nixarchy-iso-net ]; }` with:
 
@@ -204,6 +211,16 @@ shell.
   (the dry-run and the toplevel build, so an empty extraction cannot pass),
   and that every one contains `"''${SUBSTITUTE_FLAGS[@]}"`. **Break:** delete
   it from the toplevel build at `install.sh:2708` → red.
+- **`nixos-install` carries the flags.** Its cache options now come only from
+  the array, so from the same `ri-flags.sh`:
+  `sed -n '/^  nixos-install /,/return 1$/p'` must be non-empty and contain
+  `"''${SUBSTITUTE_FLAGS[@]}"`. **Break:** delete that token from the
+  `nixos-install` call → red.
+- **`format_disk`'s diskoScript build carries the flags.** Extract
+  `sed -n '/^format_disk()/,/^}/p'`, take the line(s) matching
+  `nix "''${NIX_FLAGS[@]}" build`, require at least one, and require each to
+  contain `"''${SUBSTITUTE_FLAGS[@]}"`. **Break:** delete it from `:1953` →
+  red.
 
 Check: `checks.installer-store-space` green, then each break above red, one
 at a time, proving with `git diff` that the break landed, `git checkout HEAD --
@@ -217,7 +234,7 @@ backslash); `pt.sh` is already a quoted heredoc, add no new heredoc
 `preflight_build` precedes `format_disk` stays; run the script under bash,
 which the check already does.
 
-### 3. Three small test edits
+### 3. Small test edits
 
 - **`tests/installer-network.nix:102-110`.** The comment says "No substituter
   configured (checks.install's shape) skips the network prompt; unattended
@@ -247,6 +264,15 @@ which the check already does.
   in scope from the file's argument. **Break:** remove the line → the wizard
   stops on "Let's get you online..." and `screen("Let's set up your keyboard")`
   times out → red.
+- **Two comments that would name the wrong cause** (comments only):
+  - `tests/install.nix:418-421`: "install.sh only configures those caches
+    when the ISO marker is absent" becomes "install.sh names those caches on
+    every build, and a no-network VM cannot reach them".
+  - `tests/install-iso-net.nix:116-118`: the `MARKER` step stays (decision
+    6), but its comment no longer says `preflight_build` and `ask_network` key
+    on it: the marker is still written by the image and asserted here; the
+    guards key on a configured substituter, which this run's `NIX_CONFIG`
+    supplies.
 
 Check: `checks.installer-network` (cheap); `checks.installer-refusal` and
 `checks.installer-wizard` (VM tier, see Tests).
@@ -285,8 +311,13 @@ prints `0`; an API failure reads as busy):
 - `checks.installer-wizard` green; its break red.
 - `checks.installer-refusal` green; its break red.
 - `checks.install` green (the other side of the gate). Its break,
-  `offline_by_design() { return 1; }`, refuses with
-  `cannot reach https://cache.nixos.org`; run once locally, by
+  `offline_by_design() { return 1; }`, refuses non-zero at `ask_network`'s
+  unattended branch (`install.sh:2954` runs before `preflight_build` at
+  `:3017`, and there is no network), printing step 1's new `:474` line,
+  `this install downloads the desktop, and there is no network`, with the
+  target disk unpartitioned. (The spec expected `cannot reach
+  https://cache.nixos.org`; that line is unreachable in this VM, because
+  `ask_network` exits first.) Run once locally, by
   `nix eval --raw .#checks.x86_64-linux.install.drvPath` then
   `nix build '<drv>^*'` (a background build re-evaluates the tree, §5).
   `install` requires a committed tree (`installer/mkFlake.nix`).

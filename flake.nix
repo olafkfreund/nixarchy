@@ -2245,6 +2245,11 @@
             installScript = ./installer/install.sh;
           };
 
+          installer-disk-list = import ./tests/installer-disk-list.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # The bus redaction hook blocks what a pattern can decide, and only
           # that (#272). A security hook that passes everything looks
           # identical to a working one, which is why this exists.

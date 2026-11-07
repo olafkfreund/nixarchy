@@ -259,7 +259,7 @@ its own, distinct from hide.
 
 CARRIED, until omacom/omarchy fixes them. Three `--replace-fail`
 substitutions in `pkgs/omarchy/default.nix`, written against the tree after
-`1301-menu-disabled.patch` and its `MenuModel.js` substitution. The
+the #1301 `MenuModel.js` substitution. The
 replacement text lives in `pkgs/omarchy/1305-menu-*.js`, because a multi-line
 argument inside the `installPhase` string re-flows the whole phase under
 `nix fmt`.
@@ -1079,12 +1079,10 @@ that define `__omarchy_pkg_has` (`1301-pkg-has.{old,new}.js`) to apply the
 PATH rule, because the batch avoids forks. `checks.menu-guards` asserts the
 in-shell copy agrees with `bin/omarchy-pkg-present`, so the two cannot drift.
 
-`1301-menu-disabled.patch` is CARRIED from omacom/omarchy@4b93f8d84d (#6955),
-restricted to `Menu.qml` and `MenuModel.js`, and applied with `--fuzz=0`.
-Drop it when stable reaches a release containing #6955. Edge already has it
-and deletes the `patch` line in its carry commit. #1305 rebases its own menu
-edits onto this patch, so its content is frozen (sha256 in the plan).
-Edge dropped it: quattro already carries #6955, and the patch fails there.
+The `disabled` half needs nothing from us any more. It was carried as
+`1301-menu-disabled.patch` (omacom/omarchy#6955) until stable moved to
+Omarchy 4.5 (#1405), whose `MenuModel.js` and `Menu.qml` keep, evaluate and
+dim `disabled:` rows themselves; the patch was deleted with that bump.
 
 The pacman snapshot lines above the rewritten ones are left dead on purpose:
 edge builds them in `guardPackageSnapshot()`, so their text differs between

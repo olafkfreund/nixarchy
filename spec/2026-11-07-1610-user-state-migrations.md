@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1610
 intent: intent/2026-11-07-1610-user-state-migrations.md
 ---

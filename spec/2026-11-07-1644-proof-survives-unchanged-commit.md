@@ -82,13 +82,23 @@ checkInputs = inputs // {
 };
 ```
 
-`checks = eachSystem (system: let inputs = checkInputs; …` (`flake.nix:1735`)
-then shadows `inputs` for every check that passes `inherit inputs` (27 sites,
-and every future one, so a new check is proof-stable by default). Explicit
-fields beat `dirtyRev`/`dirtyShortRev`, so a dirty local tree gets the
-placeholder too.
+`checks = eachSystem (system: let realInputs = inputs; inputs = checkInputs; …`
+(`flake.nix:1735`) then shadows `inputs` for every check that passes
+`inherit inputs` (27 sites, and every future one, so a new check is
+proof-stable by default). Explicit fields beat `dirtyRev`/`dirtyShortRev`, so a
+dirty local tree gets the placeholder too.
 
-Not reached by the shadow, and handled by the guard's first run (§Verification):
+The commit-bound checks must NOT get the placeholder. `install`,
+`install-encrypted`, `install-iso-net`, `installer-refusal` and `free-space`
+are `uniformChecks` handed `inputs` (`flake.nix:1793-1830`, `2822-2826`); a
+placeholder-rev seeded system against an installed machine that evaluates the
+real rev would break install's rebuild-builds-nothing. So the generic
+`genAttrs uniformChecks` at `flake.nix:2822` passes
+`inputs = if commitBound ? ${n} then realInputs else inputs`, and any explicit
+commit-bound entry uses `realInputs` the same way. `commitBound` is the exempt
+table (§5), one file read by both flake and guard.
+
+Not reached by the shadow:
 
 - `microvm-template` takes `nixarchyVm = self.packages.…nixarchy-vm`
   (`flake.nix:2750`), built with the real `self` (`flake.nix:1133`). It
@@ -96,39 +106,51 @@ Not reached by the shadow, and handled by the guard's first run (§Verification)
   the way the test already builds its `dirtyVm` (`tests/microvm-template.nix:50`).
 - Checks built from `self.nixosConfigurations.{vm,reference}` (coexistence,
   generate-config-surface, graphics-*, etc-sysctl and others at
-  `flake.nix:2641-2784`). Most read attributes, not `/etc`, and may not move.
-  Each one the guard reports is either switched to a configuration built from
-  `checkInputs` or put on the exempt list with its reason; the plan records
-  which, from the measured list, never by guess.
+  `flake.nix:2641-2784`), and `options-*`, which reads
+  `inputs.self.nixosConfigurations.vm` (`tests/options.nix:643`; `self // {…}`
+  keeps the real configurations). Most read attributes, not `/etc`, and may not
+  move. **Decided remedy for each one the guard reports:** it gets the same
+  configuration built from `checkInputs` (the plan factors the
+  `nixosConfigurations` block at `flake.nix:1449` into a function of `inputs`
+  if more than one needs it, and `checkInputs.self.nixosConfigurations` is set
+  from it). Exemption is only for the provenance reasons in §5. The measured
+  list says which checks need the remedy; it does not choose the remedy.
 
 ### 5. Exempt, by name, each with its reason
 
+One file, `data/commit-bound-checks.nix` (`{ <check> = "<reason>"; }`), read
+by `flake.nix` (real inputs, above) and by the guard:
+
 | check | why it carries the commit |
 |---|---|
-| `vm-toplevel`, `reference-toplevel` | the machine a user gets, `/etc/nixarchy/version` included |
-| `install`, `free-space`, `installer-refusal` | collect `self.outPath` (`tests/install.nix:64-68`) |
+| `vm-toplevel`, `reference-toplevel`, `reference-unencrypted-toplevel` (`flake.nix:2783`) | the machine a user gets, `/etc/nixarchy/version` included |
+| `install`, `install-encrypted`, `free-space`, `installer-refusal` | collect every input's `outPath` (`tests/install.nix:64-68`) and must seed what the installed machine evaluates |
 | ISO checks (`iso-source`, `iso-wifi`, `iso-budget`, `install-iso-net`) | `installer/cd.nix` `inputSources` |
 | `installer-lock` | reads `flake-template`, which pins `self.rev` (`installer/mkFlake.nix:22`) |
 | `nixarchy-options` | the one place the real rev is asserted (below) |
 
-The plan finalises the list from the guard's first measured run; any addition
-names its carrier.
+The guard's first measured run may add an entry only for one of these reasons,
+naming its carrier.
 
 ### 6. Where the real rev is still asserted
 
 `tests/nixarchy-options.nix` gains two assertions against
-`self.nixosConfigurations.reference` (real `self`): every URL declaration
-contains `/blob/${self.rev or "main"}/`, and `etc."nixarchy/version".text`
+`self.nixosConfigurations.reference` (real `self`): every declaration this
+repository owns (a URL under `github.com/olafkfreund/nixarchy/blob/`; flatsnap's
+and nixpkgs' are left alone, `modules/nixos.nix:304-316`) contains
+`/blob/${self.rev or "main"}/`, and there is at least one such declaration (so
+an empty match cannot pass); `etc."nixarchy/version".text`
 equals `import ./modules/revision.nix self`'s line; and the Mode A half of the
 same test adds `nixarchy/version` to `hasOn`/`hasOff`.
 
 ### 7. The guard: `.github/scripts/commit-independent.sh`
 
-1. Refuses on a dirty tree. `git worktree add --detach <scratch> HEAD`
-   (`$RUNNER_TEMP` in CI, `/mnt/data/vmtest` locally; never `/tmp`, §5).
+1. Refuses on a dirty tree. `git worktree add --detach <scratch> HEAD`, under
+   `${RUNNER_TEMP:-/mnt/data/vmtest}`; refuses if that directory does not exist
+   rather than falling back to `/tmp` (§5).
 2. Names: its arguments, or every `checks.x86_64-linux` attribute minus the
-   exempt table (kept in the script, `name<TAB>reason`). An exempt name that is
-   no longer a check fails (§4: a hand-kept list must not fail open).
+   names in `data/commit-bound-checks.nix`. An exempt name that is no longer a
+   check fails (§4: a hand-kept list must not fail open).
 3. Evaluates each check's `outPath` one process at a time in the scratch tree
    (memory: `generate-config-surface` alone peaks at 11.6 GB,
    `already-proven.sh:97-102`). `out=$(nix eval …) || fail`: an unevaluable
@@ -143,7 +165,10 @@ same test adds `nixarchy/version` to `hasOn`/`hasOff`.
 6. Removes the worktree in an EXIT trap on a global (§5).
 
 Wired as a new `nightly.yml` job, added to `report`'s `needs` (§4's
-`reinstall-vm` lesson). This is a CI-workflow change, so the PR proposes it for
+`reinstall-vm` lesson), with its own branch in the report's title chain
+(`nightly.yml:630-667`) and no `installer` label (`nightly.yml:694`): alone, its
+failure would otherwise be filed as "the install checks are failing", the #236
+shape that chain exists to avoid. This is a CI-workflow change, so the PR proposes it for
 a human to merge (§11). Nightly, not per PR: a leak costs cache hits, never a
 wrong result, and two evaluations of every check is the expensive row in §6.
 
@@ -205,8 +230,10 @@ cannot fail is worse than none).
 - **Guard break:** restore `--replace-fail '@nixarchyrev@' '${nixarchyRev}'`
   (and its arguments) in `pkgs/omarchy/default.nix` → guard red naming
   `omarchy` and its dependants. Second break: remove `nixosModules` from
-  `checkInputs.self` → red naming `session`. Show each break landed with
-  `git diff` before reading the result (§1).
+  `checkInputs.self` → red naming `session`. The guard refuses a dirty tree, so
+  each break is a throwaway commit in a `git worktree add --detach` scratch
+  tree (§5), shown with `git show --stat` before the run, and the captured red
+  must be the moved-outPath list, not the dirty-tree refusal (§1).
 - **Guard's own failure modes:** an exempt name that is not a check → exit 1;
   a check that does not evaluate (temporary `throw`) → exit 1, not "nothing
   moved".

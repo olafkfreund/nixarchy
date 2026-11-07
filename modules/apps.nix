@@ -77,7 +77,10 @@ let
         # `ours` apps are ones nixpkgs does not carry and that nixarchy
         # packages itself; they live in the overlay's nixarchy-apps set.
         default =
-          if app.ours or false then
+          # The flake's packages never allow unfree; an unfree app of ours takes this machine's pkgs (#1613).
+          if (app.ours or false) && (app.unfree or false) then
+            (pkgs.extend inputs.self.overlays.default).nixarchy-apps.${app.attr}
+          else if app.ours or false then
             inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.${app.attr}
           else if app.attr == "opencode" then
             import ../pkgs/opencode-hash-fixed.nix pkgs

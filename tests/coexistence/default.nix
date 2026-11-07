@@ -204,6 +204,31 @@ let
     && !(c.systemd.user.services ? omarchy-fcitx5)
     && !(builtins.elem "/share/fcitx5/themes" c.environment.pathsToLink);
 
+  superwhisperHm = c: c.home-manager.users.omarchy;
+  unfreeOff = configOf fixtures.superwhisper-unfree-off;
+  forcedOn = configOf fixtures.superwhisper-forced-on;
+  forcedPackage = lib.findFirst (
+    p: lib.getName p == "superwhisper"
+  ) null forcedOn.environment.systemPackages;
+  keyHarness = pkgs.writeText "dictation-keys.lua" ''
+    local backend, missing = arg[1], arg[2] == "missing"
+    local binds = {}
+    io.popen = function()
+      return { read = function() return backend end, close = function() end }
+    end
+    o = {
+      cmd_missing = function() return missing end,
+      bind = function(key, _, command) binds[key] = command end,
+      bind_hold = function(key) binds[key] = "hold" end,
+    }
+    dofile(arg[3])
+    if missing then
+      assert(next(binds) == nil, "superwhisper-dictation-selection: FAIL a missing backend took a dictation key")
+    else
+      assert(binds["ALT + SPACE"] == "omarchy-dictation toggle", "superwhisper-unfree-off: FAIL Alt+Space does not toggle Voxtype")
+    end
+  '';
+
   agentLocalScripts = [
     (agentLocalCheck "podman-own-config" (
       c: c.virtualisation.podman.enable && c.virtualisation.podman.dockerCompat
@@ -231,6 +256,41 @@ let
     (agentLocalCheck "preinstalls-exclude-retired" (_: true))
     (agentLocalCheck "xdg-mime-own-pdf" (
       c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
+    ))
+    # #1613. Each reads what nixarchy would add if it touched the thing the
+    # person owns; the fixtures' comments say which.
+    (agentLocalCheck "superwhisper-own-copy" (
+      c:
+      !c.programs.nixarchy.apps.superwhisper.enable
+      && !(superwhisperHm c).systemd.user.services ? superwhisper
+      &&
+        map lib.getName (builtins.filter (p: lib.getName p == "superwhisper") c.environment.systemPackages)
+        == [ "superwhisper" ]
+    ))
+    (agentLocalCheck "superwhisper-own-alt-space" (
+      c:
+      let
+        hypr = lib.filterAttrs (n: _: lib.hasPrefix "hypr/" n) (superwhisperHm c).xdg.configFile;
+        binders = lib.attrNames (lib.filterAttrs (_: v: lib.hasInfix "ALT + SPACE" (v.text or "")) hypr);
+      in
+      binders == [ "hypr/bindings.lua" ]
+    ))
+    (agentLocalCheck "superwhisper-dictation-selection" (
+      c:
+      let
+        hm = superwhisperHm c;
+      in
+      c.programs.nixarchy.dictation.enable
+      && (hm.services.voxtype.enable or false)
+      && !c.programs.nixarchy.apps.superwhisper.enable
+      && !hm.xdg.configFile ? "omarchy/defaults/dictation"
+      && !hm.home.file ? ".config/omarchy/defaults/dictation"
+      && !hm.home.activation ? nixarchyDictationSelection
+    ))
+    (agentLocalCheck "superwhisper-own-scheme" (
+      c:
+      c.xdg.mime.defaultApplications."x-scheme-handler/superwhisper" == "own-superwhisper.desktop"
+      && !((superwhisperHm c).xdg.mimeApps.defaultApplications ? "x-scheme-handler/superwhisper")
     ))
   ];
   opensshScripts = [
@@ -439,6 +499,10 @@ let
 in
 pkgs.runCommand "nixarchy-coexistence"
   {
+    nativeBuildInputs = [
+      pkgs.lua5_4
+      pkgs.python3
+    ];
     # Named so the drivers env derivations and system.path are build inputs,
     # not just strings -- see driverArgOf's comment.
     passthru.fixtures = fixtures;
@@ -454,6 +518,63 @@ pkgs.runCommand "nixarchy-coexistence"
     ${hyprlandScript}
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}
+    if [ "${
+      if
+        unfreeOff.programs.nixarchy.dictation.enable
+        && (superwhisperHm unfreeOff).services.voxtype.enable
+        && (superwhisperHm unfreeOff).home.activation ? nixarchyDictationSelection
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-unfree-off: FAIL Voxtype did not remain enabled for dictation' >&2
+      fail=1
+    fi
+    if [ "${
+      if
+        builtins.elem "nixarchySeed" (superwhisperHm unfreeOff)
+        .home.activation.nixarchyDictationSelection.after
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-unfree-off: FAIL the fallback can run before the seed writes the selection' >&2
+      fail=1
+    fi
+    if [ "${
+      if
+        lib.hasInfix "! -L" (superwhisperHm unfreeOff).home.activation.nixarchyDictationSelection.data
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-unfree-off: FAIL the fallback would write through a managed symlink' >&2
+      fail=1
+    fi
+    if [ "${
+      if
+        lib.hasPrefix "${forcedOn.programs.nixarchy.apps.superwhisper.package}/" (
+          builtins.head (superwhisperHm forcedOn).systemd.user.services.superwhisper.Service.ExecStart
+        )
+      then
+        "yes"
+      else
+        "no"
+    }" != yes ]; then
+      echo 'superwhisper-forced-on: FAIL the unit starts a package other than the one the app option selects' >&2
+      fail=1
+    fi
+    if [ "${
+      if forcedOn.programs.nixarchy.apps.superwhisper.enable && forcedPackage != null then "yes" else "no"
+    }" != yes ]; then
+      echo 'superwhisper-forced-on: FAIL the selected app is absent from the reference system' >&2
+      fail=1
+    fi
+    lua ${keyHarness} voxtype installed '${reference.config.programs.nixarchy.package}/share/omarchy/default/hypr/bindings/dictation.lua' || fail=1
+    lua ${keyHarness} superwhisper missing '${reference.config.programs.nixarchy.package}/share/omarchy/default/hypr/bindings/dictation.lua' || fail=1
     ${lib.concatStrings sysctlScripts}
     ${lib.concatStrings opensshScripts}
     ${opensshMkDefault}

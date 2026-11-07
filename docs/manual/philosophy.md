@@ -40,7 +40,7 @@ Omarchy's Install menu runs `pacman -S`. Here it cannot, so it does the
 declarative equivalent: **it edits a file and stops.**
 
 ```
-Install ▸ Brave          →  "brave queued — not installed yet"
+Install ▸ Zen            →  "zen queued — not installed yet"
 Install ▸ VSCode         →  "2 app(s) selected"
 Install ▸ Apply changes  →  nh os switch <flake>
 ```

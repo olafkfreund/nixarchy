@@ -754,6 +754,7 @@
         # holes in it.
         nixarchy-apps = {
           once = final.callPackage ./pkgs/apps/once.nix { };
+          superwhisper = final.callPackage ./pkgs/apps/superwhisper.nix { };
 
           # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
           # simply follow nixpkgs the way most apps here do.
@@ -1251,6 +1252,7 @@
 
           inherit (pkgsFor.${system}.nixarchy-apps)
             once
+            superwhisper
             retroarch
             hey-cli
             omawrite
@@ -2028,6 +2030,12 @@
             reinstallScript = ./pkgs/omarchy/nix-bin/nixarchy-reinstall-iso;
           };
 
+          superwhisper-choice = import ./tests/superwhisper-choice.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./pkgs/omarchy/nix-bin/omarchy-install-dictation-superwhisper;
+            removeScript = ./pkgs/omarchy/nix-bin/omarchy-remove-dictation-superwhisper;
+          };
+
           reinstall-image = import ./tests/reinstall-image.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
@@ -2440,6 +2448,7 @@
           # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
           cache-budget = import ./tests/cache-budget.nix {
             pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
           };
 
           # The release guard and the weekly release-candidate body, against a

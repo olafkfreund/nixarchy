@@ -2323,3 +2323,6 @@ Found on 2026-11-06, when `installer-refusal` failed with `curl` exit 60 on a pu
 
 A test's key or certificate is a committed fixture. So is anything else that another derivation embeds by content and that a rebuild would change. It is test-only and trusted only inside that VM.
 
+## Superwhisper (#1613)
+
+The real app, audio and the panel's `~/.local/bin` to `PATH` fallback are covered only by the disposable-VM run in the plan's step 10, never on a runner, because no check may build the unfree app.

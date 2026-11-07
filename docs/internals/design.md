@@ -540,8 +540,8 @@ Known gaps in detail:
   What is *not* finished is the same list as above: no partition resize, no
   Secure Boot, no graphical installer, each for a stated reason.
 
-- `brave-origin` has no published source; use `apps.brave` with policies in
-  `/etc/brave/policies/managed`
+- `brave-origin` has no published source, and nixpkgs removed stock `brave`
+  over unfixed security issues (2026-11-03)
 - RetroArch's default core set is free-licensed only, so snes9x, genesis-plus-gx,
   mame and dolphin need a `withCores` override
 - in fish, `ga` and `gd` report where they went but leave you where you were.

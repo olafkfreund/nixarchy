@@ -2029,6 +2029,12 @@
             reinstallScript = ./pkgs/omarchy/nix-bin/nixarchy-reinstall-iso;
           };
 
+          superwhisper-choice = import ./tests/superwhisper-choice.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./pkgs/omarchy/nix-bin/omarchy-install-dictation-superwhisper;
+            removeScript = ./pkgs/omarchy/nix-bin/omarchy-remove-dictation-superwhisper;
+          };
+
           # nixarchy-try's lookup and probe expressions run against the REAL
           # data/apps.nix and nixpkgs, plus the binary fallback ladder, the
           # unfree seasoning, the honest footer and the try-to-keep hand-off

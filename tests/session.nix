@@ -936,6 +936,13 @@ pkgs.testers.runNixOSTest {
     menu_text = (machine.out_dir / "menu" / "omarchy-menu.jsonc").read_text()
     rows = json.loads("\n".join(
         l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
+    remove_sw = rows["remove.dictation.superwhisper"]["action"]
+    setup_sw = rows["setup.default.dictation.superwhisper"]["action"]
+    assert "omarchy-remove-dictation-superwhisper" in remove_sw
+    assert "omarchy-default-dictation superwhisper" in setup_sw
+    assert "nixarchy-app-enable" not in setup_sw and "nixarchy-app-disable" not in remove_sw
+    machine.succeed("test -x " + menu_tree + "/bin/omarchy-install-dictation-superwhisper")
+    machine.succeed("test -x " + menu_tree + "/bin/omarchy-remove-dictation-superwhisper")
     def click(row):
         action = rows[row]["action"]
         b64 = base64.b64encode(action.encode()).decode()
@@ -1453,6 +1460,21 @@ pkgs.testers.runNixOSTest {
     # Red before green: on the pre-#278 tree this fails on the first assertion,
     # because the marker is precisely what never got written.
     machine.succeed("su - omarchy -c 'omarchy-done check first-run-user'")
+    machine.succeed("test -f /home/omarchy/.local/state/omarchy/done/superwhisper-notice")
+    machine.fail("su - omarchy -c 'command -v superwhisper'")
+    machine.fail("test -e /home/omarchy/.config/systemd/user/superwhisper.service")
+    machine.fail("su - omarchy -c 'systemctl --user cat superwhisper.service'")
+    # Run the installed first-run script twice with a selected, missing backend.
+    # The stub records delivery, while the marker proves the second run is silent.
+    machine.succeed("mkdir -p /tmp/sw-notice/bin /tmp/sw-notice/config/omarchy/defaults /tmp/sw-notice/state")
+    machine.succeed("printf '%s\\n' '#!/bin/sh' 'printf x >> /tmp/sw-notice/calls' > /tmp/sw-notice/bin/omarchy-notification-send && chmod +x /tmp/sw-notice/bin/omarchy-notification-send")
+    machine.succeed("printf '%s\\n' superwhisper > /tmp/sw-notice/config/omarchy/defaults/dictation")
+    notice = ("HOME=/tmp/sw-notice XDG_CONFIG_HOME=/tmp/sw-notice/config "
+              "XDG_STATE_HOME=/tmp/sw-notice/state PATH=/tmp/sw-notice/bin:/run/current-system/sw/bin "
+              "bash " + tree + "/install/user/first-run/superwhisper.sh")
+    machine.succeed(notice)
+    machine.succeed(notice)
+    machine.succeed("test -f /tmp/sw-notice/state/omarchy/done/superwhisper-notice && test $(wc -c < /tmp/sw-notice/calls) -eq 1")
     print("first-run wrote its completion marker")
 
     # And the marker is USED, not merely present. A machine that records

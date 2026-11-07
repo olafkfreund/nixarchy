@@ -330,7 +330,6 @@ pkgs.testers.runNixOSTest {
     # start has to cut them: only the 6 newest history rows keep their text, and
     # nothing older than 24 hours survives. The fresh live card is critical so
     # it stays on screen through the 75 s wait below (a normal one would lapse).
-    import shlex
     seed220_dir = "/home/omarchy/.local/state/omarchy/notifications"
     seed220_jq = "${pkgs.jq}/bin/jq"
     seed220_row = (

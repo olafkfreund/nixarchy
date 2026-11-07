@@ -204,6 +204,8 @@ let
     && !(c.systemd.user.services ? omarchy-fcitx5)
     && !(builtins.elem "/share/fcitx5/themes" c.environment.pathsToLink);
 
+  superwhisperHm = c: c.home-manager.users.omarchy;
+
   agentLocalScripts = [
     (agentLocalCheck "podman-own-config" (
       c: c.virtualisation.podman.enable && c.virtualisation.podman.dockerCompat
@@ -231,6 +233,41 @@ let
     (agentLocalCheck "preinstalls-exclude-retired" (_: true))
     (agentLocalCheck "xdg-mime-own-pdf" (
       c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
+    ))
+    # #1613. Each reads what nixarchy would add if it touched the thing the
+    # person owns; the fixtures' comments say which.
+    (agentLocalCheck "superwhisper-own-copy" (
+      c:
+      !c.programs.nixarchy.apps.superwhisper.enable
+      && !(superwhisperHm c).systemd.user.services ? superwhisper
+      &&
+        map lib.getName (builtins.filter (p: lib.getName p == "superwhisper") c.environment.systemPackages)
+        == [ "superwhisper" ]
+    ))
+    (agentLocalCheck "superwhisper-own-alt-space" (
+      c:
+      let
+        hypr = lib.filterAttrs (n: _: lib.hasPrefix "hypr/" n) (superwhisperHm c).xdg.configFile;
+        binders = lib.attrNames (lib.filterAttrs (_: v: lib.hasInfix "ALT + SPACE" (v.text or "")) hypr);
+      in
+      binders == [ "hypr/bindings.lua" ]
+    ))
+    (agentLocalCheck "superwhisper-dictation-selection" (
+      c:
+      let
+        hm = superwhisperHm c;
+      in
+      c.programs.nixarchy.dictation.enable
+      && (hm.services.voxtype.enable or false)
+      && !c.programs.nixarchy.apps.superwhisper.enable
+      && !hm.xdg.configFile ? "omarchy/defaults/dictation"
+      && !hm.home.file ? ".config/omarchy/defaults/dictation"
+      && !hm.home.activation ? nixarchyDictationSelection
+    ))
+    (agentLocalCheck "superwhisper-own-scheme" (
+      c:
+      c.xdg.mime.defaultApplications."x-scheme-handler/superwhisper" == "own-superwhisper.desktop"
+      && !((superwhisperHm c).xdg.mimeApps.defaultApplications ? "x-scheme-handler/superwhisper")
     ))
   ];
   opensshScripts = [

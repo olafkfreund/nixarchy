@@ -124,7 +124,10 @@ This doesn't fix the hang. It makes the next occurrence say where to look.
 - **A healthy boot is unaffected.** All of this runs only after `BootHang`.
 - **The check can fail (§1).** `checks.boot-hang-detect` must assert the new
   commands' output is in the dump, and it must be shown failing with that
-  output removed.
+  output removed. The check freezes its guest with the monitor's `stop`, and
+  a stopped guest can't print after a poke. So the check proves the poke
+  lines are written. It can't prove that a poke wakes a halted guest, and
+  the spec has to name that limit or find a fixture that can.
 - `microvm-boot` stays out of scope, per the owner's 2026-11-05 decision on
   #1604.
 

@@ -92,6 +92,50 @@
     xdg.mime.defaultApplications."application/pdf" = "own.desktop";
   };
 
+  # #1613: a person's own portable Superwhisper on PATH, the app off. Nixarchy
+  # adds no package, no unit, and no second copy of the name.
+  superwhisper-own-copy =
+    { pkgs, ... }:
+    {
+      environment.systemPackages = [
+        (pkgs.writeShellScriptBin "superwhisper" "echo own-superwhisper-marker")
+      ];
+    };
+
+  # #1613: their own ALT + SPACE, in the hypr file they own. Nothing of
+  # nixarchy's may bind that key beside it.
+  superwhisper-own-alt-space = {
+    home-manager.users.omarchy.xdg.configFile."hypr/bindings.lua".text = ''
+      o.bind("ALT + SPACE", "Their launcher", "own-launcher")
+    '';
+  };
+
+  # #1613: dictation.enable keeps Voxtype whatever a seeded selection file says,
+  # and the file is theirs: nixarchy does not manage it.
+  superwhisper-dictation-selection = {
+    programs.nixarchy.dictation.enable = true;
+  };
+
+  superwhisper-unfree-off = {
+    programs.nixarchy.allowUnfree = false;
+  };
+
+  superwhisper-forced-on =
+    { pkgs, ... }:
+    {
+      programs.nixarchy = {
+        allowUnfree = true;
+        apps.superwhisper.enable = true;
+        # A person's pinned or patched build: the unit must start this one, not the default.
+        apps.superwhisper.package = pkgs.writeShellScriptBin "superwhisper" "exit 0";
+      };
+    };
+
+  # #1613: their own association for the vendor's sign-in scheme.
+  superwhisper-own-scheme = {
+    xdg.mime.defaultApplications."x-scheme-handler/superwhisper" = "own-superwhisper.desktop";
+  };
+
   # A user who swaps Hyprland (their own pin, a patched build). The titlebars
   # plugin loads into the session's compositor, so it must be built against
   # THAT one, not the flake's input (#1572). Only the pname changes, so the

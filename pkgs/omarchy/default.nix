@@ -1326,6 +1326,9 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
                       --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
 
+                    install -Dm755 ${./superwhisper-first-run.sh} \
+                      $out/share/omarchy/install/user/first-run/superwhisper.sh
+
                     # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-editor \
                       --replace-fail 'omarchy-cmd-present "$editor" || editor="nvim"' \

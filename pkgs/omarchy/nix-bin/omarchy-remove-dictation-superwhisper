@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# omarchy:summary=Remove Superwhisper dictation, preserving your data
+
+set -euo pipefail
+
+systemctl --user disable --now superwhisper.service || true
+nixarchy-app-disable superwhisper
+nixarchy-apply --yes --no-preview
+
+selection=${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/defaults/dictation
+if [[ -f $selection && $(< "$selection") == superwhisper ]]; then
+  rm "$selection"
+fi
+omarchy-restart-hyprctl

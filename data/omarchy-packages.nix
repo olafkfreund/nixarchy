@@ -393,7 +393,7 @@
     module = "services.pipewire.alsa.enable";
   };
   "pipewire-jack" = {
-    module = "services.pipewire.jack.enable";
+    nix = "pipewire.jack";
   };
   "pipewire-pulse" = {
     module = "services.pipewire.pulse.enable";
@@ -719,7 +719,7 @@
     skip = "Not installed by default.";
   };
   "superwhisper-bin" = {
-    skip = "Unfree binary, not packaged here.";
+    skip = "Packaged here, but arrives only when the person chooses it.";
   };
   "system-config-printer" = {
     skip = "Not installed by default.";

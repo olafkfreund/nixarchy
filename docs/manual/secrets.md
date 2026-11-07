@@ -179,7 +179,8 @@ made before this release may still hold it in their git history. To check that
 older rows hold no text, count them rather than reading them:
 
 ```sh
-jq '[.[6:][] | select(.body != "" and .body != "[redacted]")] | length' ~/.local/state/omarchy/notifications/history.json
+jq '[.[6:][] | select(.body != "[redacted]" and (.summary != "" or .body != "" or .rawBody != "" or .execArgv != "" or .execActions != ""))] | length' \
+  ~/.local/state/omarchy/notifications/history.json
 ```
 
 It prints `0`. A `[redacted]` row is a verification code the shell never stored

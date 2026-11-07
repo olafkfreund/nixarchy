@@ -72,6 +72,7 @@ let
     assert.strictEqual(keys(live), "l1", "5: live age");
     const clock = Date.now() / 1000;
     assert.strictEqual(S.parseLive(JSON.stringify([Object.assign(row("l3", 0), { ts: clock - 30 * H })])).length, 0, "5: default now uses the clock");
+    assert.strictEqual(S.parseLive(JSON.stringify([Object.assign(row("l4", 0), { ts: clock - 60 })])).length, 1, "5: default clock keeps a fresh row");
 
     // The replay shows exactly the rows that have text.
     const svc = fs.readFileSync(path.join(dir, "Service.qml"), "utf8");

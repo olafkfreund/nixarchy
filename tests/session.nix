@@ -330,6 +330,8 @@ pkgs.testers.runNixOSTest {
     # start has to cut them: only the 6 newest history rows keep their text, and
     # nothing older than 24 hours survives. The fresh live card is critical so
     # it stays on screen through the 75 s wait below (a normal one would lapse).
+    # The stale one is critical too: unpatched, it would stay in live.json
+    # rather than expire into history, so the check below proves the cut.
     seed220_dir = "/home/omarchy/.local/state/omarchy/notifications"
     seed220_jq = "${pkgs.jq}/bin/jq"
     seed220_row = (
@@ -343,7 +345,7 @@ pkgs.testers.runNixOSTest {
         ' [range(0; 10) | row("s220-" + tostring; 60 * .)] + [row("s220-stale"; 90000)]')
     seed220_live = (
         'def row($k; $age; $u): ' + seed220_row + ' + {key: $k, ts: ($now - $age), urgency: $u};'
-        ' [row("live-220-stale"; 90000; 1), row("live-220-fresh"; 60; 2)]')
+        ' [row("live-220-stale"; 90000; 2), row("live-220-fresh"; 60; 2)]')
     machine.succeed("su omarchy -c 'mkdir -p " + seed220_dir + " && chmod 700 " + seed220_dir + "'")
     machine.succeed(
         "now=$(date +%s); "
@@ -616,6 +618,7 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds(
         "test -s " + seed220_lfile + " && " + seed220_jq
         + " -e 'all(.[]; .key != \"live-220-stale\")' " + seed220_lfile, timeout=30)
+    machine.succeed(seed220_jq + " -e 'all(.[]; .key != \"live-220-stale\")' " + seed220_hfile)
     assert machine.succeed(seed220_user(
         "omarchy-shell notifications dismissKey live-220-fresh")).strip() == "ok", (
         "the seeded critical card was not on screen after the first start")
@@ -1327,6 +1330,9 @@ pkgs.testers.runNixOSTest {
     # every other path: the 6 newest rows keep their text, the older ones do not.
     machine.succeed(as_user("omarchy-shell notifications setDnd on"))
     assert machine.succeed(as_user("omarchy-shell notifications isDnd")).strip() == "on"
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    machine.wait_until_succeeds(
+        "test \"$(" + as_user("omarchy-shell notifications count") + ")\" = 0", timeout=30)
     keys220 = {}
     for i220 in range(1, 9):
         machine.succeed(as_user(

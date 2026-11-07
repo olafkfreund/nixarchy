@@ -70,16 +70,16 @@ questions). Do not reopen any of them during implementation:
 Source: `inputs.omarchy` v4.5.0 (`nix flake archive --json . | jq -r
 '.inputs.omarchy.path'`).
 
-- **`moveBarWidget` never reports a refusal over IPC.**
-  `shell/services/PluginRegistry.qml:325-333` computes `error` from
-  `moveBarEntry` and then `return ""`, so `omarchy-shell shell moveBarWidget`
-  answers `ok` even when `moveBarEntry` (`:296-323`) refused because the
-  entry at `fromIndex` is not the named id. The refusal still prevents a
-  wrong move; the caller just cannot see it. **The script must treat every
-  `moveBarWidget` reply as unknown and judge each step only by re-reading the
-  file.** The spec's "marker only on proof" rule already does this; this note
-  is why it is load-bearing, not belt-and-braces. The stub in step 5 must
-  reproduce it (refuse silently, answer `ok`).
+- **`moveBarWidget` reports a refusal as its reply.**
+  `shell/services/PluginRegistry.qml:325-334` returns `moveBarEntry`'s error
+  (`:331`), and the IPC wrapper (`shell/shell.qml:1840-1847`) prints it
+  instead of `ok`: for example `widget at center[0] is not omarchy.clock`
+  when the entry at `fromIndex` is not the named id (`moveBarEntry`,
+  `:296-323`). The file is not changed by a refused move. **The script stops
+  the step at the first reply that is not `ok`**, and still judges each step
+  by re-reading the file, because `ok` does not prove the save landed
+  (`persistShellConfig` skips the write on an unreadable file). The stub in
+  step 5 reproduces both: it prints the refusal and leaves the file alone.
 - `putBarWidget` (`PluginRegistry.qml:339-358`) returns `""` (→ `ok`) when
   the id is already on the bar or enabled, `"not ready"` while scanning, drops
   `before`/`after` when the neighbour is missing, and otherwise enables with
@@ -116,7 +116,8 @@ build; the session runs every check command below after their edit.
    - **Gate:** `jq -e '.bar | type == "object" and has("centerAnchor")' "$cfg"`
      fails or the file is unreadable → `exit 0`. No IPC before this line.
    - If all three markers exist → `exit 0`.
-   - **Readiness:** copy `modules/home.nix:2353-2358`: up to 120 × `omarchy-shell
+   - **Readiness:** copy only the ping loop at `modules/home.nix:2353-2358`
+     (not that hook's `state=` line, which names a different directory): up to 120 × `omarchy-shell
      shell ping` one second apart; still no answer → `exit 0`, no marker.
      `export OMARCHY_SHELL_IPC_TIMEOUT=${OMARCHY_SHELL_IPC_TIMEOUT:-30s}`.
    - **Step `1790042972`** (skip if `$state/1790042972.sh` exists):
@@ -134,16 +135,20 @@ build; the session runs every check command below after their edit.
      "$state/1790042972.sh"`. No proof → log, stop.
    - **Step `1791968925`** (skip if marker exists; skip without a marker if
      `(.bar.id // "" | tostring)` is not `""` or `omarchy.bar`, matching
-     upstream which never acts on such a bar): read the file once. For
-     `right` the pinned position is index 0; for `left` and `center` it is the
-     last index. Take the **last** `omarchy.tray` entry's index `t` in that
-     section (upstream keeps `[-1:]`). If `t` is not already at the pinned
-     position, one `moveBarWidget omarchy.tray
-     '{"fromSection":S,"fromIndex":t,"section":S,"index":P}'` with P = 0 for
-     `right`, or the section length for `left`/`center` (clamped to append).
-     Extra trays stay (decision 5).
-     Proof: poll ≤10 s until, in each of the three sections, the last tray
-     that was there is at the pinned end. Then touch the marker.
+     upstream which never acts on such a bar): read the file once. Then,
+     **separately for each section** S in `right`, `left`, `center`: the
+     pinned position is index 0 for `right` and the last index for `left` and
+     `center`. Take the **last** `omarchy.tray` entry's index `t` in S
+     (upstream keeps `[-1:]`). If `t` is not already at the pinned position,
+     issue one `moveBarWidget omarchy.tray
+     '{"fromSection":S,"fromIndex":t,"section":S,"index":P}'` for S, with
+     P = 0 for `right`, or the section length for `left`/`center` (clamped to
+     append). Extra trays stay (decision 5). A reply other than `ok` → log,
+     stop the run.
+     Proof: from the one read, compute each section's expected **whole
+     array** (entries as JSON objects, so two trays that carry different
+     fields are told apart) and poll ≤10 s until all three sections equal it.
+     Then touch the marker.
    - **Step `1791969355`** (skip if marker exists; same built-in-bar test):
      read `center` once; `k` = index of the first entry whose id equals
      `.bar.centerAnchor` (a string; otherwise treat as absent). Absent → no
@@ -155,11 +160,16 @@ build; the session runs every check command below after their edit.
      `section:"centerBegin", index: <len, i.e. append>`, then `n-k-1` moves of
      `fromSection:"center", fromIndex:<current last index>` (naming that
      entry's id) to `section:"centerEnd", index:0`. Ids per move come from the
-     one read, so a layout that drifted makes the shell refuse silently.
+     one read, so a layout that drifted makes the shell refuse; the first
+     reply that is not `ok` stops the step (log, no marker), so no later move
+     runs against a layout that no longer matches the read.
      Proof: poll ≤10 s until the three sections' id lists equal the computed
      result; then touch the marker. Otherwise log and stop; the next login
      re-reads and recomputes.
-   - Every log line: `... | systemd-cat -t nixarchy-user-migrations`.
+   - Every log line goes through one function:
+     `log() { printf '%s\n' "$*" | systemd-cat -t nixarchy-user-migrations || true; }`
+     (`|| true`: a log that cannot reach the journal must not abort the run
+     under `set -e`/`pipefail`).
 
    Shell traps: `set -e` does not reach inside `$(...)` — write
    `out=$(cmd) || { log; exit 0; }` (§5). Never `mapfile < <(cmd)` for a list
@@ -252,8 +262,8 @@ build; the session runs every check command below after their edit.
      position (after `omarchy-migrate`).
    - `pkgs/AGENTS.md`: new `##` section appended at the end (do not insert
      mid-file; anchors are cross-referenced): what `omarchy-migrate-user`
-     does, the IPC-only rule and why (#847), the `moveBarWidget` silent-refusal
-     fact, the marker path, and "a bump that brings new migrations: run
+     does, the IPC-only rule and why (#847), the `moveBarWidget` refusal reply and why the file is still re-read,
+     the marker path, and "a bump that brings new migrations: run
      `checks.user-migrations-ledger`, add a row per id it names".
    Traps: §5 nixfmt on the ledger; §7 (short code comments, reasoning in
    AGENTS.md). Check: `nix build .#checks.x86_64-linux.bin-ledger`
@@ -267,10 +277,16 @@ build; the session runs every check command below after their edit.
    `checks` entry is enough for CI (§4: the "Build every check no other job
    claims" step runs it); **no workflow edit**.
 
-   A `runCommand` with `jq`, `bash`, `coreutils`, `diffutils`. Per case:
-   fresh `HOME`, and `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_DATA_HOME`,
-   `XDG_CACHE_HOME`, `OMARCHY_MIGRATION_STATE` all set under it (§4: moving
-   `HOME` is not isolation). `OMARCHY_SHELL_IPC_TIMEOUT` irrelevant; set a
+   A `runCommand` with `jq`, `bash`, `coreutils`, `diffutils`. Per case and
+   per run (script and oracle each get their own fresh `HOME`): set
+   `XDG_CONFIG_HOME=$HOME/.config`, `XDG_STATE_HOME=$HOME/.local/state`,
+   `XDG_DATA_HOME=$HOME/.local/share`, `XDG_CACHE_HOME=$HOME/.cache` and
+   `OMARCHY_MIGRATION_STATE=$HOME/.local/state/omarchy/migrations` exactly,
+   not merely "under" `HOME`: upstream's migrations read the literal
+   `$HOME/.config/omarchy/shell.json`, so the script and the oracle must
+   resolve the same relative path (§4: moving `HOME` alone is not isolation).
+   A stub `systemd-cat` first on `PATH` appends its stdin to
+   `$HOME/journal.log` (the sandbox has no journal). `OMARCHY_SHELL_IPC_TIMEOUT` irrelevant; set a
    tiny poll budget via the script's own constants only if step 1 exposes
    them as env overrides (keep the defaults otherwise; 10 s polls against a
    stub that writes synchronously return at once).
@@ -280,9 +296,10 @@ build; the session runs every check command below after their edit.
    putBarWidget ID JSON` → `ok` without change if ID is already in the layout,
    otherwise insert `{"id":ID}` after the `after` neighbour (dropping
    `after` if the neighbour is absent → section end of the manifest default,
-   `centerEnd`); `shell moveBarWidget ID JSON` → **always** prints `ok`;
-   changes the file only if `layout[fromSection][fromIndex]` has id ID, then
-   splices into `section` at `min(index, len)`. Every write first applies
+   `centerEnd`); `shell moveBarWidget ID JSON` → if
+   `layout[fromSection][fromIndex]` does not have id ID, prints `widget at
+   <S>[<i>] is not <ID>` and leaves the file alone; otherwise splices into
+   `section` at `min(index, len)` and prints `ok`. Every write first applies
    `ensureConfigShape` (all six `barSections` arrays, `plugins`) and sets
    `version = 1`. The line that writes the sandbox file carries `847-allow`.
    Every call is appended to `$HOME/ipc.log`. A `STUB_NOWRITE=1` mode answers
@@ -304,18 +321,20 @@ build; the session runs every check command below after their edit.
    (d) (a) with `bar.id = "local.neon-bar"`, (e) is (a) run, then Elsewhen
    removed from the layout, then run again, (f) (a) with `STUB_NOWRITE=1`,
    then rerun with the working stub, (g) (a) with the clock moved to `right`,
-   (h) (a) with `right: [tray, X, tray]`.
+   (h) (a) with `right: [{"id":"omarchy.tray","t":1}, X,
+   {"id":"omarchy.tray","t":2}]` — the extra `t` field tells the two trays
+   apart, which the shell keeps (it moves whole entries).
 
    | case | asserts |
    |---|---|
    | a | normalised == oracle; `centerEnd[0]` id is `omarchy.elsewhen`; 3 markers |
    | b | normalised == oracle |
    | c | `cmp` with the input; `ipc.log` empty; no marker dir |
-   | d | only the Elsewhen put in `ipc.log`; normalised == oracle; one marker |
+   | d | the only layout-changing call in `ipc.log` is the Elsewhen `putBarWidget` (no `moveBarWidget`; `ping`/`rescanPlugins` are expected); normalised == oracle; one marker |
    | e | Elsewhen still absent after the second run; `ipc.log` of the second run empty |
-   | f | no markers after the first run; 3 markers after the rerun; result == (a)'s |
+   | f | no markers after the first run, and a line in `journal.log`; 3 markers after the rerun; result == (a)'s |
    | g | normalised == oracle (no moves); 3 markers |
-   | h | the last tray is `right[0]`; the other tray is still in `right`; marker `1791968925.sh` written |
+   | h | `right` equals exactly `[tray t:2, tray t:1, X]` (the last tray moved to the front, the other kept in order); marker `1791968925.sh` written |
 
    Note on (h): the oracle deletes the extra tray, so (h) does **not**
    compare with the oracle; it asserts the documented partial port.
@@ -324,6 +343,8 @@ build; the session runs every check command below after their edit.
    captured for the PR, then restored with `git checkout HEAD -- <file>`
    (not `git checkout -- <file>`, which restores the index, §5):**
    a: run the split before the Elsewhen put → Elsewhen in `center`;
+   (also: stub `moveBarWidget` answering `ok` on a refusal → an extra fixture
+   with a drifted layout must still get no `1791969355` marker);
    b: split appends to `centerBegin` at index 0 → order differs;
    c: delete the gate → calls logged;
    d: drop the built-in-bar test from the split;
@@ -353,17 +374,22 @@ build; the session runs every check command below after their edit.
 
 7. **VM step in `tests/plugin.nix`**, appended after the #1391 block
    (currently ending at line 717, before `'';`). As the `omarchy` user, the
-   way `tests/session.nix:2962-2968` already does it: copy fixture (a) over
-   `~/.config/omarchy/shell.json` on a line carrying `# 847-allow` (the guard
-   looks the marker up in the original line), then `omarchy-restart-shell`,
-   which is the documented recovery from #847, and wait for `omarchy-shell
-   shell ping` (the wait loop at `tests/plugin.nix:~280-290`). Remove
-   `~/.local/state/omarchy/migrations` before the restart. Then run
+   spec says: **stop the shell, copy, start it.** Stop it with the kill loop
+   upstream's `bin/omarchy-restart-shell:84` uses (`quickshell kill -p
+   "$CONFIG_DIR" --any-display`, same `CONFIG_DIR` derivation as that script),
+   and assert `omarchy-shell shell ping` now fails before copying — if
+   `omarchy-launch-shell`'s loop respawns it, find the session's own stop path
+   and say so in the PR rather than writing under a live shell. Copy fixture
+   (a) over `~/.config/omarchy/shell.json` on a line carrying `# 847-allow`
+   (the guard looks the marker up in the original line, as
+   `tests/session.nix:2966`), remove `~/.local/state/omarchy/migrations`,
+   start the shell with `omarchy-restart-shell`, and wait for `omarchy-shell
+   shell ping` (the wait loop near `tests/plugin.nix:280-290`). Then run
    `~/.config/omarchy/hooks/post-boot.d/user-migrations`, then compare the
    normalised file with check 5's expected (a) output (pass it into the VM
    test as a store path built by step 5's derivation, e.g.
    `passthru.expectedA`) and check the three markers. This proves the real
-   IPC behaves as the stub does, including the silent `moveBarWidget`.
+   IPC behaves as the stub does.
    §1 break: swap steps in the script so the split runs first → this step
    fails. VM tier: only when `gh api repos/olafkfreund/nixarchy/actions/runners
    -q '[.runners[]|select(.busy)]|length'` prints `0` and no p620 system build

@@ -39,6 +39,7 @@ pkgs.runCommand "nixarchy-stale-scripts"
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > stub/agy
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "%s\n" launched > "$AGENT_LOG"' > stub/omarchy-agent
     chmod +x stub/agy stub/omarchy-agent
+    ln -s ${omarchy}/bin/omarchy-agent-real-path stub/omarchy-agent-real-path
     mkdir -p agent-home
     export HOME="$PWD/agent-home" AGENT_LOG="$PWD/agent.log"
     if ! bash ${omarchy}/share/omarchy/bin/omarchy-default-agent antigravity >/dev/null 2>&1; then

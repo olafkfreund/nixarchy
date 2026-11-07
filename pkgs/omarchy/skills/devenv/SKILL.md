@@ -57,8 +57,8 @@ which fetches a prebuilt toolchain into `~/.local/share/mise`. `data/apps.nix`
 in this repo rejects that for two reasons, and both still hold: nothing about it
 survives into the configuration, and mise's prebuilt binaries are dynamically
 linked against paths NixOS does not have, so several of them will not execute at
-all. mise is still installed and still fine for anything not covered here — but
-it is never the answer to "set up this project".
+all. nixarchy does not ship or activate mise (#1625), and it is never the answer
+to "set up this project".
 
 ## Is devenv Even Here
 

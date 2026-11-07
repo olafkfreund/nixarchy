@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=List Omarchy's default mise tools, or opt this user out of or back into them
+# omarchy:args=<list|declares <tool>|disable|enable>
+# omarchy:hidden=true
+
+echo "nixarchy does not ship mise." >&2
+exit 1

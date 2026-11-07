@@ -46,6 +46,18 @@
       environment.systemPackages = [ pkgs.ffmpeg-full ];
     };
 
+  # A person's own mise and a file at the path nixarchy used to own (#1625).
+  mise-own =
+    { pkgs, ... }:
+    {
+      environment.systemPackages = [
+        (pkgs.mise.overrideAttrs (o: {
+          pname = o.pname + "-coexist";
+        }))
+      ];
+      environment.etc."mise/conf.d/omarchy.toml".text = "# theirs\n";
+    };
+
   systempkg-own-vi =
     { pkgs, ... }:
     {
@@ -248,4 +260,37 @@
       programs.nixarchy.user = lib.mkDefault "omarchy";
       services.openssh.enable = true;
     };
+
+  keyboard-own-xkb = {
+    services.xserver.xkb.layout = "fr";
+  };
+
+  keyboard-own-options = {
+    services.xserver.xkb = {
+      layout = "us,ru";
+      options = "grp:caps_toggle";
+    };
+  };
+
+  keyboard-own-vconsole =
+    { lib, ... }:
+    {
+      services.xserver.xkb.layout = "de";
+      environment.etc."vconsole.conf".text = lib.mkForce "KEYMAP=own\n";
+    };
+
+  keyboard-xkb-console = {
+    console.useXkbConfig = true;
+    services.xserver.xkb.layout = "de";
+  };
+
+  keyboard-imperative = {
+    i18n.imperativeLocale = true;
+    services.xserver.xkb.layout = "de";
+  };
+
+  keyboard-kwin-greeter = {
+    services.displayManager.sddm.wayland.compositor = "kwin";
+    services.xserver.xkb.layout = "de";
+  };
 }

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Print PATH without any agent dispatch directory
+# omarchy:hidden=true
+
+# By suffix, not by store path: a long-lived shell still holds the directory of the
+# generation it started in, and an exact match would leave that one and loop forever.
+set -euo pipefail
+
+out=
+IFS=: read -r -d '' -a parts < <(printf '%s\0' "$PATH") || true
+for part in "${parts[@]}"; do
+  case $part in
+    */agent-dispatch | */agent-dispatch/) ;;
+    *) out+="${out:+:}$part" ;;
+  esac
+done
+printf '%s\n' "$out"

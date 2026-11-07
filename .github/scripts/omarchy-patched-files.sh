@@ -19,17 +19,18 @@
 # The set of files this port patches is DERIVED from what the repo already
 # states, never listed here. A hand-kept list is the thing that goes stale in
 # silence: it keeps naming a bin that was deleted and stops naming the one
-# added last week, and the report stays reassuring throughout. The four
-# statements it reads (five, with sed -i):
+# added last week, and the report stays reassuring throughout. The six
+# statements it reads:
 #
 #   pkgs/omarchy/nix-bin/*                     bins replaced by a stub
 #   substituteInPlace $out/share/omarchy/PATH  files patched in the package
 #   sed -i ... $out/share/omarchy/PATH         files edited in the package
 #   ${src}/PATH beside a sha256sum             a file copied here and pinned
 #   seed_dir "${omarchyPath}/config"           the tree seeded into ~/.config
+#   +++ b/PATH in pkgs/omarchy/*.patch          files changed by port patches
 #
 # Each of those is a grep, and a grep that matches nothing passes quietly, so
-# all five must produce something or this refuses to print. tests/patched-
+# all six must produce something or this refuses to print. tests/patched-
 # files.nix runs it against the real repo files for that reason.
 #
 # Attribution is a second pass, because it needs a network and this does not:
@@ -112,8 +113,12 @@ seeded=$(
   grep -ohE 'seed_dir "\$\{omarchyPath\}/[A-Za-z0-9._/-]+"' "$home" 2>/dev/null |
     sed -E 's|.*omarchyPath\}/||;s|"$|/|' | sort -u || true
 )
+patches=$(
+  grep -hE '^\+\+\+ b/[A-Za-z0-9._/-]+$' "$root"/pkgs/omarchy/*.patch 2>/dev/null |
+    sed 's|^+++ b/||' | sort -u || true
+)
 
-# See the header: five greps against files that move. All four have to find
+# See the header: six derived sources against files that move. All six have to find
 # something, or the intersection below is empty for a reason that has nothing
 # to do with this release.
 derived_or_die() {
@@ -129,6 +134,7 @@ derived_or_die "$patched" "substituteInPlace in pkgs/omarchy/default.nix"
 derived_or_die "$sedded" "sed -i in pkgs/omarchy/default.nix"
 derived_or_die "$pinned" "\${src}/ in pkgs/omarchy/default.nix"
 derived_or_die "$seeded" "seed_dir in modules/home.nix"
+derived_or_die "$patches" "+++ b/PATH in pkgs/omarchy/*.patch"
 
 reasons() {
   echo "$stubs" | sed 's|$|\treplaced entirely by a NixOS stub in `pkgs/omarchy/nix-bin/`|'
@@ -136,6 +142,7 @@ reasons() {
   echo "$sedded" | sed 's|$|\tedited by `sed -i` in `pkgs/omarchy/default.nix`|'
   echo "$pinned" | sed 's|$|\tread straight out of the source by `pkgs/omarchy/default.nix` (copied, rewritten, or sha256-pinned)|'
   echo "$seeded" | sed 's|$|\tseeded into `~/.config` by `modules/home.nix`|'
+  echo "$patches" | sed 's|$|\tpatched by `pkgs/omarchy/*.patch`|'
 }
 
 ours=$(reasons | grep -vE '^[[:space:]]*$' | sort -u)

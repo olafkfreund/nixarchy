@@ -549,7 +549,7 @@ pkgs.testers.runNixOSTest {
     # snapshot was never taken" and "the snapshot did not survive the boot"
     # are different bugs. The subvolumes are at the btrfs top level, which
     # nothing mounts, so the top level is mounted to look -- exactly what
-    # installer/host.nix's unit does when it uses them.
+    # installer/factory-reset.nix's unit does when it uses them.
     installer.succeed("mkdir -p /run/toplevel")
     installer.succeed(
         "mount -o subvol=/ $(findmnt -no SOURCE /mnt | sed 's/\\[.*\\]//')"
@@ -886,6 +886,9 @@ pkgs.testers.runNixOSTest {
             "reset exists to undo -- so every machine installed from this "
             "commit would get the 'no factory snapshot' refusal forever.")
     print("the baseline survived the boot, and is still read-only")
+
+    status, _ = target.execute("runuser -u omarchy -- /run/current-system/sw/bin/omarchy-system-factory-reset --check")
+    assert status == 3, f"an unprivileged --check exited {status}; 3 means it could not ask"
 
     # Something to lose, in both halves of what the reset covers.
     target.succeed("touch /home/omarchy/a-file-the-user-made")

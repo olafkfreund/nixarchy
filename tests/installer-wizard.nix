@@ -395,6 +395,8 @@ pkgs.testers.runNixOSTest {
         ("encrypt = true", default, "encryption"),
         ('time.timeZone = "Europe/London"', configuration, "timezone"),
         ('console.keyMap = "us"', configuration, "keymap"),
+        ('layout = "us"', configuration, "layout"),
+        ('variant = ""', configuration, "variant"),
     ]:
         assert text in where, f"the {name} answer never reached the flake"
 

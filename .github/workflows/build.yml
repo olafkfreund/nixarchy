@@ -393,6 +393,7 @@ jobs:
           #                    already runs two of those against a 90-minute job
           #                    and that pair grazed the timeout on 2026-09-03
           #   microvm-boot     a nested VM on the -tcg runner
+          #   keyboard-boot    two desktop VMs that boot through LUKS and type at the greeter
           # Ask Nix, do not parse the file -- and the implausible-count floor
           # that goes with it. Both moved into generated-checks.sh with the
           # reasoning; see its header.
@@ -1129,13 +1130,17 @@ jobs:
           missing=""
           for cmd in xdg-terminal-exec uwsm-app foot hyprctl quickshell jq gum \
                      wl-copy grim slurp brightnessctl pactl wpctl nmcli \
-                     bluetoothctl notify-send mise nvim gtk-launch udiskie \
+                     bluetoothctl notify-send nvim gtk-launch udiskie \
                      git less man unzip pamixer imv magick rg zbarimg \
                      inotifywait starship zoxide eza lazygit; do
             [ -x "result/bin/$cmd" ] || missing="$missing $cmd"
           done
           if [ -n "$missing" ]; then
             echo "::error::runtimeDeps does not provide:$missing"
+            exit 1
+          fi
+          if [ -e result/bin/mise ]; then
+            echo "::error::runtimeDeps provides mise again (#1625)"
             exit 1
           fi
           echo "all checked runtime commands resolve ($(ls result/bin | wc -l) binaries)"
@@ -2043,6 +2048,11 @@ jobs:
       - name: A frozen guest fails the multi-user wait fast, with registers
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.boot-hang-detect
+
+      # checks.factory-reset is a nixosTest and needs the /dev/kvm set up above (#1621).
+      - name: A failed factory reset leaves both halves untouched, on real btrfs
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.factory-reset
 
       # checks.remove-fingerprint-vm is a nixosTest and needs the /dev/kvm set up above (#1620).
       - name: A fingerprint removed through real fprintd and a virtual reader is gone

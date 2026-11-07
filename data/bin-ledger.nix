@@ -122,7 +122,11 @@
   };
   "omarchy-agent" = {
     class = "patch";
-    reason = "Two edits: mise's shims are prepended to PATH, because the menu launches through `bash -c` which sources no rc; and an `antigravity` case is added, which upstream's launcher has no arm for.";
+    reason = "Three edits: the launch carries the agent dispatch directory, because the menu's `bash -c` sources no rc; a missing agent also sends a notification, because a keypress has no terminal; and an `antigravity` case is added, which upstream's launcher has no arm for.";
+  };
+  "omarchy-agent-real-path" = {
+    class = "new";
+    reason = "Not in upstream. PATH without any generation's agent-dispatch directory, so a dispatch entry never reads as the installed CLI and the exec cannot recurse (#1625).";
   };
   "omarchy-agent-crash" = {
     class = "patch";
@@ -130,7 +134,15 @@
   };
   "omarchy-agent-account-exec" = {
     class = "patch";
-    reason = "Its mise install fallback refuses with exit 127 instead: nixarchy installs claude, codex and grok through Nix, and one it did not install (unfree off) stays not installed (#1386).";
+    reason = "Finds the real CLI by dropping every dispatch directory from PATH itself, restores this generation's for an agent's subprocesses, and refuses with exit 127 instead of a mise install (#1386, #1625).";
+  };
+  "omarchy-agent-account-add" = {
+    class = "patch";
+    reason = "Checks for the real CLI without dispatch on PATH and refuses with the Nix install route instead of running mise.";
+  };
+  "omarchy-agent-usage-codex" = {
+    class = "patch";
+    reason = "Skips agent dispatch entries when probing for Codex, so a dispatcher does not count as an installed CLI or get run by the usage probe.";
   };
   "omarchy-agent-account-copy" = {
     class = "vendor";
@@ -279,6 +291,10 @@
     class = "patch";
     reason = "It registers the native-messaging host at $OMARCHY_PATH/bin, a store path that is garbage-collected after an Omarchy update, so the registered host dangles. Registers /run/current-system/sw/bin instead (#1491).";
   };
+  "omarchy-install-dev-env" = {
+    class = "replace";
+    reason = "Upstream installs languages and frameworks globally through mise and pacman. nixarchy ships no mise, so this refuses and names Install > Development and nixarchy dev init (#1625).";
+  };
   "omarchy-install-font" = {
     class = "replace";
     reason = "Upstream runs `omarchy-pkg-add <package> && sleep 2 && omarchy-font-set`, so the && meant the switch never ran either. Asks fontconfig first, and defers to omarchy-pkg-add only if the family is absent; on the missing-font path with no terminal it reopens itself in one (#1304).";
@@ -293,8 +309,8 @@
     allow = "account-tools etc-write modprobe";
   };
   "omarchy-install-hermes-cli" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service only after a --now set-up, before re-running the theme setter; stopping a user unit is session state and carries no configuration.";
+    class = "patch";
+    reason = "Retires Omarchy's Hermes wrapper without running mise or removing the environment it built; stopping omarchy-hermes-theme.service after --now remains session state.";
     allow = "systemctl-user";
   };
   "omarchy-install-openclaw-cli" = {
@@ -304,7 +320,7 @@
   };
   "omarchy-install-preinstalls" = {
     class = "replace";
-    reason = "Upstream reseeds through omarchy-refresh-applications and its mise stubs, then exits on omarchy-pkg-add so the marker never clears. Seeds through nix-bin's omarchy-refresh-applications, writes no stubs, and clears the marker (#1304, #1319).";
+    reason = "Upstream reseeds through omarchy-refresh-applications and install/user/mise.sh, then exits on omarchy-pkg-add so the marker never clears. Seeds through nix-bin's omarchy-refresh-applications, runs no mise.sh, and clears the marker (#1304, #1319, #1625).";
   };
   "omarchy-install-service-1password" = {
     class = "patch";
@@ -376,13 +392,17 @@
     reason = "Upstream's 86 migration scripts use sudo, write under /usr and call pacman, and with no state directory every one counts as pending. --pending reports nothing to do; a bare run is told why.";
     pacman = "Ours, in pkgs/omarchy/nix-bin. The pacman line is heredoc prose or upstream code left dead after an early exit -- neither of which comment-stripping can see.";
   };
+  "omarchy-mise-default-tools" = {
+    class = "replace";
+    reason = "Upstream reads /etc/mise/conf.d/omarchy-tools.toml and edits ~/.config/mise/miserc.toml to opt out of default mise tools. nixarchy ships no mise and installs no /etc/mise files, so this refuses (#1625).";
+  };
   "omarchy-mise-install" = {
-    class = "patch";
-    reason = "Writes no launcher when a command outside ~/.local/bin already provides the tool. Upstream's launchers sit ahead of the Nix profiles on PATH, so a Nix-installed codex or claude never ran (#707). Never removes or replaces an existing ~/.local/bin entry, which may be a home-manager link (#1319).";
+    class = "replace";
+    reason = "Upstream writes a mise-backed wrapper into ~/.local/bin that runs `mise use -g` and `mise x`. nixarchy ships no mise, so this refuses (#1625).";
   };
   "omarchy-mise-unshadow" = {
     class = "new";
-    reason = "Not in upstream. Run on every activation: removes upstream's exact mise wrapper from ~/.local/bin when a Nix profile has the same command, for launchers written before omarchy-mise-install's patch (#707).";
+    reason = "Not in upstream. Run on every activation: removes upstream's exact generated mise launchers from ~/.local/bin, because mise is gone and they can only fail and shadow their replacement, and records what mise left (#707, #1625).";
   };
   "omarchy-network-speedtest" = {
     class = "patch";
@@ -451,7 +471,7 @@
   };
   "omarchy-refresh-applications" = {
     class = "replace";
-    reason = "Upstream's cp -f replaces an edited launcher or a home-manager link, and it reruns install/user/mise.sh, whose stubs replaced a home-manager ~/.local/bin entry. Copies only missing launchers and runs no mise.sh; provisioning already runs it from install/user/all.sh (#1319).";
+    reason = "Upstream's cp -f replaces an edited launcher or a home-manager link, and it reruns install/user/mise.sh, whose stubs replaced a home-manager ~/.local/bin entry. Copies only missing launchers and runs no mise.sh (#1319, #1625).";
   };
   "omarchy-refresh-limine" = {
     class = "vendor";
@@ -502,6 +522,10 @@
     reason = "It writes chromium.desktop as the fallback default browser, a name nixpkgs does not use, and its `|| true` swallowed the failure -- so removing Chrome left a default resolving to nothing. Its Zen fallback compared against zen.desktop, which nixarchy's Zen does not install; it names zen-beta.desktop (#1303).";
     allow = "etc-write";
   };
+  "omarchy-remove-dev-env" = {
+    class = "replace";
+    reason = "Upstream uninstalls language toolchains through mise and pacman. nixarchy ships no mise, so this refuses and names Remove > Development (#1625).";
+  };
   "omarchy-remove-gaming-xbox-controllers" = {
     class = "vendor";
     reason = "Vendored unchanged. Deletes the /etc/modprobe.d and /etc/modules-load.d files omarchy-install-gaming-xbox-controllers wrote. Neither exists here, because both settings are declarative.";
@@ -514,7 +538,7 @@
   };
   "omarchy-remove-preinstalls" = {
     class = "replace";
-    reason = "Upstream deletes every web app and TUI launcher and rm -f's named ~/.local/bin entries whoever made them. Deletes only an unmodified, regular-file seed of a shipped web app or TUI, and only an exact omarchy-mise-install stub and only the byte-exact Hermes wrapper upstream's installer generated (#1304, #1623).";
+    reason = "Deletes only unmodified regular-file seeds of shipped web apps or TUIs and byte-identical upstream Hermes wrappers, leaving mise launchers and user-owned files untouched (#1304, #1623, #1625).";
   };
   "omarchy-remove-security-fido2" = {
     class = "patch";
@@ -683,6 +707,10 @@
     class = "vendor";
     reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
     pacman = "Update, channel, keyring and mirror plumbing. Unreachable here because pkgs/omarchy/nix-bin replaces the entry points the UI calls -- omarchy-update and omarchy-update-available.";
+  };
+  "omarchy-update-mise" = {
+    class = "replace";
+    reason = "Upstream runs `mise up` when mise is on PATH. nixarchy ships no mise, so this refuses and names `mise up` for a user's own install (#1625).";
   };
   "omarchy-update-orphan-pkgs" = {
     class = "vendor";

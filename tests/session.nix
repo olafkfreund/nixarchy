@@ -3143,6 +3143,8 @@ pkgs.testers.runNixOSTest {
         input_driver("terminal")
         machine.wait_for_file("/tmp/typed")
 
+    # Return only commits Mozc's and Chewing's conversion: the first ctrl-d hands
+    # cat the unterminated line, the second ends it.
     def finish_typing(keys, expected, label):
         machine.send_chars(keys)
         machine.send_key("ret")
@@ -3152,9 +3154,15 @@ pkgs.testers.runNixOSTest {
         assert typed.rstrip("\n") == expected, (
             f"{label}: expected {expected!r}, got {typed.rstrip(chr(10))!r}")
 
+    # The new terminal has no input context until it is focused, and a picker
+    # apply restarts fcitx5: retry until the focused context holds the method.
+    def select_method(method):
+        machine.wait_until_succeeds(desktop_user(
+            'fcitx5-remote -s ' + method + ' && test "$(fcitx5-remote -n)" = ' + method), timeout=60)
+
     def type_keys(keys, expected, label, method):
         open_typing_terminal()
-        machine.succeed(desktop_user("fcitx5-remote -s " + method))
+        select_method(method)
         finish_typing(keys, expected, label)
 
     unitctl = "systemctl --user "
@@ -3174,7 +3182,7 @@ pkgs.testers.runNixOSTest {
     # With the terminal focused, cycle through the shell's QML input reader.
     input_driver("input", "mozc")
     open_typing_terminal()
-    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    select_method("mozc")
     before = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
     machine.succeed(desktop_user("omarchy-input-method cycle"))
     machine.wait_until_succeeds(desktop_user(
@@ -3187,7 +3195,7 @@ pkgs.testers.runNixOSTest {
         "hyprctl -j getoption input:kb_layout | grep de"), timeout=30)
     type_keys("y", "z", "German keyboard picker", "keyboard-de")
     open_typing_terminal()
-    machine.succeed(desktop_user("fcitx5-remote -s mozc"))
+    select_method("mozc")
     active = machine.succeed(desktop_user("fcitx5-remote -n")).strip()
     machine.send_key("shift")
     machine.wait_until_succeeds(desktop_user(
@@ -3227,8 +3235,7 @@ pkgs.testers.runNixOSTest {
     input_driver("input", "mozc")
     # fcitx5-remote -n is empty until something focused has an input context.
     open_typing_terminal()
-    machine.wait_until_succeeds(desktop_user(
-        'fcitx5-remote -s mozc && test "$(fcitx5-remote -n)" = mozc'), timeout=60)
+    select_method("mozc")
     machine.send_key("ctrl-d")
     print("#1614: picking Mozc replaces a stale addon-less unit")
 

@@ -1367,3 +1367,20 @@ Upstream's reasoning is sound and worth keeping: an install or upgrade may start
 The patch uses /run/wrappers/bin first, then the system profile: the same two directories a root login gets here, both root-owned, which is exactly the property upstream is reaching for.
 
 New in 4.0.3, and `checks.session` caught it. That check scans every shipped command for /usr and is the reason this is a patch rather than a surprise on somebody's laptop.
+
+## Notification history keeps text for the newest rows (#1663)
+
+904-notification-history-text.patch: only the newest
+notifications keep their text in the shell's history;
+older rows keep who and when, and day-old cards don't
+come back (Nixi #220). It sits on 902/903, which patch
+the same file. checks.notification-store and
+checks.session prove it.
+
+CARRIED until omacom/omarchy takes it. --fuzz=0, so a
+source bump that rewords the hunk fails at build time
+instead of applying somewhere else.
+
+The comment lives here, not in installPhase, because
+installPhase is measured by checks.install-phase-budget
+(#997): this text tipped the edge build over it.

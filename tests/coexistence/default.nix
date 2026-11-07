@@ -210,8 +210,8 @@ let
   forcedPackage = lib.findFirst (
     p: lib.getName p == "superwhisper"
   ) null forcedOn.environment.systemPackages;
-  forcedPackagePath =
-    if forcedPackage == null then pkgs.writeText "absent-superwhisper" "" else forcedPackage;
+  # A stub, never the real package: no check may build the unfree vendor app (#1613).
+  forcedPackagePath = pkgs.writeShellScriptBin "superwhisper" "exit 0";
   keyHarness = pkgs.writeText "dictation-keys.lua" ''
     local backend, missing = arg[1], arg[2] == "missing"
     local binds = {}

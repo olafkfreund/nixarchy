@@ -439,6 +439,29 @@ actually bound — and `programs.nixarchy.neovimSpecs` writes the spec for you
 under the same once-and-never-again rules. Point the plugin at
 `vim.env.OLLAMA_ENDPOINT` and it follows the server.
 
+## Dictation
+
+Dictation types what you say into the focused window. **Superwhisper** is the
+default choice, and it arrives only after you choose it: open **Setup >
+Default > Dictation** and pick it. You get one screen that says where your
+audio goes, then one rebuild. Nothing is downloaded and no traffic starts
+before that.
+
+- **Cloud mode** sends your audio, the transcripts and any prompt or context
+  the feature needs to Superwhisper, which processes them transiently, per the
+  vendor. **Offline mode** transcribes on the device. In either mode the app
+  contacts Superwhisper's servers when it starts, before any recording, as
+  measured for #1613. You pick a mode on
+  the consent screen. The vendor's [terms](https://superwhisper.com/terms) and
+  [privacy policy](https://superwhisper.com/privacy) are the authority.
+- Crash reports are switched off before the first start.
+- The keys are **Alt+Space** (toggle) and **Right Alt** (hold to speak). Omarchy
+  binds them only when the chosen engine is installed.
+- Superwhisper is unfree. With `allowUnfree` off, **Voxtype** is the engine,
+  on the same keys. `programs.nixarchy.dictation.enable` also keeps Voxtype.
+- To remove it, use **Remove > Dictation > Superwhisper** in the menu. Your
+  preferences, history and models stay where they are.
+
 ## Running the model locally
 
 ```nix

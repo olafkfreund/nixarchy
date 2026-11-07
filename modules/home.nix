@@ -1078,8 +1078,8 @@ in
             has no services.voxtype -- it arrived after release-26.05.
 
             voxtype is on PATH, but nothing starts the daemon, downloads the
-            whisper model or seeds the config, so F9 and Super+Ctrl+X do
-            nothing.
+            whisper model or seeds the config, so Alt+Space and Right Alt
+            do nothing.
 
             Follow home-manager's unstable branch (see the manual's "Stable or
             unstable"), or turn programs.nixarchy.dictation off.

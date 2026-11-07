@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1649
 spec: spec/2026-11-06-1649-reinstall-names-machine.md
 coders:

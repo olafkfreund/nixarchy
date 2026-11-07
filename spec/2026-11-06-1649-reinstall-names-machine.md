@@ -15,7 +15,7 @@ The image carries a small git repository and the machine's name, and its launche
 - `mkUserIso` passes `host` alongside `flake` in `source`. The published image passes neither, so it behaves as it does today.
 - `installer/cd.nix` builds the repository when `source.host` is set: a `runCommand` that copies `source.flake.outPath`, makes one commit with a fixed identity and date, and outputs a bare repository. The launcher names that store path, which is what puts it on the image. It holds only what the flake's source already holds, and no closure.
 - **No history and no remote.** A flake's source has no `.git`, and pure evaluation can't read the original's. The new `/etc/nixos` starts from one commit of the tree the image was built from.
-- `cd.nix` exposes the launcher as `system.build.installerLauncher`, so a check reads the launcher a real image would run.
+- `cd.nix` exposes the launcher as `system.build.installerLauncher`, and `mkUserIso` returns the image with that attribute beside it. A check then reaches the launcher through `mkUserIso`, the handoff that caused this bug.
 
 ### The launcher
 
@@ -37,13 +37,13 @@ A new function runs just before `confirm_repo_disks`. It evaluates the host's di
 - `hosts/<name>/default.nix` holds that path as a literal `device = "<path>";` and `mode = "whole";`;
 - the session is interactive.
 
-It then says the saved disk is missing, offers `disk_rows` (from #1653, so the boot medium and floppy are already gone), replaces the path in that file, and runs `git add`. `confirm_repo_disks` then names the chosen disk and asks before erasing, as it does for every other install.
+It then says the saved disk is missing, offers `disk_rows`, which #1653 adds (this branch sits on that commit, and the two land as one pull request, so the boot medium and floppy are already gone), replaces the path in that file, and runs `git add`. `confirm_repo_disks` then names the chosen disk and asks before erasing, as it does for every other install.
 
 In every other case, today's refusal stands: several disks, a device written some other way, free-space mode (which describes partitions on one specific disk), or an answers file, which is unattended and has no one to ask. A saved path that exists is used, and `confirm_repo_disks` shows its model and serial so a person can say no.
 
 ### The command and the manual
 
-- `nixarchy-reinstall-iso` loses `refuse_stock_image` and builds again. Its default attribute becomes `$FLAKE#<this host>-net`, because `reinstall-iso-net` throws on a repository with several machines and the command already knows which machine it's on. `NIXARCHY_REINSTALL_ATTR` still overrides it.
+- `nixarchy-reinstall-iso` loses `refuse_stock_image` and builds again. Its default attribute becomes `$FLAKE#<this host>`, because `reinstall-iso-net` throws on a repository with several machines and the command already knows which machine it's on. The bare per-host name is in every generated flake, including those from before `-net` existed. `NIXARCHY_REINSTALL_ATTR` still overrides it.
 - `docs/manual/reinstall-image.md` loses "Not available right now", and gains the one-commit `/etc/nixos`, what happens on a different disk, and the questions the image asks: consent to run the repository's Nix, network, password and recovery password, and the disks it will erase. It asks for no username.
 - The release notes and Discussions post say the command works again.
 
@@ -70,9 +70,9 @@ None for a configured machine: `installer/cd.nix` isn't imported by anything a m
 
 ## Verification
 
-- **New `checks.reinstall-image`:** evaluates `installer/cd.nix` with a fixture flake and host, takes `system.build.installerLauncher` and the repository it names, and stubs `/proc/cmdline` and the final `exec`. Cases: nothing on the command line passes the image's pair; both named wins; one named passes only that one, and the real `main()` argument check refuses it; `clone_repo` accepts the carried repository, sees the host and has no `origin`; a host absent from the repository takes the existing "adding it" branch, which the check reports so it can't read as this machine; the published image's launcher (no `host`) passes nothing. `mkUserIso` with a wrong host still throws.
+- **New `checks.reinstall-image`:** calls `lib.mkUserIso` with a fixture flake and host, takes the returned `installerLauncher` and the repository it names, and stubs `/proc/cmdline` and the final `exec`. Cases: nothing on the command line passes the image's pair; both named wins; one named passes only that one, and the real `main()` argument check refuses it; `clone_repo` accepts the carried repository, sees the host and has no `origin`; a host absent from the repository takes the existing "adding it" branch, which the check reports so it can't read as this machine; the published image's launcher (no `host`) passes nothing. `mkUserIso` with a wrong host still throws.
 - **The disk step, in `tests/installer-from-repo.nix`:** stubbed `lsblk`, `nix eval` and `gum`. Missing saved disk, one candidate: the file is rewritten and staged. Saved disk present: untouched. Several disks, free mode, a device not written literally, and non-interactive: all refuse with nothing written.
 - **`checks.reinstall-iso`:** the command reaches `nix build`, with the refusal gone and the attribute naming the host.
-- **§1:** remove the launcher's pair and the first case fails. Remove the `origin` removal and the clone case fails. Make the launcher combine a named host with the image's repository and the "one named" case fails. Skip the literal-`device` guard and its case fails.
+- **§1:** stop `mkUserIso` passing `host` and the first case fails. Remove the launcher's pair and the same case fails. Remove the `origin` removal and the clone case fails. Make the launcher combine a named host with the image's repository and the "one named" case fails. Skip the literal-`device` guard and its case fails.
 - **Local, not CI:** build one real image from a throwaway generated flake and boot it in a VM far enough to see the installer name the host. If that fits a slot, the plan says so; a full install on it is named as run or not run in the PR.
 - **Named hole:** a full install of a personal image, in `tests/install-matrix.py` and `tests/AGENTS.md`.

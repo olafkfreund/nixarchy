@@ -99,7 +99,9 @@ let
     ssl-cert-file = /mnt/share/ca.pem'
     export SSL_CERT_FILE NIX_SSL_CERT_FILE NIX_CONFIG
 
-    step CACHE nix copy --from https://nixarchy.cachix.org --no-check-sigs "$(cat /mnt/share/install-path)"
+    # The flag a user types on a stock ISO (docs/manual/the-iso.md); not NIX_CONFIG,
+    # which would also cover a nix call inside the installer that lacks its own.
+    step CACHE nix --extra-experimental-features 'nix-command flakes' copy --from https://nixarchy.cachix.org --no-check-sigs "$(cat /mnt/share/install-path)"
     started=$(date +%s)
     (while [ ! -s /var/log/nixarchy-install.log ]; do sleep 1; done
      first=$(date +%s)

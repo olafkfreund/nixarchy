@@ -1332,7 +1332,7 @@ pkgs.testers.runNixOSTest {
     rich = "omarchy-shell notifications delegateRich 8000"
     assert machine.succeed(as_user(rich)).strip() == "[]"
     machine.succeed(as_user(
-        "${pkgs.libnotify}/bin/notify-send -t 30000 -a teams-for-linux -A more=More -- rich-214 hi"
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -A more=More -- rich-214 hi"
         + " >/tmp/rich-214-action 2>/tmp/rich-214-error </dev/null &"))
     rich_key = machine.wait_until_succeeds(as_user(rich) + " | " + jq
         + " -e -r '.[] | select(.summary == \"rich-214\" and .actions == [{\"id\":\"more\",\"text\":\"More\"}]"
@@ -1340,7 +1340,8 @@ pkgs.testers.runNixOSTest {
         timeout=30).strip()
     assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " unknown")).strip() == "none"
     assert machine.succeed(as_user("omarchy-shell notifications invokeKey missing-214 more")).strip() == "none"
-    # The hand-over, rather than the most recent lease renewal, starts this clock.
+    # The hand-over, rather than the most recent lease renewal, starts this clock. No -t: the
+    # row's own duration must not mask the 30 s hold (the plain floor is 12 s).
     machine.sleep(20)
     assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " more")).strip() == "ok"
     machine.wait_until_succeeds("test -s /tmp/rich-214-action && grep -qx more /tmp/rich-214-action", timeout=30)

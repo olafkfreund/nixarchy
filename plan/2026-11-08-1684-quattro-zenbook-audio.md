@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1684
 spec: spec/2026-11-08-1684-quattro-zenbook-audio.md
 coders:

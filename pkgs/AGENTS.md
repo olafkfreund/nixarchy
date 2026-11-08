@@ -1420,3 +1420,12 @@ instead of applying somewhere else.
 The comment lives here, not in installPhase, because
 installPhase is measured by checks.install-phase-budget
 (#997): this text tipped the edge build over it.
+
+## Power actions authorise before closing windows (#1659)
+
+CARRIED: `1659-system-authorise-first.patch` schedules reboot and power-off
+before closing windows, so a refused polkit request leaves the session intact
+(nixos_config#2761). It also reports a timed-out authorisation dialog.
+`checks.session` probes denial, timeout and success for both verbs.
+Drop the patch when omacom/omarchy authorises before closing windows and
+reports a timed-out dialog; `--fuzz=0` will catch changed upstream context.

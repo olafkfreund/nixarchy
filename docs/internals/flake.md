@@ -908,19 +908,19 @@ trade #221 already surveyed and rejected.
 ### Which nixarchy built this machine (#208), for nixarchy-version
 
 ```nix
-nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";
+(import ../../modules/revision.nix self).shortRev
 ```
 
-Which nixarchy built this machine (#208), for nixarchy-version.
+`modules/revision.nix` derives the short revision and date from `self`.
+The NixOS module writes them to `/etc/nixarchy/version` as one line,
+`<shortRev> <date>`. Standalone Home Manager writes the same line to
+`~/.config/nixarchy/version`. `nixarchy-version` reads the file at run time,
+preferring `/etc/nixarchy/version`, then the XDG config location. Without
+either file it prints `unknown` for both values.
 
-`self` is the only place the answer exists, and it is only reachable
-here -- pkgs/omarchy/default.nix cannot see the flake it belongs to --
-so the two values are computed once and threaded into the package.
-
-Not a tag: a flake cannot know its own, and the ordinary consumer
-flake.nix tracks main and has none. Not a hand-kept literal beside
-omarchyVersion either; that is the class of stale string #201 had to
-fix. A rev cannot go stale.
+The revision comes from the flake rather than a tag or hand-kept literal.
+The ordinary consumer flake tracks main and has no tag. A literal beside
+`omarchyVersion` could go stale, as #201 showed.
 
 `dirtyShortRev` is what a working copy with uncommitted changes gets
 instead of `shortRev` -- it reads "800af40-dirty", which is the honest

@@ -2,11 +2,13 @@
   pkgs,
   reference,
   flatsnap,
+  self,
+  revision,
 }:
 # #1166: the catalogue nixarchy-options builds and ships to /etc/nixarchy,
-# checked for the three things a silent regression would otherwise hide --
+# checked for failures a silent regression would otherwise hide --
 # every non-flatsnap option names its real file rather than a store path
-# (the _file wraps in flake.nix), the two /etc entries are Mode A inert
+# (the _file wraps in flake.nix), the three /etc entries are Mode A inert
 # (gated on cfg.enable, not written unconditionally), and the docs linkFarm
 # actually carries the manual.
 #
@@ -22,8 +24,8 @@ let
       modules = [ { programs.nixarchy.enable = lib.mkForce false; } ];
     }).config.environment.etc;
 
-  hasOn = (etc ? "nixarchy/options.json") && (etc ? "nixarchy/docs");
-  hasOff = (off ? "nixarchy/options.json") || (off ? "nixarchy/docs");
+  hasOn = (etc ? "nixarchy/options.json") && (etc ? "nixarchy/docs") && (etc ? "nixarchy/version");
+  hasOff = (off ? "nixarchy/options.json") || (off ? "nixarchy/docs") || (off ? "nixarchy/version");
 in
 pkgs.runCommand "nixarchy-options-check"
   {
@@ -31,6 +33,9 @@ pkgs.runCommand "nixarchy-options-check"
     docs = etc."nixarchy/docs".source;
     hasOn = if hasOn then "1" else "0";
     hasOff = if hasOff then "1" else "0";
+    rev = self.rev or "main";
+    versionOk =
+      if etc."nixarchy/version".text == "${revision.shortRev} ${revision.date}\n" then "1" else "0";
     nativeBuildInputs = [ pkgs.jq ];
   }
   ''
@@ -58,6 +63,21 @@ pkgs.runCommand "nixarchy-options-check"
     if [ -n "$offenders" ]; then
       echo "options with a store-path (not a URL) declaration:" >&2
       printf '%s\n' "$offenders" | head -n 3 >&2
+      exit 1
+    fi
+
+    ownUrls=$(jq -r '[.[] | .declarations[]? | .url? // empty | select(startswith("https://github.com/olafkfreund/nixarchy/blob/"))] | .[]' "$options") || exit 1
+    if [ -z "$ownUrls" ]; then
+      echo "no nixarchy declaration URLs in the catalogue" >&2
+      exit 1
+    fi
+    if printf '%s\n' "$ownUrls" | jq -R -e --arg rev "$rev" 'select(contains("/blob/" + $rev + "/") | not)' >/dev/null; then
+      echo "a nixarchy declaration URL does not contain /blob/$rev/" >&2
+      exit 1
+    fi
+
+    if [ "$versionOk" != 1 ]; then
+      echo "nixarchy/version does not match the real revision" >&2
       exit 1
     fi
 

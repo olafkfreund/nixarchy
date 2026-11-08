@@ -49,7 +49,12 @@ byte, because the `omarchy-nvim` pacman package "has no published source"
 - Licensing: the tree is MIT; whatever source is used must be one the
   package can cite.
 
-## Open questions
+## Decisions (owner, 2026-11-08)
+
+1. The file comes from Omarchy's pacman package `omarchy-nvim`, fetched by URL and pinned by hash, with that one file extracted. The URL goes in `pkgs/omarchy-nvim/default.nix`'s header.
+2. Only that one file. The rest of the v3.0.2 tree is unchanged.
+
+## Open questions (as drafted)
 
 1. **Where the file comes from.** One option is Omarchy's pacman repository
    package `omarchy-nvim` (a binary `.pkg.tar.zst`, MIT, fetched by URL and

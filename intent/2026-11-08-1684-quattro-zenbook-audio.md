@@ -13,7 +13,7 @@ Edge is held on quattro `6194f46`. The 20 commits up to `d9cc361` include
 sleep", omacom/omarchy#18079), which adds `asus-zenbook-14-ux3480qa-audio` to
 `install/omarchy-other.packages`. `checks.omarchy-package-ledger` refuses an
 install-list entry with no row in `data/omarchy-packages.nix`, so every edge
-run since then stops there (#1684, signatures `c802f51` and `d9cc361`).
+run that tries to advance the pin stops there (#1684, signatures `c802f51` and `d9cc361`).
 
 ## Proposed outcome
 
@@ -27,8 +27,9 @@ run since then stops there (#1684, signatures `c802f51` and `d9cc361`).
 
 - Edge only, until edge's next merge into `main`. `main` pins the v4.5.0 tag
   and does not have this package.
-- `data/omarchy-packages.nix` on `main` (the row is harmless there; the
-  ledger reads only the pin's lists), and an `edge-candidate` carry.
+- An `edge-candidate` carry only. The row cannot go to `main` first: the
+  ledger fails a row whose name no pinned list has (stale,
+  `data/omarchy-packages.nix:22-24`), and `main` pins v4.5.0.
 
 ## Constraints
 
@@ -44,9 +45,10 @@ run since then stops there (#1684, signatures `c802f51` and `d9cc361`).
 
 ## Open questions
 
-1. Skip, as with the ProArt P14 row? The alternative is `nix = ...` with a
-   module, and nixpkgs has no package for this model's audio fix. Skip is
-   the recommendation.
-2. Should the row go to `main` first (picked up at edge's next merge), or
-   only in the carry? The 1498 precedent put shared changes on `main` and
-   edge-only ones in the carry. This row is harmless on both.
+1. Is this one laptop's hardware support in scope? If not, the row is
+   `skip`, as the ProArt P14 row is (`data/omarchy-packages.nix:483`). That
+   is the recommendation.
+2. When edge next merges into `main`, the row must travel with the pin. If
+   `main` keeps the v4.5.0 tag, the row goes stale there. The edge-to-`main`
+   merge already reruns readme counts against the pin (§8, #1537); should
+   the ledger be named alongside it?

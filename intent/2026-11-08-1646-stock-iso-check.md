@@ -44,7 +44,12 @@ its CI placement, and a manual section.
 - §1: proven by breaking Part A's gate (forcing the preflight back on) and
   watching the install case refuse.
 
-## Open questions
+## Decisions (owner, 2026-11-08)
+
+1. It runs nightly, in the nightly budget.
+2. The stock NixOS 26.05 minimal ISO, pinned by URL and hash.
+
+## Open questions (as drafted)
 
 1. Is a nightly budget slot acceptable, or should this be manual-dispatch
    only? The recommendation is nightly. Part A's whole risk is a path no

@@ -707,10 +707,10 @@ better evidence than a synthetic break anyway.
 
 ## Boot hang detect
 
-`checks.boot-hang-detect` (#1594). `wait_for_multi_user` in `vm-cleanup.py` used
-to be one 900 s wait, so an install target that froze in boot cost 15 minutes
-and left no evidence. It now waits in windows of at most 15 s and fails on
-either of two reasons:
+`checks.boot-hang-detect` (#1594, #1604). `wait_for_multi_user` in
+`vm-cleanup.py` used to be one 900 s wait, so an install target that froze in
+boot cost 15 minutes and left no evidence. It now waits in windows of at most
+15 s and fails on either of two reasons:
 
 - `console silent for N s` -- no new console line for `silence` s (default
   120). Healthy boots take 13-17 s with a longest console gap of 6.4 s over 65
@@ -718,27 +718,90 @@ either of two reasons:
 - `multi-user not reached within N s` -- the console kept talking but the
   budget ran out. A slow boot or a service loop, not a freeze.
 
-Both print two samples of `info cpus` and `info registers -a` from the qemu
-monitor, 5 s apart, then the #1365 systemd probe, and attach the text to the
-exception as `.monitor_dump`. Reading it:
+Both print two samples from the qemu monitor, 5 s apart -- `info cpus`, `info
+registers -a`, `cpu <n>` + `info lapic` per vCPU, `info pic`, `info irq`, `info
+virtio`, and every queue's `info virtio-queue-status` for each virtio device
+-- then, on `BootHang` only, two pokes (`nmi`, then
+`sendkey alt-sysrq-w`, each watched for `poke_watch` s, default 15), then the
+#1365 systemd probe, and attach the monitor text to the exception as
+`.monitor_dump`. Reading the samples:
 
 - both samples halted: the guest is blocked in an idle wait (lost interrupt,
   device never answered);
 - same RIP (EIP while still in 32-bit firmware), not halted: a spin on one
   instruction;
-- RIP moving: a livelock. The guest runs but makes no progress.
+- RIP moving: a livelock. The guest runs but makes no progress;
+- an IRR or ISR bit set in both samples: a stuck vector;
+- an IOAPIC entry with remote-IRR set: a level line waiting on an EOI;
+- a virtio queue with `inuse > 0` whose `used_idx` does not move between
+  samples: a request the device never completed.
 
-To symbolise a RIP, `grep -i <first digits of RIP>` against `System.map`, which
-sits beside the target's bzImage in its kernel output (build the reference
-config's kernel; the address is only meaningful for that exact kernel).
+Limits: a TSC-deadline timer does not show in the LAPIC count, and MSI-X
+bypasses the IOAPIC.
 
-There is no sysrq dump: systemd sets `kernel.sysrq=16` about a second into boot,
-and enabling more would change the shipped closure to diagnose a test.
+**Never send `info virtio-status`.** On the pinned QEMU 11.1.2 it segfaults
+QEMU right after printing `Backend features:`, for every device type tried
+(virtio-rng, virtio-net; `-S -nodefaults -monitor stdio -device
+virtio-rng-pci` reproduces it in a second). The first passing-tree run of this
+check lost its frozen guest that way, and every later command read
+`BrokenPipeError` -- a diagnostic that kills the hung guest destroys the very
+evidence it was sent for. So the queue count is not read from `num_vqs`: the
+helper walks `info virtio-queue-status <path> <q>` up from 0 until the reply
+says `Invalid virtqueue number`, and `checks.boot-diagnostics` fails if
+`info virtio-status` is ever sent. Any new monitor command gets one run against
+a real QEMU before it goes into a hang path.
+
+Reading the pokes:
+
+- only `Uhhuh. NMI received for unknown reason` after the NMI: vCPUs can be
+  woken and went back to idle;
+- other boot output after the NMI: the guest resumed, and the key's result is
+  moot;
+- `This sysrq operation is disabled` after the key: the legacy i8042 -> IOAPIC
+  -> LAPIC path delivered;
+- silence: weak evidence -- a quietly handled NMI or a key that never reached
+  sysrq look the same.
+
+A guest that prints after a poke still fails the check.
+
+To symbolise a RIP, use `System.map`, which sits beside the target's `bzImage`
+in its kernel output; the address is only meaningful for that exact kernel.
+KASLR moves the kernel in 2 MiB steps and the offset is not in the log, so take
+the RIP's offset within its 2 MiB window and list the symbol it falls in for
+each window. Worked example, the two target hangs of 2026-11-05 and 2026-11-06
+on `/nix/store/ajcdl0nncrga4f8wr0crix7pbjdf0gdd-linux-7.3.1` (`_text` at
+`ffffffff81000000`): the window offset was `0x7d5cf` in both, and of the 27
+candidates in the text range only one is an idle routine,
+`pv_native_safe_halt+0xf` (symbol at `ffffffff8227d5c0`) -- the instruction
+after `sti; hlt`, which matches `HLT=1`. That implies KASLR offsets of
+`0x0b200000` and `0x3b400000`, both 2 MiB-aligned, so every vCPU was in the
+idle loop's halt.
+
+There is still no sysrq task dump: `sendkey alt-sysrq-w` is sent as a poke
+under the shipped `kernel.sysrq=16`, which dumps nothing but prints the
+disabled line above; enabling more would change the shipped closure to diagnose
+a test.
+
+**What no check proves:** case A's stopped guest cannot print, so nothing shows
+a poke waking a halted-and-hung guest; case C runs the test VM's default
+kernel, not the target's 7.3.1. The first real answer is the next CI hang. Raw
+logs, not job logs, hold hangs before #1643: `bzcat <log> | tr '\r' '\n'`.
 
 The check stops one guest with the monitor's `stop` and expects the first
-reason in under 60 s, then boots a second guest that must pass. Break it by
-dropping the silence deadline from the window and it fails on elapsed time:
-`AssertionError: took 130 s to notice`.
+reason in under 60 s (case A), boots a second guest that must pass (case B),
+and pokes that healthy guest with `_poke`, expecting the NMI line and the
+sysrq-disabled line (case C). Case A also asserts on the replies (`dumping
+local APIC state for CPU`, `ioapic0: ver=`, `used_idx:`, both poke lines, and
+none of `unknown command:`, `monitor command failed` or `monitor replied:`).
+Breaks (the first from #1594, the rest run in the VM for #1604): drop the
+silence deadline from the window and case A fails on elapsed time (`AssertionError: took 130 s to notice`); misspell
+`info lapic` and case A fails on `'dumping local APIC state for CPU' not in
+dump`; delete the poke block and case A fails on `'poke nmi:' not in dump`;
+strip no escapes from a poke's reply, or send anything but `nmi`, and case A
+fails on `'monitor replied:' in dump`; send `sendkey shift` instead of `nmi` to
+the healthy guest only and case C fails on `NMI poke unanswered`.
+`checks.boot-diagnostics`' stub cases cover command order, every queue of every
+device, the abandoned-join guard and a rejected poke being shown.
 
 ## A test file in tests/ is not a check, and the coverage gate cannot see that
 

@@ -1,5 +1,6 @@
 import datetime
 import os
+import re
 import sys
 import threading
 import time
@@ -55,7 +56,7 @@ def reap_owned_vms(vms):
         os._exit(1)
 
 
-def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120):
+def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120, poke_watch=15):
     console_length = len(machine.full_console_log)
     started = time.monotonic()
     budget_deadline = started + timeout
@@ -70,7 +71,7 @@ def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120):
         if window <= 0:
             reason = (f"console silent for {silence} s" if silence_deadline <= budget_deadline
                       else f"multi-user not reached within {timeout} s")
-            dump = _diagnose(machine, probe_timeout)
+            dump = _diagnose(machine, probe_timeout, poke_watch)
             error = BootHang(f"{reason}\n{dump}")
             error.monitor_dump = dump
             raise error
@@ -87,13 +88,39 @@ def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120):
             raise
 
 
-def _diagnose(machine, probe_timeout):
+def _poke(machine, watch, abandoned):
+    entries = []
+    for command in ("nmi", "sendkey alt-sysrq-w"):
+        if abandoned.is_set():
+            return entries
+        before = len(machine.full_console_log)
+        try:
+            raw = re.sub(r"\x1b\[[0-9;]*[A-Za-z]|\r", "", machine.send_monitor_command(command))
+            # HMP echoes the command (as readline redraws) and its prompt; the rest is an answer.
+            reply = "\n".join(line for line in raw.splitlines()
+                              if line.strip() not in ("", "(qemu)") and not line.endswith(command))
+        except Exception as error:
+            entries.append(f"monitor command failed: {error!r}")
+            continue
+        time.sleep(watch)
+        new = machine.full_console_log[before:]
+        entry = (f"poke {command}: {len(new)} console lines within {watch} s" if new else
+                 f"poke {command}: no console output within {watch} s")
+        entry += "".join("\n  " + line.replace("\r", "") for line in new[:20])
+        if reply:
+            entry += f"\n  monitor replied: {reply}"
+        entries.append(entry)
+    return entries
+
+
+def _diagnose(machine, probe_timeout, poke_watch=None):
     """Monitor registers first (they answer a frozen guest), then the #1365 probe."""
     monitor_dump = []
+    abandoned = threading.Event()
 
     def sample_monitor():
         for sample in (1, 2):
-            for command in ("info cpus", "info registers -a"):
+            def send(command):
                 try:
                     response = machine.send_monitor_command(command).replace("\r", "")
                 except Exception as error:
@@ -101,15 +128,41 @@ def _diagnose(machine, probe_timeout):
                 entry = f"monitor sample {sample} ({command}):\n{response}"
                 monitor_dump.append(entry)
                 print(entry)
+                return response
+
+            cpus = send("info cpus")
+            send("info registers -a")
+            for cpu in re.findall(r"CPU #(\d+)", cpus):
+                send(f"cpu {cpu}")
+                send("info lapic")
+            for command in ("info pic", "info irq"):
+                send(command)
+            reply = send("info virtio")
+            # Never `info virtio-status`: it segfaults QEMU 11.1.2 (tests/AGENTS.md#boot-hang-detect).
+            # Walk queues until the monitor says the index is past the last one.
+            for path in re.findall(r"^(/\S+) \[", reply, re.M):
+                for queue in range(64):
+                    if "Invalid virtqueue number" in send(f"info virtio-queue-status {path} {queue}"):
+                        break
             if sample == 1:
                 time.sleep(5)
+        if poke_watch is not None:
+            for entry in _poke(machine, poke_watch, abandoned):
+                monitor_dump.append(entry)
+                print(entry)
+            entry = "a guest that printed after a poke still fails this check"
+            monitor_dump.append(entry)
+            print(entry)
 
     monitor_thread = threading.Thread(target=sample_monitor, daemon=True)
     monitor_thread.start()
-    monitor_thread.join(timeout=30)
+    budget = 30 + 2 * (poke_watch or 0)
+    monitor_thread.join(timeout=budget)
     if monitor_thread.is_alive():
-        monitor_dump.append("monitor did not answer within 30 s")
-        print("monitor did not answer within 30 s")
+        abandoned.set()
+        entry = f"monitor did not answer within {budget} s"
+        monitor_dump.append(entry)
+        print(entry)
 
     # #1365: say what systemd is stuck on before failing. Bounded in a thread,
     # because connect() can block with no timeout on a frozen guest (#1260).

@@ -9,7 +9,7 @@ author: olafkfreund
 ## Problem
 
 `omarchy-system reboot|shutdown` (upstream Omarchy, shipped unchanged in
-`pkgs/omarchy`) closes every window (`omarchy-hyprland-window-close-all
+`pkgs/omarchy`) tries to close every window (`omarchy-hyprland-window-close-all
 --wait`, line 53), clears the "restart required" marker, and only then runs
 `systemctl reboot|poweroff --no-wall` (lines 22-23).
 
@@ -30,6 +30,8 @@ itself does not ship.
 - A refusal, a cancel or a timeout leaves the windows and the marker as they
   were and says so in a notification.
 - No change for a machine where no password is asked.
+- Each promised outcome (refused, cancelled, timed out) has a probe, or the
+  promise is narrowed to what a probe can see.
 
 ## Affected users and systems
 
@@ -59,5 +61,10 @@ itself does not ship.
    (omacom/omarchy), or both (carry now, drop it when upstream takes it)?
    Upstream on Arch hits the same thing under any polkit rule that asks for
    a password, so upstream is the natural home.
-2. The 30-second timeout is in the same script. Fix it in the same change
-   (report a failure when the unit is killed), or leave it to upstream?
+2. The 30-second timeout is in the same script, and it bounds the whole
+   unit, not only the prompt. Fix it in the same change (report a failure
+   when the unit is killed), or leave it to upstream?
+3. A `pkcheck` first does not make the later `systemctl reboot` skip its own
+   prompt: polkit asks again unless the rule's result is `auth_*_keep`. Which
+   mechanism makes "authorised, then close windows, then reboot" one
+   prompt? This is the spec's main question.

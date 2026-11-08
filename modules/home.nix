@@ -1400,16 +1400,48 @@ in
 
                 # First-run theme. omarchy-theme-set is the only thing that may write
                 # this tree; running it headless avoids poking a shell that is not up.
-                if [ ! -e "${config.home.homeDirectory}/.local/state/omarchy/current/theme.name" ]; then
+                theme_name="${config.home.homeDirectory}/.local/state/omarchy/current/theme.name"
+                name=
+                if [ -f "$theme_name" ]; then
+                  name=$(<"$theme_name")
+                  name=''${name//[[:space:]]/}
+                fi
+                target=
+                if [ -z "$name" ]; then
+                  target="${cfg.defaultTheme}"
+                elif [ ! -d "${omarchyPath}/themes/$name" ] &&
+                  [ ! -d "${config.xdg.configHome}/omarchy/themes/$name" ]; then
+                  target="${cfg.defaultTheme}"
+                  if [ ! -d "${omarchyPath}/themes/$target" ] &&
+                    [ ! -d "${config.xdg.configHome}/omarchy/themes/$target" ]; then
+                    target=tokyo-night
+                  fi
+                fi
+                if [ -n "$target" ]; then
                   # PATH, not just the absolute path to the script: omarchy-theme-set
                   # calls its siblings by bare name -- omarchy-theme-set-templates and
                   # omarchy-theme-color among them -- and has no `set -e`. Without the
                   # package on PATH they were simply not found and it carried on and
                   # exited 0, so no template was ever rendered: the first-run theme had
                   # no btop.theme, foot.ini, alacritty.toml or gum_env.lua at all.
-                  run env OMARCHY_PATH="${omarchyPath}" OMARCHY_THEME_HEADLESS=1 \
+                  if run env OMARCHY_PATH="${omarchyPath}" OMARCHY_THEME_HEADLESS=1 \
                     PATH="${cfg.package}/bin:${lib.makeBinPath cfg.package.passthru.runtimeDeps}:$PATH" \
-                    ${cfg.package}/bin/omarchy-theme-set "${cfg.defaultTheme}" || true
+                    ${cfg.package}/bin/omarchy-theme-set "$target" &&
+                    [ -f "$theme_name" ] && [ "$(<"$theme_name")" = "$target" ] &&
+                    [ -e "${config.home.homeDirectory}/.local/state/omarchy/current/theme/colors.toml" ]; then
+                    if [ -n "$name" ]; then
+                      echo "nixarchy: theme '$name' no longer exists; applied '$target' (#1705)"
+                      marker_dir="${config.home.homeDirectory}/.local/state/nixarchy"
+                      marker="$marker_dir/theme-fallback"
+                      tmp="$marker.tmp.$$"
+                      if run mkdir -p "$marker_dir" &&
+                        { printf '%s\n%s\n' "$name" "$target" | run tee "$tmp" >/dev/null; } &&
+                        run mv "$tmp" "$marker"; then :; fi
+                    fi
+                  # A dry run only echoes the call, so its checks cannot pass: say nothing.
+                  elif [ -n "$name" ] && [ -z "''${DRY_RUN:-}" ]; then
+                    echo "nixarchy: could not apply '$target' in place of vanished theme '$name'; trying again at the next switch" >&2
+                  fi
                 fi
         ${nvimActivation}
       '';
@@ -2498,6 +2530,28 @@ in
             ]
           }:$PATH
           exec omarchy-migrate-user
+        '';
+      };
+
+      "omarchy/hooks/post-boot.d/theme-fallback" = {
+        enable = osConfig.programs.nixarchy.enable or false;
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export PATH=${
+            lib.makeBinPath [
+              pkgs.libnotify
+              pkgs.coreutils
+            ]
+          }:$PATH
+          marker="$HOME/.local/state/nixarchy/theme-fallback"
+          [ -f "$marker" ] || exit 0
+          mapfile -t lines < "$marker"
+          old=''${lines[0]:-}
+          new=''${lines[1]:-}
+          if notify-send "Theme changed: '$old' is no longer installed, so '$new' is in use. Pick another with Super + Shift + Ctrl + Space."; then
+            rm -- "$marker"
+          fi
         '';
       };
 

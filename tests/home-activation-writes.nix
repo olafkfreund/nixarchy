@@ -18,6 +18,14 @@ let
   };
   home = vm.config.home-manager.users.omarchy;
   act = name: pkgs.writeText "${name}.sh" home.home.activation.${name}.data;
+  # #1705: the fallback needs a default that is not the hard-coded last resort.
+  vmTheme = vm.extendModules {
+    modules = [ { home-manager.users.omarchy.programs.nixarchy.defaultTheme = "gruvbox"; } ];
+  };
+  seedTheme = pkgs.writeText "seed-theme.sh" vmTheme.config.home-manager.users.omarchy.home.activation.nixarchySeed.data;
+  themeHook =
+    pkgs.writeText "theme-fallback"
+      home.xdg.configFile."omarchy/hooks/post-boot.d/theme-fallback".text;
   hook =
     pkgs.writeText "default-plugins"
       home.xdg.configFile."omarchy/hooks/post-boot.d/default-plugins".text;
@@ -138,6 +146,154 @@ pkgs.runCommand "nixarchy-home-activation-writes"
     ( set -eu; . ./nohold.sh ) > /dev/null 2>&1 || true
     [ -e $list ] || { echo "the hold's rm is not what removes the list, so this check cannot see it (#1342)" >&2; exit 1; }
     rm -f $list
+
+    # ---- #1705: a vanished or stale theme is put right at a switch ----
+    # The block from the first-run comment to its closing `fi`, with
+    # omarchy-theme-set and the omarchy tree swapped for a stub and a fixture.
+    # Each case gets its own HOME and runs under `set -eu` as activation does.
+    extract_theme() {
+      awk '
+        /# First-run theme\./ { on = 1 }
+        on { print }
+        on && /^[[:space:]]*if \[ -n "\$target" \]; then$/ { match($0, /^[[:space:]]*/); ind = substr($0, 1, RLENGTH); seen = 1 }
+        on && seen && $0 == ind "fi" { exit }
+      ' "$1" | sed -e "s|/nix/store/[^ \"]*/bin/omarchy-theme-set|$root/theme-set-stub|" -e "s|/nix/store/[^\"]*/themes/|$root/home/omar/themes/|g"
+    }
+    extract_theme seed.sh > theme.sh
+    rehome ${seedTheme} > seed2.sh
+    extract_theme seed2.sh > theme2.sh
+    for f in theme.sh theme2.sh; do
+      grep -q 'no longer exists' $f || { echo "the theme fallback is not in nixarchySeed any more ($f)" >&2; exit 1; }
+      grep -q "$root/theme-set-stub" $f || { echo "the theme-set stub did not replace the store path ($f)" >&2; exit 1; }
+      grep -q "$root/home/omar/themes/" $f || { echo "the omarchy tree did not move to the fixture ($f)" >&2; exit 1; }
+    done
+    printf '%s\n' '#!/bin/sh' \
+      'printf "%s\n" "$1" >> "$CALLS"' \
+      '[ "$STUB_FAIL" = 1 ] && exit 1' \
+      'mkdir -p "$HOME/.local/state/omarchy/current/theme"' \
+      'printf "%s\n" "$1" > "$HOME/.local/state/omarchy/current/theme.name"' \
+      '[ "$STUB_NO_COLORS" = 1 ] || : > "$HOME/.local/state/omarchy/current/theme/colors.toml"' \
+      'exit 0' > theme-set-stub
+    chmod +x theme-set-stub
+    # tcase NAME: a fresh home; blk SCRIPT [VAR=value...] runs the block in it.
+    tcase() {
+      h=$root/cases/$1
+      rm -rf "$h"
+      mkdir -p "$h/.local/state/omarchy/current" "$h/omar/themes" "$h/.config/omarchy/themes"
+    }
+    blk() {
+      script=$1; shift
+      sed "s|$root/home|$h|g" "$script" > "$h/block.sh"
+      rc=0
+      ( export HOME="$h" CALLS="$h/calls" "$@"; set -eu; . "$h/block.sh" ) > "$h/out" 2> "$h/err" || rc=$?
+    }
+    marker() { echo "$h/.local/state/nixarchy/theme-fallback"; }
+    has() { grep -qF -- "$1" "$2"; }
+    setname() { printf '%s\n' "$1" > "$h/.local/state/omarchy/current/theme.name"; }
+
+    for kind in missing empty blank; do
+      tcase first-$kind
+      case $kind in
+        empty) : > "$h/.local/state/omarchy/current/theme.name" ;;
+        blank) printf ' \n' > "$h/.local/state/omarchy/current/theme.name" ;;
+      esac
+      blk theme.sh
+      [ "$rc" = 0 ] && [ "$(cat "$h/calls" 2>/dev/null)" = tokyo-night ] && [ ! -e "$(marker)" ] &&
+        ok "a $kind theme.name applies the default and leaves no marker" ||
+        bad "a $kind theme.name: rc=$rc calls=$(cat "$h/calls" 2>/dev/null) marker=$(ls "$(marker)" 2>&1)"
+    done
+
+    tcase bundled
+    setname foo; mkdir "$h/omar/themes/foo"
+    blk theme.sh
+    [ "$rc" = 0 ] && [ ! -e "$h/calls" ] && [ ! -e "$(marker)" ] && [ ! -s "$h/out" ] && [ ! -s "$h/err" ] &&
+      ok "a bundled theme that exists: no call, no marker, no output" ||
+      bad "a bundled theme: rc=$rc calls=$(cat "$h/calls" 2>&1) out=$(cat "$h/out" "$h/err")"
+
+    tcase usertheme
+    setname foo; mkdir "$h/.config/omarchy/themes/foo"
+    blk theme.sh
+    [ "$rc" = 0 ] && [ ! -e "$h/calls" ] && [ ! -e "$(marker)" ] &&
+      ok "a user theme that exists: no call" ||
+      bad "a user theme: rc=$rc calls=$(cat "$h/calls" 2>&1)"
+
+    tcase vanished
+    setname gone; mkdir "$h/omar/themes/gruvbox" "$h/omar/themes/tokyo-night"
+    blk theme2.sh
+    [ "$rc" = 0 ] && [ "$(cat "$h/calls" 2>/dev/null)" = gruvbox ] &&
+      [ "$(cat "$(marker)" 2>/dev/null)" = "$(printf 'gone\ngruvbox')" ] &&
+      has "theme 'gone' no longer exists; applied 'gruvbox' (#1705)" "$h/out" &&
+      ok "a vanished theme gets the configured default, a marker (old, new) and a log line" ||
+      bad "a vanished theme: rc=$rc calls=$(cat "$h/calls" 2>&1) marker=$(cat "$(marker)" 2>&1) out=$(cat "$h/out")"
+
+    tcase vanished-default
+    setname gone; mkdir "$h/omar/themes/tokyo-night"
+    blk theme2.sh
+    [ "$rc" = 0 ] && [ "$(cat "$h/calls" 2>/dev/null)" = tokyo-night ] &&
+      [ "$(cat "$(marker)" 2>/dev/null)" = "$(printf 'gone\ntokyo-night')" ] &&
+      ok "a vanished default falls back to tokyo-night" ||
+      bad "a vanished default: rc=$rc calls=$(cat "$h/calls" 2>&1) marker=$(cat "$(marker)" 2>&1)"
+
+    for fault in STUB_FAIL STUB_NO_COLORS; do
+      tcase fault-$fault
+      setname gone; mkdir "$h/omar/themes/tokyo-night"
+      blk theme.sh $fault=1
+      [ "$rc" = 0 ] && [ ! -e "$(marker)" ] &&
+        has "could not apply 'tokyo-night' in place of vanished theme 'gone'" "$h/err" &&
+        ok "$fault: a warning on stderr, the switch goes on, no marker" ||
+        bad "$fault: rc=$rc marker=$(ls "$(marker)" 2>&1) err=$(cat "$h/err")"
+    done
+
+    tcase dry
+    setname gone; mkdir "$h/omar/themes/tokyo-night"
+    blk theme.sh DRY_RUN=1
+    [ "$rc" = 0 ] && [ ! -e "$h/.local/state/nixarchy" ] && [ ! -e "$h/calls" ] &&
+      ! has "no longer exists" "$h/out" && ! has "could not apply" "$h/err" &&
+      ok "a dry run writes no marker, creates no state dir and says neither line" ||
+      bad "a dry run: rc=$rc out=$(cat "$h/out") err=$(cat "$h/err") state=$(ls -A "$h/.local/state/nixarchy" 2>&1)"
+
+    tcase symlinks
+    setname foo; mkdir real-foo-$$ "$h/real"
+    ln -s "$h/real" "$h/.config/omarchy/themes/foo"
+    blk theme.sh
+    [ "$rc" = 0 ] && [ ! -e "$h/calls" ] && [ ! -e "$(marker)" ] &&
+      ok "a theme directory that is a resolving symlink counts as existing" ||
+      bad "a resolving symlink: rc=$rc calls=$(cat "$h/calls" 2>&1)"
+    rm -rf real-foo-$$
+    tcase dangling
+    setname foo; mkdir "$h/omar/themes/tokyo-night"
+    ln -s "$h/nowhere" "$h/.config/omarchy/themes/foo"
+    blk theme.sh
+    [ "$rc" = 0 ] && [ "$(cat "$h/calls" 2>/dev/null)" = tokyo-night ] && [ -e "$(marker)" ] &&
+      ok "a dangling symlinked theme directory is repaired" ||
+      bad "a dangling symlink: rc=$rc calls=$(cat "$h/calls" 2>&1)"
+
+    # ---- #1705: the notice hook keeps its marker until the toast was shown ----
+    mkdir -p hookstubs
+    printf '%s\n' '#!/bin/sh' 'echo "$@" >> "$NOTIFIED"' '[ "$NOTIFY_FAIL" = 1 ] && exit 1' 'exit 0' > hookstubs/notify-send
+    chmod +x hookstubs/notify-send
+    sed "s|^export PATH=|export PATH=$root/hookstubs:|" ${themeHook} > theme-hook.sh
+    hookrun() {
+      rc=0
+      HOME="$h" NOTIFIED="$h/notified" bash theme-hook.sh > "$h/out" 2>&1 || rc=$?
+    }
+    tcase hook-ok
+    mkdir -p "$h/.local/state/nixarchy"; printf 'gone\ngruvbox\n' > "$(marker)"
+    hookrun
+    [ "$rc" = 0 ] && [ "$(wc -l < "$h/notified")" = 1 ] && has "'gone'" "$h/notified" && has "'gruvbox'" "$h/notified" && [ ! -e "$(marker)" ] &&
+      ok "the hook notifies once and removes the marker" ||
+      bad "the hook: rc=$rc notified=$(cat "$h/notified" 2>&1) marker=$(ls "$(marker)" 2>&1)"
+    tcase hook-fail
+    mkdir -p "$h/.local/state/nixarchy"; printf 'gone\ngruvbox\n' > "$(marker)"
+    NOTIFY_FAIL=1 hookrun
+    [ "$(wc -l < "$h/notified")" = 1 ] && [ -e "$(marker)" ] &&
+      ok "a failed notification keeps the marker for the next login" ||
+      bad "failed notify: notified=$(cat "$h/notified" 2>&1) marker=$(ls "$(marker)" 2>&1)"
+    tcase hook-none
+    hookrun
+    [ "$rc" = 0 ] && [ ! -e "$h/notified" ] &&
+      ok "no marker, no notification" ||
+      bad "no marker: rc=$rc notified=$(cat "$h/notified" 2>&1)"
 
     # ---- an unreadable plugin list stops the hook ----
     mkdir -p stubs

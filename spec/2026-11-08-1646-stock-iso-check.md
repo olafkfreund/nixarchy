@@ -119,3 +119,7 @@ and the RAM note from `check_store_space`.
   check must go red, with the output captured.
 - `checks.install-gate` and `generated-checks.sh`'s own guard (the nightly
   list membership) stay green; fmt, statix, deadnix.
+
+## Decisions (owner, 2026-11-08, on the draft)
+
+1. **Weekly, not nightly** (this replaces the intent's "nightly"). The check goes in the weekly workflow; it is still a CI change the owner merges.

@@ -1368,6 +1368,19 @@ The patch uses /run/wrappers/bin first, then the system profile: the same two di
 
 New in 4.0.3, and `checks.session` caught it. That check scans every shipped command for /usr and is the reason this is a patch rather than a surprise on somebody's laptop.
 
+<a id="osaka-jade-is-bundled-again-1698"></a>
+
+## Osaka Jade is bundled again (#1698)
+
+Upstream dropped Osaka Jade in a1ea6096d, leaving a staged copy usable but no
+source for refresh or re-selection (#1698). The package pins
+`omacom/omarchy-osaka-jade-theme` and adds it to the packaged themes tree.
+Treat it as an installed theme: `bin/omarchy-theme-set:25-35,290-294` excludes
+all `*.lua`, `alacritty.toml`, `foot.ini`, `ghostty.conf`, `kitty.conf`,
+`vscode.json`, and symlinks. Refresh the pin by hand because the nightly reviews
+`flake.lock`, not `fetchFromGitHub` revisions; inspect and refilter the new tree.
+If upstream bundles it again, the collision refusal signals dropping this carry.
+
 ## User-file migrations (#1610)
 
 Omarchy's migrations are not run here (`omarchy-migrate` is a refusal), so a

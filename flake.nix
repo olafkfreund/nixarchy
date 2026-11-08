@@ -2371,6 +2371,11 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          osaka-jade-theme = import ./tests/osaka-jade-theme.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           home-manager-writers = import ./tests/home-manager-writers.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

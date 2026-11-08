@@ -1,6 +1,7 @@
 {
   lib,
   stdenvNoCC,
+  fetchFromGitHub,
   src,
   version,
   # Runtime dependencies, derived by grepping every script in upstream `bin/`
@@ -123,6 +124,13 @@
   symlinkJoin,
 }:
 let
+  osakaJadeTheme = fetchFromGitHub {
+    owner = "omacom";
+    repo = "omarchy-osaka-jade-theme";
+    rev = "bc18781cdd0102f86cbc3e82c6bd6d420c8025b9";
+    hash = "sha256-4BGYncJ7a0/qHNTAs91x3C9ciEx+9/tioGMg5fR+siQ=";
+  };
+
   # Why: pkgs/AGENTS.md#chromium-reads-its-flags-through-our-launcher-1491
   chromium-flags = symlinkJoin {
     name = "chromium-flags-${chromium.version}";
@@ -422,6 +430,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     mkdir -p $out/share/omarchy
                     cp -r . $out/share/omarchy/
                     rm -rf $out/share/omarchy/{.git,.github,docs,manual,test,plans,agents}
+
+                    # Why: pkgs/AGENTS.md#osaka-jade-is-bundled-again-1698
+                    theme_dir=$out/share/omarchy/themes/osaka-jade
+                    if [ -e "$theme_dir" ] || [ -L "$theme_dir" ]; then
+                      echo "upstream ships osaka-jade again; drop the #1698 carry" >&2
+                      exit 1
+                    fi
+                    mkdir -p "$theme_dir"
+                    cp -r --no-preserve=mode ${osakaJadeTheme}/. "$theme_dir/"
+                    find "$theme_dir" -type l -delete
+                    find "$theme_dir" \( -name '*.lua' -o -name alacritty.toml -o -name foot.ini -o -name ghostty.conf -o -name kitty.conf -o -name vscode.json \) -delete
 
                     # CARRIED, for #1153: video and GIF desktop backgrounds and a
                     # video-aware lock poster, backported onto v4.0.4 from

@@ -18,6 +18,9 @@ class BootHang(AssertionError):
     monitor_dump = ""
 
 
+POKE_MAX_LINES = 3000
+
+
 def reap_owned_vms(vms):
     """No guest/monitor RPC: either can be the reason the test failed."""
     original = sys.exc_info()
@@ -56,7 +59,8 @@ def reap_owned_vms(vms):
         os._exit(1)
 
 
-def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120, poke_watch=15):
+def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120, poke_watch=15,
+                        quiet=3, task_max=90):
     console_length = len(machine.full_console_log)
     started = time.monotonic()
     budget_deadline = started + timeout
@@ -71,7 +75,7 @@ def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120, pok
         if window <= 0:
             reason = (f"console silent for {silence} s" if silence_deadline <= budget_deadline
                       else f"multi-user not reached within {timeout} s")
-            dump = _diagnose(machine, probe_timeout, poke_watch)
+            dump = _diagnose(machine, probe_timeout, poke_watch, quiet, task_max)
             error = BootHang(f"{reason}\n{dump}")
             error.monitor_dump = dump
             raise error
@@ -88,9 +92,12 @@ def wait_for_multi_user(machine, timeout=900, probe_timeout=90, silence=120, pok
             raise
 
 
-def _poke(machine, watch, abandoned):
+def _poke(machine, watch, abandoned, quiet=3, task_max=90):
     entries = []
-    for command in ("nmi", "sendkey alt-sysrq-w"):
+    blocked = False
+    for command in ("nmi", "sendkey alt-sysrq-w", "sendkey alt-sysrq-t"):
+        if command == "sendkey alt-sysrq-t" and blocked:
+            break
         if abandoned.is_set():
             return entries
         before = len(machine.full_console_log)
@@ -102,18 +109,43 @@ def _poke(machine, watch, abandoned):
         except Exception as error:
             entries.append(f"monitor command failed: {error!r}")
             continue
-        time.sleep(watch)
+        if command == "sendkey alt-sysrq-t":
+            sent = time.monotonic()
+            last_line = sent
+            console_length = before
+            while not abandoned.is_set():
+                now = time.monotonic()
+                length = len(machine.full_console_log)
+                if length > console_length:
+                    last_line = now
+                console_length = length
+                remaining = min(sent + task_max - now, last_line + quiet - now)
+                if remaining <= 0:
+                    break
+                if abandoned.wait(min(0.2, remaining)):
+                    break
+            waited = time.monotonic() - sent
+        else:
+            time.sleep(watch)
         new = machine.full_console_log[before:]
-        entry = (f"poke {command}: {len(new)} console lines within {watch} s" if new else
-                 f"poke {command}: no console output within {watch} s")
-        entry += "".join("\n  " + line.replace("\r", "") for line in new[:20])
+        if command == "sendkey alt-sysrq-w":
+            blocked = any("state:D" in line for line in new)
+        if command == "sendkey alt-sysrq-t":
+            entry = (f"poke {command}: {len(new)} console lines within {waited:.0f} s "
+                     f"(quiet {quiet} s)")
+        else:
+            entry = (f"poke {command}: {len(new)} console lines within {watch} s" if new else
+                     f"poke {command}: no console output within {watch} s")
+        entry += "".join("\n  " + line.replace("\r", "") for line in new[:POKE_MAX_LINES])
         if reply:
             entry += f"\n  monitor replied: {reply}"
+        if len(new) > POKE_MAX_LINES:
+            entry += "\n  (" + str(len(new) - POKE_MAX_LINES) + " more console lines not shown)"
         entries.append(entry)
     return entries
 
 
-def _diagnose(machine, probe_timeout, poke_watch=None):
+def _diagnose(machine, probe_timeout, poke_watch=None, quiet=3, task_max=90):
     """Monitor registers first (they answer a frozen guest), then the #1365 probe."""
     monitor_dump = []
     abandoned = threading.Event()
@@ -147,7 +179,7 @@ def _diagnose(machine, probe_timeout, poke_watch=None):
             if sample == 1:
                 time.sleep(5)
         if poke_watch is not None:
-            for entry in _poke(machine, poke_watch, abandoned):
+            for entry in _poke(machine, poke_watch, abandoned, quiet, task_max):
                 monitor_dump.append(entry)
                 print(entry)
             entry = "a guest that printed after a poke still fails this check"
@@ -156,7 +188,7 @@ def _diagnose(machine, probe_timeout, poke_watch=None):
 
     monitor_thread = threading.Thread(target=sample_monitor, daemon=True)
     monitor_thread.start()
-    budget = 30 + 2 * (poke_watch or 0)
+    budget = 30 if poke_watch is None else 30 + 2 * poke_watch + task_max + 5
     monitor_thread.join(timeout=budget)
     if monitor_thread.is_alive():
         abandoned.set()

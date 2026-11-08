@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1646
 spec: spec/2026-11-08-1646-stock-iso-check.md
 coders:

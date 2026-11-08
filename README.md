@@ -13,7 +13,7 @@ menus rewired to Nix instead of pacman.
 **[Roadmap](#roadmap)** ·
 **[Discussions](https://github.com/olafkfreund/nixarchy/discussions)**
 
-Omarchy 4.x is not a dotfiles repo, it's an application: **563 shell commands**,
+Omarchy 4.x is not a dotfiles repo, it's an application: **564 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
@@ -434,7 +434,7 @@ nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
 work and the exit status, terminal and signals stay the command's own.
 
-**Upstream's 563 commands keep upstream's name, deliberately.** `omarchy theme
+**Upstream's 564 commands keep upstream's name, deliberately.** `omarchy theme
 set` is the same script here as on Arch — a bug in it is a bug to report there,
 and renaming it would say otherwise. It would also cost the property this repo
 is built on: tracking a release is a source bump because nixarchy replaces 19
@@ -471,7 +471,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 563 subcommands, `omarchy commands --check` green |
+| `omarchy` CLI | all 564 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **Install ▸ Packages** | the same catalogue in a panel ([nixarchy-pkg](https://github.com/olafkfreund/nixarchy-pkg)): search, add, draft and apply without a terminal. **On by default**, Super+Alt+N on a new install; `programs.nixarchy.defaultPlugins.pkg = false` removes it |
@@ -486,7 +486,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Runtime themes** | the active palette across supported apps without a rebuild ([omatheme](https://github.com/olafkfreund/nixarchy-omatheme)). **On by default** |
 | **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **On by default**, and it asks a human before it takes control, and it can work in a window you are not using without moving your cursor — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
 | **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
-| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 563 |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 564 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
 | 76 apps in the selection | 50 from nixpkgs, 7 as NixOS modules, 13 built here, 6 with no equivalent |

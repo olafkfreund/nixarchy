@@ -211,6 +211,19 @@
   };
 
   # In v4.0.6 already; every nixarchy seed carries its effect.
+  "1787481314" = {
+    decision = "declined";
+    reason = "clones the Osaka Jade theme repository at login and otherwise switches the theme to Jade Horse; the hook has no git, so here it would always switch the user's theme unasked (#1698)";
+  };
+  "1793650506" = {
+    decision = "not-needed";
+    reason = "Snapdragon OEM firmware through pacman, sudo and mkinitcpio; aarch64 Qualcomm only, which this port does not target";
+  };
+  "1794068501" = {
+    decision = "ported";
+    run = "upstream";
+    reason = "reseeds the Herdr desktop app's keybindings through omarchy-refresh-herdr-app, only when ~/.config/herdr-app exists (quattro, #1696)";
+  };
   predates = [
     "1780057136"
     "1780294774"

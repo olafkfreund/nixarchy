@@ -14,6 +14,6 @@
   install-iso-net = "installer/cd.nix inputSources collects the source commit";
   installer-lock = "installer/mkFlake.nix:22 pins self.rev";
   nixarchy-options = "tests/nixarchy-options.nix asserts the real rev";
-  options-files = "vm/configuration.nix:173 writes path:''${inputs.self} into the VM's generated flake (owner, 2026-11-08: evaluation only, so it stays commit-bound)";
+  options-files = "vm/configuration.nix:173 writes path: plus inputs.self into the VM's generated flake (owner, 2026-11-08: evaluation only, so it stays commit-bound)";
   cache-keys = "hashes the whole source tree by design (owner, 2026-11-08: evaluation only, so it stays commit-bound)";
 }

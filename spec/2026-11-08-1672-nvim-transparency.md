@@ -47,12 +47,22 @@ this issue (its deviation 2):
 `omarchy-nvim-config` argument. The script's own guards stay: it exits when
 `~/.config/nvim` is absent, and preserves a symlinked file or parent.
 
-### 3. Branch order
+### 3. Who it reaches
+
+Only configs nixarchy seeded. Under `programs.nixarchy.neovim = "theme-only"`
+(the default, `modules/home.nix:652-672`), the seed copies into an absent
+`~/.config/nvim` only (`:464`). So a new seed gets the file from the package,
+and a pre-4.5 seed gets it from the migration. `adopt`, `off` and a user's
+own config are untouched: the migration exits when `~/.config/nvim` is
+absent, and both its symlink guards and the seed's refusal stay.
+
+### 4. Branch order
 
 `pkgs/omarchy/user-migrations.nix`, the ledger's `run` field and the
 harness exist only on `feat/1673-pre45-migrations` (the Pre-4.5 PR). This
-branch is rebuilt on that one after it merges, or stacked on it until then.
-Section 1 does not depend on it and can land alone.
+branch stacks on it: the implementation merges `feat/1673-pre45-migrations`
+in first, and rebases onto `main` once that merges. Section 1 alone would
+not need it, but the row in section 2 does, and they land together.
 
 ## Alternatives rejected
 

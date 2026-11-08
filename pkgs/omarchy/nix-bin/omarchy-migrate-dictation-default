@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # nixarchy:new
+# omarchy:summary=Keep a Voxtype dictation user on Voxtype after Omarchy 4.5's default moved to Superwhisper
 # omarchy:hidden=true
 
 set -euo pipefail

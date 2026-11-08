@@ -130,8 +130,9 @@
     reason = "gated on omarchy-pkg-*, pacman or /var/lib; apps and system state come from the flake";
   };
   "1791722809" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "make the old black Herdr tab bar transparent while retaining a black dim surface (#1678)";
   };
   "1791723398" = {
     decision = "declined";

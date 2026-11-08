@@ -15,6 +15,7 @@ let
     nativeBuildInputs = inputs;
     FIXTURE_A = ./fixtures/shell-json/v4.0.6.json;
     FIXTURE_C = "${omarchySrc}/config/omarchy/shell.json";
+    PRE45_HERDR_CONFIG = ./fixtures/pre45/herdr-config.toml;
     MIGRATE_SCRIPT = "${omarchy}/bin/omarchy-migrate-user";
     ORACLE_SOURCE = omarchySrc;
     NIXARCHY_USER_MIGRATIONS = omarchy.passthru.userMigrations;

@@ -310,6 +310,42 @@ case_1677() {
   [[ $(<"$config") == superwhisper ]] || fail '1677: upstream oracle unexpectedly changed an existing default'
   grep -Fx 'omarchy-pkg-present voxtype-bin' "$HOME/calls.log" >/dev/null || fail '1677: upstream oracle did not test Voxtype'
 }
+case_1678() {
+  local variant config before
+  for variant in regular symlink; do
+    case=1678.$variant
+    setup "$case" "$FIXTURE_C"
+    config=$XDG_CONFIG_HOME/herdr/config.toml
+    mkdir -p "${config%/*}"
+    if [[ $variant == symlink ]]; then
+      cp "$PRE45_HERDR_CONFIG" "$XDG_CONFIG_HOME/herdr/managed.toml"
+      ln -s managed.toml "$config"
+    else
+      cp "$PRE45_HERDR_CONFIG" "$config"
+    fi
+    : > "$HOME/calls.log"
+
+    run_port
+    [[ -e $OMARCHY_MIGRATION_STATE/1791722809.sh ]] || fail "$case: migration marker missing"
+    if [[ $variant == symlink ]]; then
+      [[ -L $config && $(readlink "$config") == managed.toml ]] || fail "$case: managed config link changed"
+      cmp "$PRE45_HERDR_CONFIG" "$XDG_CONFIG_HOME/herdr/managed.toml" || fail "$case: managed config target changed"
+      [[ ! -s $HOME/calls.log ]] || fail "$case: Herdr restarted for a managed config"
+    else
+      [[ $(grep -cFx 'panel_bg = "reset"' "$config") -eq 1 ]] || fail "$case: transparent tab background missing or duplicated"
+      [[ $(grep -cFx 'surface_dim = "black"' "$config") -eq 1 ]] || fail "$case: black dim surface missing or duplicated"
+      diff -u <(sed '/^panel_bg = "black"$/d' "$PRE45_HERDR_CONFIG") \
+        <(sed '/^panel_bg = "reset"$/d; /^surface_dim = "black"$/d' "$config") || fail "$case: unrelated Herdr config changed"
+      printf '%s\n' 'omarchy-restart-herdr ' | cmp - "$HOME/calls.log" || fail "$case: Herdr restart call missing or unexpected"
+    fi
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -419,5 +455,6 @@ case_1674
 case_1675
 case_1676
 case_1677
+case_1678
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

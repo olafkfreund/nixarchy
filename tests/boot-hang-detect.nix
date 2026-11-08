@@ -3,9 +3,13 @@
 # Why: tests/AGENTS.md#boot-hang-detect
 pkgs.testers.runNixOSTest {
   name = "nixarchy-boot-hang-detect";
-  nodes.frozen.virtualisation.memorySize = 1024;
-  nodes.healthy.virtualisation.memorySize = 1024;
-  nodes.healthy.boot.kernelParams = [ "sysrq_always_enabled" ];
+  nodes = {
+    frozen.virtualisation.memorySize = 1024;
+    healthy = {
+      virtualisation.memorySize = 1024;
+      boot.kernelParams = [ "sysrq_always_enabled" ];
+    };
+  };
   testScript = builtins.readFile ./vm-cleanup.py + ''
 
     # Case A: stop the CPUs mid-boot; the silence detector must fire.

@@ -1250,7 +1250,9 @@ pkgs.testers.runNixOSTest {
         "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -- delegated-133 hi"))
     # The poll that drains the row prints its key; 30 s is a floor, not a measurement.
     key = machine.wait_until_succeeds(as_user(delegate) + " | " + jq
-        + " -e -r '.[] | select(.summary == \"delegated-133\" and .category == \"chat\") | .key'",
+        + " -e -r '.[] | select(.summary == \"delegated-133\" and .category == \"chat\""
+        + " and (has(\"actions\") | not) and (has(\"image\") | not)"
+        + " and (has(\"rich\") | not)) | .key'",
         timeout=30).strip()
     # In history (batched write: wait), and never on screen.
     machine.wait_until_succeeds(
@@ -1324,6 +1326,55 @@ pkgs.testers.runNixOSTest {
     machine.succeed(as_user("omarchy-shell notifications delegate 0"))
     machine.succeed(as_user("omarchy-shell notifications dismissAll"))
     print("a notification is queued for the companion under a lease, and pops up when it lapses")
+
+    # Rich leases carry sender actions. The plain lease above keeps the old
+    # no-buttons contract; switch back to it here with a fresh sender.
+    rich = "omarchy-shell notifications delegateRich 8000"
+    assert machine.succeed(as_user(rich)).strip() == "[]"
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -A more=More -- rich-214 hi"
+        + " >/tmp/rich-214-action 2>/tmp/rich-214-error </dev/null &"))
+    rich_key = machine.wait_until_succeeds(as_user(rich) + " | " + jq
+        + " -e -r '.[] | select(.summary == \"rich-214\" and .actions == [{\"id\":\"more\",\"text\":\"More\"}]"
+        + " and .image == \"\" and .rich == \"hi\") | .key'",
+        timeout=30).strip()
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " unknown")).strip() == "none"
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey missing-214 more")).strip() == "none"
+    # The hand-over, rather than the most recent lease renewal, starts this clock. No -t: the
+    # row's own duration must not mask the 30 s hold (the plain floor is 12 s).
+    machine.sleep(20)
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " more")).strip() == "ok"
+    machine.wait_until_succeeds("test -s /tmp/rich-214-action && grep -qx more /tmp/rich-214-action", timeout=30)
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " more")).strip() == "none"
+
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    assert machine.succeed(as_user(delegate)).strip() == "[]"
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -t 30000 -a teams-for-linux -A more=More -- plain-214 hi"
+        + " >/dev/null 2>&1 </dev/null &"))
+    machine.wait_until_succeeds(live_mentions("plain-214"), timeout=30)
+    assert machine.succeed(as_user(delegate)).strip() == "[]", "a plain lease took a buttoned row"
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+
+    assert machine.succeed(as_user(rich)).strip() == "[]"
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -t 30000 -a teams-for-linux"
+        " -A one=One -A two=Two -A three=Three -A four=Four -- four-214 hi"
+        + " >/dev/null 2>&1 </dev/null &"))
+    machine.wait_until_succeeds(live_mentions("four-214"), timeout=30)
+    assert machine.succeed(as_user(rich)).strip() == "[]", "four actions were handed over"
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+
+    # This hint gives the shell an argv button, which must stay on its own card.
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux"
+        " -h \"string:omarchy-actions:[{\\\"label\\\":\\\"Run\\\",\\\"argv\\\":[\\\"true\\\"]}]\""
+        " -- exec-214 hi"))
+    machine.wait_until_succeeds(live_mentions("exec-214"), timeout=30)
+    assert machine.succeed(as_user(rich)).strip() == "[]", "execActions were handed over"
+    machine.succeed(as_user("omarchy-shell notifications delegate 0"))
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    print("rich leases carry named actions, keep argv buttons local, and hold a live sender for 30 seconds")
 
     # ---- the text window holds in quiet mode (#1663) ------------------------
     # Quiet mode writes history without a card, through the same retain() as

@@ -37,8 +37,9 @@
     reason = "portal set by modules/nixos.nix, and config/ is seeded on activation by modules/home.nix";
   };
   "1788281348" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "refresh active themes with packaged intro videos (#1674)";
   };
   "1788941927" = {
     decision = "not-needed";
@@ -79,7 +80,7 @@
   };
   "1791123731" = {
     decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    reason = "a commented example in looknfeel.lua; no visible break (#1674)";
   };
   "1791345484" = {
     decision = "not-needed";
@@ -94,8 +95,9 @@
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
   };
   "1791470456" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "repair saved JPG backgrounds after bundled images moved to WebP (#1674)";
   };
   "1791479273" = {
     decision = "declined";
@@ -115,8 +117,9 @@
     reason = "convert saved workspace layout rules to modes (#1673)";
   };
   "1791705142" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "move the saved animation opacity rule to the opaque toggle (#1674)";
   };
   "1791708587" = {
     decision = "not-needed";
@@ -149,8 +152,9 @@
     reason = "ported in omarchy-migrate-user (#1610)";
   };
   "1792259038" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "repair saved selections of renumbered bundled backgrounds (#1674)";
   };
   "1792343225" = {
     decision = "not-needed";

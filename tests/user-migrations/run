@@ -111,6 +111,50 @@ case_1673() {
   run_port
   same_tree "$before" "$HOME" || fail '1673: second run changed the home'
 }
+case_1674() {
+  local current staged toggles remembered before webp renamed source
+  case=1674
+  setup 1674 "$FIXTURE_C"
+  current=$XDG_STATE_HOME/omarchy/current
+  staged=$current/theme/backgrounds
+  toggles=$XDG_STATE_HOME/omarchy/toggles/hypr
+  remembered=$XDG_STATE_HOME/omarchy/theme-backgrounds
+  mkdir -p "$staged" "$toggles" "$remembered" "$XDG_CONFIG_HOME/hypr"
+  printf '%s\n' catppuccin > "$current/theme.name"
+  ln -s "$staged/1-totoro.jpg" "$current/background"
+  printf '%s\n' "$staged/1-totoro.jpg" > "$remembered/catppuccin"
+  printf '%s\n' "$staged/0-winding-road.jpg" > "$remembered/tokyo-night"
+  printf '%s\n' 'hl.config({ animations = { enabled = false } })' \
+    'o.window(".*", { opacity = "1 1" })' > "$toggles/no-animations.lua"
+  printf '%s\n' '-- existing look and feel' > "$XDG_CONFIG_HOME/hypr/looknfeel.lua"
+  : > "$HOME/calls.log"
+
+  OMARCHY_SESSION_ID=fixture-session run_port
+  for id in 1788281348 1791470456 1791705142 1792259038; do
+    [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1674: marker missing for $id"
+  done
+  [[ ! -e $OMARCHY_MIGRATION_STATE/1791123731.sh ]] || fail '1674: declined example ran'
+  [[ $(<"$current/background-intro.session-id") == fixture-session ]] || fail '1674: intro session was not recorded'
+  webp=$staged/1-totoro.webp
+  [[ $(readlink "$current/background") == "$webp" ]] || fail '1674: active background was not repaired'
+  source=$OMARCHY_PATH/themes/catppuccin/backgrounds/1-totoro.webp
+  cmp "$source" "$webp" || fail '1674: bundled WebP was not staged'
+  [[ $(<"$remembered/catppuccin") == "$webp" ]] || fail '1674: remembered JPG was not repaired'
+  renamed=$staged/1-winding-road.webp
+  cmp "$OMARCHY_PATH/themes/tokyo-night/backgrounds/1-winding-road.webp" "$renamed" || fail '1674: renamed background was not staged'
+  [[ $(<"$remembered/tokyo-night") == "$renamed" ]] || fail '1674: renumbered selection was not repaired'
+  [[ $(<"$toggles/no-animations.lua") == 'hl.config({ animations = { enabled = false } })' ]] || fail '1674: animation flag still forces opacity'
+  cmp "$OMARCHY_PATH/default/hypr/toggles/window-opaque.lua" "$toggles/window-opaque.lua" || fail '1674: opaque toggle missing'
+  [[ $(<"$XDG_CONFIG_HOME/hypr/looknfeel.lua") == '-- existing look and feel' ]] || fail '1674: declined example changed looknfeel'
+  printf '%s\n' 'omarchy-theme-refresh ' "omarchy-shell background set $webp" > "$work/1674.expected-calls"
+  cmp "$work/1674.expected-calls" "$HOME/calls.log" || fail '1674: unexpected session calls'
+
+  before=$work/1674.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  OMARCHY_SESSION_ID=fixture-session run_port
+  same_tree "$before" "$HOME" || fail '1674: second run changed the home'
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -216,5 +260,6 @@ STUB_DRIFT=1 run_port
 grep 'widget at center\[0\] is not omarchy.indicators' "$HOME/journal.log" >/dev/null || fail 'drift: refusal not observed'
 case_fresh45
 case_1673
+case_1674
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

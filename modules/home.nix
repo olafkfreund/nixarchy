@@ -53,6 +53,9 @@ let
   # one. Null on a standalone home-manager user, exactly like localAi above:
   # there is no NixOS module to have set it.
   defaultAgent = osConfig.programs.nixarchy.defaultAgent or null;
+  # Omarchy 4.5's launcher only accepts agy. Keep the old option spelling for
+  # existing hosts while writing the id the launcher can actually run.
+  selectedDefaultAgent = if defaultAgent == "gemini" then "agy" else defaultAgent;
 
   # #623 and #630, read across from the NixOS side for the same reason
   # `localAi` above is: these are machine decisions -- a package installed, a
@@ -1193,7 +1196,23 @@ in
                 if [ ! -e "${config.xdg.configHome}/hyprland-mimeapps.list" ] && [ ! -L "${config.xdg.configHome}/hyprland-mimeapps.list" ]; then
                   mimeapps_absent=1
                 fi
+                fresh_shell=
+                if [ ! -e "${config.xdg.configHome}/omarchy/shell.json" ] \
+                  && [ ! -L "${config.xdg.configHome}/omarchy/shell.json" ]; then
+                  fresh_shell=1
+                fi
                 seed_dir "${omarchyPath}/config" "${config.xdg.configHome}"
+                if [ -n "$fresh_shell" ] && [ -e "${config.xdg.configHome}/omarchy/shell.json" ]; then
+                  migration_state="${config.home.homeDirectory}/.local/state/omarchy/migrations"
+                  run mkdir -p "$migration_state"
+                  for id in 1790042972 1791968925 1791969355; do
+                    run touch "$migration_state/$id.sh"
+                  done
+                  while IFS=$'\t' read -r id script; do
+                    [ -n "$id" ] && [ -n "$script" ] || continue
+                    run touch "$migration_state/$id.sh"
+                  done < ${cfg.package.passthru.userMigrations}/list
+                fi
                 if [ -n "$mimeapps_absent" ] && [ -e "${config.xdg.configHome}/hyprland-mimeapps.list" ]; then
                   run rm -f "${config.xdg.configHome}/hyprland-mimeapps.list"
                   echo "nixarchy: hyprland-mimeapps.list is seeded at your next login (#1342)"
@@ -1482,6 +1501,14 @@ in
     # through it rather than replacing omarchy-theme-set-gnome means the cursor
     # follows a theme change without this repo owning a fork of that script.
     xdg.configFile = {
+      "nixarchy/version" = lib.mkIf (osConfig == null) {
+        text = lib.mkDefault (
+          let
+            r = import ./revision.nix inputs.self;
+          in
+          "${r.shortRev} ${r.date}\n"
+        );
+      };
       "omarchy/hooks/theme-set.d/cursor" = {
         executable = true;
         text = ''
@@ -1529,10 +1556,10 @@ in
         # menu reading half an agent name and launching nothing. Beside the
         # file so the move is a rename, and not at all on a dry run (#1276).
         if [[ -v DRY_RUN ]]; then
-          echo "nixarchy: would set the default agent to "${lib.escapeShellArg defaultAgent}
+          echo "nixarchy: would set the default agent to "${lib.escapeShellArg selectedDefaultAgent}
         else
           tmp=$(${pkgs.coreutils}/bin/mktemp "$agentfile.XXXXXX")
-          printf '%s\n' ${lib.escapeShellArg defaultAgent} > "$tmp"
+          printf '%s\n' ${lib.escapeShellArg selectedDefaultAgent} > "$tmp"
           [ ! -e "$agentfile" ] || ${pkgs.coreutils}/bin/chmod --reference="$agentfile" "$tmp"
           ${pkgs.coreutils}/bin/mv "$tmp" "$agentfile"
         fi
@@ -2451,6 +2478,25 @@ in
               printf '%s: %s\n' "$id" "$out" | systemd-cat -t nixarchy-default-plugins
             fi
           done
+        '';
+      };
+
+      # Why: pkgs/AGENTS.md#user-file-migrations-1610
+      "omarchy/hooks/post-boot.d/user-migrations" = {
+        enable = osConfig.programs.nixarchy.enable or false;
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export NIXARCHY_USER_MIGRATIONS=${cfg.package.passthru.userMigrations}
+          export PATH=${
+            lib.makeBinPath [
+              cfg.package
+              pkgs.jq
+              pkgs.coreutils
+              pkgs.systemd
+            ]
+          }:$PATH
+          exec omarchy-migrate-user
         '';
       };
 

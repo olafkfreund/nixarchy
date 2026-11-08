@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Port Omarchy's user-file migrations that apply here
+# omarchy:hidden=true
+# shellcheck disable=SC2016 # jq filters use their own $layout and $want variables.
+
+set -euo pipefail
+
+cfg=${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json
+state=${OMARCHY_MIGRATION_STATE:-$HOME/.local/state/omarchy/migrations}
+poll=${NIXARCHY_MIGRATE_POLL:-10}
+ping_attempts=${NIXARCHY_MIGRATE_PING_ATTEMPTS:-120}
+ready_attempts=${NIXARCHY_MIGRATE_READY_ATTEMPTS:-50}
+export OMARCHY_SHELL_IPC_TIMEOUT=${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
+
+log() { printf '%s\n' "$*" | systemd-cat -t nixarchy-user-migrations || true; }
+# A UTF-8 locale of its own: in C, Quickshell prints Qt's locale warning on stdout,
+# ahead of the reply (AGENTS.md §13).
+ipc() { LC_ALL=C.UTF-8 omarchy-shell shell "$@"; }
+
+bar_migrations() (
+[[ -r $cfg ]] && jq -e '.bar | type == "object" and has("centerAnchor")' "$cfg" >/dev/null 2>&1 || exit 0
+[[ -e $state/1790042972.sh && -e $state/1791968925.sh && -e $state/1791969355.sh ]] && exit 0
+
+for ((i = 0; i < ping_attempts; i++)); do
+  ipc ping >/dev/null 2>&1 && break
+  ((i + 1 == ping_attempts)) || sleep 1
+done
+ipc ping >/dev/null 2>&1 || exit 0
+
+poll_file() {
+  local filter=$1 want=${2:-null} i
+  for ((i = 0; i <= poll; i++)); do
+    jq -e --argjson want "$want" "$filter" "$cfg" >/dev/null 2>&1 && return 0
+    ((i == poll)) || sleep 1
+  done
+  return 1
+}
+
+move() {
+  local out
+  out=$(ipc moveBarWidget "$1" "$2") || { log "moveBarWidget $1 failed"; exit 0; }
+  case $out in
+    ok) ;;
+    *) log "moveBarWidget $1: $out"; exit 0 ;;
+  esac
+}
+
+if [[ ! -e $state/1790042972.sh ]]; then
+  ipc rescanPlugins >/dev/null 2>&1 || true
+  old_elsewhen=$(jq -r '[.bar.layout[]?[]? | if type == "object" then .id else . end] | index("omacom.elsewhen") != null' "$cfg") || { log '1790042972: cannot read shell.json'; exit 0; }
+  if [[ $old_elsewhen == false ]]; then
+    for ((i = 0; i < ready_attempts; i++)); do
+      out=$(ipc putBarWidget omarchy.elsewhen '{"after":"omarchy.clock"}') || { log 'putBarWidget omarchy.elsewhen failed'; exit 0; }
+      case $out in
+        ok) break ;;
+        'not ready') ((i + 1 == ready_attempts)) || sleep 1 ;;
+        *) log "putBarWidget omarchy.elsewhen: $out"; exit 0 ;;
+      esac
+    done
+    case $out in
+      ok) ;;
+      *) log "putBarWidget omarchy.elsewhen: $out"; exit 0 ;;
+    esac
+  fi
+  poll_file '[.bar.layout[]?[]? | if type == "object" then .id else . end] | any(. == "omarchy.elsewhen" or . == "omacom.elsewhen")' || { log '1790042972: shell.json did not show Elsewhen'; exit 0; }
+  mkdir -p "$state"
+  touch "$state/1790042972.sh"
+fi
+
+if [[ ! -e $state/1791968925.sh ]]; then
+  bar=$(jq -c '.bar' "$cfg") || { log '1791968925: cannot read shell.json'; exit 0; }
+  if jq -e '(.id // "" | tostring) == "" or (.id // "" | tostring) == "omarchy.bar"' <<<"$bar" >/dev/null; then
+    expected=$(jq -c '.layout' <<<"$bar") || { log '1791968925: cannot read layout'; exit 0; }
+    for section in right left center; do
+      info=$(jq -r --arg s "$section" '(.layout[$s] // []) as $a | ($a | to_entries | map(select((.value | if type == "object" then .id else . end) == "omarchy.tray"))) as $trays | [if ($trays | length) == 0 then -1 else $trays[-1].key end, ($a | length)] | @tsv' <<<"$bar") || { log "1791968925: cannot read $section"; exit 0; }
+      read -r tray length <<<"$info"
+      ((tray >= 0)) || continue
+      if [[ $section == right ]]; then
+        ((tray == 0)) && continue
+        position=0
+      else
+        ((tray == length - 1)) && continue
+        position=$length
+      fi
+      args=$(jq -nc --arg s "$section" --argjson t "$tray" --argjson p "$position" '{fromSection:$s,fromIndex:$t,section:$s,index:$p}') || { log '1791968925: cannot build move'; exit 0; }
+      move omarchy.tray "$args"
+      expected=$(jq -c --arg s "$section" --argjson t "$tray" '(.[$s] // []) as $a | .[$s] = (if $s == "right" then [$a[$t]] + $a[0:$t] + $a[$t+1:] else $a[0:$t] + $a[$t+1:] + [$a[$t]] end)' <<<"$expected") || { log '1791968925: cannot compute result'; exit 0; }
+    done
+    poll_file '.bar.layout as $layout | all(["right","left","center"][]; ($layout[.] // []) == ($want[.] // []))' "$expected" || { log '1791968925: shell.json did not show tray order'; exit 0; }
+    mkdir -p "$state"
+    touch "$state/1791968925.sh"
+  fi
+fi
+
+if [[ ! -e $state/1791969355.sh ]]; then
+  bar=$(jq -c '.bar' "$cfg") || { log '1791969355: cannot read shell.json'; exit 0; }
+  if jq -e '(.id // "" | tostring) == "" or (.id // "" | tostring) == "omarchy.bar"' <<<"$bar" >/dev/null; then
+    center_data=$(jq -c 'def id: if type == "object" then .id else . end; (.layout.center // []) as $c | (.centerAnchor | if type == "string" then . else "" end) as $anchor | ([range(0; $c | length) | select($anchor != "" and ($c[.] | id) == $anchor)] | if length == 0 then -1 else .[0] end) as $k | {k:$k, n:($c | length), beginLen:(.layout.centerBegin // [] | length), expected:{centerBegin:((.layout.centerBegin // []) + $c[0:$k] | map(id)), center:([$c[$k]] | map(id)), centerEnd:($c[$k+1:] + (.layout.centerEnd // []) | map(id))}}' <<<"$bar") || { log '1791969355: cannot compute split'; exit 0; }
+    k=$(jq -r '.k' <<<"$center_data") || { log '1791969355: cannot read anchor index'; exit 0; }
+    if ((k >= 0)); then
+      n=$(jq -r '.n' <<<"$center_data") || { log '1791969355: cannot read center length'; exit 0; }
+      begin_len=$(jq -r '.beginLen' <<<"$center_data") || { log '1791969355: cannot read begin length'; exit 0; }
+      for ((i = 0; i < k; i++)); do
+        id=$(jq -r --argjson i "$i" '.layout.center[$i] | if type == "object" then .id else . end' <<<"$bar") || { log '1791969355: cannot read widget id'; exit 0; }
+        args=$(jq -nc --argjson p "$((begin_len + i))" '{fromSection:"center",fromIndex:0,section:"centerBegin",index:$p}') || { log '1791969355: cannot build move'; exit 0; }
+        move "$id" "$args"
+      done
+      for ((i = n - 1; i > k; i--)); do
+        id=$(jq -r --argjson i "$i" '.layout.center[$i] | if type == "object" then .id else . end' <<<"$bar") || { log '1791969355: cannot read widget id'; exit 0; }
+        args=$(jq -nc --argjson p "$((i - k))" '{fromSection:"center",fromIndex:$p,section:"centerEnd",index:0}') || { log '1791969355: cannot build move'; exit 0; }
+        move "$id" "$args"
+      done
+      expected=$(jq -c '.expected' <<<"$center_data") || { log '1791969355: cannot read expected split'; exit 0; }
+      poll_file 'def id: if type == "object" then .id else . end; .bar.layout as $layout | all(["centerBegin","center","centerEnd"][]; ($layout[.] // [] | map(id)) == $want[.])' "$expected" || { log '1791969355: shell.json did not show center split'; exit 0; }
+    fi
+    mkdir -p "$state"
+    touch "$state/1791969355.sh"
+  fi
+fi
+)
+
+run_upstream() {
+  local id script
+  [[ -n ${NIXARCHY_USER_MIGRATIONS:-} ]] || return 0
+  # fd 3, as upstream's runner does: a script reading stdin must not eat the list.
+  while IFS=$'\t' read -r id script <&3; do
+    [[ -n $id && -n $script ]] || { log 'invalid user migration list entry'; return 1; }
+    [[ ! -e $state/$id.sh ]] || continue
+    if ! OMARCHY_PATH=${OMARCHY_PATH:-$(dirname "$(dirname "$0")")/share/omarchy} bash -euo pipefail "$script" 3<&- </dev/null; then
+      log "$id: user migration failed"
+      return 1
+    fi
+    mkdir -p "$state"
+    touch "$state/$id.sh"
+  done 3< "$NIXARCHY_USER_MIGRATIONS/list"
+}
+
+# A failed bar migration must not hold back the others.
+bar_migrations || log 'bar migrations failed'
+run_upstream

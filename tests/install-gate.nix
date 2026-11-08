@@ -60,6 +60,9 @@ pkgs.runCommand "nixarchy-install-gate"
     t "a nested AGENTS.md does not run the VM"  --install "installer/AGENTS.md" false
     t "nor a deeper one"                        --install "a/b/AGENTS.md" false
     t "nor the root one"                        --install "AGENTS.md" false
+    t "an intent does not run the VM"           --install "intent/2026-11-08-1-x.md" false
+    t "nor a plan with a doc change"            --install "$(printf '%s\n' plan/2026-11-08-1-x.md spec/2026-11-08-1-x.md AGENTS.md)" false
+    t "a plan with a module still does"         --install "$(printf '%s\n' plan/2026-11-08-1-x.md modules/nixos.nix)" true
 
     echo "the build question, unchanged:"
     t "an unrelated check still builds"        "" "tests/substitutable.nix" true
@@ -69,6 +72,7 @@ pkgs.runCommand "nixarchy-install-gate"
     t "README still builds"                    "" "README.md" true
     t "the gate itself always does"            "" ".github/scripts/pr-touches-build.sh" true
     t "a nested AGENTS.md builds nothing"      "" "modules/AGENTS.md" false
+    t "an artifact-only PR builds nothing"     "" "$(printf '%s\n' intent/2026-11-08-1-x.md spec/2026-11-08-1-x.md)" false
     t "install-check.yml always does"          "" ".github/workflows/install-check.yml" true
 
     # This line used to read `t "docs still do not" "" "docs/…" false`, and it

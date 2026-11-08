@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+printf '%s\n' 'omarchy-mise-install '"$*" >> "$HOME/calls.log"

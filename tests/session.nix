@@ -1250,7 +1250,9 @@ pkgs.testers.runNixOSTest {
         "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -- delegated-133 hi"))
     # The poll that drains the row prints its key; 30 s is a floor, not a measurement.
     key = machine.wait_until_succeeds(as_user(delegate) + " | " + jq
-        + " -e -r '.[] | select(.summary == \"delegated-133\" and .category == \"chat\") | .key'",
+        + " -e -r '.[] | select(.summary == \"delegated-133\" and .category == \"chat\""
+        + " and (has(\"actions\") | not) and (has(\"image\") | not)"
+        + " and (has(\"rich\") | not)) | .key'",
         timeout=30).strip()
     # In history (batched write: wait), and never on screen.
     machine.wait_until_succeeds(
@@ -1324,6 +1326,55 @@ pkgs.testers.runNixOSTest {
     machine.succeed(as_user("omarchy-shell notifications delegate 0"))
     machine.succeed(as_user("omarchy-shell notifications dismissAll"))
     print("a notification is queued for the companion under a lease, and pops up when it lapses")
+
+    # Rich leases carry sender actions. The plain lease above keeps the old
+    # no-buttons contract; switch back to it here with a fresh sender.
+    rich = "omarchy-shell notifications delegateRich 8000"
+    assert machine.succeed(as_user(rich)).strip() == "[]"
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -A more=More -- rich-214 hi"
+        + " >/tmp/rich-214-action 2>/tmp/rich-214-error </dev/null &"))
+    rich_key = machine.wait_until_succeeds(as_user(rich) + " | " + jq
+        + " -e -r '.[] | select(.summary == \"rich-214\" and .actions == [{\"id\":\"more\",\"text\":\"More\"}]"
+        + " and .image == \"\" and .rich == \"hi\") | .key'",
+        timeout=30).strip()
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " unknown")).strip() == "none"
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey missing-214 more")).strip() == "none"
+    # The hand-over, rather than the most recent lease renewal, starts this clock. No -t: the
+    # row's own duration must not mask the 30 s hold (the plain floor is 12 s).
+    machine.sleep(20)
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " more")).strip() == "ok"
+    machine.wait_until_succeeds("test -s /tmp/rich-214-action && grep -qx more /tmp/rich-214-action", timeout=30)
+    assert machine.succeed(as_user("omarchy-shell notifications invokeKey " + rich_key + " more")).strip() == "none"
+
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    assert machine.succeed(as_user(delegate)).strip() == "[]"
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -t 30000 -a teams-for-linux -A more=More -- plain-214 hi"
+        + " >/dev/null 2>&1 </dev/null &"))
+    machine.wait_until_succeeds(live_mentions("plain-214"), timeout=30)
+    assert machine.succeed(as_user(delegate)).strip() == "[]", "a plain lease took a buttoned row"
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+
+    assert machine.succeed(as_user(rich)).strip() == "[]"
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -t 30000 -a teams-for-linux"
+        " -A one=One -A two=Two -A three=Three -A four=Four -- four-214 hi"
+        + " >/dev/null 2>&1 </dev/null &"))
+    machine.wait_until_succeeds(live_mentions("four-214"), timeout=30)
+    assert machine.succeed(as_user(rich)).strip() == "[]", "four actions were handed over"
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+
+    # This hint gives the shell an argv button, which must stay on its own card.
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux"
+        " -h \"string:omarchy-actions:[{\\\"label\\\":\\\"Run\\\",\\\"argv\\\":[\\\"true\\\"]}]\""
+        " -- exec-214 hi"))
+    machine.wait_until_succeeds(live_mentions("exec-214"), timeout=30)
+    assert machine.succeed(as_user(rich)).strip() == "[]", "execActions were handed over"
+    machine.succeed(as_user("omarchy-shell notifications delegate 0"))
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    print("rich leases carry named actions, keep argv buttons local, and hold a live sender for 30 seconds")
 
     # ---- the text window holds in quiet mode (#1663) ------------------------
     # Quiet mode writes history without a card, through the same retain() as
@@ -3426,6 +3477,132 @@ pkgs.testers.runNixOSTest {
     machine.succeed(desktop_user("test -e ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
     print("#1624: the candidate window's theme has its glyphs")
     print("#1614: keyboard and input-method state restored")
+
+    # ---- power actions ask before closing windows (#1659) -----------------
+    import shlex
+    power_rule = "/etc/polkit-1/rules.d/00-test-power-1659.rules"
+    power_marker = "/home/omarchy/.local/state/omarchy/reboot-required"
+    power_live = "/home/omarchy/.local/state/omarchy/notifications/live.json"
+    power_schedule = ("busctl get-property org.freedesktop.login1"
+        " /org/freedesktop/login1 org.freedesktop.login1.Manager ScheduledShutdown")
+
+    def power_cancel(verb):
+        # Run from the driver even when an assertion or a guest command fails.
+        machine.succeed("systemctl " + verb + " --when=cancel")
+
+    def power_empty():
+        return '""' in machine.succeed(power_schedule)
+
+    def power_notification(verb):
+        title_key = "system.rebootFailed" if verb == "reboot" else "system.shutdownFailed"
+        title = machine.succeed(desktop_user("omarchy-i18n " + title_key)).strip()
+        assert title, f"{verb}: the failure title is empty"
+        machine.wait_until_succeeds(
+            "test -s " + power_live + " && ${pkgs.jq}/bin/jq -e --arg title "
+            + shlex.quote(title) + " 'any(.[]; .summary == $title and .urgency == 2)' "
+            + power_live,
+            timeout=30)
+
+    def power_window(label):
+        machine.succeed(desktop_user(
+            "hyprctl clients -j | ${pkgs.jq}/bin/jq -e "
+            '"any(.[]; .class == \\"power-1659-' + label + '\\")"'))
+
+    def power_dispatch(command, label):
+        # Use the same checked Lua exec_cmd path as launch_dispatch_pkexec:
+        # the new process belongs to the desktop login session for polkit.
+        runner = "/tmp/power-1659-" + label + ".sh"
+        machine.succeed("printf '%s\\n' " + shlex.quote(command) + " > " + runner)
+        reply = machine.succeed(desktop_user(
+            'hyprctl dispatch "hl.dsp.exec_cmd(\\"sh ' + runner + '\\")"')).strip()
+        assert reply == "ok", f"{label}: Hyprland refused dispatch: {reply!r}"
+
+    def power_rule_for(result):
+        rule = ("polkit.addRule(function(action, subject) {\n"
+            "  if (action.id.indexOf('org.freedesktop.login1.reboot') === 0 ||\n"
+            "      action.id.indexOf('org.freedesktop.login1.power-off') === 0)\n"
+            "    return polkit.Result." + result + ";\n"
+            "});\n")
+        machine.succeed("printf '%s' " + shlex.quote(rule) + " > "
+            + power_rule + ".tmp && mv " + power_rule + ".tmp " + power_rule)
+        machine.sleep(1)  # polkit reloads changed rules asynchronously
+
+    def power_cleanup(action):
+        try:
+            power_cancel(action)
+        finally:
+            machine.succeed("rm -f " + power_rule)
+            machine.sleep(1)
+
+    def power_agent_registered():
+        # The shell may have restarted since the earlier pkexec probe.
+        shell_pid = machine.succeed("pgrep -o quickshell").strip()
+        agent_log = machine.succeed(
+            "journalctl -b -t omarchy-shell _PID=" + shell_pid + " -o cat --no-pager")
+        assert "omarchy polkit agent registered" in agent_log, (
+            "the current shell has no registered polkit agent")
+
+    for verb, action in (("reboot", "reboot"), ("shutdown", "poweroff")):
+        power_rule_for("NO")
+        try:
+            machine.succeed(desktop_user("omarchy-shell notifications dismissAll"))
+            power_dispatch("foot --app-id=power-1659-denied-" + verb
+                + " -e sleep 300", "window-denied-" + verb)
+            machine.wait_until_succeeds(desktop_user(
+                "hyprctl clients -j | ${pkgs.jq}/bin/jq -e "
+                '"any(.[]; .class == \\"power-1659-denied-' + verb
+                + '\\")"'), timeout=30)
+            machine.succeed(desktop_user("omarchy-state set reboot-required"))
+            status, output = machine.execute(desktop_user(
+                "omarchy-system " + verb + " --execute 2>&1"))
+            assert status != 0, f"{verb}: denied action succeeded: {output}"
+            power_window("denied-" + verb)
+            machine.succeed("test -e " + power_marker)
+            power_notification(verb)
+            assert power_empty(), f"{verb}: denied action was scheduled"
+        finally:
+            power_cleanup(action)
+        print(f"#1659: {verb} denial kept the window and marker")
+
+        power_rule_for("AUTH_ADMIN")
+        try:
+            power_agent_registered()
+            machine.succeed(desktop_user("omarchy-shell notifications dismissAll"))
+            power_dispatch("foot --app-id=power-1659-timeout-" + verb
+                + " -e sleep 300", "window-timeout-" + verb)
+            machine.wait_until_succeeds(desktop_user(
+                "hyprctl clients -j | ${pkgs.jq}/bin/jq -e "
+                '"any(.[]; .class == \\"power-1659-timeout-' + verb
+                + '\\")"'), timeout=30)
+            machine.succeed(desktop_user("omarchy-state set reboot-required"))
+            since = machine.succeed("date +%s").strip()
+            power_dispatch("OMARCHY_SYSTEM_TIMEOUT=5s omarchy-system " + verb,
+                "timeout-" + verb)
+            machine.wait_until_succeeds(
+                "test -n \"$(systemctl list-units --no-legend"
+                " 'polkit-agent-helper@*')\"", timeout=4)
+            machine.wait_until_succeeds(
+                desktop_user("journalctl --user --since=@" + since
+                    + " --no-pager -o cat")
+                + " | grep -E \"run-[^: ]+\\.service: Failed with result 'timeout'\"",
+                timeout=45)
+            power_notification(verb)
+            power_window("timeout-" + verb)
+            machine.succeed("test -e " + power_marker)
+            assert power_empty(), f"{verb}: timed-out action was scheduled"
+        finally:
+            power_cleanup(action)
+        print(f"#1659: {verb} timed out with its window and marker intact")
+
+        try:
+            # No test rule: the real session's default logind policy decides.
+            power_dispatch("omarchy-system " + verb, "allowed-" + verb)
+            machine.wait_until_succeeds(
+                power_schedule + " | grep -F '\"" + action + "\"'", timeout=4)
+        finally:
+            power_cleanup(action)
+        assert power_empty(), f"{verb}: the scheduled action was not cancelled"
+        print(f"#1659: {verb} scheduled and cancelled")
 
     # A QML engine that resolves a singleton to the wrong type (omarchy#14811,
     # Qt 6.12.0) leaves the shell running with every surface black or

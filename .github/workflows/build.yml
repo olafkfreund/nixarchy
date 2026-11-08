@@ -266,7 +266,7 @@ jobs:
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |
-          echo "Only paths the gate excludes changed; not building." \
+          echo "no-op: the gate found nothing this job builds" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v5
@@ -292,6 +292,8 @@ jobs:
         run: nix run .#devenv-presets
 
   omarchy:
+    needs: gate
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     # Warm runs measured 675-878s against the old 900s limit (2026-09-13), and
     # a nixpkgs bump starts cold: #671 timed out at 919s and 1200s. Past the
@@ -305,9 +307,24 @@ jobs:
     # four at a time (905s to 406s cold on p620); this is the margin.
     timeout-minutes: 60
     steps:
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: Nothing here can affect a build
+        if: needs.gate.outputs.relevant != 'true'
+        run: |
+          echo "no-op: the gate found nothing this job builds" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
       - uses: ./.github/actions/setup-nix
+        if: needs.gate.outputs.relevant == 'true'
       - uses: cachix/cachix-action@v17
+        if: needs.gate.outputs.relevant == 'true'
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
@@ -322,6 +339,7 @@ jobs:
       # Cheap and the most informative single check: proves the vendored tree
       # assembles, shebangs patch, and the bin/ symlink farm is intact.
       - name: Build the vendored Omarchy tree
+        if: needs.gate.outputs.relevant == 'true'
         run: nix build .#omarchy --print-build-logs
 
       # cachix-action pushes the store DIFF, and these runners have warm
@@ -332,6 +350,7 @@ jobs:
       #
       # So name what to push rather than inferring it.
       - name: Push the Omarchy closure to cachix
+        if: needs.gate.outputs.relevant == 'true'
         # A slow cache is not an error, so continue-on-error alone would let it
         # spend the job's timeout and cancel every check after it (#883).
         continue-on-error: true
@@ -343,6 +362,7 @@ jobs:
           .github/scripts/cachix-push.sh "${entries[@]}"
 
       - name: Verify the CLI sees its subcommands
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # bin/omarchy discovers subcommands by grepping sibling scripts for
           # `# omarchy:summary=`. Wrapping the bins silently breaks this, and
@@ -364,6 +384,7 @@ jobs:
           # asking them to be a calculator.
 
       - name: Every check is run by some workflow, on pull requests
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # A check in `checks` that no workflow builds is worse than no check:
           # it reads like coverage, and the PR that adds it goes green without
@@ -581,6 +602,7 @@ jobs:
           echo "$gen checks are generated, $(printf '%s' "$claimed" | wc -w) are claimed elsewhere"
 
       - name: Build every check no other job claims
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # The 20 steps this replaces were byte-identical except for the name:
           # `nix build .#checks.x86_64-linux.<x> --print-build-logs`, no setup,
@@ -616,12 +638,11 @@ jobs:
           # shebangs were patched" inspects a completely different tree --
           # which is exactly how it failed. Nothing here wants an out-link;
           # the build IS the assertion.
-          # Anything the cache can already vouch for is dropped first. This
-          # step is the one that still runs on a docs-only pull request --
-          # `omarchy` stays unconditional because it greps README.md for the
-          # app and command counts -- so it is where the remaining minutes of
-          # such a run are spent, on 26 checks a documentation edit cannot
-          # change. A miss degrades safely: it builds.
+          # Anything the cache can already vouch for is dropped first. The
+          # gate skips this step for docs-only changes. README.md remains
+          # relevant because the count step below greps it; data/ and pkgs/
+          # changes remain relevant too. A proof lookup miss on a relevant
+          # change degrades safely: it builds.
           #
           # The targets go through as they are: the script accepts the
           # fully-qualified attr as well as a bare name, and every caller uses
@@ -644,11 +665,12 @@ jobs:
       # catching it on the PR that closes the epic -- which is not where it
       # gets noticed anyway, because closing happens after the merge.
       - name: The README's roadmap still matches the open epics
-        if: github.event_name != 'pull_request'
+        if: needs.gate.outputs.relevant == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          [ "${{ github.event_name }}" != "pull_request" ] || exit 0
           # A roadmap nobody updates is worse than none: it is the section a
           # newcomer reads to judge whether the project is alive, and a stale
           # one says it is not. The README claims CI keeps this honest, so
@@ -704,11 +726,12 @@ jobs:
       # live issue list, which a pull request from a fork cannot be trusted to
       # do, and closing happens after the merge anyway.
       - name: A milestone whose work is done is closed
-        if: github.event_name != 'pull_request'
+        if: needs.gate.outputs.relevant == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          [ "${{ github.event_name }}" != "pull_request" ] || exit 0
           # The same argument as the roadmap check above, one level out.
           # Milestones answer "how far has each feature got", and a milestone
           # whose issues are all closed answers it wrongly: it says in progress
@@ -753,6 +776,7 @@ jobs:
       # Omarchy bump runs the same script with --fix and commits the result,
       # so a release moves the numbers instead of failing on them.
       - name: Every derived number in the README
+        if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/readme-counts.sh --check
 
       # docs/_config.yml carries the manual's sidebar as an explicit list,
@@ -767,6 +791,7 @@ jobs:
       # Order still is not checked, only membership: where a page belongs in
       # a reading order is a judgement, whether it is reachable at all is not.
       - name: Every manual page is in the sidebar
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           pages=$(basename -a docs/manual/*.md |
             sed 's/\.md$//' | grep -v '^index$' | sort)
@@ -822,6 +847,7 @@ jobs:
       # both sides share, so each row carries it as a comment inside its last
       # cell -- after the final pipe, kramdown renders an extra column.
       - name: Every default plugin has a row in the manual
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           ids=$(awk '/^      defaultPluginSet = \{/{f=1} f; f && /^      \};/{exit}' modules/home.nix |
             grep -oE 'id = "[^"]+"' | sed 's/id = "//;s/"$//' | sort -u || true)
@@ -844,6 +870,7 @@ jobs:
           echo "every default plugin has a row in the manual, and every row is a default"
 
       - name: Nothing we ship writes shell.json
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # Writing that file under a running shell breaks the shell (#847):
           # the watcher fires, and Quickshell's registerHandler leaves the new
@@ -903,6 +930,7 @@ jobs:
           echo "nothing under modules/, pkgs/, installer/ or tests/ writes the live shell.json"
 
       - name: Verify shebangs were patched
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # Line 1 only. Several scripts legitimately contain `#!/bin/bash`
           # further down inside heredocs because they generate scripts, so
@@ -940,9 +968,11 @@ jobs:
       # this was found: "Verify the browser lookup ignores $BROWSER" went red
       # for a change that never touched it.
       - name: Every command this port changes, classified
+        if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.bin-ledger
 
       - name: Verify the browser lookup ignores $BROWSER
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # `xdg-settings get default-web-browser` does not read the mime database
           # when $BROWSER is set: it treats $BROWSER as a command name and returns
@@ -967,6 +997,7 @@ jobs:
           echo "browser lookups all ignore \$BROWSER"
 
       - name: Verify the agent skills are NixOS-aware
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # omarchy-provision-user symlinks every directory here into
           # ~/.claude/skills, ~/.agents/skills, ~/.codex/skills and
@@ -1029,6 +1060,7 @@ jobs:
           echo "agent skills are NixOS-aware"
 
       - name: Verify every app's attr resolves to a real package
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # nixarchy-doctor and the Install menu both ask pkgs for an app's
           # meta.mainProgram to learn which command it puts on PATH, and fall
@@ -1074,6 +1106,7 @@ jobs:
           echo "every app attr resolves to a package"
 
       - name: Verify every Install row is mapped
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # data/apps.nix claims CI keeps it from rotting. This is that check,
           # and omarchy.yml runs the same script against the newest Omarchy --
@@ -1084,6 +1117,7 @@ jobs:
             data/apps.nix data/services.nix
 
       - name: Verify every mapped app still evaluates
+        if: needs.gate.outputs.relevant == 'true'
         env:
           NIXPKGS_ALLOW_UNFREE: "1"
           NIXPKGS_ALLOW_BROKEN: "0"
@@ -1121,6 +1155,7 @@ jobs:
           echo "all $(echo "$attrs" | wc -w) mapped packages evaluate"
 
       - name: Verify runtime commands resolve
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # The bins are unwrapped on purpose, so an incomplete runtimeDeps
           # list produces a package that builds cleanly and then fails at the
@@ -1146,6 +1181,7 @@ jobs:
           echo "all checked runtime commands resolve ($(ls result/bin | wc -l) binaries)"
 
       - name: Verify every desktop entry's command resolves
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           # The step above checks a hand-written list of command names. That
           # list was built by grepping bin/, so a command referenced only by a
@@ -1179,6 +1215,7 @@ jobs:
           echo "every desktop entry's command resolves"
 
       - name: Verify the generated menu defaults and app template
+        if: needs.gate.outputs.relevant == 'true'
         run: |
           nix build .#nixosConfigurations.vm.config.system.build.toplevel \
             --print-build-logs -o result-sys
@@ -1408,7 +1445,7 @@ jobs:
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |
-          echo "Only paths the gate excludes changed; not building." \
+          echo "no-op: the gate found nothing this job builds" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v5
@@ -1772,7 +1809,7 @@ jobs:
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |
-          echo "Only paths the gate excludes changed; not building." \
+          echo "no-op: the gate found nothing this job builds" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v5
@@ -1983,7 +2020,7 @@ jobs:
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |
-          echo "Only paths the gate excludes changed; not building." \
+          echo "no-op: the gate found nothing this job builds" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v5

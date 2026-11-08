@@ -95,8 +95,8 @@ nh os switch
   omarchy update --nixarchy
   ```
 
-  That picks up the new commit along with nixarchy. `nixarchy version` names
-  the commit of your checkout being built
+  That picks up the new commit along with nixarchy. `nixarchy version` reads
+  `/etc/nixarchy/version` to name the commit of your checkout being built
   ([#1373](https://github.com/olafkfreund/nixarchy/issues/1373)).
 - **nixarchy's NixOS patches are applied to your checkout**, the same ones
   edge uses. If your change moves something nixarchy patches, the rebuild

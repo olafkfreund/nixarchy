@@ -2,15 +2,19 @@
 
 # omarchy:summary=Run pending Omarchy migrations
 
-# Omarchy ships 86 migration scripts that bring an *older* Arch install
-# forward. Twenty-nine use sudo, twelve write under /usr and eight call pacman,
-# so on NixOS they range from meaningless to destructive: there is no /usr to
-# write to, no pacman to call, and the things they migrate -- release channels,
-# keyrings, system config -- are the flake's job here.
+# Omarchy ships migration scripts (218 at v4.5.0) that bring an *older* Arch
+# install forward. Many use sudo, write under /usr or call pacman, so on NixOS
+# they range from meaningless to destructive: there is no /usr to write to, no
+# pacman to call, and the things they migrate -- release channels, keyrings,
+# system config -- are the flake's job here.
 #
 # With no state directory every one of them counts as pending, so this is not
 # academic. Someone running `omarchy migrate` on a machine installed today
-# would have run all 86 as root.
+# would have run all of them as root.
+#
+# The ones that edit a user's own files are decided one by one in
+# data/user-migrations.nix; those that apply here are ported into
+# omarchy-migrate-user, which a post-boot hook runs (#1610).
 #
 # --pending answers honestly rather than refusing: nothing IS pending, because
 # nothing here will ever run them. omarchy-bar and omarchy-migrate-notify both

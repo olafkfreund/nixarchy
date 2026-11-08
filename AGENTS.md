@@ -986,6 +986,10 @@ Omarchy pin on the merged tree, run `.github/scripts/readme-counts.sh --fix`
 and commit what it writes: those numbers are derived from the pin, so
 neither side's README is right for the other (#1537).
 
+The package ledger is pin-derived too: a `data/omarchy-packages.nix` row
+for a package only quattro installs goes stale under `main`'s tag pin,
+so drop it in that merge, or keep it if `main` is moving to quattro.
+
 **A carry on `edge-candidate` that classifies a new quattro commit must
 also pin it.** A `from_candidate=true` dispatch keeps the candidate's own
 quattro pin (`sha=$HAVE` in `omarchy-edge.yml`). Only a scheduled run, which

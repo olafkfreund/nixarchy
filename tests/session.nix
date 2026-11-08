@@ -3367,16 +3367,22 @@ pkgs.testers.runNixOSTest {
     # /tmp/typed proves cat opened its file, not that its terminal holds focus;
     # keys sent before Hyprland focuses it go to another window (#1699).
     def open_typing_terminal():
-        import shlex
+        import time
         machine.succeed("rm -f /tmp/typed")
         before = {c["address"] for c in json.loads(
             machine.succeed(desktop_user("hyprctl clients -j")))}
         input_driver("terminal")
         machine.wait_for_file("/tmp/typed")
-        machine.wait_until_succeeds(desktop_user(
-            "hyprctl activewindow -j | ${pkgs.jq}/bin/jq -e --argjson before "
-            + shlex.quote(json.dumps(sorted(before)))
-            + " '.address as $a | ($a != null) and ($before | index($a) | not)'"), timeout=30)
+        # Parsed here, not by jq inside desktop_user: its su -c '...' wrapper
+        # cannot carry a quoted jq program (#1699).
+        deadline = time.monotonic() + 30
+        while True:
+            win = json.loads(machine.succeed(desktop_user("hyprctl activewindow -j")) or "{}")
+            if win.get("address") and win["address"] not in before:
+                break
+            assert time.monotonic() < deadline, (
+                "the new typing terminal never took focus; focused: " + repr(win.get("class")))
+            time.sleep(0.5)
 
     # Return only commits Mozc's and Chewing's conversion: the first ctrl-d hands
     # cat the unterminated line, the second ends it.

@@ -1928,7 +1928,6 @@
             "sshd-login"
             "swap-guard"
             "switch-indicator"
-            "try-nixarchy"
             "update-available"
             "user-unit-links"
             "verify-boxes"
@@ -2265,6 +2264,17 @@
           installer-disk-list = import ./tests/installer-disk-list.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
+          };
+
+          installer-early-exit = import ./tests/installer-early-exit.nix {
+            pkgs = pkgsFor.${system};
+            renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
+          };
+
+          try-nixarchy = import ./tests/try-nixarchy.nix {
+            pkgs = pkgsFor.${system};
+            vmTargetMiB =
+              (builtins.head self.nixosConfigurations.installer-vm.config.virtualisation.emptyDiskImages).size;
           };
 
           # The bus redaction hook blocks what a pattern can decide, and only

@@ -3363,6 +3363,132 @@ pkgs.testers.runNixOSTest {
     print("#1624: the candidate window's theme has its glyphs")
     print("#1614: keyboard and input-method state restored")
 
+    # ---- power actions ask before closing windows (#1659) -----------------
+    import shlex
+    power_rule = "/etc/polkit-1/rules.d/00-test-power-1659.rules"
+    power_marker = "/home/omarchy/.local/state/omarchy/reboot-required"
+    power_live = "/home/omarchy/.local/state/omarchy/notifications/live.json"
+    power_schedule = ("busctl get-property org.freedesktop.login1"
+        " /org/freedesktop/login1 org.freedesktop.login1.Manager ScheduledShutdown")
+
+    def power_cancel(verb):
+        # Run from the driver even when an assertion or a guest command fails.
+        machine.succeed("systemctl " + verb + " --when=cancel")
+
+    def power_empty():
+        return '""' in machine.succeed(power_schedule)
+
+    def power_notification(verb):
+        title_key = "system.rebootFailed" if verb == "reboot" else "system.shutdownFailed"
+        title = machine.succeed(desktop_user("omarchy-i18n " + title_key)).strip()
+        assert title, f"{verb}: the failure title is empty"
+        machine.wait_until_succeeds(
+            "test -s " + power_live + " && ${pkgs.jq}/bin/jq -e --arg title "
+            + shlex.quote(title) + " 'any(.[]; .summary == $title and .urgency == 2)' "
+            + power_live,
+            timeout=30)
+
+    def power_window(label):
+        machine.succeed(desktop_user(
+            "hyprctl clients -j | ${pkgs.jq}/bin/jq -e "
+            '"any(.[]; .class == \\"power-1659-' + label + '\\")"'))
+
+    def power_dispatch(command, label):
+        # Use the same checked Lua exec_cmd path as launch_dispatch_pkexec:
+        # the new process belongs to the desktop login session for polkit.
+        runner = "/tmp/power-1659-" + label + ".sh"
+        machine.succeed("printf '%s\\n' " + shlex.quote(command) + " > " + runner)
+        reply = machine.succeed(desktop_user(
+            'hyprctl dispatch "hl.dsp.exec_cmd(\\"sh ' + runner + '\\")"')).strip()
+        assert reply == "ok", f"{label}: Hyprland refused dispatch: {reply!r}"
+
+    def power_rule_for(result):
+        rule = ("polkit.addRule(function(action, subject) {\n"
+            "  if (action.id.indexOf('org.freedesktop.login1.reboot') === 0 ||\n"
+            "      action.id.indexOf('org.freedesktop.login1.power-off') === 0)\n"
+            "    return polkit.Result." + result + ";\n"
+            "});\n")
+        machine.succeed("printf '%s' " + shlex.quote(rule) + " > "
+            + power_rule + ".tmp && mv " + power_rule + ".tmp " + power_rule)
+        machine.sleep(1)  # polkit reloads changed rules asynchronously
+
+    def power_cleanup(action):
+        try:
+            power_cancel(action)
+        finally:
+            machine.succeed("rm -f " + power_rule)
+            machine.sleep(1)
+
+    def power_agent_registered():
+        # The shell may have restarted since the earlier pkexec probe.
+        shell_pid = machine.succeed("pgrep -o quickshell").strip()
+        agent_log = machine.succeed(
+            "journalctl -b -t omarchy-shell _PID=" + shell_pid + " -o cat --no-pager")
+        assert "omarchy polkit agent registered" in agent_log, (
+            "the current shell has no registered polkit agent")
+
+    for verb, action in (("reboot", "reboot"), ("shutdown", "poweroff")):
+        power_rule_for("NO")
+        try:
+            machine.succeed(desktop_user("omarchy-shell notifications dismissAll"))
+            power_dispatch("foot --app-id=power-1659-denied-" + verb
+                + " -e sleep 300", "window-denied-" + verb)
+            machine.wait_until_succeeds(desktop_user(
+                "hyprctl clients -j | ${pkgs.jq}/bin/jq -e "
+                '"any(.[]; .class == \\"power-1659-denied-' + verb
+                + '\\")"'), timeout=30)
+            machine.succeed(desktop_user("omarchy-state set reboot-required"))
+            status, output = machine.execute(desktop_user(
+                "omarchy-system " + verb + " --execute 2>&1"))
+            assert status != 0, f"{verb}: denied action succeeded: {output}"
+            power_window("denied-" + verb)
+            machine.succeed("test -e " + power_marker)
+            power_notification(verb)
+            assert power_empty(), f"{verb}: denied action was scheduled"
+        finally:
+            power_cleanup(action)
+        print(f"#1659: {verb} denial kept the window and marker")
+
+        power_rule_for("AUTH_ADMIN")
+        try:
+            power_agent_registered()
+            machine.succeed(desktop_user("omarchy-shell notifications dismissAll"))
+            power_dispatch("foot --app-id=power-1659-timeout-" + verb
+                + " -e sleep 300", "window-timeout-" + verb)
+            machine.wait_until_succeeds(desktop_user(
+                "hyprctl clients -j | ${pkgs.jq}/bin/jq -e "
+                '"any(.[]; .class == \\"power-1659-timeout-' + verb
+                + '\\")"'), timeout=30)
+            machine.succeed(desktop_user("omarchy-state set reboot-required"))
+            since = machine.succeed("date +%s").strip()
+            power_dispatch("OMARCHY_SYSTEM_TIMEOUT=5s omarchy-system " + verb,
+                "timeout-" + verb)
+            machine.wait_until_succeeds(
+                "test -n \"$(systemctl list-units --no-legend"
+                " 'polkit-agent-helper@*')\"", timeout=4)
+            machine.wait_until_succeeds(
+                desktop_user("journalctl --user --since=@" + since
+                    + " --no-pager -o cat")
+                + " | grep -E \"run-[^: ]+\\.service: Failed with result 'timeout'\"",
+                timeout=45)
+            power_notification(verb)
+            power_window("timeout-" + verb)
+            machine.succeed("test -e " + power_marker)
+            assert power_empty(), f"{verb}: timed-out action was scheduled"
+        finally:
+            power_cleanup(action)
+        print(f"#1659: {verb} timed out with its window and marker intact")
+
+        try:
+            # No test rule: the real session's default logind policy decides.
+            power_dispatch("omarchy-system " + verb, "allowed-" + verb)
+            machine.wait_until_succeeds(
+                power_schedule + " | grep -F '\"" + action + "\"'", timeout=4)
+        finally:
+            power_cleanup(action)
+        assert power_empty(), f"{verb}: the scheduled action was not cancelled"
+        print(f"#1659: {verb} scheduled and cancelled")
+
     # A QML engine that resolves a singleton to the wrong type (omarchy#14811,
     # Qt 6.12.0) leaves the shell running with every surface black or
     # uncoloured; only these lines say so. None appear on Qt 6.11.2.

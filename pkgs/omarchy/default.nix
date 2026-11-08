@@ -1127,6 +1127,8 @@ stdenvNoCC.mkDerivation {
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1625-no-mise.patch}
+                    # Why: pkgs/AGENTS.md#power-actions-authorise-before-closing-windows-1659
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1659-system-authorise-first.patch}
                     rm $out/share/omarchy/install/user/mise.sh
                     substituteInPlace $out/share/omarchy/bin/omarchy-agent $out/share/omarchy/bin/omarchy-agent-account-exec \
                       --replace-fail '@omarchyDispatch@' "$out/share/omarchy/agent-dispatch"

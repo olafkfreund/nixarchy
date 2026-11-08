@@ -1,0 +1,42 @@
+--- a/bin/omarchy-system
++++ b/bin/omarchy-system
+@@ -44,6 +44,11 @@
+ esac
+ 
+ exit_session() {
++  if [[ $action != "logout" ]]; then
++    # logind checks authorisation when the shutdown is scheduled.
++    systemctl "${command[1]}" --no-wall --when=+5s || return $?
++  fi
++
+   omarchy-osd -i "$action" -m "$message" -d 5000
+   if [[ $action != "logout" ]]; then
+     omarchy-state clear re*-required
+@@ -51,7 +56,9 @@
+ 
+   # Proceed as soon as apps exit, with a bound for unresponsive windows.
+   timeout 2s omarchy-hyprland-window-close-all --wait
+-  "${command[@]}"
++  if [[ $action == "logout" ]]; then
++    "${command[@]}"
++  fi
+ }
+ 
+ if [[ ${2:-} == "--inhibited" ]]; then
+@@ -72,7 +79,15 @@
+   fi
+ elif [[ -z ${2:-} ]]; then
+   # Survive closing the terminal that requested the session exit.
+-  systemd-run --user --collect --quiet --property=Type=exec --property=RuntimeMaxSec=30s \
++  stop_post=()
++  if [[ $action != "logout" ]]; then
++    # $$ survives systemd's command expansion; the shell sees $SERVICE_RESULT.
++    stop_post=(--property="ExecStopPost=$(command -v sh) -c 'if [ \"\$\$SERVICE_RESULT\" = timeout ]; then omarchy-notification-send -u critical \"\$\$OMARCHY_SYSTEM_FAILED_TITLE\" \"\$\$OMARCHY_SYSTEM_FAILED_BODY\"; fi'")
++    stop_post+=(--setenv=OMARCHY_SYSTEM_FAILED_TITLE="$failed_title")
++    stop_post+=(--setenv=OMARCHY_SYSTEM_FAILED_BODY="$failed_body")
++  fi
++  systemd-run --user --collect --quiet --property=Type=exec \
++    --property=RuntimeMaxSec=${OMARCHY_SYSTEM_TIMEOUT:-30s} "${stop_post[@]}" \
+     --setenv=PATH --setenv=HYPRLAND_INSTANCE_SIGNATURE --setenv=OMARCHY_PATH \
+     "$0" "$action" --execute
+ else

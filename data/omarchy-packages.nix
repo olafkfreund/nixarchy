@@ -504,6 +504,9 @@
   "asus-proart-p14-speaker-firmware" = {
     skip = "One ASUS laptop; not targeted.";
   };
+  "asus-zenbook-14-ux3480qa-audio" = {
+    skip = "One ASUS laptop; not targeted.";
+  };
   "asusctl" = {
     skip = "ASUS laptops; services.asusd is the user choice.";
   };

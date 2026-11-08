@@ -73,6 +73,7 @@ prove a personal image can fetch every package it needs.
 | `free-space` | installing beside an existing OS |
 | `install-encrypted` | LUKS, unlocked over the serial console |
 | `install-iso-net` | the real published network image |
+| `install-stock-iso` | the stock NixOS minimal ISO and cache preflight |
 | `installer-from-repo` | `--from-repo`, installing a host out of the user's own repo |
 | `installer-wizard` | the questions themselves, answered over a serial line |
 | `installer-ui` | gum widgets at every terminal width |

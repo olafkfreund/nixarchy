@@ -105,3 +105,15 @@ has not landed. A landed carry is reverted by a carry that restores
   advances). The branch carries the intent, spec and plan history, so it
   merges with a merge commit: `--auto --merge --delete-branch`.
 - Comment "@codex review" on the PR.
+
+## Deviations (Codex plan review, 2026-11-08)
+
+1. Step 1's lookup is `commits?sha=quattro` (the branch `omarchy-edge.yml:219`
+   reads), not `dev`. Done: `d9cc361` is the newest quattro commit.
+2. Step 2's order: lock, commit the carry, then the break proof (remove the
+   row, confirm the ledger fails, `git checkout HEAD -- data/omarchy-packages.nix`),
+   and push only after the restore.
+3. `git fetch origin edge` before reading `origin/edge:flake.lock`.
+4. Step 2 also asserts the lock rev, the `flake.nix` URL SHA and
+   `omarchyVersion`'s short SHA all name the same commit.
+5. The version format is at `omarchy-edge.yml:243`.

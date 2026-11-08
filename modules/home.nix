@@ -2533,6 +2533,28 @@ in
         '';
       };
 
+      "omarchy/hooks/post-boot.d/theme-fallback" = {
+        enable = osConfig.programs.nixarchy.enable or false;
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export PATH=${
+            lib.makeBinPath [
+              pkgs.libnotify
+              pkgs.coreutils
+            ]
+          }:$PATH
+          marker="$HOME/.local/state/nixarchy/theme-fallback"
+          [ -f "$marker" ] || exit 0
+          mapfile -t lines < "$marker"
+          old=''${lines[0]:-}
+          new=''${lines[1]:-}
+          if notify-send "Theme changed: '$old' is no longer installed, so '$new' is in use. Pick another with Super + Shift + Ctrl + Space."; then
+            rm -- "$marker"
+          fi
+        '';
+      };
+
       "omarchy/hooks/post-boot.d/fcitx5-glyphs" = {
         enable = osConfig.programs.nixarchy.enable or false;
         executable = true;

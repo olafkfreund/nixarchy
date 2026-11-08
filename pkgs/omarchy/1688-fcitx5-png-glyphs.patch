@@ -1,0 +1,26 @@
+--- a/bin/omarchy-theme-set-fcitx5
++++ b/bin/omarchy-theme-set-fcitx5
+@@ -74,9 +74,21 @@
+ 
+ # Image= entries resolve inside the theme's own directory. fcitx5's page and
+ # menu glyphs are neutral grey, so the packaged ones suit every palette.
+-for glyph in "$PACKAGED_THEME"/*.svg; do
+-  [[ -e $glyph ]] && ln -sfn "$glyph" "$THEME_DIR/${glyph##*/}"
++for glyph in "$PACKAGED_THEME"/*.{svg,png}; do
++  [[ -e $glyph ]] || continue
++  ln -sfn "$glyph" "$THEME_DIR/${glyph##*/}"
+ done
++
++# The copied config must name the format this fcitx5 package actually ships.
++# Never edit a symlink back into the theme source.
++if [[ -f $THEME_DIR/theme.conf && ! -L $THEME_DIR/theme.conf ]]; then
++  while IFS= read -r name; do
++    [[ $name =~ ^[[:alnum:]_-]+$ ]] || continue
++    if [[ ! -e $PACKAGED_THEME/$name.svg && -e $PACKAGED_THEME/$name.png ]]; then
++      sed -i "s/^Image=${name}\.svg$/Image=${name}.png/" "$THEME_DIR/theme.conf"
++    fi
++  done < <(sed -n 's/^Image=\(.*\)\.svg$/\1/p' "$THEME_DIR/theme.conf")
++fi
+ 
+ if (( ACTIVATE == 1 )); then
+   select_theme

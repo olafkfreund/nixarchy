@@ -339,7 +339,13 @@ pkgs.runCommand "nixarchy-input-methods"
       dbus-run-session --config-file=${pkgs.dbus}/share/dbus-1/session.conf -- \
       ${python}/bin/python3 ${driver} ${tree} ${real} ${bare} ${ledger} \
       ${pkgs.closureInfo { rootPaths = [ real ]; }}/store-paths ${pre} ${python}
-    test -e ${linked}/share/fcitx5/themes/default/prev.svg || { echo "input-methods: FAIL themes are not linked"; exit 1; }
+    for glyph in prev next radio arrow; do
+      if [ ! -e "${linked}/share/fcitx5/themes/default/$glyph.svg" ] &&
+         [ ! -e "${linked}/share/fcitx5/themes/default/$glyph.png" ]; then
+        echo "input-methods: FAIL $glyph theme glyph is not linked"
+        exit 1
+      fi
+    done
     test ! -e ${linked}/share/fcitx5/addon || { echo "input-methods: FAIL addon files are linked"; exit 1; }
     touch $out
   ''

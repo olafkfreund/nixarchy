@@ -1421,6 +1421,19 @@ The comment lives here, not in installPhase, because
 installPhase is measured by checks.install-phase-budget
 (#997): this text tipped the edge build over it.
 
+<a id="fcitx5-packaged-png-glyphs-1688"></a>
+
+## Fcitx5 packaged PNG glyphs (#1688)
+
+CARRIED, not meant upstream: Arch's fcitx5 ships SVG glyphs, while NixOS
+26.05 ships PNGs. `1688-fcitx5-png-glyphs.patch` links both formats and
+rewrites `Image=*.svg` to `.png` in the copied theme only when the packaged
+SVG is absent and the PNG exists. It applies after the NixOS path substitution
+with `--fuzz=0`, so a changed upstream script stops the package build.
+The post-boot hook repairs an existing generated theme once at the next login.
+`checks.input-methods` covers the packaged glyphs; `checks.session` covers
+the generated theme and the repair.
+
 ## Power actions authorise before closing windows (#1659)
 
 CARRIED: `1659-system-authorise-first.patch` schedules reboot and power-off

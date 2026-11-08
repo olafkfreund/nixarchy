@@ -878,6 +878,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-fcitx5 \
                   --replace-fail '/usr/share/fcitx5/themes/default' \
                   '/run/current-system/sw/share/fcitx5/themes/default'
+                # Why: pkgs/AGENTS.md#fcitx5-packaged-png-glyphs-1688
+                patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1688-fcitx5-png-glyphs.patch}
 
                 # quattro routes both former tensaku-edit call sites through omasnap,
                 # which is in the runtime list above, so neither needs a patch.

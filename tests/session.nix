@@ -3407,10 +3407,43 @@ pkgs.testers.runNixOSTest {
     input_driver("stock-profile")
     machine.succeed(desktop_user(unitctl + "start omarchy-fcitx5"))
     machine.wait_until_succeeds(desktop_user("fcitx5-remote -q"), timeout=60)
-    machine.succeed(desktop_user("rm -f ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    theme_dir = "/home/omarchy/.local/share/fcitx5/themes/omarchy"
+
+    def check_fcitx5_images(label):
+        names = machine.succeed(desktop_user(
+            "sed -n \"s/^Image=//p\" " + theme_dir + "/theme.conf")).splitlines()
+        assert names, label + ": theme.conf has no Image= entries"
+        for name in names:
+            assert re.fullmatch(r"[A-Za-z0-9_-]+\.(svg|png)", name), (
+                label + ": unexpected Image= value " + repr(name))
+            status, _ = machine.execute(desktop_user("test -e " + theme_dir + "/" + name))
+            assert status == 0, label + ": Image=" + name + " names a file that does not exist"
+
+    machine.succeed(desktop_user("rm -f " + theme_dir + "/*.svg " + theme_dir + "/*.png"))
     machine.succeed(desktop_user("omarchy-theme-set-fcitx5 --activate"))
-    # -e follows the link, so a dangling one fails.
-    machine.succeed(desktop_user("test -e ~/.local/share/fcitx5/themes/omarchy/prev.svg"))
+    check_fcitx5_images("generated theme")
+
+    # The same PNG-only fixture exercises the stable layout on both channels.
+    png_theme = "/tmp/fcitx5-png-only"
+    machine.succeed("mkdir -p " + png_theme + " && touch " +
+        " ".join(png_theme + "/" + name + ".png" for name in
+                 ("prev", "next", "radio", "arrow")))
+    machine.succeed(desktop_user("rm -f " + theme_dir + "/*.svg " + theme_dir + "/*.png"))
+    machine.succeed(desktop_user(
+        "OMARCHY_FCITX5_PACKAGED_THEME=" + png_theme + " omarchy-theme-set-fcitx5 --activate"))
+    check_fcitx5_images("PNG-only packaged theme")
+
+    # Recreate an existing machine's missing glyphs, then run the login hook.
+    machine.succeed(desktop_user("rm -f " + theme_dir + "/*.svg " + theme_dir + "/*.png"))
+    machine.succeed(desktop_user(
+        "cp $HOME/.local/state/omarchy/current/theme/fcitx5-theme.conf " + theme_dir + "/theme.conf"))
+    hook = "/home/omarchy/.config/omarchy/hooks/post-boot.d/fcitx5-glyphs"
+    machine.succeed(desktop_user("bash " + hook))
+    check_fcitx5_images("post-boot repair")
+    mtime = machine.succeed("stat -c %y " + theme_dir).strip()
+    machine.succeed(desktop_user("bash " + hook))
+    assert machine.succeed("stat -c %y " + theme_dir).strip() == mtime, (
+        "the Fcitx5 repair hook touched an already repaired theme")
     print("#1624: the candidate window's theme has its glyphs")
     print("#1614: keyboard and input-method state restored")
 

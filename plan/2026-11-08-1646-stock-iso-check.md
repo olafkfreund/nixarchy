@@ -173,3 +173,20 @@ the owner's merge (§11). Comment "@codex review". Merge with a merge commit
 5. **Step 1's coverage probe:** call `lib.inputSources { flake = self; }`
    as `tests/iso-source.nix:4` does, through `nix eval --impure --expr`
    on the flake, not `.#lib.inputSources` with no argument.
+
+## Step 1 result (session, 2026-11-08)
+
+Both probes pass.
+- **Coverage:** every top-level input of the flake is in
+  `lib.inputSources { flake = self; }` (0 missing). Only top-level inputs
+  were compared, not `follows` targets.
+- **ISO pin:** `https://releases.nixos.org/nixos/26.05/nixos-26.05.13627.c56a87d8e41c/nixos-minimal-26.05.13627.c56a87d8e41c-x86_64-linux.iso`,
+  `hash = "sha256-EqYJQWEILG4gNInsYaQhU0yJGSLJIBdpx+6AuLwoNQE="`.
+- **Boot layout:** UEFI via `EFI/BOOT/BOOTX64.EFI` and `EFI/BOOT/grub.cfg`
+  (also `isolinux/isolinux.cfg`). It carries two kernels, 6.18.60 and
+  7.3.1, each with its own `initrd` under `boot/nix/store/...`. The default
+  grub entry boots
+  `linux /boot//nix/store/jyb28mnq...-linux-6.18.60/bzImage ${isoboot} init=/nix/store/380213xj...-nixos-system-.../init nohibernate root=fstab loglevel=4 lsm=landlock,yama,bpf`.
+  Booting the ISO through OVMF and grub (not a direct kernel boot) avoids
+  depending on these paths; the extraction derivation is needed only if
+  the test boots the kernel directly.

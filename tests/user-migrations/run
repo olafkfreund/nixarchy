@@ -204,6 +204,39 @@ case_1675() {
   run_port
   same_tree "$before" "$HOME" || fail '1675: second run changed the home'
 }
+case_1676() {
+  local variant flags before
+  for variant in existing-feature no-feature-line; do
+    case=1676.$variant
+    setup "$case" "$FIXTURE_C"
+    flags=$XDG_CONFIG_HOME/chromium-flags.conf
+    case $variant in
+      existing-feature)
+        printf '%s\n' '--enable-features=UseOzonePlatform' '--ozone-platform=wayland' > "$flags"
+        printf '%s\n' '--enable-features=UseOzonePlatform,OverlayScrollbar' \
+          '--ozone-platform=wayland' > "$work/$case.expected-flags"
+        ;;
+      no-feature-line)
+        printf '%s' '--ozone-platform=wayland' > "$flags"
+        printf '%s\n' '--ozone-platform=wayland' \
+          '--enable-features=OverlayScrollbar' > "$work/$case.expected-flags"
+        ;;
+    esac
+    : > "$HOME/calls.log"
+
+    run_port
+    [[ -e $OMARCHY_MIGRATION_STATE/1791376887.sh ]] || fail "$case: overlay scrollbar marker missing"
+    [[ ! -e $OMARCHY_MIGRATION_STATE/1792474908.sh ]] || fail "$case: declined Brave Origin migration ran"
+    cmp "$work/$case.expected-flags" "$flags" || fail "$case: Chromium flags differ from 4.5 result"
+    [[ ! -s $HOME/calls.log ]] || fail "$case: unexpected session calls"
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -311,5 +344,6 @@ case_fresh45
 case_1673
 case_1674
 case_1675
+case_1676
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

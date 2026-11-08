@@ -87,8 +87,9 @@
     reason = "handled in the package and runtimeDeps; see pkgs/AGENTS.md (Disktree)";
   };
   "1791376887" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "enable overlay scrollbars in existing Chromium-family flags files (#1676)";
   };
   "1791382872" = {
     decision = "not-needed";
@@ -168,7 +169,7 @@
   };
   "1792474908" = {
     decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    reason = "Brave Origin is unavailable on nixarchy (data/apps.nix) (#1676)";
   };
   "1792648436" = {
     decision = "declined";

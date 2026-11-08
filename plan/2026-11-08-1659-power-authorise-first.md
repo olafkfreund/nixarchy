@@ -118,3 +118,29 @@ reviewers:
 Revert the PR. The patch line and file go, and `omarchy-system` is
 upstream's again. Nothing persists on a machine: the scheduled shutdown is
 the only state, and it fires or is cancelled within seconds.
+
+## Deviations (Codex plan review, 2026-11-08, before coding)
+
+1. **One failure notification.** `exit_session` returns non-zero without
+   notifying. The existing `--execute` handler (lines 58-71) already
+   notifies on a non-zero status.
+2. **The timeout override is in step 1's patch:**
+   `--property=RuntimeMaxSec=${OMARCHY_SYSTEM_TIMEOUT:-30s}`. It is
+   undocumented and used only by the test. The `ExecStopPost` notification
+   is added for the two power verbs only, not logout.
+3. **The allowed and timeout cases launch from the desktop session**
+   (`hyprctl dispatch exec`), so polkit sees the login session as the
+   subject, as `tests/session.nix:652` explains. The denied case may use
+   `su`, since a `NO` rule refuses any subject.
+4. **The timeout result is read from the journal**, not from the unit,
+   which `--collect` unloads. That means `journalctl --user` for the
+   transient `run-*.service` with "Failed with result 'timeout'", plus the
+   notification and the surviving window.
+5. **Step 1's check proves the patch applies, nothing more.** The behaviour
+   proof is step 2's revert-and-fail.
+6. **Patch location:** `pkgs/omarchy/1659-system-authorise-first.patch`,
+   beside the existing patches (all live in `pkgs/omarchy/`; there is no
+   `patches/` directory). The spec's path named a directory that does not
+   exist, so this follows the tree.
+7. The new session block goes after the input-method block's final cleanup,
+   not at line 3226.

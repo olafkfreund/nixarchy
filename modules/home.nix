@@ -2454,6 +2454,24 @@ in
         '';
       };
 
+      # Why: pkgs/AGENTS.md#user-file-migrations-1610
+      "omarchy/hooks/post-boot.d/user-migrations" = {
+        enable = osConfig.programs.nixarchy.enable or false;
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export PATH=${
+            lib.makeBinPath [
+              cfg.package
+              pkgs.jq
+              pkgs.coreutils
+              pkgs.systemd
+            ]
+          }:$PATH
+          exec omarchy-migrate-user
+        '';
+      };
+
       # #1625: activation's stdout lands in the journal under the NixOS module, so this
       # is what a person actually sees.
       "omarchy/hooks/post-boot.d/mise-notice" = {

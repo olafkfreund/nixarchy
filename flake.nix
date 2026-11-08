@@ -1928,7 +1928,6 @@
             "sshd-login"
             "swap-guard"
             "switch-indicator"
-            "try-nixarchy"
             "update-available"
             "user-unit-links"
             "verify-boxes"
@@ -2267,6 +2266,17 @@
             installScript = ./installer/install.sh;
           };
 
+          installer-early-exit = import ./tests/installer-early-exit.nix {
+            pkgs = pkgsFor.${system};
+            renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
+          };
+
+          try-nixarchy = import ./tests/try-nixarchy.nix {
+            pkgs = pkgsFor.${system};
+            vmTargetMiB =
+              (builtins.head self.nixosConfigurations.installer-vm.config.virtualisation.emptyDiskImages).size;
+          };
+
           # The bus redaction hook blocks what a pattern can decide, and only
           # that (#272). A security hook that passes everything looks
           # identical to a working one, which is why this exists.
@@ -2401,6 +2411,15 @@
           panel-loaders = import ./tests/panel-loaders.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
+          user-migrations = import ./tests/user-migrations.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
+          user-migrations-ledger = import ./tests/user-migrations-ledger.nix {
+            pkgs = pkgsFor.${system};
             omarchySrc = omarchy;
           };
           # #1381: no shipped plugin reads Color unqualified (Qt 6.12 shadows it). The

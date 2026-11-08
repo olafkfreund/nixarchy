@@ -2853,6 +2853,15 @@ take_factory_snapshot() {
   return 0
 }
 
+early_exit_hold() {
+  local rc=$?
+  [ "$rc" -ne 0 ] || return 0
+  ui_interactive || return 0
+  printf '%s\n' 'The installer stopped before writing to any disk.' 'Press Return for a root shell.'
+  read -r _ || true
+  exec bash --login
+}
+
 main() {
   while [ $# -gt 0 ]; do
     case $1 in
@@ -2962,12 +2971,14 @@ main() {
     # ask -- and asking the rest again would invite an answer that the
     # repository then overrules, which is worse than not asking.
     ui_greeter
+    trap early_exit_hold EXIT
     ask_network
     load_repo_keymap
     ask_password
     ask_recovery
   else
     ui_greeter
+    trap early_exit_hold EXIT
     ask_network
 
     # "No" at the summary goes back to the questions, and that is the whole
@@ -3088,6 +3099,7 @@ install_once() {
   # Handed the log so the drawer can tell "still working" from "stopped":
   # the phases below write only to this file, so a log that stops growing is
   # the one observable sign that the install has too.
+  trap - EXIT
   ui_dashboard_start "$log"
   # `&&` between the phases, not newlines, and it is load-bearing.
   #

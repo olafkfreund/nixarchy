@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "$HOME/ipc.log"
+[[ ${1:-} == -q ]] && shift
+[[ ${1:-} == shell ]] || exit 1
+shift
+cfg=$XDG_CONFIG_HOME/omarchy/shell.json
+
+case ${1:-} in
+  ping|rescanPlugins) printf '%s\n' ok ;;
+  putBarWidget)
+    id=$2 placement=$3
+    if [[ ${STUB_NOWRITE:-0} == 1 ]]; then printf '%s\n' ok; exit 0; fi
+    jq -e --arg id "$id" '[.bar.layout[]?[]? | if type == "object" then .id else . end] | index($id) != null' "$cfg" >/dev/null && { printf '%s\n' ok; exit 0; }
+    jq --arg id "$id" --argjson p "$placement" '
+      def entry_id: if type == "object" then .id else . end;
+      .bar.layout as $layout
+      | (["left","centerBegin","center","centerEnd","right","tray"] | map({key:., value:($layout[.] // [])}) | from_entries) as $shape
+      | .bar.layout = $shape | .plugins //= [] | .version = 1
+      | ([.bar.layout | to_entries[] | .key as $s | .value | to_entries[] | select((.value | entry_id) == $p.after) | {section:$s,index:(.key + 1)}] | first) as $target
+      | ($target.section // "centerEnd") as $section
+      | ($target.index // (.bar.layout[$section] | length)) as $index
+      | .bar.layout[$section] |= (.[0:$index] + [{id:$id}] + .[$index:])
+    ' "$cfg" > "$cfg.tmp"
+    mv "$cfg.tmp" "$cfg" # 847-allow: sandbox shell IPC persistence
+    printf '%s\n' ok
+    ;;
+  moveBarWidget)
+    id=$2 placement=$3
+    if [[ ${STUB_DRIFT:-0} == 1 && ! -e $HOME/drifted ]]; then
+      jq '
+        .bar.layout as $layout
+        | .bar.layout = (["left","centerBegin","center","centerEnd","right","tray"] | map({key:., value:($layout[.] // [])}) | from_entries)
+        | .plugins //= [] | .version = 1
+        | .bar.layout.center = [{id:"drift.marker"}] + .bar.layout.center
+      ' "$cfg" > "$cfg.tmp"
+      mv "$cfg.tmp" "$cfg" # 847-allow: sandbox drift injection
+      touch "$HOME/drifted"
+    fi
+    source_section=$(jq -r '.fromSection' <<< "$placement")
+    source_index=$(jq -r '.fromIndex' <<< "$placement")
+    actual=$(jq -r --arg s "$source_section" --argjson i "$source_index" '.bar.layout[$s][$i] // empty | if type == "object" then .id else . end' "$cfg")
+    if [[ $actual != "$id" ]]; then
+      printf 'widget at %s[%s] is not %s\n' "$source_section" "$source_index" "$id"
+      exit 0
+    fi
+    if [[ ${STUB_NOWRITE:-0} == 1 ]]; then printf '%s\n' ok; exit 0; fi
+    jq --argjson p "$placement" '
+      .bar.layout as $layout
+      | (["left","centerBegin","center","centerEnd","right","tray"] | map({key:., value:($layout[.] // [])}) | from_entries) as $shape
+      | .bar.layout = $shape | .plugins //= [] | .version = 1
+      | .bar.layout[$p.fromSection][$p.fromIndex] as $entry
+      | .bar.layout[$p.fromSection] |= (.[0:$p.fromIndex] + .[($p.fromIndex+1):])
+      | ($p.section) as $s | ([$p.index, (.bar.layout[$s] | length)] | min) as $i
+      | .bar.layout[$s] |= (.[0:$i] + [$entry] + .[$i:])
+    ' "$cfg" > "$cfg.tmp"
+    mv "$cfg.tmp" "$cfg" # 847-allow: sandbox shell IPC persistence
+    printf '%s\n' ok
+    ;;
+  *) exit 1 ;;
+esac

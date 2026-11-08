@@ -2501,6 +2501,28 @@ in
         '';
       };
 
+      "omarchy/hooks/post-boot.d/fcitx5-glyphs" = {
+        enable = osConfig.programs.nixarchy.enable or false;
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export PATH=${
+            lib.makeBinPath [
+              cfg.package
+              pkgs.gnused
+              pkgs.coreutils
+            ]
+          }:$PATH
+          dir="$HOME/.local/share/fcitx5/themes/omarchy"
+          [ -f "$dir/theme.conf" ] || exit 0
+          while IFS= read -r name; do
+            if [ ! -e "$dir/$name" ]; then
+              exec omarchy-theme-set-fcitx5
+            fi
+          done < <(sed -n 's/^Image=//p' "$dir/theme.conf")
+        '';
+      };
+
       # #1625: activation's stdout lands in the journal under the NixOS module, so this
       # is what a person actually sees.
       "omarchy/hooks/post-boot.d/mise-notice" = {

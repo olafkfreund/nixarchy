@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2153,SC2154 # Generated scripts keep $HOME literal; Nix supplies the fixture and out variables.
 set -euo pipefail
 
 fixture_a=$FIXTURE_A
@@ -41,6 +42,535 @@ run_oracle() {
   bash "$oracle/migrations/1790042972.sh"
   bash "$oracle/migrations/1791968925.sh"
   bash "$oracle/migrations/1791969355.sh"
+}
+snapshot() {
+  local dir=$1
+  (
+    cd "$dir"
+    find . -printf '%y %p %l\n' | sort
+    find . -type f -print0 | sort -z | xargs -0 -r sha256sum
+  )
+}
+same_tree() { diff -u <(snapshot "$1") <(snapshot "$2"); }
+oracle_run() {
+  local id=$1 fixture=$2
+  setup "$case.oracle.$id" "$FIXTURE_C"
+  cp -a "$fixture"/. "$HOME"/
+  OMARCHY_PATH=$ORACLE_SOURCE bash -euo pipefail "$ORACLE_SOURCE/migrations/$id.sh"
+}
+case_fresh45() {
+  local before id script
+  case=fresh45
+  setup fresh45 "$FIXTURE_C"
+  mkdir -p "$XDG_STATE_HOME/omarchy/notifications" \
+    "$XDG_STATE_HOME/omarchy/workspace-layouts" \
+    "$XDG_CONFIG_HOME/herdr" "$XDG_DATA_HOME/applications" \
+    "$OMARCHY_MIGRATION_STATE"
+  printf '%s\n' '[]' > "$XDG_STATE_HOME/omarchy/notifications/live.json"
+  printf '%s\n' '[]' > "$XDG_STATE_HOME/omarchy/notifications/history.json"
+  printf '%s\n' '{"dnd":false}' > "$XDG_STATE_HOME/omarchy/notifications/quiet.json"
+  printf '%s\n' 'o.workspace_mode({ workspace = "3", mode = "scrolling" })' > "$XDG_STATE_HOME/omarchy/workspace-layouts/3.lua"
+  printf '%s\n' 'panel_bg = "reset"' 'surface_dim = "black"' > "$XDG_CONFIG_HOME/herdr/config.toml"
+  printf '%s\n' '[Desktop Entry]' 'StartupWMClass=omarchy' > "$XDG_DATA_HOME/applications/omarchy.desktop"
+  mkdir -p "$XDG_CONFIG_HOME/imv"
+  printf '%s\n' 'user-owned imv config' > "$XDG_CONFIG_HOME/imv/managed-config"
+  ln -s managed-config "$XDG_CONFIG_HOME/imv/config"
+  for id in 1790042972 1791968925 1791969355; do
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done
+  while IFS=$'\t' read -r id script; do
+    [[ -n $id && -n $script ]] || fail 'fresh45: invalid list entry'
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done < "$NIXARCHY_USER_MIGRATIONS/list"
+  before=$work/fresh45.before
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail 'fresh45: runner changed a seeded home'
+  [[ -L $XDG_CONFIG_HOME/imv/config ]] || fail 'fresh45: managed symlink replaced'
+  [[ $(marker_count) -eq $((3 + $(wc -l < "$NIXARCHY_USER_MIGRATIONS/list"))) ]] || fail 'fresh45: markers missing'
+}
+case_1673() {
+  local layouts before
+  case=1673
+  setup 1673 "$FIXTURE_C"
+  layouts=$XDG_STATE_HOME/omarchy/workspace-layouts
+  mkdir -p "$layouts"
+  printf '%s\n' 'hl.workspace_rule({ workspace = "-98", layout = "scrolling" })' > "$layouts/-98.lua"
+  printf '%s\n' 'hl.workspace_rule({ workspace = "3", layout = "scrolling" })' > "$layouts/3.lua"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1787679775.sh && -e $OMARCHY_MIGRATION_STATE/1791698594.sh ]] || fail '1673: migration markers missing'
+  [[ ! -e $layouts/-98.lua ]] || fail '1673: named workspace layout remains'
+  printf '%s\n' 'o.workspace_mode({ workspace = "3", mode = "scrolling" })' | cmp - "$layouts/3.lua" || fail '1673: workspace mode not saved'
+  [[ $(cat "$HOME/calls.log") == 'hyprctl reload' ]] || fail '1673: expected one Hyprland reload'
+
+  before=$work/1673.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1673: second run changed the home'
+}
+case_1674() {
+  local current staged toggles remembered before webp renamed source
+  case=1674
+  setup 1674 "$FIXTURE_C"
+  current=$XDG_STATE_HOME/omarchy/current
+  staged=$current/theme/backgrounds
+  toggles=$XDG_STATE_HOME/omarchy/toggles/hypr
+  remembered=$XDG_STATE_HOME/omarchy/theme-backgrounds
+  mkdir -p "$staged" "$toggles" "$remembered" "$XDG_CONFIG_HOME/hypr"
+  printf '%s\n' catppuccin > "$current/theme.name"
+  ln -s "$staged/1-totoro.jpg" "$current/background"
+  printf '%s\n' "$staged/1-totoro.jpg" > "$remembered/catppuccin"
+  printf '%s\n' "$staged/0-winding-road.jpg" > "$remembered/tokyo-night"
+  printf '%s\n' 'hl.config({ animations = { enabled = false } })' \
+    'o.window(".*", { opacity = "1 1" })' > "$toggles/no-animations.lua"
+  printf '%s\n' '-- existing look and feel' > "$XDG_CONFIG_HOME/hypr/looknfeel.lua"
+  : > "$HOME/calls.log"
+
+  OMARCHY_SESSION_ID=fixture-session run_port
+  for id in 1788281348 1791470456 1791705142 1792259038; do
+    [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1674: marker missing for $id"
+  done
+  [[ ! -e $OMARCHY_MIGRATION_STATE/1791123731.sh ]] || fail '1674: declined example ran'
+  [[ $(<"$current/background-intro.session-id") == fixture-session ]] || fail '1674: intro session was not recorded'
+  webp=$staged/1-totoro.webp
+  [[ $(readlink "$current/background") == "$webp" ]] || fail '1674: active background was not repaired'
+  source=$OMARCHY_PATH/themes/catppuccin/backgrounds/1-totoro.webp
+  cmp "$source" "$webp" || fail '1674: bundled WebP was not staged'
+  [[ $(<"$remembered/catppuccin") == "$webp" ]] || fail '1674: remembered JPG was not repaired'
+  renamed=$staged/1-winding-road.webp
+  cmp "$OMARCHY_PATH/themes/tokyo-night/backgrounds/1-winding-road.webp" "$renamed" || fail '1674: renamed background was not staged'
+  [[ $(<"$remembered/tokyo-night") == "$renamed" ]] || fail '1674: renumbered selection was not repaired'
+  [[ $(<"$toggles/no-animations.lua") == 'hl.config({ animations = { enabled = false } })' ]] || fail '1674: animation flag still forces opacity'
+  cmp "$OMARCHY_PATH/default/hypr/toggles/window-opaque.lua" "$toggles/window-opaque.lua" || fail '1674: opaque toggle missing'
+  [[ $(<"$XDG_CONFIG_HOME/hypr/looknfeel.lua") == '-- existing look and feel' ]] || fail '1674: declined example changed looknfeel'
+  printf '%s\n' 'omarchy-theme-refresh ' "omarchy-shell background set $webp" > "$work/1674.expected-calls"
+  cmp "$work/1674.expected-calls" "$HOME/calls.log" || fail '1674: unexpected session calls'
+
+  before=$work/1674.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  OMARCHY_SESSION_ID=fixture-session run_port
+  same_tree "$before" "$HOME" || fail '1674: second run changed the home'
+}
+case_1675() {
+  local applications before
+  case=1675
+  setup 1675 "$FIXTURE_C"
+  applications=$XDG_DATA_HOME/applications
+  mkdir -p "$applications"
+  printf '%s\n' '[Desktop Entry]' 'Name=Example' \
+    'Exec=omarchy-launch-webapp "https://example.com/dashboard"' \
+    'Terminal=false' > "$applications/example.desktop"
+  printf '%s\n' '[Desktop Entry]' 'Name=HEY' \
+    'Exec=omarchy-webapp-handler-hey %u' > "$applications/hey.desktop"
+  printf '%s\n' '[Desktop Entry]' 'Name=Existing' \
+    'Exec=omarchy-launch-webapp "https://already.example"' \
+    'StartupWMClass=existing-class' > "$applications/existing.desktop"
+  printf '%s\n' '[Desktop Entry]' 'Name=Custom' \
+    'Exec=custom-browser https://custom.example' > "$applications/custom.desktop"
+  : > "$HOME/calls.log"
+
+  run_port
+  for id in 1791696584 1791875754; do
+    [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1675: marker missing for $id"
+  done
+  printf '%s\n' '[Desktop Entry]' 'Name=Example' \
+    'Exec=omarchy-launch-webapp "https://example.com/dashboard"' \
+    'StartupWMClass=chrome-example.com__dashboard-Default' \
+    'Terminal=false' > "$work/1675.expected-example.desktop"
+  cmp "$work/1675.expected-example.desktop" "$applications/example.desktop" || fail '1675: standard launcher class or placement wrong'
+  printf '%s\n' '[Desktop Entry]' 'Name=HEY' \
+    'Exec=omarchy-webapp-handler-hey %u' \
+    'StartupWMClass=chrome-app.hey.com__-Default' > "$work/1675.expected-hey.desktop"
+  cmp "$work/1675.expected-hey.desktop" "$applications/hey.desktop" || fail '1675: HEY launcher class or placement wrong'
+  printf '%s\n' '[Desktop Entry]' 'Name=Existing' \
+    'Exec=omarchy-launch-webapp "https://already.example"' \
+    'StartupWMClass=existing-class' > "$work/1675.expected-existing.desktop"
+  cmp "$work/1675.expected-existing.desktop" "$applications/existing.desktop" || fail '1675: existing class changed'
+  printf '%s\n' '[Desktop Entry]' 'Name=Custom' \
+    'Exec=custom-browser https://custom.example' > "$work/1675.expected-custom.desktop"
+  cmp "$work/1675.expected-custom.desktop" "$applications/custom.desktop" || fail '1675: unrelated launcher changed'
+  printf '%s\n' \
+    'omarchy-webapp-window-class https://example.com/dashboard' \
+    'omarchy-webapp-window-class https://app.hey.com' > "$work/1675.expected-calls"
+  cmp "$work/1675.expected-calls" "$HOME/calls.log" || fail '1675: unexpected window class calls'
+
+  before=$work/1675.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1675: second run changed the home'
+}
+case_1676() {
+  local variant flags before
+  for variant in existing-feature no-feature-line; do
+    case=1676.$variant
+    setup "$case" "$FIXTURE_C"
+    flags=$XDG_CONFIG_HOME/chromium-flags.conf
+    case $variant in
+      existing-feature)
+        printf '%s\n' '--enable-features=UseOzonePlatform' '--ozone-platform=wayland' > "$flags"
+        printf '%s\n' '--enable-features=UseOzonePlatform,OverlayScrollbar' \
+          '--ozone-platform=wayland' > "$work/$case.expected-flags"
+        ;;
+      no-feature-line)
+        printf '%s' '--ozone-platform=wayland' > "$flags"
+        printf '%s\n' '--ozone-platform=wayland' \
+          '--enable-features=OverlayScrollbar' > "$work/$case.expected-flags"
+        ;;
+    esac
+    : > "$HOME/calls.log"
+
+    run_port
+    [[ -e $OMARCHY_MIGRATION_STATE/1791376887.sh ]] || fail "$case: overlay scrollbar marker missing"
+    [[ ! -e $OMARCHY_MIGRATION_STATE/1792474908.sh ]] || fail "$case: declined Brave Origin migration ran"
+    cmp "$work/$case.expected-flags" "$flags" || fail "$case: Chromium flags differ from 4.5 result"
+    [[ ! -s $HOME/calls.log ]] || fail "$case: unexpected session calls"
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+}
+case_1677() {
+  local variant config bindings fcitx before expected calls path_with_voxtype
+  for variant in migrate backend marker no-voxtype preferences existing-f9; do
+    case=1677.$variant
+    setup "$case" "$FIXTURE_C"
+    config=$XDG_CONFIG_HOME/omarchy/defaults/dictation
+    bindings=$XDG_CONFIG_HOME/hypr/bindings.lua
+    fcitx=$XDG_CONFIG_HOME/fcitx5/config
+    mkdir -p "${config%/*}" "${bindings%/*}" "${fcitx%/*}" "$HOME/bin"
+    printf '%s\n' superwhisper > "$config"
+    printf '%s\n' '[Hotkey/AltTriggerKeys]' '[Hotkey/TriggerKeys]' '0=Control+space' > "$fcitx"
+    printf '%s\n' '-- old dictation bindings' > "$bindings"
+    if [[ $variant == existing-f9 ]]; then
+      printf '%s\n' 'o.bind_hold("F9", "Existing", "custom-start", "Stop", "custom-stop")' >> "$bindings"
+    fi
+    if [[ $variant == marker ]]; then
+      mkdir -p "$OMARCHY_MIGRATION_STATE"
+      touch "$OMARCHY_MIGRATION_STATE/1791479273.sh"
+    fi
+    if [[ $variant == preferences ]]; then
+      mkdir -p "$HOME/.config/superwhisper"
+      printf '%s\n' '{}' > "$HOME/.config/superwhisper/preferences.json"
+    fi
+    if [[ $variant != no-voxtype ]]; then
+      printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$HOME/bin/voxtype"
+      chmod +x "$HOME/bin/voxtype"
+    fi
+    if [[ $variant == migrate ]]; then
+      cp -a "$HOME" "$work/1677.oracle-fixture"
+    fi
+    path_with_voxtype=$HOME/bin:$PATH
+    if [[ $variant == backend ]]; then
+      STUB_DICTATION_BACKEND=voxtype PATH=$path_with_voxtype run_port
+    else
+      PATH=$path_with_voxtype run_port
+    fi
+    for id in 1791479273 1791676907 1793477875; do
+      [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "$case: marker missing for $id"
+    done
+    expected=superwhisper
+    [[ $variant == migrate || $variant == existing-f9 ]] && expected=voxtype
+    [[ $(<"$config") == "$expected" ]] || fail "$case: dictation default changed unexpectedly"
+    [[ $(grep -c '^0=Shift_L$' "$fcitx") -eq 1 ]] || fail "$case: Shift trigger missing or duplicated"
+    [[ $(grep -cF '"SUPER + CTRL + X"' "$bindings") -eq 1 ]] || fail "$case: legacy toggle missing or duplicated"
+    [[ $(grep -cF '"F9"' "$bindings") -eq 1 ]] || fail "$case: F9 missing or duplicated"
+    [[ $(grep -cF 'o.bind_hold("F9"' "$bindings") -eq 1 ]] || fail "$case: F9 binding duplicated"
+    if [[ $variant == existing-f9 ]]; then
+      [[ $(grep -cF 'custom-start' "$bindings") -eq 1 ]] || fail "$case: existing F9 binding replaced"
+    fi
+    calls=$HOME/calls.log
+    [[ $(grep -c '^busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 ReloadConfig$' "$calls") -eq 1 ]] || fail "$case: Fcitx reload missing"
+    [[ $(grep -c '^omarchy-pkg-present ' "$calls" || true) -eq 0 ]] || fail "$case: port called upstream's package probe"
+    [[ $(grep -c '^omarchy-default-dictation ' "$calls") -ge 1 ]] || fail "$case: dictation default was not read"
+    if [[ $variant == preferences ]]; then
+      grep -Fx 'superwhisper shortcuts show' "$calls" >/dev/null || fail "$case: Superwhisper shortcut not read"
+      grep -Fx 'superwhisper shortcuts set toggle Ctrl+Alt+Space' "$calls" >/dev/null || fail "$case: Superwhisper shortcut not moved"
+    else
+      [[ $(grep -c '^superwhisper ' "$calls" || true) -eq 0 ]] || fail "$case: unexpected Superwhisper call"
+    fi
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    PATH=$path_with_voxtype run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+
+  case=1677.oracle
+  oracle_run 1791479273 "$work/1677.oracle-fixture"
+  config=$XDG_CONFIG_HOME/omarchy/defaults/dictation
+  [[ $(<"$config") == superwhisper ]] || fail '1677: upstream oracle unexpectedly changed an existing default'
+  grep -Fx 'omarchy-pkg-present voxtype-bin' "$HOME/calls.log" >/dev/null || fail '1677: upstream oracle did not test Voxtype'
+}
+case_1678() {
+  local variant config before
+  for variant in regular symlink; do
+    case=1678.$variant
+    setup "$case" "$FIXTURE_C"
+    config=$XDG_CONFIG_HOME/herdr/config.toml
+    mkdir -p "${config%/*}"
+    if [[ $variant == symlink ]]; then
+      cp "$PRE45_HERDR_CONFIG" "$XDG_CONFIG_HOME/herdr/managed.toml"
+      ln -s managed.toml "$config"
+    else
+      cp "$PRE45_HERDR_CONFIG" "$config"
+    fi
+    : > "$HOME/calls.log"
+
+    run_port
+    [[ -e $OMARCHY_MIGRATION_STATE/1791722809.sh ]] || fail "$case: migration marker missing"
+    if [[ $variant == symlink ]]; then
+      [[ -L $config && $(readlink "$config") == managed.toml ]] || fail "$case: managed config link changed"
+      cmp "$PRE45_HERDR_CONFIG" "$XDG_CONFIG_HOME/herdr/managed.toml" || fail "$case: managed config target changed"
+      [[ ! -s $HOME/calls.log ]] || fail "$case: Herdr restarted for a managed config"
+    else
+      [[ $(grep -cFx 'panel_bg = "reset"' "$config") -eq 1 ]] || fail "$case: transparent tab background missing or duplicated"
+      [[ $(grep -cFx 'surface_dim = "black"' "$config") -eq 1 ]] || fail "$case: black dim surface missing or duplicated"
+      diff -u <(sed '/^panel_bg = "black"$/d' "$PRE45_HERDR_CONFIG") \
+        <(sed '/^panel_bg = "reset"$/d; /^surface_dim = "black"$/d' "$config") || fail "$case: unrelated Herdr config changed"
+      printf '%s\n' 'omarchy-restart-herdr ' | cmp - "$HOME/calls.log" || fail "$case: Herdr restart call missing or unexpected"
+    fi
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+}
+case_1679() {
+  local variant config before
+  for variant in no-theme chosen-theme no-cli; do
+    case=1679.$variant
+    setup "$case" "$FIXTURE_C"
+    config=$XDG_CONFIG_HOME/opencode/cli.json
+    mkdir -p "${config%/*}"
+    case $variant in
+      no-theme)
+        printf '%s\n' '{"$schema":"https://opencode.ai/v2/cli.json","keybinds":{"quit":"ctrl+q"}}' > "$config"
+        ;;
+      chosen-theme)
+        printf '%s\n' '{"theme":{"name":"custom"},"keybinds":{"quit":"ctrl+q"}}' > "$config"
+        chmod 640 "$config"
+        cp "$config" "$work/$case.expected-cli.json"
+        ;;
+      no-cli)
+        [[ ! -e $config && ! -e $XDG_CONFIG_HOME/opencode/tui.json && ! -e $XDG_STATE_HOME/opencode/kv.json ]] || fail "$case: fixture is not empty"
+        ;;
+    esac
+    : > "$HOME/calls.log"
+
+    run_port
+    [[ -e $OMARCHY_MIGRATION_STATE/1793565796.sh ]] || fail "$case: migration marker missing"
+    case $variant in
+      no-theme)
+        jq -e '.theme == {name:"system"} and .keybinds.quit == "ctrl+q" and ."$schema" == "https://opencode.ai/v2/cli.json"' "$config" >/dev/null || fail "$case: theme or existing config changed"
+        ;;
+      chosen-theme)
+        cmp "$work/$case.expected-cli.json" "$config" || fail "$case: chosen theme changed"
+        [[ $(stat -c %a "$config") == 640 ]] || fail "$case: chosen config permissions changed"
+        ;;
+      no-cli)
+        cmp "$OMARCHY_PATH/config/opencode/cli.json" "$config" || fail "$case: bundled cli.json was not copied"
+        ;;
+    esac
+    if [[ $variant != chosen-theme ]]; then
+      [[ $(stat -c %a "$config") == 600 ]] || fail "$case: cli.json permissions are wrong"
+    fi
+    [[ ! -s $HOME/calls.log ]] || fail "$case: unexpected session calls"
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+}
+case_1680() {
+  local notifications before
+  case=1680
+  setup 1680 "$FIXTURE_C"
+  notifications=$XDG_STATE_HOME/omarchy/notifications
+  mkdir -p "$notifications/history" "$notifications/images"
+  printf '%s\n' '{"dnd":true}' > "$XDG_STATE_HOME/omarchy/notifications.json"
+  printf '%s\n' '{"message":"old notification"}' > "$notifications/history/old.json"
+  printf '%s\n' 'old image' > "$notifications/images/old.png"
+  printf '%s\n' '{"message":"old popup"}' > "$notifications/1234-abc.json"
+  printf '%s\n' 'keep this file' > "$notifications/notes.txt"
+  : > "$HOME/calls.log"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1792648436.sh ]] || fail '1680: migration marker missing'
+  jq -e '. == {snoozes:{},dnd:true,silencedSince:0,codesBypassQuiet:true}' \
+    "$notifications/quiet.json" >/dev/null || fail '1680: Do Not Disturb was not carried into quiet state'
+  [[ $(stat -c %a "$notifications/quiet.json") == 600 ]] || fail '1680: quiet state permissions changed'
+  [[ ! -e $XDG_STATE_HOME/omarchy/notifications.json ]] || fail '1680: legacy notification state remains'
+  [[ ! -e $notifications/history && ! -e $notifications/images && ! -e $notifications/1234-abc.json ]] || fail '1680: legacy notification files remain'
+  [[ $(<"$notifications/notes.txt") == 'keep this file' ]] || fail '1680: unrelated notification file changed'
+  [[ ! -s $HOME/calls.log ]] || fail '1680: unexpected session calls'
+
+  before=$work/1680.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1680: second run changed the home'
+}
+case_1681() {
+  local agent wrapper skills before oracle_fixture skill name port_view id listed_script
+  case=1681
+  setup 1681 "$FIXTURE_C"
+  agent=$XDG_CONFIG_HOME/omarchy/defaults/agent
+  wrapper=$HOME/.local/bin/gemini
+  skills=$HOME/.gemini/config/skills
+  mkdir -p "${agent%/*}" "${wrapper%/*}"
+  printf '%s\n' gemini > "$agent"
+  printf '%s\n' '#!/usr/bin/env bash' 'mise use -g "gemini"' > "$wrapper"
+  chmod +x "$wrapper"
+  mkdir -p "$OMARCHY_MIGRATION_STATE"
+  for id in 1790042972 1791968925 1791969355; do
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done
+  while IFS=$'\t' read -r id listed_script; do
+    [[ -n $id && -n $listed_script ]] || fail '1681: invalid migration list entry'
+    [[ $id == 1786719479 ]] || touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done < "$NIXARCHY_USER_MIGRATIONS/list"
+  : > "$HOME/calls.log"
+  oracle_fixture=$work/1681.oracle-fixture
+  cp -a "$HOME" "$oracle_fixture"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1786719479.sh ]] || fail '1681: migration marker missing'
+  [[ $(<"$agent") == agy ]] || fail '1681: Gemini default was not replaced'
+  [[ ! -e $wrapper ]] || fail '1681: old Gemini wrapper remains'
+  [[ -d $skills ]] || fail '1681: agent skills directory missing'
+  for skill in "$OMARCHY_PATH"/default/agents/skills/*/; do
+    [[ -d $skill ]] || continue
+    name=${skill%/}
+    name=${name##*/}
+    [[ -L $skills/$name && $(readlink "$skills/$name") == "${skill%/}" ]] || fail "1681: skill link wrong for $skill"
+  done
+  [[ ! -s $HOME/calls.log ]] || fail '1681: removed mise install or another command was called'
+
+  before=$work/1681.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1681: second run changed the home'
+
+  port_view=$work/1681.port-view
+  cp -a "$HOME" "$port_view"
+
+  case=1681.oracle
+  oracle_run 1786719479 "$oracle_fixture"
+  [[ $(<"$XDG_CONFIG_HOME/omarchy/defaults/agent") == agy ]] || fail '1681: upstream default differs'
+  [[ ! -e $HOME/.local/bin/gemini ]] || fail '1681: upstream wrapper differs'
+  [[ -d $HOME/.gemini/config/skills ]] || fail '1681: upstream skills directory differs'
+  for skill in "$ORACLE_SOURCE"/default/agents/skills/*/; do
+    [[ -d $skill ]] || continue
+    name=${skill%/}
+    name=${name##*/}
+    [[ -L $HOME/.gemini/config/skills/$name && $(readlink "$HOME/.gemini/config/skills/$name") == "${skill%/}" ]] || fail "1681: upstream skill link differs for $skill"
+  done
+  printf '%s\n' 'omarchy-cmd-missing agy' 'omarchy-mise-install antigravity-cli agy' > "$work/1681.expected-oracle-calls"
+  cmp "$work/1681.expected-oracle-calls" "$HOME/calls.log" || fail '1681: oracle did not exercise only the removed install block'
+
+  # The only allowed differences are runner markers, the removed install
+  # block's calls, and the store root used for equivalent skill links.
+  rm -f "$port_view/.local/state/omarchy/migrations/1786719479.sh"
+  rm -f "$port_view/calls.log" "$HOME/calls.log"
+  for skill in "$port_view"/.gemini/config/skills/*; do
+    [[ -L $skill ]] || continue
+    name=${skill##*/}
+    ln -sfn "$ORACLE_SOURCE/default/agents/skills/$name" "$skill"
+  done
+  same_tree "$port_view" "$HOME" || fail '1681: edited migration differs from upstream beyond the removed install block'
+}
+case_1671() {
+  local config launcher before oracle_fixture port_view id listed_script
+  case=1671
+  setup 1671 "$FIXTURE_C"
+  config=$XDG_CONFIG_HOME/imv/config
+  launcher=$XDG_DATA_HOME/applications/omasnap.desktop
+  mkdir -p "${config%/*}" "${launcher%/*}" "$OMARCHY_MIGRATION_STATE"
+  printf '%s\n' \
+    '# Edit the current image in Tensaku and quit the viewer' \
+    '<Ctrl+e> = exec tensaku-edit "$imv_current_file" & ; quit' \
+    '# Edit the current image in Satty and quit the viewer' \
+    '<Ctrl+e> = exec satty --filename "$imv_current_file" & ; quit' \
+    '# Keep this custom binding' \
+    '<Ctrl+x> = quit' > "$config"
+  printf '%s\n' '[Desktop Entry]' 'Name=Old Omasnap' 'NoDisplay=true' > "$launcher"
+  for id in 1790042972 1791968925 1791969355; do
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done
+  while IFS=$'\t' read -r id listed_script; do
+    [[ -n $id && -n $listed_script ]] || fail '1671: invalid migration list entry'
+    [[ $id == 1788129995 ]] || touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done < "$NIXARCHY_USER_MIGRATIONS/list"
+  : > "$HOME/calls.log"
+  oracle_fixture=$work/1671.oracle-fixture
+  cp -a "$HOME" "$oracle_fixture"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1788129995.sh ]] || fail '1671: migration marker missing'
+  printf '%s\n' \
+    '# Edit the current image in Omasnap and quit the viewer' \
+    '<Ctrl+e> = exec omasnap "$imv_current_file" & ; quit' \
+    '# Edit the current image in Omasnap and quit the viewer' \
+    '<Ctrl+e> = exec omasnap "$imv_current_file" & ; quit' \
+    '# Keep this custom binding' \
+    '<Ctrl+x> = quit' > "$work/1671.expected-config"
+  cmp "$work/1671.expected-config" "$config" || fail '1671: imv bindings differ from 4.5 result'
+  [[ ! -e $launcher ]] || fail '1671: stale Omasnap launcher remains'
+  [[ $(grep -Ec '^omarchy-pkg-(add|drop)( |$)' "$HOME/calls.log" || true) -eq 0 ]] || fail '1671: package command was called'
+  [[ ! -s $HOME/calls.log ]] || fail '1671: unexpected session call'
+
+  before=$work/1671.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1671: second run changed the home'
+
+  port_view=$work/1671.port-view
+  cp -a "$HOME" "$port_view"
+  case=1671.oracle
+  oracle_run 1788129995 "$oracle_fixture"
+  cmp "$work/1671.expected-config" "$XDG_CONFIG_HOME/imv/config" || fail '1671: upstream imv result differs'
+  [[ ! -e $XDG_DATA_HOME/applications/omasnap.desktop ]] || fail '1671: upstream left stale launcher'
+  printf '%s\n' 'omarchy-pkg-add omasnap' 'omarchy-pkg-drop satty tensaku' > "$work/1671.expected-oracle-calls"
+  cmp "$work/1671.expected-oracle-calls" "$HOME/calls.log" || fail '1671: upstream package calls differ'
+
+  # The edited copy differs only by the omitted package calls and its runner marker.
+  rm -f "$port_view/.local/state/omarchy/migrations/1788129995.sh"
+  rm -f "$port_view/calls.log" "$HOME/calls.log"
+  same_tree "$port_view" "$HOME" || fail '1671: edited migration differs from upstream beyond package calls'
+}
+case_runner_stop() {
+  local list_dir=$work/runner-list
+  case=runner-stop
+  setup runner-stop "$FIXTURE_C"
+  mkdir -p "$list_dir"
+  printf '%s\n' 'exit 1' > "$list_dir/first.sh"
+  printf '%s\n' 'printf "%s\\n" second >> "$HOME/order"' > "$list_dir/second.sh"
+  printf '%s\t%s\n' 100 "$list_dir/first.sh" 200 "$list_dir/second.sh" > "$list_dir/list"
+  NIXARCHY_USER_MIGRATIONS=$list_dir
+  export NIXARCHY_USER_MIGRATIONS
+  if run_port; then fail 'runner-stop: first failure returned success'; fi
+  [[ ! -e $HOME/order && ! -d $OMARCHY_MIGRATION_STATE ]] || fail 'runner-stop: continued after failure'
+  grep -F '100: user migration failed' "$HOME/journal.log" >/dev/null || fail 'runner-stop: journal lacks failed id'
+  # It drains stdin: with the list on stdin, the second entry would vanish.
+  printf '%s\n' 'cat >/dev/null; printf "%s\\n" first >> "$HOME/order"' > "$list_dir/first.sh"
+  run_port
+  [[ $(cat "$HOME/order") == $'first\nsecond' ]] || fail 'runner-stop: recovery order wrong'
+  [[ -e $OMARCHY_MIGRATION_STATE/100.sh && -e $OMARCHY_MIGRATION_STATE/200.sh ]] || fail 'runner-stop: recovery markers missing'
 }
 compare_oracle() {
   local fixture=$1
@@ -126,4 +656,16 @@ setup drift "$fixture_a"
 STUB_DRIFT=1 run_port
 [[ ! -e $OMARCHY_MIGRATION_STATE/1791969355.sh ]] || fail 'drift: split marker despite refused move'
 grep 'widget at center\[0\] is not omarchy.indicators' "$HOME/journal.log" >/dev/null || fail 'drift: refusal not observed'
+case_fresh45
+case_1673
+case_1674
+case_1675
+case_1676
+case_1677
+case_1678
+case_1679
+case_1680
+case_1681
+case_1671
+case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

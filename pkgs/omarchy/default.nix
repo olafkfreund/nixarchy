@@ -3,11 +3,6 @@
   stdenvNoCC,
   src,
   version,
-  # Which nixarchy this is (#208). Computed in flake.nix, because `self` is
-  # reachable there and nowhere else, and spliced into nix-bin/nixarchy-version
-  # below.
-  nixarchyRev,
-  nixarchyDate,
   # Runtime dependencies, derived by grepping every script in upstream `bin/`
   # for the commands it shells out to. Regenerate with:
   #   nix run .#deps-report
@@ -376,7 +371,7 @@ let
     in
     writeText "nixarchy-arch-packages.tsv" (lib.concatStringsSep "\n" (appRows ++ extraRows) + "\n");
 in
-stdenvNoCC.mkDerivation {
+stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "omarchy";
   inherit version src;
 
@@ -1050,33 +1045,20 @@ stdenvNoCC.mkDerivation {
                       [ -e "$out/bin/$name" ] || ln -s "$target" "$out/bin/$name"
                     done
 
-                    # nixarchy-version, told which nixarchy it is (#208).
-                    #
-                    # The values come from `self` in flake.nix -- see the note on the
-                    # nixarchyRev argument. Spliced at build time the way omarchy-version's
-                    # version is, and for the same reason: nothing at runtime can work out
-                    # which revision built this store path.
+                    # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
                     substituteInPlace $out/share/omarchy/bin/nixarchy-version \
-                      --replace-fail '@omarchyversion@' '${version}' \
-                      --replace-fail '@nixarchyrev@' '${nixarchyRev}' \
-                      --replace-fail '@nixarchydate@' '${nixarchyDate}'
+                      --replace-fail '@omarchyversion@' '${version}'
 
-                    # And that the command actually prints what this build put in it.
-                    #
-                    # --replace-fail above catches a placeholder that stops existing; it
-                    # cannot catch the substituteInPlace itself being dropped, which would
-                    # ship a script printing "@nixarchyrev@" with a perfectly green build.
-                    # AGENTS.md section 1: the check has to be able to fail. The script is
-                    # deliberately free of runtime dependencies so it can simply be run here.
-                    printed=$(bash $out/share/omarchy/bin/nixarchy-version)
-                    case $printed in
-                      *'${version}'*'${nixarchyRev}'*'${nixarchyDate}'*) ;;
-                      *)
-                        echo "nixarchy-version does not print what this build set:" >&2
-                        echo "$printed" >&2
-                        exit 1
-                        ;;
-                    esac
+                    # The sandbox has no /etc/nixarchy/version.
+                    mkdir -p "$TMPDIR/xdg-set/nixarchy" "$TMPDIR/xdg-none"
+                    printf '%s\n' 'abc1234 2026-01-02' > "$TMPDIR/xdg-set/nixarchy/version"
+                    for fixture in set none; do
+                      printed=$(XDG_CONFIG_HOME="$TMPDIR/xdg-$fixture" bash $out/share/omarchy/bin/nixarchy-version)
+                      case $fixture:$printed in
+                        set:*'${version}'*'abc1234'*'2026-01-02'* | none:*'${version}'*'unknown  unknown'*) ;;
+                        *) echo "nixarchy-version fixture $fixture failed: $printed" >&2; exit 1 ;;
+                      esac
+                    done
 
                     # Why: pkgs/AGENTS.md#the-agent-skills-upstream-writes-for-arch
                     #
@@ -1127,6 +1109,8 @@ stdenvNoCC.mkDerivation {
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1625-no-mise.patch}
+                    # Why: pkgs/AGENTS.md#power-actions-authorise-before-closing-windows-1659
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1659-system-authorise-first.patch}
                     rm $out/share/omarchy/install/user/mise.sh
                     substituteInPlace $out/share/omarchy/bin/omarchy-agent $out/share/omarchy/bin/omarchy-agent-account-exec \
                       --replace-fail '@omarchyDispatch@' "$out/share/omarchy/agent-dispatch"
@@ -2116,6 +2100,9 @@ stdenvNoCC.mkDerivation {
 
   passthru = {
     inherit runtimeDeps;
+    userMigrations = callPackage ./user-migrations.nix {
+      omarchy = finalAttrs.finalPackage;
+    };
 
     # The desktop shell this build actually uses, so it can be asserted on
     # (#528). flake.nix pins it to a FLOOR: on a nixpkgs shipping quickshell
@@ -2144,4 +2131,4 @@ stdenvNoCC.mkDerivation {
     platforms = lib.platforms.linux;
     mainProgram = "omarchy";
   };
-}
+})

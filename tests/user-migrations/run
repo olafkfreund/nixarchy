@@ -155,6 +155,55 @@ case_1674() {
   OMARCHY_SESSION_ID=fixture-session run_port
   same_tree "$before" "$HOME" || fail '1674: second run changed the home'
 }
+case_1675() {
+  local applications before
+  case=1675
+  setup 1675 "$FIXTURE_C"
+  applications=$XDG_DATA_HOME/applications
+  mkdir -p "$applications"
+  printf '%s\n' '[Desktop Entry]' 'Name=Example' \
+    'Exec=omarchy-launch-webapp "https://example.com/dashboard"' \
+    'Terminal=false' > "$applications/example.desktop"
+  printf '%s\n' '[Desktop Entry]' 'Name=HEY' \
+    'Exec=omarchy-webapp-handler-hey %u' > "$applications/hey.desktop"
+  printf '%s\n' '[Desktop Entry]' 'Name=Existing' \
+    'Exec=omarchy-launch-webapp "https://already.example"' \
+    'StartupWMClass=existing-class' > "$applications/existing.desktop"
+  printf '%s\n' '[Desktop Entry]' 'Name=Custom' \
+    'Exec=custom-browser https://custom.example' > "$applications/custom.desktop"
+  : > "$HOME/calls.log"
+
+  run_port
+  for id in 1791696584 1791875754; do
+    [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1675: marker missing for $id"
+  done
+  printf '%s\n' '[Desktop Entry]' 'Name=Example' \
+    'Exec=omarchy-launch-webapp "https://example.com/dashboard"' \
+    'StartupWMClass=chrome-example.com__dashboard-Default' \
+    'Terminal=false' > "$work/1675.expected-example.desktop"
+  cmp "$work/1675.expected-example.desktop" "$applications/example.desktop" || fail '1675: standard launcher class or placement wrong'
+  printf '%s\n' '[Desktop Entry]' 'Name=HEY' \
+    'Exec=omarchy-webapp-handler-hey %u' \
+    'StartupWMClass=chrome-app.hey.com__-Default' > "$work/1675.expected-hey.desktop"
+  cmp "$work/1675.expected-hey.desktop" "$applications/hey.desktop" || fail '1675: HEY launcher class or placement wrong'
+  printf '%s\n' '[Desktop Entry]' 'Name=Existing' \
+    'Exec=omarchy-launch-webapp "https://already.example"' \
+    'StartupWMClass=existing-class' > "$work/1675.expected-existing.desktop"
+  cmp "$work/1675.expected-existing.desktop" "$applications/existing.desktop" || fail '1675: existing class changed'
+  printf '%s\n' '[Desktop Entry]' 'Name=Custom' \
+    'Exec=custom-browser https://custom.example' > "$work/1675.expected-custom.desktop"
+  cmp "$work/1675.expected-custom.desktop" "$applications/custom.desktop" || fail '1675: unrelated launcher changed'
+  printf '%s\n' \
+    'omarchy-webapp-window-class https://example.com/dashboard' \
+    'omarchy-webapp-window-class https://app.hey.com' > "$work/1675.expected-calls"
+  cmp "$work/1675.expected-calls" "$HOME/calls.log" || fail '1675: unexpected window class calls'
+
+  before=$work/1675.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1675: second run changed the home'
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -261,5 +310,6 @@ grep 'widget at center\[0\] is not omarchy.indicators' "$HOME/journal.log" >/dev
 case_fresh45
 case_1673
 case_1674
+case_1675
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

@@ -108,8 +108,9 @@
     reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
   };
   "1791696584" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "add window classes to standard web app launchers (#1675)";
   };
   "1791698594" = {
     decision = "ported";
@@ -138,8 +139,9 @@
     reason = "no nixarchy release shipped the USB approval units";
   };
   "1791875754" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "add window classes to custom command web app launchers (#1675)";
   };
   "1791968925" = {
     decision = "partial";

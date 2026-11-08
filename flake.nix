@@ -754,6 +754,7 @@
         # holes in it.
         nixarchy-apps = {
           once = final.callPackage ./pkgs/apps/once.nix { };
+          superwhisper = final.callPackage ./pkgs/apps/superwhisper.nix { };
 
           # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
           # simply follow nixpkgs the way most apps here do.
@@ -1251,6 +1252,7 @@
 
           inherit (pkgsFor.${system}.nixarchy-apps)
             once
+            superwhisper
             retroarch
             hey-cli
             omawrite
@@ -1749,6 +1751,8 @@
             "home-activation-writes"
             "language-locale"
             "language-select"
+            # The notification history keeps text for the newest rows only (#1663).
+            "notification-store"
             # data/bin-ledger.nix, held to its own claim. Also the home of the
             # pacman allowlist that used to live inline in build.yml. See
             # tests/bin-ledger.nix and #447.
@@ -1924,7 +1928,6 @@
             "sshd-login"
             "swap-guard"
             "switch-indicator"
-            "try-nixarchy"
             "update-available"
             "user-unit-links"
             "verify-boxes"
@@ -2026,6 +2029,12 @@
           reinstall-iso = import ./tests/reinstall-iso.nix {
             pkgs = pkgsFor.${system};
             reinstallScript = ./pkgs/omarchy/nix-bin/nixarchy-reinstall-iso;
+          };
+
+          superwhisper-choice = import ./tests/superwhisper-choice.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./pkgs/omarchy/nix-bin/omarchy-install-dictation-superwhisper;
+            removeScript = ./pkgs/omarchy/nix-bin/omarchy-remove-dictation-superwhisper;
           };
 
           reinstall-image = import ./tests/reinstall-image.nix {
@@ -2257,6 +2266,17 @@
             installScript = ./installer/install.sh;
           };
 
+          installer-early-exit = import ./tests/installer-early-exit.nix {
+            pkgs = pkgsFor.${system};
+            renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
+          };
+
+          try-nixarchy = import ./tests/try-nixarchy.nix {
+            pkgs = pkgsFor.${system};
+            vmTargetMiB =
+              (builtins.head self.nixosConfigurations.installer-vm.config.virtualisation.emptyDiskImages).size;
+          };
+
           # The bus redaction hook blocks what a pattern can decide, and only
           # that (#272). A security hook that passes everything looks
           # identical to a working one, which is why this exists.
@@ -2393,6 +2413,15 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
+          user-migrations = import ./tests/user-migrations.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
+          user-migrations-ledger = import ./tests/user-migrations-ledger.nix {
+            pkgs = pkgsFor.${system};
+            omarchySrc = omarchy;
+          };
           # #1381: no shipped plugin reads Color unqualified (Qt 6.12 shadows it). The
           # defaults come from defaultPluginSet; nixi and voice install through their own
           # Home Manager modules (modules/home.nix), so they are named here.
@@ -2440,6 +2469,7 @@
           # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
           cache-budget = import ./tests/cache-budget.nix {
             pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
           };
 
           # The release guard and the weekly release-candidate body, against a

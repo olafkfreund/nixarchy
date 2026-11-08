@@ -33,7 +33,7 @@
 
   environment.systemPackages = [
     pkgs.codex
-    (import ../../../pkgs/opencode-hash-fixed.nix pkgs)
+    pkgs.opencode
   ]
   ++ lib.optional (builtins.tryEval pkgs.claude-code.outPath).success pkgs.claude-code;
 

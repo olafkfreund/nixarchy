@@ -73,6 +73,9 @@ let
   # A panel-kind default (#770), to hold upstream's setEnabled to what the
   # hook relies on: a panel ignores the `right` placement and lands in
   # plugins[]. A valid manifest is all it needs; the panel never opens.
+  # #1610: check 5's normalised result for the v4.0.6 seed.
+  inherit (inputs.self.checks.${pkgs.stdenv.hostPlatform.system}.user-migrations) expectedA;
+
   panelFixture = pkgs.runCommand "nixarchy-panel-fixture" { } ''
     mkdir -p $out
     echo 'import QtQuick' > $out/Panel.qml
@@ -716,5 +719,28 @@ pkgs.testers.runNixOSTest rec {
     user(f"test -e ~/.local/state/nixarchy/enabled-once/{tele}")
     user("test ! -e ~/.local/state/nixarchy/enabled-once/nixarchy.oldtele")
     print("a renamed default that was off stays off, its marker moved")
+
+    # #1610: the user-migrations hook against the real shell's IPC, on a v4.0.6
+    # seed. Stop the shell, copy, start it: a live shell rewrites shell.json from memory.
+    user("d=$(systemctl --user show-environment | sed -n 's/^OMARCHY_PATH=//p' | tail -n 1); "
+         ": \"''${d:=$OMARCHY_PATH}\"; "
+         "while timeout 30 quickshell kill -p \"$d/shell\" --any-display >/dev/null 2>&1; do :; done")
+    machine.wait_until_fails("su omarchy -c 'bash /tmp/ping.sh'", timeout=60)
+    user("cp ${./fixtures/shell-json/v4.0.6.json} ~/.config/omarchy/shell.json")  # 847-allow
+    user("chmod u+w ~/.config/omarchy/shell.json; rm -rf ~/.local/state/omarchy/migrations")
+    user("omarchy-restart-shell", check=False)
+    wait_for_shell()
+    user("~/.config/omarchy/hooks/post-boot.d/user-migrations", timeout=300)
+    ids = ('[.bar.layout | to_entries[] | {key, value: [.value[] | '
+           'if type == "object" then .id else . end]}] | from_entries')
+    got = json.loads(user(f"jq -S '{ids}' ~/.config/omarchy/shell.json"))
+    want = json.loads(machine.succeed(f"${pkgs.jq}/bin/jq -S '{ids}' ${expectedA}"))
+    for section in ("left", "centerBegin", "center", "centerEnd", "right"):
+        assert got.get(section, []) == want.get(section, []), (
+            f"{section} after the real shell's IPC is {got.get(section)}, "
+            f"the stub-checked port gives {want.get(section)}")
+    for m in ("1790042972", "1791968925", "1791969355"):
+        user(f"test -e ~/.local/state/omarchy/migrations/{m}.sh")
+    print("the v4.0.6 seed's bar migrated through the real shell, three markers written")
   '';
 }

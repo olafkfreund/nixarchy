@@ -406,7 +406,7 @@ in
 
     # lowPrio: a user's own copy wins any binary it shares (#1167, as #809).
     environment.systemPackages = map lib.lowPrio (
-      lib.optional (builtins.elem "opencode" aiCfg.agents) (import ../pkgs/opencode-hash-fixed.nix pkgs)
+      lib.optional (builtins.elem "opencode" aiCfg.agents) pkgs.opencode
       ++ lib.optional (builtins.elem "pi" aiCfg.agents) pkgs.pi-coding-agent
     );
 

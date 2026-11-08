@@ -172,7 +172,9 @@ while IFS= read -r f; do
       if [ "$install_only" = true ]; then continue; fi
       relevant=true; break ;;
 
-    AGENTS.md|*/AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
+    # intent/, spec/ and plan/ are the artifact workflow's markdown, on nearly
+    # every pull request; nothing reads one into a derivation (grepped).
+    AGENTS.md|*/AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*|intent/*|spec/*|plan/*)
       continue ;;
 
     # Only for the install question, and only files the install job cannot

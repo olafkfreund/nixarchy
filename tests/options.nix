@@ -1137,6 +1137,11 @@ let
       on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
       off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
     };
+    userMigrationsHook = {
+      # .enable, not ?: the entry exists either way, and enable is what writes the file.
+      on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".enable;
+      off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".enable;
+    };
 
     # ---- upstream's /etc overlay, the rows carried as NixOS options ----
     #
@@ -5168,13 +5173,14 @@ pkgs.runCommand "nixarchy-options-files"
           exit 1
         fi
 
-        # The three things inside an allowlisted directory that must not
+        # The things inside an allowlisted directory that must not
         # travel. clipboard-history.json is the sharpest: password managers
         # paste through the clipboard, and it sits inside
         # ~/.local/state/omarchy, which the epic asks for by name.
         for never in .local/state/omarchy/clipboard-history.json \
           .local/state/omarchy/current/theme/ \
-          .local/state/omarchy/done/; do
+          .local/state/omarchy/done/ \
+          .local/state/omarchy/notifications/; do
           <<<"$allowlist" grep -qxF "!$never" || {
             echo "the allowlist no longer excludes $never" >&2
             exit 1

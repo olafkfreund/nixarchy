@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, vmTargetMiB }:
 # installer/try-nixarchy.sh, on the machines it will actually meet.
 #
 # The script exists for somebody on Ubuntu or Fedora with no nix, so almost
@@ -42,6 +42,26 @@ pkgs.runCommand "nixarchy-try-nixarchy"
     shellcheck ./try-nixarchy.sh || { echo "shellcheck rejected it" >&2; fail=1; }
     echo "  shellcheck clean"
 
+    read_number() {
+      local name=$1 file=$2 pattern=$3 value
+      value=$(sed -n "s/$pattern/\\1/p" "$file" | head -1) || exit 1
+      if ! [[ $value =~ ^[0-9]+$ ]]; then
+        echo "could not read $name from $file" >&2
+        exit 1
+      fi
+      printf '%s\n' "$value"
+    }
+    install_min=$(read_number MIN_DISK_GIB ${../installer/install.sh} '^MIN_DISK_GIB=\([0-9][0-9]*\)$')
+    launcher_default=$(read_number NIXARCHY_TRY_DISK ./try-nixarchy.sh '^DISK_GB=''${NIXARCHY_TRY_DISK:-\([0-9][0-9]*\)}$')
+    launcher_min=$(read_number MIN_DISK_GB ./try-nixarchy.sh '^MIN_DISK_GB=\([0-9][0-9]*\)$')
+    try_mib=$(read_number DISK_MB ${../installer/try.sh} '^DISK_MB=\([0-9][0-9]*\)$')
+    vm_mib=${toString vmTargetMiB}
+    [[ $vm_mib =~ ^[0-9]+$ ]] || { echo 'could not read emptyDiskImages size from installer/vm.nix' >&2; exit 1; }
+    [ "$launcher_default" -eq 64 ] || { echo 'try-nixarchy.sh default must be 64 GB' >&2; exit 1; }
+    [ "$launcher_min" -eq "$install_min" ] || { echo 'try-nixarchy.sh MIN_DISK_GB differs from install.sh MIN_DISK_GIB' >&2; exit 1; }
+    [ "$try_mib" -ge "$((install_min * 1024))" ] || { echo 'try.sh DISK_MB is under install.sh MIN_DISK_GIB' >&2; exit 1; }
+    [ "$vm_mib" -ge "$((install_min * 1024))" ] || { echo 'installer/vm.nix emptyDiskImages is under install.sh MIN_DISK_GIB' >&2; exit 1; }
+
     res=$(bash ./try-nixarchy.sh --full 2>&1 || true)
     case "$res" in
       *"full image is gone"*"network image"*) echo "  --full explains the network image" ;;
@@ -66,6 +86,9 @@ pkgs.runCommand "nixarchy-try-nixarchy"
     done
     printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "$PWD/qemu-args"\n' > "$stub/qemu-system-x86_64"
     chmod +x "$stub/qemu-system-x86_64"
+    printf '#!/bin/sh\nif [ "$1" = info ]; then\n  if [ -f "$PWD/info-24" ]; then\n    echo "virtual size: 24 GiB (25769803776 bytes)"\n    exit 0\n  fi\n  exit 1\nfi\nexit 0\n' > "$stub/qemu-img"
+    chmod +x "$stub/qemu-img"
+    patchShebangs "$stub" >/dev/null
     export PATH="$stub:$PATH"
 
     res=$(NIXARCHY_TRY_DIR=$PWD/w1 bash ./try-nixarchy.sh 2>&1 || true)
@@ -85,6 +108,7 @@ pkgs.runCommand "nixarchy-try-nixarchy"
     # advice on the single distribution with a better answer. Reached with a
     # stub, because a sandbox has no nix of its own.
     printf '#!/bin/sh\nexit 0\n' > "$stub/nix"; chmod +x "$stub/nix"
+    patchShebangs "$stub/nix" >/dev/null
     res=$(NIXARCHY_TRY_DIR=$PWD/w1b bash ./try-nixarchy.sh 2>&1 || true)
     rm -f "$stub/nix"
     case "$res" in
@@ -115,6 +139,31 @@ pkgs.runCommand "nixarchy-try-nixarchy"
       *) echo "an existing disk was not handled" >&2; printf %s\\n "$res" | sed "s/^/    | /" >&2; fail=1 ;;
     esac
 
+    : > "$PWD/info-24"
+    res=$(NIXARCHY_TRY_DIR=$PWD/w3 bash ./try-nixarchy.sh 2>&1 || true)
+    case "$res" in
+      *"is 24 GB, under the installer's 32 GB minimum"*"--boot"*"--fresh"*) echo "  a small existing disk names its size and both ways out" ;;
+      *) echo "a small existing disk did not name its size" >&2; fail=1 ;;
+    esac
+    rm -f "$PWD/info-24"
+    res=$(NIXARCHY_TRY_DIR=$PWD/w3 NIXARCHY_TRY_DISK=24 bash ./try-nixarchy.sh --fresh 2>&1 || true)
+    case "$res" in
+      *"NIXARCHY_TRY_DISK=24 is under the installer's 32 GB minimum"*) echo "  --fresh refuses a small requested disk" ;;
+      *) echo "--fresh accepted a small requested disk" >&2; fail=1 ;;
+    esac
+    [ -f "$PWD/w3/nixarchy-try.qcow2" ] || { echo '--fresh removed the disk before refusing' >&2; fail=1; }
+    res=$(NIXARCHY_TRY_DIR=$PWD/w3 NIXARCHY_TRY_DISK=not-a-number bash ./try-nixarchy.sh --fresh 2>&1 || true)
+    case "$res" in
+      *"NIXARCHY_TRY_DISK=not-a-number must be a whole number"*) echo "  --fresh refuses a non-integer disk size" ;;
+      *) echo "--fresh accepted a non-integer disk size" >&2; fail=1 ;;
+    esac
+    [ -f "$PWD/w3/nixarchy-try.qcow2" ] || { echo 'non-integer --fresh removed the disk' >&2; fail=1; }
+    res=$(NIXARCHY_TRY_DIR=$PWD/w3 NIXARCHY_TRY_DISK=24 bash ./try-nixarchy.sh --boot 2>&1 || true)
+    case "$res" in
+      *"under the installer's"*) echo "--boot was refused for a creation size it never uses" >&2; fail=1 ;;
+      *) echo "  --boot ignores the creation size" ;;
+    esac
+
     res=$(NIXARCHY_TRY_DIR=$PWD/w4 bash ./try-nixarchy.sh --boot 2>&1 || true)
     case "$res" in
       *"to boot"*) echo "  --boot with no disk refuses" ;;
@@ -133,6 +182,7 @@ pkgs.runCommand "nixarchy-try-nixarchy"
       > "$PWD/w5/SHA256SUMS"
     printf '#!/bin/sh\necho \x27{ "tag_name": "vTEST" }\x27\n' > "$stub/curl"
     chmod +x "$stub/curl"
+    patchShebangs "$stub/curl" >/dev/null
 
     res=$(NIXARCHY_TRY_DIR=$PWD/w5 bash ./try-nixarchy.sh 2>&1 || true)
     case "$res" in

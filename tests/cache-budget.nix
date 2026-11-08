@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, reference, ... }:
 # What reaches nixarchy.cachix.org, and what it costs (#697).
 #
 # The cache is the free tier: 5 GB, evicted by last download. Every job used to
@@ -18,6 +18,25 @@
 #
 # The scripts are the real files; nix, curl and cachix are stubs over a small
 # pretend store described by store.json.
+let
+  forced =
+    (reference.extendModules {
+      modules = [
+        {
+          programs.nixarchy.allowUnfree = true;
+          programs.nixarchy.apps.superwhisper.enable = true;
+        }
+      ];
+    }).config;
+  superwhisper = pkgs.lib.findFirst (
+    p: pkgs.lib.getName p == "superwhisper"
+  ) null forced.environment.systemPackages;
+  forcedPath =
+    if superwhisper == null then
+      "missing-superwhisper"
+    else
+      builtins.unsafeDiscardStringContext (toString superwhisper);
+in
 pkgs.runCommand "nixarchy-cache-budget"
   {
     nativeBuildInputs = with pkgs; [
@@ -52,6 +71,7 @@ pkgs.runCommand "nixarchy-cache-budget"
       ".#twin":   { "/nix/store/ccc-twin":  $((5 * MiB)),  "/nix/store/shared-qemu": $((400 * MiB)) },
       ".#huge":   { "/nix/store/ddd-huge":  $((3000 * MiB)) },
       ".#flaky":  { "/nix/store/hhh-flaky": $((7 * MiB)) },
+      ".#forced-on": { "${forcedPath}": $((1 * MiB)) },
       ".#omarchy": { "/nix/store/ooo-omarchy": $((1 * MiB)) },
       ".#bumpy":  { "/nix/store/iii-refsrc": $((1 * MiB)), "/nix/store/jjj-keep": $((1 * MiB)) },
       ".#checks.x86_64-linux.lonely":  { "/nix/store/eee-lonely": 96 },
@@ -185,6 +205,18 @@ pkgs.runCommand "nixarchy-cache-budget"
       ok "an unreadable closure fails the budget, naming the entry"
     else
       bad "an unreadable closure failed without naming the entry:"; printf '%s\n' "$got"
+    fi
+
+    if [ "${
+      if forced.programs.nixarchy.apps.superwhisper.enable && superwhisper != null then "yes" else "no"
+    }" != yes ]; then
+      bad 'forced-on reference fixture did not install Superwhisper'
+    elif got=$(bash $budget .#small .#forced-on 2>&1); then
+      bad 'the public cache accepted a forced-on Superwhisper closure'
+    elif grep -q 'allowlisted closure contains Superwhisper' <<<"$got"; then
+      ok 'a forced-on Superwhisper closure is refused by the public cache'
+    else
+      bad "Superwhisper closure failed without naming the property:"; printf '%s\n' "$got"
     fi
 
     export CACHIX_AUTH_TOKEN=stub

@@ -1326,6 +1326,9 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
                       --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
 
+                    install -Dm755 ${./superwhisper-first-run.sh} \
+                      $out/share/omarchy/install/user/first-run/superwhisper.sh
+
                     # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-editor \
                       --replace-fail 'omarchy-cmd-present "$editor" || editor="nvim"' \
@@ -2020,6 +2023,9 @@ stdenvNoCC.mkDerivation {
                     # omacom/omarchy takes it; --fuzz=0 so a bump that rewords the handler fails here.
                     # Sits on 902: same file. checks.session delegates one and watches.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./903-notification-delegate.patch}
+
+                    # Why: pkgs/AGENTS.md#notification-history-keeps-text-for-the-newest-rows-1663
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./904-notification-history-text.patch}
 
                     # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
                     substituteInPlace $out/share/omarchy/shell/shell.qml \

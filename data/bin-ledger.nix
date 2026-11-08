@@ -291,6 +291,11 @@
     class = "patch";
     reason = "It registers the native-messaging host at $OMARCHY_PATH/bin, a store path that is garbage-collected after an Omarchy update, so the registered host dangles. Registers /run/current-system/sw/bin instead (#1491).";
   };
+  "omarchy-install-dictation-superwhisper" = {
+    class = "replace";
+    reason = "Shows vendor terms and asks before enabling the unfree app; writes crash-report preferences before the first daemon start (#1613).";
+    allow = "systemctl-user";
+  };
   "omarchy-install-dev-env" = {
     class = "replace";
     reason = "Upstream installs languages and frameworks globally through mise and pacman. nixarchy ships no mise, so this refuses and names Install > Development and nixarchy dev init (#1625).";
@@ -389,8 +394,12 @@
   };
   "omarchy-migrate" = {
     class = "replace";
-    reason = "Upstream's 86 migration scripts use sudo, write under /usr and call pacman, and with no state directory every one counts as pending. --pending reports nothing to do; a bare run is told why.";
+    reason = "Upstream's migration scripts use sudo, write under /usr and call pacman, and with no state directory every one counts as pending. --pending reports nothing to do; a bare run is told why. The user-file ones are decided in data/user-migrations.nix, and those that apply are ported into omarchy-migrate-user (#1610).";
     pacman = "Ours, in pkgs/omarchy/nix-bin. The pacman line is heredoc prose or upstream code left dead after an early exit -- neither of which comment-stripping can see.";
+  };
+  "omarchy-migrate-user" = {
+    class = "new";
+    reason = "Not in upstream. Run once per user from a post-boot hook: ports the bar's three 4.5 migrations through the shell's IPC on a v4.0.x seed, with upstream's own migration markers (#1610).";
   };
   "omarchy-mise-default-tools" = {
     class = "replace";
@@ -799,8 +808,8 @@
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-superwhisper" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Disables superwhisper.service, a user unit installed under the user's own tree, and asks whether fcitx5 is running.";
+    class = "replace";
+    reason = "Disables the declarative app and clears only its selected backend after a successful rebuild (#1613).";
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-voxtype" = {

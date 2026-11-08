@@ -22,7 +22,9 @@ REPO=${NIXARCHY_REPO:-olafkfreund/nixarchy}
 API=${NIXARCHY_API:-https://api.github.com/repos/$REPO/releases?per_page=1}
 WORK=${NIXARCHY_TRY_DIR:-$PWD}
 DISK="$WORK/nixarchy-try.qcow2"
-DISK_GB=${NIXARCHY_TRY_DISK:-24}
+DISK_GB=${NIXARCHY_TRY_DISK:-64}
+# Keep equal to installer/install.sh's MIN_DISK_GIB; checks.try-nixarchy compares them.
+MIN_DISK_GB=32
 MEM_MB=${NIXARCHY_TRY_MEM:-8192}
 CPUS=${NIXARCHY_TRY_CPUS:-4}
 
@@ -49,6 +51,9 @@ while (($#)); do
     *) die "Unknown option: $1 -- try --help" ;;
   esac
 done
+[[ $DISK_GB =~ ^[0-9]+$ ]] || die "NIXARCHY_TRY_DISK=$DISK_GB must be a whole number of GB."
+# --boot creates no disk, so the creation size cannot refuse it.
+$boot_only || (( DISK_GB >= MIN_DISK_GB )) || die "NIXARCHY_TRY_DISK=$DISK_GB is under the installer's $MIN_DISK_GB GB minimum."
 
 # ---------------------------------------------------------------------------
 # Refuse early, in sentences, naming the number and the way out.
@@ -143,7 +148,7 @@ avail_gb=$(df -BG --output=avail "$WORK" 2>/dev/null | tail -1 | tr -dc '0-9')
 avail_gb=${avail_gb:-0}
 image_gb=2
 want_gb=$((DISK_GB + image_gb))
-if [ "$avail_gb" -gt 0 ] && [ "$avail_gb" -lt "$want_gb" ]; then
+if ! $boot_only && [ "$avail_gb" -gt 0 ] && [ "$avail_gb" -lt "$want_gb" ]; then
   die "$WORK has ${avail_gb}GB free; this needs about ${want_gb}GB (a ${DISK_GB}GB
 disk plus the image). Set NIXARCHY_TRY_DIR to somewhere with room."
 fi
@@ -198,6 +203,13 @@ if $fresh && [ -f "$DISK" ]; then
 fi
 
 if [ -f "$DISK" ]; then
+  info=$(qemu-img info "$DISK" 2>/dev/null) || info=""
+  bytes=$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*virtual size:.*(\([0-9][0-9]*\) bytes).*$/\1/p' | head -1)
+  if [[ $bytes =~ ^[0-9]+$ ]] && (( bytes < MIN_DISK_GB * 1024 * 1024 * 1024 )); then
+    die "$DISK is $((bytes / 1024 / 1024 / 1024)) GB, under the installer's $MIN_DISK_GB GB minimum. --fresh wipes it and creates a $DISK_GB GB disk.
+  --boot   start the machine you installed into it
+  --fresh  wipe it and install again"
+  fi
   die "$DISK already exists.
   --boot   start the machine you installed into it
   --fresh  wipe it and install again"

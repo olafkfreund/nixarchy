@@ -9,6 +9,7 @@ let
     pkgs.bash
     pkgs.coreutils
     pkgs.diffutils
+    pkgs.findutils
   ];
   common = {
     nativeBuildInputs = inputs;
@@ -16,6 +17,7 @@ let
     FIXTURE_C = "${omarchySrc}/config/omarchy/shell.json";
     MIGRATE_SCRIPT = "${omarchy}/bin/omarchy-migrate-user";
     ORACLE_SOURCE = omarchySrc;
+    NIXARCHY_USER_MIGRATIONS = omarchy.passthru.userMigrations;
     # The oracle's migrations call omarchy-shell-config, which reads it under set -u.
     OMARCHY_PATH = "${omarchy}/share/omarchy";
   };

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2153,SC2154 # Generated scripts keep $HOME literal; Nix supplies the fixture and out variables.
 set -euo pipefail
 
 fixture_a=$FIXTURE_A
@@ -41,6 +42,72 @@ run_oracle() {
   bash "$oracle/migrations/1790042972.sh"
   bash "$oracle/migrations/1791968925.sh"
   bash "$oracle/migrations/1791969355.sh"
+}
+snapshot() {
+  local dir=$1
+  (
+    cd "$dir"
+    find . -printf '%y %p %l\n' | sort
+    find . -type f -print0 | sort -z | xargs -0 -r sha256sum
+  )
+}
+same_tree() { diff -u <(snapshot "$1") <(snapshot "$2"); }
+oracle_run() {
+  local id=$1 fixture=$2
+  setup "$case.oracle.$id" "$FIXTURE_C"
+  cp -a "$fixture"/. "$HOME"/
+  OMARCHY_PATH=$ORACLE_SOURCE bash -euo pipefail "$ORACLE_SOURCE/migrations/$id.sh"
+}
+case_fresh45() {
+  local before id script
+  case=fresh45
+  setup fresh45 "$FIXTURE_C"
+  mkdir -p "$XDG_STATE_HOME/omarchy/notifications" \
+    "$XDG_STATE_HOME/omarchy/workspace-layouts" \
+    "$XDG_CONFIG_HOME/herdr" "$XDG_DATA_HOME/applications" \
+    "$OMARCHY_MIGRATION_STATE"
+  printf '%s\n' '[]' > "$XDG_STATE_HOME/omarchy/notifications/live.json"
+  printf '%s\n' '[]' > "$XDG_STATE_HOME/omarchy/notifications/history.json"
+  printf '%s\n' '{"dnd":false}' > "$XDG_STATE_HOME/omarchy/notifications/quiet.json"
+  printf '%s\n' 'o.workspace_mode({ workspace = "3", mode = "scrolling" })' > "$XDG_STATE_HOME/omarchy/workspace-layouts/3.lua"
+  printf '%s\n' 'panel_bg = "reset"' 'surface_dim = "black"' > "$XDG_CONFIG_HOME/herdr/config.toml"
+  printf '%s\n' '[Desktop Entry]' 'StartupWMClass=omarchy' > "$XDG_DATA_HOME/applications/omarchy.desktop"
+  mkdir -p "$XDG_CONFIG_HOME/imv"
+  printf '%s\n' 'user-owned imv config' > "$XDG_CONFIG_HOME/imv/managed-config"
+  ln -s managed-config "$XDG_CONFIG_HOME/imv/config"
+  for id in 1790042972 1791968925 1791969355; do
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done
+  while IFS=$'\t' read -r id script; do
+    [[ -n $id && -n $script ]] || fail 'fresh45: invalid list entry'
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done < "$NIXARCHY_USER_MIGRATIONS/list"
+  before=$work/fresh45.before
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail 'fresh45: runner changed a seeded home'
+  [[ -L $XDG_CONFIG_HOME/imv/config ]] || fail 'fresh45: managed symlink replaced'
+  [[ $(marker_count) -eq $((3 + $(wc -l < "$NIXARCHY_USER_MIGRATIONS/list"))) ]] || fail 'fresh45: markers missing'
+}
+case_runner_stop() {
+  local list_dir=$work/runner-list
+  case=runner-stop
+  setup runner-stop "$FIXTURE_C"
+  mkdir -p "$list_dir"
+  printf '%s\n' 'exit 1' > "$list_dir/first.sh"
+  printf '%s\n' 'printf "%s\\n" second >> "$HOME/order"' > "$list_dir/second.sh"
+  printf '%s\t%s\n' 100 "$list_dir/first.sh" 200 "$list_dir/second.sh" > "$list_dir/list"
+  NIXARCHY_USER_MIGRATIONS=$list_dir
+  export NIXARCHY_USER_MIGRATIONS
+  if run_port; then fail 'runner-stop: first failure returned success'; fi
+  [[ ! -e $HOME/order && ! -d $OMARCHY_MIGRATION_STATE ]] || fail 'runner-stop: continued after failure'
+  grep -F '100: user migration failed' "$HOME/journal.log" >/dev/null || fail 'runner-stop: journal lacks failed id'
+  # It drains stdin: with the list on stdin, the second entry would vanish.
+  printf '%s\n' 'cat >/dev/null; printf "%s\\n" first >> "$HOME/order"' > "$list_dir/first.sh"
+  run_port
+  [[ $(cat "$HOME/order") == $'first\nsecond' ]] || fail 'runner-stop: recovery order wrong'
+  [[ -e $OMARCHY_MIGRATION_STATE/100.sh && -e $OMARCHY_MIGRATION_STATE/200.sh ]] || fail 'runner-stop: recovery markers missing'
 }
 compare_oracle() {
   local fixture=$1
@@ -126,4 +193,6 @@ setup drift "$fixture_a"
 STUB_DRIFT=1 run_port
 [[ ! -e $OMARCHY_MIGRATION_STATE/1791969355.sh ]] || fail 'drift: split marker despite refused move'
 grep 'widget at center\[0\] is not omarchy.indicators' "$HOME/journal.log" >/dev/null || fail 'drift: refusal not observed'
+case_fresh45
+case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

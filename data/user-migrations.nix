@@ -53,6 +53,7 @@
   };
   "1790042972" = {
     decision = "ported";
+    run = "bar";
     reason = "ported in omarchy-migrate-user (#1610)";
   };
   "1790457067" = {
@@ -137,10 +138,12 @@
   };
   "1791968925" = {
     decision = "partial";
+    run = "bar";
     reason = "order ported in omarchy-migrate-user; duplicate trays kept (no IPC delete; no seed had two)";
   };
   "1791969355" = {
     decision = "ported";
+    run = "bar";
     reason = "ported in omarchy-migrate-user (#1610)";
   };
   "1792259038" = {

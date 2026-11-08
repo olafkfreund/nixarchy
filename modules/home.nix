@@ -1193,7 +1193,23 @@ in
                 if [ ! -e "${config.xdg.configHome}/hyprland-mimeapps.list" ] && [ ! -L "${config.xdg.configHome}/hyprland-mimeapps.list" ]; then
                   mimeapps_absent=1
                 fi
+                fresh_shell=
+                if [ ! -e "${config.xdg.configHome}/omarchy/shell.json" ] \
+                  && [ ! -L "${config.xdg.configHome}/omarchy/shell.json" ]; then
+                  fresh_shell=1
+                fi
                 seed_dir "${omarchyPath}/config" "${config.xdg.configHome}"
+                if [ -n "$fresh_shell" ] && [ -e "${config.xdg.configHome}/omarchy/shell.json" ]; then
+                  migration_state="${config.home.homeDirectory}/.local/state/omarchy/migrations"
+                  run mkdir -p "$migration_state"
+                  for id in 1790042972 1791968925 1791969355; do
+                    run touch "$migration_state/$id.sh"
+                  done
+                  while IFS=$'\t' read -r id script; do
+                    [ -n "$id" ] && [ -n "$script" ] || continue
+                    run touch "$migration_state/$id.sh"
+                  done < ${cfg.package.passthru.userMigrations}/list
+                fi
                 if [ -n "$mimeapps_absent" ] && [ -e "${config.xdg.configHome}/hyprland-mimeapps.list" ]; then
                   run rm -f "${config.xdg.configHome}/hyprland-mimeapps.list"
                   echo "nixarchy: hyprland-mimeapps.list is seeded at your next login (#1342)"
@@ -2460,6 +2476,7 @@ in
         executable = true;
         text = ''
           #!/usr/bin/env bash
+          export NIXARCHY_USER_MIGRATIONS=${cfg.package.passthru.userMigrations}
           export PATH=${
             lib.makeBinPath [
               cfg.package

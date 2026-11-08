@@ -376,7 +376,7 @@ let
     in
     writeText "nixarchy-arch-packages.tsv" (lib.concatStringsSep "\n" (appRows ++ extraRows) + "\n");
 in
-stdenvNoCC.mkDerivation {
+stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "omarchy";
   inherit version src;
 
@@ -2116,6 +2116,9 @@ stdenvNoCC.mkDerivation {
 
   passthru = {
     inherit runtimeDeps;
+    userMigrations = callPackage ./user-migrations.nix {
+      omarchy = finalAttrs.finalPackage;
+    };
 
     # The desktop shell this build actually uses, so it can be asserted on
     # (#528). flake.nix pins it to a FLOOR: on a nixpkgs shipping quickshell
@@ -2144,4 +2147,4 @@ stdenvNoCC.mkDerivation {
     platforms = lib.platforms.linux;
     mainProgram = "omarchy";
   };
-}
+})

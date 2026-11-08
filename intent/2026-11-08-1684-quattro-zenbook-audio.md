@@ -43,7 +43,12 @@ run that tries to advance the pin stops there (#1684, signatures `c802f51` and `
 - Other checks may fail once the ledger passes, since the ledger was the
   first refusal. The dispatched run is the measurement.
 
-## Open questions
+## Decisions (owner, 2026-11-08)
+
+1. `skip`: one laptop model, not targeted, as with the ProArt P14 row.
+2. The row lives only in the edge carry. The edge-to-`main` merge rule in CLAUDE.md §8 names the package ledger beside readme counts, so the row is reconciled with the pin `main` keeps.
+
+## Open questions (as drafted)
 
 1. Is this one laptop's hardware support in scope? If not, the row is
    `skip`, as the ProArt P14 row is (`data/omarchy-packages.nix:483`). That

@@ -15,8 +15,10 @@ The usage text (line 46) already prints `$DISK_GB`, so it follows. The space
 preflight (lines 145-147) already asks for `DISK_GB + image_gb` and needs no
 edit.
 
-A `NIXARCHY_TRY_DISK` below the installer's floor is refused before
-`qemu-img create`, with the floor named: `NIXARCHY_TRY_DISK=$DISK_GB is under
+A `NIXARCHY_TRY_DISK` below the installer's floor is refused right after
+argument parsing, **before** `--fresh` deletes anything
+(`try-nixarchy.sh:194`), so a bad override never costs an existing disk. The
+refusal names the floor: `NIXARCHY_TRY_DISK=$DISK_GB is under
 the installer's 32 GB minimum`. The floor is a literal in the launcher with
 a comment naming `MIN_DISK_GIB`; the check in section 3 is what keeps the
 two equal. The launcher is a standalone download (the release asset), so it
@@ -25,8 +27,10 @@ cannot source `install.sh`.
 ### 2. An existing undersized disk (decision 4)
 
 Where the launcher refuses an existing `$DISK` (lines 200-203), it first
-reads the image's virtual size (`qemu-img info --output=json`,
-`.["virtual-size"]`). When that is under the floor, the refusal says so:
+reads the image's virtual size from `qemu-img info`'s plain output (the
+`virtual size: ... (N bytes)` line, parsed with `sed`). The launcher needs
+no jq today (`try-nixarchy.sh:68`) and gains none. When that is under the
+floor, the refusal says so:
 `$DISK is 24 GB, under the installer's 32 GB minimum. --fresh wipes it and
 creates a 64 GB disk.` `--boot` stays offered, because a disk that already
 holds an install boots whatever its size. A `qemu-img info` failure falls
@@ -41,9 +45,12 @@ fails when either VM number is under the floor:
 - the launcher's default from `try-nixarchy.sh` (`NIXARCHY_TRY_DISK:-N`),
 - the launcher's own floor literal from section 1, which must equal
   `MIN_DISK_GIB`,
+- `installer/try.sh`'s `DISK_MB` (line 51), the in-tree launcher,
 - `installer/vm.nix`'s install target, read by evaluation rather than by
   grep: `emptyDiskImages`'s first `size` in MiB, divided by 1024.
 
+The launcher's default must also equal 64 exactly, so a slide back to the
+floor fails as a change of decision rather than passing as "still legal".
 Each number that cannot be extracted fails the check by name ("could not
 read MIN_DISK_GIB"). A failed extraction must not read as zero, and zero
 must not read as a pass (§4, `mapfile` and empty lists). The `vm.nix`
@@ -58,7 +65,7 @@ cleared where the dashboard's own failure handling takes over (the first
 is true, it prints:
 
 ```text
-The installer stopped before changing anything.
+The installer stopped before writing to any disk.
 Press Return for a root shell.
 ```
 
@@ -71,8 +78,8 @@ variables at exit). The unit in `installer/cd.nix` is not changed: the
 `conflicts` line and the TTY settings stay load-bearing as documented, and
 `Restart = "no"` still holds because the shell is the same process.
 
-The installer already prints its refusals to stderr before exiting. The
-hold keeps them on screen, because nothing clears the VT until the unit
+The installer prints its refusal (stderr for `ask_device`, stdout for
+`ui_abort`, `install.sh:306`) before exiting. The hold keeps it on screen, because nothing clears the VT until the unit
 stops, and the unit does not stop while the shell runs.
 
 ## Alternatives rejected
@@ -107,14 +114,25 @@ stops, and the unit does not stop while the shell runs.
   default back to 24 fails it, naming the launcher. Floor literal 30 fails
   it. `emptyDiskImages` size 24576 fails it. Each break is shown with
   `git diff`, and the failing output goes in the PR.
-- `checks.installer-disk-list` (or a sibling stubbed `runCommand`) runs
-  `ask_device` under `script -qc` (a pty, so `-t 0` is true) with a stubbed
-  `lsblk` listing only a 24 GiB disk, and asserts the output carries "no disk
-  large enough" **and** the hold prompt. The same run with `--answers` set
-  asserts there is no prompt. §1 break: the trap removed fails the first
-  assertion.
-- A launcher stub run (`tests/try-nixarchy.nix` already stubs qemu) with an
-  existing 24 GB `$DISK` asserts the undersized-disk message.
+- A new stubbed `runCommand` runs **the real `install.sh` entry**, not an
+  extracted function, so the trap setup runs. `checks.installer-disk-list`
+  extracts `ask_device` and would never see the trap. It runs under `script
+  -qc` (a pty, so `-t 0` is true), with the greeter's Return fed on stdin
+  and a stubbed `lsblk` listing only a 24 GiB disk. It asserts the output
+  carries "no disk large enough" **and** the hold prompt. Three more runs:
+  - with `--answers` set: no prompt;
+  - with stdin not a TTY: no prompt;
+  - past `ui_dashboard_start`, a stubbed failure: `ui_failed`'s screen and
+    no hold prompt (the boundary).
+
+  §1 break: the trap removed fails the first assertion, and the trap left
+  set into the dashboard fails the last.
+- Launcher stub runs (`tests/try-nixarchy.nix` already stubs qemu, and its
+  `qemu-img` stub gains an `info` reply):
+  - an existing 24 GB `$DISK` gets the undersized-disk message;
+  - an unreadable `info` gets today's message;
+  - `NIXARCHY_TRY_DISK=24 --fresh` is refused with the disk file still
+    present (`test -f`).
 - VM tier when the gate is free: `checks.installer-refusal`, because it
   exercises an early refusal on a real ISO and must stay green.
 - `nix fmt -- --ci`, statix, deadnix, `checks.grep-q-pipefail`.

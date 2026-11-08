@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1659
 intent: intent/2026-11-08-1659-power-authorise-first.md
 ---

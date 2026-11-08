@@ -114,3 +114,8 @@ not need it, but the row in section 2 does, and they land together.
   pointed at the fixture's package directory, differs only by that path.
   §1: the row back to `declined` fails the case.
 - `checks.user-migrations-ledger`, `bin-ledger`, fmt, statix, deadnix.
+
+## Decisions (owner, 2026-11-08, on the draft)
+
+1. **Vendor the file, not fetchurl** (this replaces the intent's "fetched by URL"). `lua/plugins/lualine-transparent.lua` is extracted once from `omarchy-nvim-2026.9.21-5-any.pkg.tar.zst` and committed into `pkgs/omarchy-nvim/config`. The package URL and its sha256 from Omarchy's `omarchy.db` go in `pkgs/omarchy-nvim/default.nix`'s header as provenance. No 33 MB fetch at build time, and no build failure if the repository drops that version. The plan's first step verifies the file's path in the archive and records the archive hash it was taken from.
+2. Under `neovim = "off"`, nothing is touched: the migration does not run for a config nixarchy does not manage.

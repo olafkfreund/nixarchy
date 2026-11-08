@@ -50,7 +50,11 @@ Two checks encode the unstable layout as a fixed `.svg` path:
   arrangement (`.svg`) rather than the property.
 - §1: proven to fail on stable before the fix and pass after.
 
-## Open questions
+## Decisions (owner, 2026-11-08)
+
+1. The script is fixed. It links the packaged glyphs whatever their extension, and rewrites an `Image=X.svg` to `X.png` in the copied `theme.conf` when only the PNG exists. The system's own fcitx5 files stay the source.
+
+## Open questions (as drafted)
 
 1. Fix in the script: link `*.svg` and `*.png`, and rewrite `Image=X.svg`
    to `X.png` in the copied `theme.conf` when only the PNG exists? Or fix

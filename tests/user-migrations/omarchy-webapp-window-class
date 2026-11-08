@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+printf 'omarchy-webapp-window-class %s\n' "$*" >> "$HOME/calls.log"
+case ${1:-} in
+  https://example.com/dashboard) printf '%s\n' 'chrome-example.com__dashboard-Default' ;;
+  https://app.hey.com) printf '%s\n' 'chrome-app.hey.com__-Default' ;;
+  *) printf 'unexpected web app URL: %s\n' "${1:-}" >&2; exit 1 ;;
+esac

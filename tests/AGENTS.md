@@ -15,6 +15,15 @@ green, a `cachix` step that printed "Nothing to push" at a 404.
 So the bar for adding one is: **run it against the unfixed code first and watch
 it fail.** A check that has never failed is a check nobody knows works.
 
+Checks receive a placeholder `self` through `checkInputs`, so proof for a check
+survives a commit that changes nothing it builds. A check that must carry the
+real commit belongs in `data/commit-bound-checks.nix` with its provenance
+reason. `.github/scripts/commit-independent.sh` compares check outputs across
+a probe commit nightly. The measured `self.outPath` carriers are
+`vm/configuration.nix:173`, `installer/host.nix:289`, and
+`tests/options.nix:648`; inspect these when a check moves despite stable
+revision values.
+
 ## A sourced function does not check its package (#1112, #1124)
 
 Extracting or sourcing a function in a `runCommand` exercises its behavior but

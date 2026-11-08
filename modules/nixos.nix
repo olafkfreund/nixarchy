@@ -665,6 +665,7 @@ in
           "opencode"
           "crush"
           "gemini"
+          "agy"
           "copilot"
           "grok"
         ]
@@ -688,7 +689,7 @@ in
         that outlived a rebuild would be a second, invisible one.
 
         The ids match `omarchy-default-agent`'s. This option installs these
-        seven. The menu installs more of them from nixpkgs, such as `pi` and
+        eight. The menu installs more of them from nixpkgs, such as `pi` and
         `omp`, and names where the ones nixpkgs lacks are packaged.
       '';
     };
@@ -960,6 +961,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    warnings = lib.optional (
+      cfg.defaultAgent == "gemini"
+    ) ''Gemini was replaced by Antigravity in Omarchy 4.5; defaultAgent = "gemini" now selects agy'';
     assertions = [
       (
         let
@@ -1750,6 +1754,12 @@ in
       // {
         "nixarchy/options.json".source = "${nixarchyOptions}/share/doc/nixos/options.json";
         "nixarchy/docs".source = nixarchyDocs;
+        "nixarchy/version".text = lib.mkDefault (
+          let
+            r = import ./revision.nix inputs.self;
+          in
+          "${r.shortRev} ${r.date}\n"
+        );
       };
 
     # glib looks for compiled schemas in $XDG_DATA_DIRS/glib-2.0/schemas, but

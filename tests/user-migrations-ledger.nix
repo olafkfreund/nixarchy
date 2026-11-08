@@ -55,6 +55,15 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
       printf '  %s\n' "$bad" >&2
       status=1
     fi
+    bad_run=$(jq -r 'del(.predates) | to_entries[]
+      | select((.value.decision | IN("ported", "partial")) and (.value.run | IN("bar", "upstream", "edited", "port") | not)
+          or ((.value.decision | IN("ported", "partial") | not) and (.value | has("run"))))
+      | "\(.key): decision=\(.value.decision), run=\(.value.run // "missing")"' ${ledger}) || exit 1
+    if [ -n "$bad_run" ]; then
+      echo "rows with a missing, invalid or misplaced run:" >&2
+      printf '  %s\n' "$bad_run" >&2
+      status=1
+    fi
     [ "$status" = 0 ] || exit 1
     echo "$(wc -l <triage) user-file migrations, every one decided"
     touch $out

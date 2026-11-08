@@ -482,8 +482,8 @@
       # two systems need different ones, and the ORDER has to stay exactly as
       # it was. environment.systemPackages order reaches buildEnv, so moving
       # a module is not free even when the resulting set is identical.
-      vmModulesWith = hm: [
-        self.nixosModules.nixarchy
+      vmModulesWith = inputs: hm: [
+        inputs.self.nixosModules.nixarchy
         hm
         ./vm/configuration.nix
       ];
@@ -502,16 +502,459 @@
       # instead, every `inputs.nixpkgs` read inside the modules saw unstable,
       # and a stable machine that could not evaluate passed here (#1200).
       # `self` too: installer/host.nix takes the HM module from it.
-      stableInputs = inputs // {
+      stableInputs = checkInputs // {
         nixpkgs = nixpkgs-stable;
         home-manager = home-manager-stable;
-        self = self // {
-          nixosModules = self.nixosModules // {
+        self = checkInputs.self // {
+          nixosModules = checkInputs.self.nixosModules // {
             nixarchy = import ./modules/nixos.nix stableInputs;
           };
-          homeManagerModules = self.homeManagerModules // {
+          homeManagerModules = checkInputs.self.homeManagerModules // {
             nixarchy = import ./modules/home.nix stableInputs;
           };
+        };
+      };
+      mkReferenceWith =
+        inputs:
+        {
+          encrypt,
+          hardware ? false,
+        }:
+        nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [
+            inputs.self.nixosModules.nixarchy
+            homeManagerModule
+            inputs.disko.nixosModules.disko
+
+            # Why: docs/internals/flake.md#one-module-that-imports-the-machines-own-two-rathe
+            {
+              imports = [
+                (import ./installer/host.nix {
+                  hostname = "nixarchy";
+                  username = "omarchy";
+                })
+                (import ./installer/disk-config.nix {
+                  device = "/dev/vda";
+                  inherit encrypt;
+                })
+              ];
+            }
+          ]
+          ++ nixpkgs.lib.optional hardware {
+            # Kept in step with tests/generate-config-surface.nix, which fails
+            # if this list stops covering what nixos-generate-config emits.
+            # Two of the tool's package-adding attributes are deliberately NOT
+            # here, and the check states why: hardware.parallels.enable pulls
+            # a proprietary Parallels disk image that cannot be redistributed
+            # on an ISO, and boot.isNspawnContainer is emitted only when the
+            # tool runs INSIDE an nspawn container, which an installer that
+            # partitions a physical disk never is.
+            hardware.cpu.intel.npu.enable = true;
+            boot.swraid.enable = true;
+
+            # Answered, not muted. swraid.nix:16 accepts any mdadm.conf
+            # matching MAILADDR|PROGRAM, and without one it warns that mdmon
+            # will crash -- on every evaluation of this configuration, which
+            # is every ISO build and every run of checks.iso-source.
+            #
+            # #472 answered the same question for the `iso` configuration and
+            # verified ITS warnings were empty; this one was never checked and
+            # went on warning. Hence checks.config-warnings below, so the next
+            # one fails instead of accumulating.
+            #
+            # root is where NixOS mail goes with no MTA configured, which on a
+            # configuration that exists only to put mdadm's packages on an
+            # image is exactly right: the point is that mdmon starts, not that
+            # anyone reads it.
+            boot.swraid.mdadmConf = "MAILADDR root";
+            virtualisation.hypervGuest.enable = true;
+            virtualisation.virtualbox.guest.enable = true;
+
+            # Every nixos-hardware module installer/hardware-modules.sh can
+            # select. Keep this union for the hardware evaluation checks.
+            #
+            # The UNION, not a machine: no real machine has an Intel and an
+            # AMD GPU and both microcode sets. Every entry is mkDefault config
+            # and this host is never installed.
+            #
+            # checks.hardware-modules asserts these names exist.
+            imports = with inputs.nixos-hardware.nixosModules; [
+              common-cpu-intel-cpu-only
+              common-cpu-amd
+              common-gpu-intel
+              common-gpu-amd
+              # Imports common-pc and common-pc-laptop too, so it covers all
+              # four of the chassis/disk outcomes.
+              common-pc-laptop-ssd
+            ];
+          };
+        };
+
+      mkConfigurations =
+        inputs:
+        let
+          withHelpers = rec {
+            isoSource = {
+              flake = inputs.self;
+            };
+
+            # The live network image. See installer/cd.nix.
+            iso-net = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = {
+                inherit inputs;
+                source = isoSource;
+              };
+              modules = [ ./installer/cd.nix ];
+            };
+
+            installer-vm = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = { inherit inputs; };
+              modules = [ ./installer/vm.nix ];
+            };
+
+            vm = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = { inherit inputs; };
+              modules = vmModulesWith inputs homeManagerModule;
+            };
+
+            # Why: docs/internals/flake.md#the-same-vm-with-room-to-run-a-model
+            vm-big = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = { inherit inputs; };
+              modules = [
+                inputs.self.nixosModules.nixarchy
+                homeManagerModule
+                ./vm/configuration.nix
+                (
+                  { lib, ... }:
+                  {
+                    virtualisation = {
+                      memorySize = lib.mkForce 32768;
+                      cores = lib.mkForce 8;
+                      diskSize = lib.mkForce 131072; # 128GB: several models, comfortably
+                      diskImage = lib.mkForce "./nixarchy-vm-big.qcow2";
+                      # A different port, so this and .#vm can run side by side.
+                      forwardPorts = lib.mkForce [
+                        {
+                          from = "host";
+                          host.port = 2224;
+                          guest.port = 22;
+                        }
+                      ];
+                    };
+
+                    # This is the VM a person KEEPS (#817), so it matches a real
+                    # machine rather than the smoke test. Both panels that follow
+                    # a service are gated on that service, and with neither
+                    # enabled nixarchy.podman and nixarchy.distrobox are invisible
+                    # here -- the two panels most worth trying by hand. The cost
+                    # is the image pulls, paid by whoever runs this VM.
+                    virtualisation.podman.enable = true;
+                    programs.nixarchy.services.boxes.enable = true;
+
+                    # Sized for the machine rather than inherited from the smoke
+                    # test: with 32GB the 8b tier is comfortable, and 8b is the
+                    # smallest size shown to follow the skills rather than answer
+                    # from memory while claiming to have read them.
+                    programs.nixarchy.localAi = {
+                      enable = lib.mkDefault true;
+                      model = lib.mkDefault "qwen3:8b";
+                      # A VM has no GPU, and localAi refuses to build without one
+                      # unless told. This is the case the option exists for: a rig
+                      # for exercising the wiring, where a slow answer is still an
+                      # answer and nobody is trying to work.
+                      allowCpu = lib.mkDefault true;
+                    };
+                  }
+                )
+              ];
+            };
+
+            # The machine the installer produces, with the installer's own defaults.
+            # Built in CI so the install path cannot rot between releases.
+            #
+            # `device` is a placeholder: nothing here formats a disk. What matters is
+            # that the expensive derivations in this toplevel are the same ones a real
+            # install needs, and the device string is not one of them.
+            reference = mkReferenceWith inputs { encrypt = true; };
+
+            # The same machine on an unencrypted disk.
+            #
+            # The installer offers encryption on or off; this evaluates the
+            # unencrypted result for checks and cache population.
+            reference-unencrypted = mkReferenceWith inputs { encrypt = false; };
+
+            # The same machine again, with every hardware attribute
+            # nixos-generate-config can emit that adds a package turned on.
+            # tests/generate-config-surface.nix evaluates this configuration;
+            # tests/config-warnings.nix checks its warnings.
+            #
+            # #382: an Intel NPU made the tool write hardware.cpu.intel.npu.enable
+            # into hardware-configuration.nix, which put intel-npu-driver into
+            # environment.systemPackages, which no baked closure carried, so the
+            # target had to BUILD it -- and building a cmake package with no
+            # compiler on the image is the stdenv source bootstrap, which is where
+            # two users' installs died, after the disk was partitioned.
+            #
+            # boot.swraid.enable is the one that matters most and was found by
+            # tests/generate-config-surface.nix rather than by a user: a machine
+            # whose root is on mdraid gets it written, and it pulls mdadm. That
+            # one cannot be worked around by commenting it out either -- without
+            # it the installed machine does not boot at all.
+            reference-hardware = mkReferenceWith inputs {
+              encrypt = false;
+              hardware = true;
+            };
+          };
+        in
+        builtins.removeAttrs withHelpers [ "isoSource" ];
+
+      mkInstall =
+        inputs: system:
+        pkgsFor.${system}.writeShellApplication {
+          name = "nixarchy-install";
+          runtimeInputs = with pkgsFor.${system}; [
+            gum
+            coreutils
+            gnused
+            gnugrep
+            gawk
+            findutils
+            util-linux # lsblk, findmnt, blkid, blockdev, partx, wipefs
+            # `btrfs subvolume snapshot -r`, for the @factory baseline taken
+            # at the end of the install. writeShellApplication prepends these
+            # inputs to the caller's PATH; an undeclared command might work
+            # on one machine and fail at this final step on another.
+            btrfs-progs
+            # sgdisk, and only sgdisk: the free-space mode's whole safety
+            # argument rests on `--new=0:` picking the next free partition
+            # number, which is gptfdisk's behaviour and nothing else's.
+            gptfdisk
+            git
+            mkpasswd
+            nixos-install-tools # nixos-install, nixos-generate-config
+            nix
+            ncurses # clear and tput, which the screens are drawn with
+            kbd # loadkeys, and the keymap list
+            tzdata # the timezone list
+            # Both are used by ask_network. `nix run .#install` on a stock
+            # ISO needs them as runtime inputs.
+            curl # the connectivity test -- can we reach the binary cache
+            networkmanager # nmcli, for joining a wireless network
+            # The failure and finish screens offer a way out of both. Present
+            # on the live medium anyway; named here so `nix run .#install` on
+            # some other host does not discover them missing at the one moment
+            # a person needs them.
+            systemd # systemctl reboot / poweroff
+            bashInteractive # the shell the failure screen drops into
+          ];
+          # Spliced at build time the way doctor splices @apps@, so the script
+          # never has to find these itself and `nix run` works from anywhere.
+          text =
+            builtins.replaceStrings
+              [
+                "@template@"
+                "@gumenv@"
+                "@ui@"
+                "@logo@"
+                "@logocompact@"
+                "@tips@"
+                "@keymaps@"
+                "@dashboard@"
+                "@tzdata@"
+                "@kbd@"
+                "@kbdmodelmap@"
+                "@nonlatin@"
+                "@reservedusers@"
+                "@initrdmodules@"
+                "@initrdforced@"
+                "@initrdmodulesplain@"
+                "@initrdforcedplain@"
+                "@initrdkernel@"
+                "@hardwaremodules@"
+              ]
+              [
+                "${inputs.self.packages.${system}.flake-template}"
+                "${./installer/gum-env.sh}"
+                "${./installer/lib/ui.sh}"
+                "${./installer/brand/logo.txt}"
+                "${./installer/brand/logo-compact.txt}"
+                "${./installer/brand/tips.txt}"
+                "${./installer/brand/keymaps.txt}"
+                "${./installer/lib/dashboard.sh}"
+                "${pkgsFor.${system}.tzdata}"
+                "${pkgsFor.${system}.kbd}"
+                "${pkgsFor.${system}.systemd}/share/systemd/kbd-model-map"
+                (builtins.head (
+                  builtins.match ".*local non_latin_layouts =[[:space:]]*\"([^\"]*)\".*" (
+                    builtins.readFile "${omarchy}/default/hypr/input.lua"
+                  )
+                ))
+                (
+                  let
+                    users = builtins.attrValues inputs.self.nixosConfigurations.reference.config.users.users;
+                  in
+                  nixpkgs.lib.concatStringsSep " " (
+                    builtins.map (user: user.name) (builtins.filter (user: !(user.isNormalUser or false)) users)
+                    ++ [ "daemon" ]
+                  )
+                )
+                # The initrd modules the reference host carries, and therefore
+                # the ones already baked into any image built from this commit.
+                # install.sh compares what it detected against this list to
+                # decide whether the installed machine can reuse that initrd.
+                (nixpkgs.lib.concatStringsSep " " inputs.self.nixosConfigurations.reference.config.boot.initrd.availableKernelModules)
+                # And the ones it loads unconditionally, which the same pin has
+                # to cover: an imported profile sets this list too.
+                (nixpkgs.lib.concatStringsSep " " inputs.self.nixosConfigurations.reference.config.boot.initrd.kernelModules)
+                # And the same two for an unencrypted install. They are not the
+                # same lists: LUKS adds a dozen crypto modules to the initrd, so
+                # a machine installed without encryption that pinned the
+                # encrypted set would match neither baked initrd and build a
+                # third.
+                (nixpkgs.lib.concatStringsSep " " inputs.self.nixosConfigurations.reference-unencrypted.config.boot.initrd.availableKernelModules)
+                (nixpkgs.lib.concatStringsSep " " inputs.self.nixosConfigurations.reference-unencrypted.config.boot.initrd.kernelModules)
+                # The kernel those four lists were captured from.
+                #
+                # The pin install.sh writes is only VALID for this kernel.
+                # nixpkgs gates entries in the default initrd module set on
+                # the kernel version -- xhci_pci_prom21 appears only at 7.2
+                # and later -- so a list captured here and forced onto a
+                # machine running a different kernel asks modprobe for a
+                # module that does not exist, and the initrd cannot build.
+                #
+                # That is not hypothetical: it is what `omarchy update`
+                # produced on a machine installed from a 7.2 image whose
+                # flake still resolved nixarchy to a revision with no kernel
+                # policy, and the machine dropped back to 6.18.
+                #
+                # So the pin is conditional on this exact version. When the
+                # kernel moves the pin evaporates, nixpkgs computes the list
+                # its own kernel warrants, and the machine builds a new
+                # initrd -- which it had to do anyway, because a different
+                # kernel is a different initrd.
+                inputs.self.nixosConfigurations.reference-unencrypted.config.boot.kernelPackages.kernel.version
+
+                # Which nixos-hardware modules this machine wants. A separate
+                # script rather than a function in install.sh because it takes
+                # its whole world from four environment variables and can
+                # therefore be driven against fixture machines --
+                # checks.hardware-modules does, and the install VM is one
+                # machine where these rules are about being on many.
+                "${./installer/hardware-modules.sh}"
+              ]
+              (builtins.readFile ./installer/install.sh);
+        };
+
+      mkTry =
+        inputs: system:
+        let
+          pkgs = pkgsFor.${system};
+        in
+        pkgs.writeShellApplication {
+          name = "nixarchy-try";
+          runtimeInputs = with pkgs; [
+            coreutils # df, install, mktemp, nproc, sha256sum
+            curl # the release-image fallback
+            gnugrep
+            gnused
+            gawk
+          ];
+          text =
+            builtins.replaceStrings
+              [
+                "@rev@"
+                "@qemu@"
+                "@qemu_img@"
+                "@ovmf_code@"
+                "@ovmf_vars@"
+              ]
+              [
+                (inputs.self.rev or "")
+                "${pkgs.qemu_kvm}/bin/qemu-system-x86_64"
+                "${pkgs.qemu_kvm}/bin/qemu-img"
+                "${pkgs.OVMF.firmware}"
+                "${pkgs.OVMF.variables}"
+              ]
+              (builtins.readFile ./installer/try.sh);
+        };
+
+      mkMicrovmWith =
+        inputs:
+        {
+          template,
+          system,
+          modules ? [ ],
+        }:
+        (nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit inputs; };
+          modules = [
+            inputs.microvm.nixosModules.microvm
+            ./modules/microvm/guest.nix
+            template
+          ]
+          ++ modules;
+        }).config.microvm.declaredRunner;
+
+      realInputs = inputs;
+      commitBound = import ./data/commit-bound-checks.nix;
+      checkInputs = realInputs // {
+        self = self // {
+          rev = "0000000000000000000000000000000000000000";
+          shortRev = "0000000";
+          lastModifiedDate = "19700101000000";
+          nixosModules = self.nixosModules // {
+            nixarchy = import ./modules/nixos.nix checkInputs;
+          };
+          homeManagerModules = self.homeManagerModules // {
+            nixarchy = import ./modules/home.nix checkInputs;
+          };
+          nixosConfigurations = mkConfigurations checkInputs;
+          packages =
+            self.packages
+            // lib.genAttrs (import systems) (
+              system:
+              self.packages.${system}
+              // {
+                flake-template = pkgsFor.${system}.callPackage ./installer/mkFlake.nix {
+                  inherit (checkInputs) self;
+                };
+                install = mkInstall checkInputs system;
+                try = mkTry checkInputs system;
+                nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit (checkInputs) self; };
+              }
+              // lib.concatMapAttrs (name: template: {
+                "microvm-${name}" = mkMicrovmWith checkInputs {
+                  inherit system;
+                  template = template.module;
+                };
+                "microvm-${name}-tcg" = mkMicrovmWith checkInputs {
+                  inherit system;
+                  template = template.module;
+                  modules = [
+                    {
+                      microvm.cpu = "max";
+                      microvm.qemu.machineOpts = {
+                        accel = "tcg";
+                        acpi = "on";
+                        "mem-merge" = "on";
+                        pcie = "on";
+                        pit = "on";
+                        pic = "on";
+                        rtc = "on";
+                        usb = "off";
+                      };
+                    }
+                  ];
+                };
+              }) (import ./data/microvm-templates.nix)
+            );
         };
       };
       stableVm = nixpkgs-stable.lib.nixosSystem {
@@ -527,25 +970,6 @@
 
       # nixarchy's own pins, which a consumer's overrides never change (#1371)
       ownLock = builtins.fromJSON (builtins.readFile ./flake.lock);
-      # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
-      nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";
-      #
-      # `lastModifiedDate` is absent, not empty, when a lock node has no
-      # `lastModified` -- which is what installer/mkFlake.nix used to write,
-      # and is why the offline install broke the first time this landed: the
-      # generated flake evaluated a DIFFERENT omarchy than the installer had
-      # seeded, for want of one field. mkFlake now writes it. The fallback
-      # stays for the machines whose flake.lock was generated before it did:
-      # they get "unknown" and a rebuild that has a network, rather than an
-      # evaluation error on a system they cannot rebuild to fix.
-      nixarchyDate =
-        let
-          d = self.lastModifiedDate or "";
-        in
-        if d == "" then
-          "unknown"
-        else
-          "${lib.substring 0 4 d}-${lib.substring 4 2 d}-${lib.substring 6 2 d}";
     in
     {
       overlays.default = final: _prev: {
@@ -841,7 +1265,6 @@
             pinnedRev = ownLock.nodes.${ownLock.nodes.root.inputs.omarchy}.locked.rev or null;
             input = omarchy;
           };
-          inherit nixarchyRev nixarchyDate;
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
 
@@ -954,140 +1377,7 @@
           };
 
           # Why: docs/internals/flake.md#nix-run-github-olafkfreund-nixarchy-verify-from-in
-          install = pkgsFor.${system}.writeShellApplication {
-            name = "nixarchy-install";
-            runtimeInputs = with pkgsFor.${system}; [
-              gum
-              coreutils
-              gnused
-              gnugrep
-              gawk
-              findutils
-              util-linux # lsblk, findmnt, blkid, blockdev, partx, wipefs
-              # `btrfs subvolume snapshot -r`, for the @factory baseline taken
-              # at the end of the install. writeShellApplication prepends these
-              # inputs to the caller's PATH; an undeclared command might work
-              # on one machine and fail at this final step on another.
-              btrfs-progs
-              # sgdisk, and only sgdisk: the free-space mode's whole safety
-              # argument rests on `--new=0:` picking the next free partition
-              # number, which is gptfdisk's behaviour and nothing else's.
-              gptfdisk
-              git
-              mkpasswd
-              nixos-install-tools # nixos-install, nixos-generate-config
-              nix
-              ncurses # clear and tput, which the screens are drawn with
-              kbd # loadkeys, and the keymap list
-              tzdata # the timezone list
-              # Both are used by ask_network. `nix run .#install` on a stock
-              # ISO needs them as runtime inputs.
-              curl # the connectivity test -- can we reach the binary cache
-              networkmanager # nmcli, for joining a wireless network
-              # The failure and finish screens offer a way out of both. Present
-              # on the live medium anyway; named here so `nix run .#install` on
-              # some other host does not discover them missing at the one moment
-              # a person needs them.
-              systemd # systemctl reboot / poweroff
-              bashInteractive # the shell the failure screen drops into
-            ];
-            # Spliced at build time the way doctor splices @apps@, so the script
-            # never has to find these itself and `nix run` works from anywhere.
-            text =
-              builtins.replaceStrings
-                [
-                  "@template@"
-                  "@gumenv@"
-                  "@ui@"
-                  "@logo@"
-                  "@logocompact@"
-                  "@tips@"
-                  "@keymaps@"
-                  "@dashboard@"
-                  "@tzdata@"
-                  "@kbd@"
-                  "@kbdmodelmap@"
-                  "@nonlatin@"
-                  "@reservedusers@"
-                  "@initrdmodules@"
-                  "@initrdforced@"
-                  "@initrdmodulesplain@"
-                  "@initrdforcedplain@"
-                  "@initrdkernel@"
-                  "@hardwaremodules@"
-                ]
-                [
-                  "${self.packages.${system}.flake-template}"
-                  "${./installer/gum-env.sh}"
-                  "${./installer/lib/ui.sh}"
-                  "${./installer/brand/logo.txt}"
-                  "${./installer/brand/logo-compact.txt}"
-                  "${./installer/brand/tips.txt}"
-                  "${./installer/brand/keymaps.txt}"
-                  "${./installer/lib/dashboard.sh}"
-                  "${pkgsFor.${system}.tzdata}"
-                  "${pkgsFor.${system}.kbd}"
-                  "${pkgsFor.${system}.systemd}/share/systemd/kbd-model-map"
-                  (builtins.head (
-                    builtins.match ".*local non_latin_layouts =[[:space:]]*\"([^\"]*)\".*" (
-                      builtins.readFile "${omarchy}/default/hypr/input.lua"
-                    )
-                  ))
-                  (
-                    let
-                      users = builtins.attrValues self.nixosConfigurations.reference.config.users.users;
-                    in
-                    nixpkgs.lib.concatStringsSep " " (
-                      builtins.map (user: user.name) (builtins.filter (user: !(user.isNormalUser or false)) users)
-                      ++ [ "daemon" ]
-                    )
-                  )
-                  # The initrd modules the reference host carries, and therefore
-                  # the ones already baked into any image built from this commit.
-                  # install.sh compares what it detected against this list to
-                  # decide whether the installed machine can reuse that initrd.
-                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.availableKernelModules)
-                  # And the ones it loads unconditionally, which the same pin has
-                  # to cover: an imported profile sets this list too.
-                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.kernelModules)
-                  # And the same two for an unencrypted install. They are not the
-                  # same lists: LUKS adds a dozen crypto modules to the initrd, so
-                  # a machine installed without encryption that pinned the
-                  # encrypted set would match neither baked initrd and build a
-                  # third.
-                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.availableKernelModules)
-                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.kernelModules)
-                  # The kernel those four lists were captured from.
-                  #
-                  # The pin install.sh writes is only VALID for this kernel.
-                  # nixpkgs gates entries in the default initrd module set on
-                  # the kernel version -- xhci_pci_prom21 appears only at 7.2
-                  # and later -- so a list captured here and forced onto a
-                  # machine running a different kernel asks modprobe for a
-                  # module that does not exist, and the initrd cannot build.
-                  #
-                  # That is not hypothetical: it is what `omarchy update`
-                  # produced on a machine installed from a 7.2 image whose
-                  # flake still resolved nixarchy to a revision with no kernel
-                  # policy, and the machine dropped back to 6.18.
-                  #
-                  # So the pin is conditional on this exact version. When the
-                  # kernel moves the pin evaporates, nixpkgs computes the list
-                  # its own kernel warrants, and the machine builds a new
-                  # initrd -- which it had to do anyway, because a different
-                  # kernel is a different initrd.
-                  self.nixosConfigurations.reference-unencrypted.config.boot.kernelPackages.kernel.version
-
-                  # Which nixos-hardware modules this machine wants. A separate
-                  # script rather than a function in install.sh because it takes
-                  # its whole world from four environment variables and can
-                  # therefore be driven against fixture machines --
-                  # checks.hardware-modules does, and the install VM is one
-                  # machine where these rules are about being on many.
-                  "${./installer/hardware-modules.sh}"
-                ]
-                (builtins.readFile ./installer/install.sh);
-          };
+          install = mkInstall inputs system;
 
           # The flake the installer writes to /etc/nixos: the template files with
           # their @tokens@ still in place, plus a lock derived from this repo's
@@ -1357,37 +1647,7 @@
             };
 
           # Why: docs/internals/flake.md#the-front-door
-          try =
-            let
-              pkgs = pkgsFor.${system};
-            in
-            pkgs.writeShellApplication {
-              name = "nixarchy-try";
-              runtimeInputs = with pkgs; [
-                coreutils # df, install, mktemp, nproc, sha256sum
-                curl # the release-image fallback
-                gnugrep
-                gnused
-                gawk
-              ];
-              text =
-                builtins.replaceStrings
-                  [
-                    "@rev@"
-                    "@qemu@"
-                    "@qemu_img@"
-                    "@ovmf_code@"
-                    "@ovmf_vars@"
-                  ]
-                  [
-                    (self.rev or "")
-                    "${pkgs.qemu_kvm}/bin/qemu-system-x86_64"
-                    "${pkgs.qemu_kvm}/bin/qemu-img"
-                    "${pkgs.OVMF.firmware}"
-                    "${pkgs.OVMF.variables}"
-                  ]
-                  (builtins.readFile ./installer/try.sh);
-            };
+          try = mkTry inputs system;
 
           # Every command the vendored scripts exec by name, in one prefix.
           # The bins are unwrapped on purpose, so an incomplete runtimeDeps list
@@ -1448,126 +1708,7 @@
       # Smoke-test VM. Not a daily driver -- it exists to prove the QuickShell
       # bar comes up against Hyprland's Lua config before any packaging effort
       # is spent on the long tail.
-      nixosConfigurations =
-        let
-          withHelpers = rec {
-            isoSource = {
-              flake = inputs.self;
-            };
-
-            # The live network image. See installer/cd.nix.
-            iso-net = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-              specialArgs = {
-                inherit inputs;
-                source = isoSource;
-              };
-              modules = [ ./installer/cd.nix ];
-            };
-
-            installer-vm = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-              specialArgs = { inherit inputs; };
-              modules = [ ./installer/vm.nix ];
-            };
-
-            vm = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-              specialArgs = { inherit inputs; };
-              modules = vmModulesWith homeManagerModule;
-            };
-
-            # Why: docs/internals/flake.md#the-same-vm-with-room-to-run-a-model
-            vm-big = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-              specialArgs = { inherit inputs; };
-              modules = [
-                self.nixosModules.nixarchy
-                homeManagerModule
-                ./vm/configuration.nix
-                (
-                  { lib, ... }:
-                  {
-                    virtualisation = {
-                      memorySize = lib.mkForce 32768;
-                      cores = lib.mkForce 8;
-                      diskSize = lib.mkForce 131072; # 128GB: several models, comfortably
-                      diskImage = lib.mkForce "./nixarchy-vm-big.qcow2";
-                      # A different port, so this and .#vm can run side by side.
-                      forwardPorts = lib.mkForce [
-                        {
-                          from = "host";
-                          host.port = 2224;
-                          guest.port = 22;
-                        }
-                      ];
-                    };
-
-                    # This is the VM a person KEEPS (#817), so it matches a real
-                    # machine rather than the smoke test. Both panels that follow
-                    # a service are gated on that service, and with neither
-                    # enabled nixarchy.podman and nixarchy.distrobox are invisible
-                    # here -- the two panels most worth trying by hand. The cost
-                    # is the image pulls, paid by whoever runs this VM.
-                    virtualisation.podman.enable = true;
-                    programs.nixarchy.services.boxes.enable = true;
-
-                    # Sized for the machine rather than inherited from the smoke
-                    # test: with 32GB the 8b tier is comfortable, and 8b is the
-                    # smallest size shown to follow the skills rather than answer
-                    # from memory while claiming to have read them.
-                    programs.nixarchy.localAi = {
-                      enable = lib.mkDefault true;
-                      model = lib.mkDefault "qwen3:8b";
-                      # A VM has no GPU, and localAi refuses to build without one
-                      # unless told. This is the case the option exists for: a rig
-                      # for exercising the wiring, where a slow answer is still an
-                      # answer and nobody is trying to work.
-                      allowCpu = lib.mkDefault true;
-                    };
-                  }
-                )
-              ];
-            };
-
-            # The machine the installer produces, with the installer's own defaults.
-            # Built in CI so the install path cannot rot between releases.
-            #
-            # `device` is a placeholder: nothing here formats a disk. What matters is
-            # that the expensive derivations in this toplevel are the same ones a real
-            # install needs, and the device string is not one of them.
-            reference = self.lib.mkReference { encrypt = true; };
-
-            # The same machine on an unencrypted disk.
-            #
-            # The installer offers encryption on or off; this evaluates the
-            # unencrypted result for checks and cache population.
-            reference-unencrypted = self.lib.mkReference { encrypt = false; };
-
-            # The same machine again, with every hardware attribute
-            # nixos-generate-config can emit that adds a package turned on.
-            # tests/generate-config-surface.nix evaluates this configuration;
-            # tests/config-warnings.nix checks its warnings.
-            #
-            # #382: an Intel NPU made the tool write hardware.cpu.intel.npu.enable
-            # into hardware-configuration.nix, which put intel-npu-driver into
-            # environment.systemPackages, which no baked closure carried, so the
-            # target had to BUILD it -- and building a cmake package with no
-            # compiler on the image is the stdenv source bootstrap, which is where
-            # two users' installs died, after the disk was partitioned.
-            #
-            # boot.swraid.enable is the one that matters most and was found by
-            # tests/generate-config-surface.nix rather than by a user: a machine
-            # whose root is on mdraid gets it written, and it pulls mdadm. That
-            # one cannot be worked around by commenting it out either -- without
-            # it the installed machine does not boot at all.
-            reference-hardware = self.lib.mkReference {
-              encrypt = false;
-              hardware = true;
-            };
-          };
-        in
-        builtins.removeAttrs withHelpers [ "isoSource" ];
+      nixosConfigurations = mkConfigurations inputs;
 
       devShells = eachSystem (system: {
         default = pkgsFor.${system}.callPackage ./shell.nix { };
@@ -1595,82 +1736,7 @@
         # The installed machine, as the installer would produce it. Both disk
         # modes come from here so they cannot drift apart, and so installer/cd.nix
         # can bake each one onto the image without restating the host.
-        mkReference =
-          {
-            encrypt,
-            hardware ? false,
-          }:
-          nixpkgs.lib.nixosSystem {
-            system = "x86_64-linux";
-            specialArgs = { inherit inputs; };
-            modules = [
-              self.nixosModules.nixarchy
-              homeManagerModule
-              inputs.disko.nixosModules.disko
-
-              # Why: docs/internals/flake.md#one-module-that-imports-the-machines-own-two-rathe
-              {
-                imports = [
-                  (import ./installer/host.nix {
-                    hostname = "nixarchy";
-                    username = "omarchy";
-                  })
-                  (import ./installer/disk-config.nix {
-                    device = "/dev/vda";
-                    inherit encrypt;
-                  })
-                ];
-              }
-            ]
-            ++ nixpkgs.lib.optional hardware {
-              # Kept in step with tests/generate-config-surface.nix, which fails
-              # if this list stops covering what nixos-generate-config emits.
-              # Two of the tool's package-adding attributes are deliberately NOT
-              # here, and the check states why: hardware.parallels.enable pulls
-              # a proprietary Parallels disk image that cannot be redistributed
-              # on an ISO, and boot.isNspawnContainer is emitted only when the
-              # tool runs INSIDE an nspawn container, which an installer that
-              # partitions a physical disk never is.
-              hardware.cpu.intel.npu.enable = true;
-              boot.swraid.enable = true;
-
-              # Answered, not muted. swraid.nix:16 accepts any mdadm.conf
-              # matching MAILADDR|PROGRAM, and without one it warns that mdmon
-              # will crash -- on every evaluation of this configuration, which
-              # is every ISO build and every run of checks.iso-source.
-              #
-              # #472 answered the same question for the `iso` configuration and
-              # verified ITS warnings were empty; this one was never checked and
-              # went on warning. Hence checks.config-warnings below, so the next
-              # one fails instead of accumulating.
-              #
-              # root is where NixOS mail goes with no MTA configured, which on a
-              # configuration that exists only to put mdadm's packages on an
-              # image is exactly right: the point is that mdmon starts, not that
-              # anyone reads it.
-              boot.swraid.mdadmConf = "MAILADDR root";
-              virtualisation.hypervGuest.enable = true;
-              virtualisation.virtualbox.guest.enable = true;
-
-              # Every nixos-hardware module installer/hardware-modules.sh can
-              # select. Keep this union for the hardware evaluation checks.
-              #
-              # The UNION, not a machine: no real machine has an Intel and an
-              # AMD GPU and both microcode sets. Every entry is mkDefault config
-              # and this host is never installed.
-              #
-              # checks.hardware-modules asserts these names exist.
-              imports = with inputs.nixos-hardware.nixosModules; [
-                common-cpu-intel-cpu-only
-                common-cpu-amd
-                common-gpu-intel
-                common-gpu-amd
-                # Imports common-pc and common-pc-laptop too, so it covers all
-                # four of the chassis/disk outcomes.
-                common-pc-laptop-ssd
-              ];
-            };
-          };
+        mkReference = mkReferenceWith inputs;
 
         # Why: docs/internals/flake.md#one-closure-per-template-shared-by-every-vm-a-user
         # An installable image carrying somebody else's machine (#478).
@@ -1714,22 +1780,7 @@
             iso.config.system.build.isoImage // { inherit (iso.config.system.build) installerLauncher; }
           );
 
-        mkMicrovm =
-          {
-            template,
-            system,
-            modules ? [ ],
-          }:
-          (nixpkgs.lib.nixosSystem {
-            inherit system;
-            specialArgs = { inherit inputs; };
-            modules = [
-              inputs.microvm.nixosModules.microvm
-              ./modules/microvm/guest.nix
-              template
-            ]
-            ++ modules;
-          }).config.microvm.declaredRunner;
+        mkMicrovm = mkMicrovmWith inputs;
       };
 
       formatter = eachSystem (system: pkgsFor.${system}.nixfmt-tree);
@@ -1737,6 +1788,7 @@
       checks = eachSystem (
         system:
         let
+          inputs = checkInputs;
           images = boxImages.${system};
           # Checks whose file takes { inputs, pkgs } and whose name is the
           # file's. test-registration is handed this list (#1048), so a name
@@ -2083,7 +2135,7 @@
 
           installer-input-validation = import ./tests/installer-input-validation.nix {
             pkgs = pkgsFor.${system};
-            renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
+            renderedInstallScript = "${inputs.self.packages.${system}.install}/bin/nixarchy-install";
           };
 
           installer-keymaps = import ./tests/installer-keymaps.nix {
@@ -2229,7 +2281,7 @@
           # image carries none of them. Guards the `source` argument #479
           # added to installer/cd.nix. See tests/iso-source.nix.
           iso-source = import ./tests/iso-source.nix {
-            inherit inputs;
+            inputs = realInputs;
             pkgs = pkgsFor.${system};
           };
 
@@ -2249,7 +2301,7 @@
           try-preflight = import ./tests/try-preflight.nix {
             pkgs = pkgsFor.${system};
             tryScript = ./installer/try.sh;
-            tryApp = self.packages.${system}.try;
+            tryApp = inputs.self.packages.${system}.try;
           };
 
           # --from-repo's two branches -- host already in the repository, host
@@ -2357,7 +2409,7 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
             menuPlugin =
-              self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
+              inputs.self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
           };
 
           # configuration.md names every default plugin and service by its line
@@ -2428,9 +2480,8 @@
           qml-color-qualified = import ./tests/qml-color-qualified.nix {
             pkgs = pkgsFor.${system};
             sources =
-              builtins.mapAttrs (
-                _: p: p.src
-              ) self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet
+              builtins.mapAttrs (_: p: p.src)
+                inputs.self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet
               // {
                 inherit (inputs) nixi;
                 voice = inputs.nixarchy-voice;
@@ -2587,8 +2638,8 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
             menuPlugin =
-              self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
-            nixi = self.nixosConfigurations.vm.config.home-manager.users.omarchy.services.nixi.package;
+              inputs.self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
+            nixi = inputs.self.nixosConfigurations.vm.config.home-manager.users.omarchy.services.nixi.package;
           };
 
           # #1342: a default browser entry that runs the launcher itself is refused.
@@ -2723,6 +2774,8 @@
             pkgs = pkgsFor.${system};
             reference = self.nixosConfigurations.reference;
             flatsnap = self.inputs.nixarchy-flatsnap.outPath;
+            inherit self;
+            revision = import ./modules/revision.nix self;
           };
 
           # #1163: a user's own Mesa in hardware.graphics.extraPackages(32)
@@ -2758,11 +2811,11 @@
           # closure warm.
           coexistence = import ./tests/coexistence/default.nix {
             pkgs = pkgsFor.${system};
-            reference = self.nixosConfigurations.reference;
+            reference = inputs.self.nixosConfigurations.reference;
           };
           input-methods = import ./tests/input-methods.nix {
             pkgs = pkgsFor.${system};
-            reference = self.nixosConfigurations.reference;
+            reference = inputs.self.nixosConfigurations.reference;
           };
 
           # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
@@ -2774,10 +2827,10 @@
             pkgs = pkgsFor.${system};
             inherit lib;
             templates = lib.mapAttrs (name: _: {
-              kvm = self.packages.${system}."microvm-${name}";
-              tcg = self.packages.${system}."microvm-${name}-tcg";
+              kvm = inputs.self.packages.${system}."microvm-${name}";
+              tcg = inputs.self.packages.${system}."microvm-${name}-tcg";
             }) (import ./data/microvm-templates.nix);
-            nixarchyVm = self.packages.${system}.nixarchy-vm;
+            nixarchyVm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit (inputs) self; };
           };
 
           # Reads the box catalogue structurally -- see
@@ -2852,7 +2905,7 @@
         // lib.genAttrs uniformChecks (
           n:
           import ./tests/${n}.nix {
-            inherit inputs;
+            inputs = if builtins.hasAttr n commitBound then realInputs else inputs;
             pkgs = pkgsFor.${system};
           }
         )
@@ -2864,12 +2917,16 @@
               inherit inputs;
               pkgs = pkgsFor.${system};
             };
+            optionsReal = import ./tests/options.nix {
+              inputs = realInputs;
+              pkgs = pkgsFor.${system};
+            };
           in
           {
             options-system = options.optionShards.system;
             options-home = options.optionShards.home;
             options-microvm = options.optionShards.microvm;
-            options-files = options;
+            options-files = optionsReal;
             options-shards = options.optionShards.guard;
           }
         )

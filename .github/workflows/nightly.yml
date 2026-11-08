@@ -575,6 +575,28 @@ jobs:
           test -s "$RUNNER_TEMP/config/nixarchy/packages/hexyl.nix"
           grep -qF 'building  hexyl ... ok' "$RUNNER_TEMP/out"
 
+  # The check derivations must keep their proof when only the source commit
+  # changes. This compares their outPaths across a probe commit on a hosted
+  # runner; it does not build the checks or occupy the install runners.
+  commit-independent:
+    runs-on: ubuntu-26.04
+    # The first measurement took about 66 minutes. Use 90 until the hosted
+    # run gives a measured value for this job.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-nix
+      - uses: cachix/cachix-action@v17
+        continue-on-error: true
+        with:
+          skipPush: true
+          # Why: .github/actions/setup-nix/action.yml -- `cachix use` would replace its substituters.
+          skipAddingSubstituter: true
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: A commit that changes nothing built preserves every check proof
+        run: .github/scripts/commit-independent.sh
+
   report:
     name: report a failure
     runs-on: ubuntu-26.04
@@ -585,7 +607,7 @@ jobs:
     # dependencies, and reported SUCCESS. The encrypted install is the DEFAULT
     # answer to the installer's own question, and it was the one failure that
     # filed no issue.
-    needs: [install, install-encrypted, keyboard-boot, install-iso-net, microvm, cache, repush, canary, pkg-new]
+    needs: [install, install-encrypted, keyboard-boot, install-iso-net, microvm, cache, repush, canary, pkg-new, commit-independent]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -627,6 +649,7 @@ jobs:
           # install issue. #236 was exactly that shape: a watchdog issue whose
           # title sent the reader at the wrong thing, and the duplicate hunt cost
           # more than the bug did.
+          labels=()
           if [ "${{ needs.cache.result }}" = "failure" ] || [ "${{ needs.repush.result }}" = "failure" ]; then
             title="nightly: nothing is reaching the binary cache"
           elif [ "${{ needs.canary.result }}" = "failure" ] &&
@@ -663,8 +686,15 @@ jobs:
             # upstream moved under a real nix-init run, and the install checks
             # are the wrong place to send the reader.
             title="nightly: a real nix-init draft no longer builds"
+          elif [ "${{ needs.commit-independent.result }}" != "success" ] &&
+            [ "${{ needs.install.result }}" = "success" ] &&
+            [ "${{ needs.install-encrypted.result }}" = "success" ] &&
+            [ "${{ needs.keyboard-boot.result }}" = "success" ] &&
+            [ "${{ needs.install-iso-net.result }}" = "success" ]; then
+            title="nightly: a commit leaks into a check's proof"
           else
             title="nightly: the install checks are failing"
+            labels=(--label installer)
           fi
           # Which of the two it was. A timeout and a failed assertion want
           # different first moves, and the issue is the only place anyone
@@ -676,12 +706,14 @@ jobs:
           # night: a check broken for a week should read as one problem, not
           # seven.
           body="The nightly $what: $RUN"
-          body="$body
+          if [ "${#labels[@]}" -gt 0 ]; then
+            body="$body
 
-          Both jobs run on a self-hosted runner, all of which are on p620.
-          If the failure is 'no space left', check its nix build-dir and its
-          store -- /mnt/games/nix-build and /. A VM test that runs out of
-          room does not fail cleanly, it wedges."
+          The install jobs run on self-hosted runners on p620. If the failure
+          is 'no space left', check the nix build-dir and store --
+          /mnt/games/nix-build and /. A VM test that runs out of room does not
+          fail cleanly, it wedges."
+          fi
           existing=$(gh issue list --state open --search "$title in:title" \
             --json number --jq '.[0].number // empty')
           # A milestone on both paths: the review's board row flags any open
@@ -691,5 +723,5 @@ jobs:
             gh issue edit "$existing" --milestone "$milestone"
             gh issue comment "$existing" --body "Still failing ($what): $RUN"
           else
-            gh issue create --title "$title" --label installer --milestone "$milestone" --body "$body"
+            gh issue create --title "$title" "${labels[@]}" --milestone "$milestone" --body "$body"
           fi

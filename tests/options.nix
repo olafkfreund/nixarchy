@@ -1966,12 +1966,12 @@ let
       );
     };
     defaultAgentGeminiWritesAgy = {
-      on = pkgs.lib.hasInfix "printf '%s\\n' 'agy'" (
-        (homeOn { defaultAgent = "gemini"; } { }).home.activation.nixarchyDefaultAgent.data
-      );
-      off = pkgs.lib.hasInfix "printf '%s\\n' 'gemini'" (
-        (homeOn { defaultAgent = "agy"; } { }).home.activation.nixarchyDefaultAgent.data
-      );
+      on =
+        pkgs.lib.hasInfix "printf '%s\\n' 'agy'"
+          (homeOn { defaultAgent = "gemini"; } { }).home.activation.nixarchyDefaultAgent.data;
+      off =
+        pkgs.lib.hasInfix "printf '%s\\n' 'gemini'"
+          (homeOn { defaultAgent = "agy"; } { }).home.activation.nixarchyDefaultAgent.data;
     };
     # ---- the free-space floor is the installer's, never an adopter's ----
     #

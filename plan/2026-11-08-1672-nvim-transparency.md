@@ -134,3 +134,22 @@ the archive and its hash, says which steps Codex did, and carries the
 three §1 outputs. Comment "@codex review". Merge with a merge commit
 (`--merge`). While #1692 is open, the PR's base is
 `feat/1673-pre45-migrations`; it moves to `main` once #1692 merges.
+
+## Deviations (Codex plan review and step 1, 2026-11-08)
+
+1. **Step 1 passed.** The archive sha256 is `b46d4197...cbcbc9`, matching `omarchy.db`, and the file is at
+   `usr/share/omarchy-nvim/config/lua/plugins/lualine-transparent.lua`
+   (sha256 `d59f78b5...75bcb7`, 21 lines). **Found:** the package's
+   `plugin/after/transparency.lua` is `2f4ab7aa...`, not our seed's
+   `bd833dc0...`. The migration replaces an unmodified copy (`bd833dc0`
+   is on its list), so upstream gives a seeded config both files. Whether
+   to vendor the newer `transparency.lua` too is the owner's call: it
+   changes decision 1's "only that one file".
+2. **Step 3's verification** also asserts the built hook exports
+   `NIXARCHY_NEOVIM`, and that the ledger row reads `ported`/`edited` (jq
+   on the ledger JSON), so a missed edit fails.
+3. **Step 4's fixture** is the vendored seed minus the new file, and asserts
+   `transparency.lua` is byte-identical afterwards unless the owner chooses
+   to vendor the new one (then it must equal the new one).
+4. **Merge conflicts are resolved by reading both sides**, not by "keep
+   both". A duplicated ledger row or runner entry is a bug.

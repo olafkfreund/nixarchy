@@ -113,3 +113,7 @@ Two checks, two properties:
   42466135557) and must pass after.
 - `checks.omarchy` (package tier) for the patch applying, plus
   `checks.patched-files`, fmt, statix, deadnix and `grep-q-pipefail`.
+
+## Decisions (owner, 2026-11-08, on the draft)
+
+1. The post-boot repair hook stays as designed: it reruns the sync once, only when `theme.conf` names a missing image.

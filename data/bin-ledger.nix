@@ -658,6 +658,10 @@
     class = "replace";
     reason = "Upstream writes /etc/sudoers.d/99-omarchy-nopasswd-$USER, a directory /etc/sudoers does not include here, then reports success regardless. Names security.sudo.extraRules and exits non-zero.";
   };
+  "omarchy-system" = {
+    class = "patch";
+    reason = "Schedules the power action with systemctl --when=+5s before closing any window, so polkit asks first and a refusal leaves the session intact; a timed-out dialog is reported (#1659, 1659-system-authorise-first.patch, CARRIED).";
+  };
   "omarchy-system-factory-reset" = {
     class = "replace";
     reason = "Upstream clones the Quattro ISO's @factory snapshot and then re-keys LUKS. This uses the nixarchy installer's @factory/@factory-home baseline, restores /home and /var/lib only, and stops if it is absent.";

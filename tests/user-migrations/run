@@ -274,7 +274,7 @@ case_1677() {
     fi
     if [[ $variant == preferences ]]; then
       mkdir -p "$HOME/.config/superwhisper"
-      printf '%s\n' '{}' > "$HOME/.config/superwhisper/preferences.json"
+      printf '%s\n' '{"toggle":"Alt+Space"}' > "$HOME/.config/superwhisper/preferences.json"
     fi
     if [[ $variant != no-voxtype ]]; then
       printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$HOME/bin/voxtype"
@@ -283,6 +283,9 @@ case_1677() {
     if [[ $variant == migrate ]]; then
       cp -a "$HOME" "$work/1677.oracle-fixture"
     fi
+    # Quattro's 1793477875 restarts Superwhisper itself; record it like the other stubs.
+    printf '%s\n' "#!$BASH" 'printf "%s\\n" "systemctl $*" >> "$HOME/calls.log"' > "$HOME/bin/systemctl"
+    chmod +x "$HOME/bin/systemctl"
     path_with_voxtype=$HOME/bin:$PATH
     if [[ $variant == backend ]]; then
       STUB_DICTATION_BACKEND=voxtype PATH=$path_with_voxtype run_ids 1791676907 1793477875 1791479273
@@ -306,11 +309,18 @@ case_1677() {
     [[ $(grep -c '^busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 ReloadConfig$' "$calls") -eq 1 ]] || fail "$case: Fcitx reload missing"
     [[ $(grep -c '^omarchy-pkg-present ' "$calls" || true) -eq 0 ]] || fail "$case: port called upstream's package probe"
     [[ $(grep -c '^omarchy-default-dictation ' "$calls") -ge 1 ]] || fail "$case: dictation default was not read"
-    if [[ $variant == preferences ]]; then
+    # The tag pin moves the shortcut through Superwhisper's CLI; quattro edits
+    # its files and restarts it. Ask the pinned migration which one to expect.
+    # A code line, not a comment: quattro's comment names the CLI it stopped using.
+    if [[ $variant == preferences ]] && grep -qE '^[[:space:]]*systemctl --user try-restart superwhisper' "$OMARCHY_PATH/migrations/1793477875.sh"; then
+      grep -qF '"Ctrl+Alt+Space"' "$HOME/.config/superwhisper/preferences.json" || fail "$case: Superwhisper preferences not moved"
+      grep -Fx 'systemctl --user try-restart superwhisper.service' "$calls" >/dev/null || fail "$case: Superwhisper not restarted"
+    elif [[ $variant == preferences ]]; then
       grep -Fx 'superwhisper shortcuts show' "$calls" >/dev/null || fail "$case: Superwhisper shortcut not read"
       grep -Fx 'superwhisper shortcuts set toggle Ctrl+Alt+Space' "$calls" >/dev/null || fail "$case: Superwhisper shortcut not moved"
     else
       [[ $(grep -c '^superwhisper ' "$calls" || true) -eq 0 ]] || fail "$case: unexpected Superwhisper call"
+      [[ $(grep -c '^systemctl ' "$calls" || true) -eq 0 ]] || fail "$case: unexpected systemctl call"
     fi
 
     before=$work/$case.before-second-run

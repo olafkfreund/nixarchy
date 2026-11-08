@@ -1,0 +1,1 @@
+{"jobs":[{"id":1,"name":"install from the network ISO","conclusion":"cancelled","steps":[{"name":"Set up job","conclusion":"success"},{"name":"Install from the NETWORK ISO, fetching the closure","conclusion":"cancelled"},{"name":"Complete job","conclusion":"success"}]}]}

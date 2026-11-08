@@ -1,0 +1,7 @@
+building '/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-vm-test-run-nixarchy-install.drv'...
+vm-test-run-nixarchy-install> installer # waiting for the wizard
+vm-test-run-nixarchy-install> Traceback (most recent call last):
+vm-test-run-nixarchy-install>   File "test-driver", line 12, in <module>
+vm-test-run-nixarchy-install>     machine.wait_for_unit("multi-user.target")
+vm-test-run-nixarchy-install> RuntimeError: the installed system did not boot
+error: builder for '/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-vm-test-run-nixarchy-install.drv' failed with exit code 1

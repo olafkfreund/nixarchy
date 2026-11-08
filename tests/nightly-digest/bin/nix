@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# eval --raw .#<attr>.drvPath from common/drvs; log <drv> from log/<drv basename>.
+set -eu
+case $1 in
+  eval)
+    [ "$2" = --raw ] || exit 2
+    attr=${3#.#}
+    attr=${attr%.drvPath}
+    awk -v a="$attr" '$1 == a { printf "%s", $2; found = 1 } END { exit !found }' "$STUB_COMMON/drvs" ;;
+  log)
+    base=${2##*/}
+    for d in "$STUB_CASE" "$STUB_COMMON"; do
+      if [ -f "$d/log/$base" ]; then cat "$d/log/$base"; exit 0; fi
+    done
+    echo "error: no log for $2" >&2
+    exit 1 ;;
+  *) exit 2 ;;
+esac

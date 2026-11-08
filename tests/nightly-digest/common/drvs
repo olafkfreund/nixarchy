@@ -1,0 +1,7 @@
+checks.x86_64-linux.install /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-vm-test-run-nixarchy-install.drv
+installer-vm /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-installer-vm.drv
+checks.x86_64-linux.install-encrypted /nix/store/cccccccccccccccccccccccccccccccc-vm-test-run-nixarchy-install-encrypted.drv
+checks.x86_64-linux.keyboard-boot /nix/store/dddddddddddddddddddddddddddddddd-vm-test-run-nixarchy-keyboard-boot.drv
+iso-net /nix/store/ffffffffffffffffffffffffffffffff-nixarchy-iso.drv
+checks.x86_64-linux.iso-budget /nix/store/gggggggggggggggggggggggggggggggg-nixarchy-iso-budget.drv
+checks.x86_64-linux.install-iso-net /nix/store/iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii-vm-test-run-nixarchy-install-iso-net.drv

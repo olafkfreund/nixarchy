@@ -44,9 +44,26 @@ and a short CARRIED section in `pkgs/AGENTS.md`. It is NixOS-specific
 (Arch's fcitx5 always ships SVG), so the section says it is not meant
 upstream.
 
-### 2. The probes (§1 read backwards)
+### 2. Existing machines
 
-- `tests/session.nix:3410-3414` deletes `prev.svg`, reruns
+A script fix reaches a theme directory only when the script next runs.
+That is a theme change or activation, never an upgrade, which #1624 already
+recorded (`intent/2026-11-05-1624-fcitx5-theme.md:41-43`). A 26.05 user who
+never changes theme would keep the missing arrows. So a post-boot hook,
+`omarchy/hooks/post-boot.d/fcitx5-glyphs` in `modules/home.nix` beside
+`user-migrations` (`:2458`), runs `omarchy-theme-set-fcitx5` (no
+`--activate`, so the user's classicui choice is untouched) when
+`~/.local/share/fcitx5/themes/omarchy/theme.conf` exists and any of its
+`Image=` values names a file missing from that directory. Otherwise it
+does nothing. It is idempotent: once the images resolve, it never runs the
+script again. It sits under the same `enable` as the user-migrations hook,
+so Mode A is untouched.
+
+### 3. The probes (§1 read backwards)
+
+Two checks, two properties:
+
+- `tests/session.nix:3410-3414` (the **generated** theme) deletes `prev.svg`, reruns
   `--activate`, and tests `prev.svg`. It becomes: delete every glyph link
   in the theme directory, rerun `--activate`, then for every `Image=` value
   in `~/.local/share/fcitx5/themes/omarchy/theme.conf`, `test -e` it in that
@@ -54,9 +71,13 @@ upstream.
   least one `Image=` line exists. This runs in both `checks.session`
   (unstable) and the weekly `stable-session` (`weekly.yml:90`, the same
   check against nixos-26.05), so one assertion covers both channels.
-- `tests/input-methods.nix:342` tests `${linked}/share/fcitx5/themes/default/prev.svg`.
-  It becomes "`prev.svg` or `prev.png`", because the property it guards is
-  "the themes are linked", not the format.
+- `tests/input-methods.nix:342` (the **packaged** theme directory) tests
+  `${linked}/share/fcitx5/themes/default/prev.svg`. It becomes: each of
+  `prev`, `next`, `radio` and `arrow` exists as `.svg` or `.png`. The
+  property it guards is "the packaged glyphs are linked", not their format.
+- The repair hook: `checks.session` deletes the glyph links, starts the
+  hook directly, and asserts every `Image=` resolves again. With the links
+  present, a second run must not touch the directory (mtime unchanged).
 
 ## Alternatives rejected
 

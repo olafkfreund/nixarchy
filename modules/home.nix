@@ -1482,6 +1482,14 @@ in
     # through it rather than replacing omarchy-theme-set-gnome means the cursor
     # follows a theme change without this repo owning a fork of that script.
     xdg.configFile = {
+      "nixarchy/version" = lib.mkIf (osConfig == null) {
+        text = lib.mkDefault (
+          let
+            r = import ./revision.nix inputs.self;
+          in
+          "${r.shortRev} ${r.date}\n"
+        );
+      };
       "omarchy/hooks/theme-set.d/cursor" = {
         executable = true;
         text = ''

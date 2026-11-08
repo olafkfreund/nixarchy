@@ -1750,6 +1750,12 @@ in
       // {
         "nixarchy/options.json".source = "${nixarchyOptions}/share/doc/nixos/options.json";
         "nixarchy/docs".source = nixarchyDocs;
+        "nixarchy/version".text = lib.mkDefault (
+          let
+            r = import ./revision.nix inputs.self;
+          in
+          "${r.shortRev} ${r.date}\n"
+        );
       };
 
     # glib looks for compiled schemas in $XDG_DATA_DIRS/glib-2.0/schemas, but

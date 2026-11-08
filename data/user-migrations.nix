@@ -4,8 +4,9 @@
 # See pkgs/AGENTS.md#user-file-migrations-1610.
 {
   "1786719479" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "edited";
+    reason = "replace the Gemini default, remove its old wrapper, and link agent skills (#1681)";
   };
   "1786967403" = {
     decision = "not-needed";
@@ -24,20 +25,23 @@
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
   };
   "1787679775" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "remove saved layouts for named workspaces and reload Hyprland (#1673)";
   };
   "1788129995" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "edited";
+    reason = "replace old Satty and Tensaku imv bindings with Omasnap and remove its stale launcher (#1671)";
   };
   "1788261467" = {
     decision = "not-needed";
     reason = "portal set by modules/nixos.nix, and config/ is seeded on activation by modules/home.nix";
   };
   "1788281348" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "refresh active themes with packaged intro videos (#1674)";
   };
   "1788941927" = {
     decision = "not-needed";
@@ -53,6 +57,7 @@
   };
   "1790042972" = {
     decision = "ported";
+    run = "bar";
     reason = "ported in omarchy-migrate-user (#1610)";
   };
   "1790457067" = {
@@ -77,75 +82,87 @@
   };
   "1791123731" = {
     decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    reason = "a commented example in looknfeel.lua; no visible break (#1674)";
   };
   "1791345484" = {
     decision = "not-needed";
     reason = "handled in the package and runtimeDeps; see pkgs/AGENTS.md (Disktree)";
   };
   "1791376887" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "enable overlay scrollbars in existing Chromium-family flags files (#1676)";
   };
   "1791382872" = {
     decision = "not-needed";
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
   };
   "1791470456" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "repair saved JPG backgrounds after bundled images moved to WebP (#1674)";
   };
   "1791479273" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "port";
+    reason = "switch an unused Superwhisper default to installed Voxtype (#1677)";
   };
   "1791676907" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "restore Shift for an empty Fcitx alternate trigger list (#1677)";
   };
   "1791696584" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "add window classes to standard web app launchers (#1675)";
   };
   "1791698594" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "convert saved workspace layout rules to modes (#1673)";
   };
   "1791705142" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "move the saved animation opacity rule to the opaque toggle (#1674)";
   };
   "1791708587" = {
     decision = "not-needed";
     reason = "gated on omarchy-pkg-*, pacman or /var/lib; apps and system state come from the flake";
   };
   "1791722809" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "make the old black Herdr tab bar transparent while retaining a black dim surface (#1678)";
   };
   "1791723398" = {
     decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    reason = "needs omarchy-nvim-config to ship lualine-transparent.lua first (#1672)";
   };
   "1791769486" = {
     decision = "not-needed";
     reason = "no nixarchy release shipped the USB approval units";
   };
   "1791875754" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "add window classes to custom command web app launchers (#1675)";
   };
   "1791968925" = {
     decision = "partial";
+    run = "bar";
     reason = "order ported in omarchy-migrate-user; duplicate trays kept (no IPC delete; no seed had two)";
   };
   "1791969355" = {
     decision = "ported";
+    run = "bar";
     reason = "ported in omarchy-migrate-user (#1610)";
   };
   "1792259038" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "repair saved selections of renumbered bundled backgrounds (#1674)";
   };
   "1792343225" = {
     decision = "not-needed";
@@ -157,23 +174,26 @@
   };
   "1792474908" = {
     decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    reason = "Brave Origin is unavailable on nixarchy (data/apps.nix) (#1676)";
   };
   "1792648436" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "removes 4.0 notification files and carries Do Not Disturb into quiet state (#1680)";
   };
   "1793315076" = {
     decision = "not-needed";
     reason = "Apple Silicon ~/.bashrc; bash setup comes from /etc/bashrc (modules/nixos.nix)";
   };
   "1793477875" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "retain existing dictation keys and move Superwhisper off Alt+Space (#1677)";
   };
   "1793565796" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "set OpenCode 2 system theme without replacing a chosen theme (#1679)";
   };
   "1793667581" = {
     decision = "not-needed";

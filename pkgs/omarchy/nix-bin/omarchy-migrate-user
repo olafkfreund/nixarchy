@@ -3,6 +3,7 @@
 # nixarchy:new
 # omarchy:summary=Port Omarchy's user-file migrations that apply here
 # omarchy:hidden=true
+# shellcheck disable=SC2016 # jq filters use their own $layout and $want variables.
 
 set -euo pipefail
 
@@ -18,6 +19,7 @@ log() { printf '%s\n' "$*" | systemd-cat -t nixarchy-user-migrations || true; }
 # ahead of the reply (AGENTS.md §13).
 ipc() { LC_ALL=C.UTF-8 omarchy-shell shell "$@"; }
 
+bar_migrations() (
 [[ -r $cfg ]] && jq -e '.bar | type == "object" and has("centerAnchor")' "$cfg" >/dev/null 2>&1 || exit 0
 [[ -e $state/1790042972.sh && -e $state/1791968925.sh && -e $state/1791969355.sh ]] && exit 0
 
@@ -117,3 +119,24 @@ if [[ ! -e $state/1791969355.sh ]]; then
     touch "$state/1791969355.sh"
   fi
 fi
+)
+
+run_upstream() {
+  local id script
+  [[ -n ${NIXARCHY_USER_MIGRATIONS:-} ]] || return 0
+  # fd 3, as upstream's runner does: a script reading stdin must not eat the list.
+  while IFS=$'\t' read -r id script <&3; do
+    [[ -n $id && -n $script ]] || { log 'invalid user migration list entry'; return 1; }
+    [[ ! -e $state/$id.sh ]] || continue
+    if ! OMARCHY_PATH=${OMARCHY_PATH:-$(dirname "$(dirname "$0")")/share/omarchy} bash -euo pipefail "$script" 3<&- </dev/null; then
+      log "$id: user migration failed"
+      return 1
+    fi
+    mkdir -p "$state"
+    touch "$state/$id.sh"
+  done 3< "$NIXARCHY_USER_MIGRATIONS/list"
+}
+
+# A failed bar migration must not hold back the others.
+bar_migrations || log 'bar migrations failed'
+run_upstream

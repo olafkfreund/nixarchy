@@ -14,15 +14,15 @@ set -uo pipefail
 
 agent_file="$HOME/.config/omarchy/defaults/agent"
 
-# agent id -> nixpkgs attribute. The command each installs is meta.mainProgram
-# and is already the id, which is why nothing here has to map names twice.
+# agent id -> nixpkgs attribute. Canonical ids match the installed command;
+# gemini is a legacy spelling that now resolves to Antigravity.
 attr_for() {
   case "$1" in
     claude)   echo claude-code ;;
     codex)    echo codex ;;
     opencode) echo opencode ;;
     crush)    echo crush ;;
-    gemini)   echo gemini-cli ;;
+    gemini)   echo antigravity-cli ;;
     copilot)  echo github-copilot-cli ;;
     grok)     echo grok-cli ;;
     openclaw) echo openclaw ;;
@@ -71,9 +71,9 @@ crush) agent="crush"; name="Crush" ;;
 grok) agent="grok"; name="Grok" ;;
 # quattro names it agy, its command; antigravity is the id stable stored.
 agy | antigravity | antigravity-cli) agent="agy"; name="Antigravity" ;;
-# Google deprecated gemini-cli in favour of Antigravity, but nixpkgs still has
-# a maintained gemini-cli and people still ask for it by name, so both stay.
-gemini | gemini-cli) agent="gemini"; name="Gemini" ;;
+# Omarchy 4.5's omarchy-agent has no gemini case. Keep the old name as an alias
+# for Antigravity so existing choices still launch an agent.
+gemini | gemini-cli) agent="agy"; name="Antigravity" ;;
 copilot | github-copilot) agent="copilot"; name="GitHub Copilot" ;;
 # The menu has rows for these four and the case did not, so each printed a usage
 # line and exited 1 -- into a detached terminal nobody sees (#949).

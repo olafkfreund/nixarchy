@@ -20,10 +20,9 @@
 # a hand-kept `nixarchyRelease = "1"` literal beside omarchyVersion would --
 # which is the literal #201 had to fix with a sed.
 #
-# Both values are spliced in by pkgs/omarchy/default.nix from what the flake
-# actually built. The Omarchy half is the same `version` omarchy-version is
-# spliced with, rather than a call out to it, so this script has no runtime
-# dependency at all and the build can run it to check the splice worked.
+# The module writes the revision and date to /etc/nixarchy/version, or to
+# the XDG config directory for standalone Home Manager. The Omarchy version
+# remains spliced in by pkgs/omarchy/default.nix, with no runtime dependency.
 
 set -euo pipefail
 
@@ -54,4 +53,11 @@ case "$built" in
 esac
 
 printf 'Omarchy   %s%s\n' "$built" "$om_suffix"
-printf 'nixarchy  %s  %s\n' '@nixarchyrev@' '@nixarchydate@'
+rev=unknown date=unknown
+for f in /etc/nixarchy/version "${XDG_CONFIG_HOME:-${HOME:-/nonexistent}/.config}/nixarchy/version"; do
+  if [ -r "$f" ]; then
+    read -r rev date < "$f" || true
+    break
+  fi
+done
+printf 'nixarchy  %s  %s\n' "${rev:-unknown}" "${date:-unknown}"

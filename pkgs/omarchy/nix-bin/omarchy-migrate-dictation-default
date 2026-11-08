@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:hidden=true
+
+set -euo pipefail
+
+config=${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/defaults/dictation
+preferences=$HOME/.config/superwhisper/preferences.json
+state=${OMARCHY_MIGRATION_STATE:-$HOME/.local/state/omarchy/migrations}
+
+backend=$(omarchy-default-dictation 2>/dev/null) || exit 0
+[[ $backend == superwhisper ]] || exit 0
+[[ ! -e $state/1791479273.sh ]] || exit 0
+command -v voxtype >/dev/null 2>&1 || exit 0
+[[ ! -e $preferences ]] || exit 0
+
+printf '%s\n' voxtype > "$config"

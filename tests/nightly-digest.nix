@@ -113,6 +113,26 @@ pkgs.runCommand "nixarchy-nightly-digest"
     lacks c10-redaction 's3cr3t'
     lacks c10-redaction 'CACHIX_AUTH_TOKEN'
 
+    # Wiring: the real nightly.yml hands the digest to report, through env only.
+    wf=work/.github/workflows/nightly.yml
+    q() { yq "$1" "$wf"; }
+    want() { # <what> <expected> <yq expression>
+      got=$(q "$3") || fail "wiring: yq failed on $3"
+      if [ "$got" != "$2" ]; then fail "wiring: $1: expected '$2', got '$got'"; fi
+    }
+    want "the digest step runs nightly-digest.sh" 1 \
+      '[.jobs.digest.steps[] | select(.id == "digest") | select(.run | contains("nightly-digest.sh"))] | length'
+    want "digest.outputs.text" '$'"{{ steps.digest.outputs.text }}" '.jobs.digest.outputs.text'
+    want "the digest step has GH_TOKEN" 1 \
+      '[.jobs.digest.steps[] | select(.id == "digest") | select(.env | has("GH_TOKEN"))] | length'
+    want "digest.if equals report.if" "$(q '.jobs.report.if')" '.jobs.digest.if'
+    if [ -z "$(q '.jobs.report.if')" ] || [ "$(q '.jobs.report.if')" = null ]; then fail "wiring: report has no if"; fi
+    want "report.needs contains digest" 1 '[.jobs.report.needs[] | select(. == "digest")] | length'
+    want "a report step env carries DIGEST" 1 \
+      '[.jobs.report.steps[] | select(.env) | select(.env | has("DIGEST"))] | length'
+    want "no run: contains needs.digest.outputs" 0 \
+      '[.jobs[].steps[] | select(.run) | select(.run | contains("needs.digest.outputs"))] | length'
+
     echo "nightly-digest: ten cases name the job, step and failing log, and every run exits 0"
     touch $out
   ''

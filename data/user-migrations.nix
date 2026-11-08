@@ -138,7 +138,7 @@
   };
   "1791723398" = {
     decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    reason = "needs omarchy-nvim-config to ship lualine-transparent.lua first (#1672)";
   };
   "1791769486" = {
     decision = "not-needed";

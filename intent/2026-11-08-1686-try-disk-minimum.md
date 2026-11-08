@@ -30,8 +30,14 @@ Two constants that must agree live in two files with nothing comparing them
   minimum, with headroom for the store.
 - A check fails if the launcher's default (or any other VM launcher default
   in the tree) drops below `MIN_DISK_GIB`.
-- When the installer exits before installing, for any reason, its last
-  message stays readable on tty1, and the user has a way to a shell.
+- When the installer exits before its own failure screen can run
+  (`ui_failed` already covers failures during the install, `install.sh`
+  ~3042), its last message stays readable on tty1, and the user has a way to
+  a shell. `ask_device`'s refusal is the known case.
+- A tester who already has a 24 GB disk is told why it cannot install.
+  Today the launcher refuses an existing disk and offers `--boot` or
+  `--fresh` (`try-nixarchy.sh:194-203`), and neither says the disk is too
+  small.
 
 ## Affected users and systems
 
@@ -56,9 +62,15 @@ Two constants that must agree live in two files with nothing comparing them
 ## Open questions
 
 1. Default size: 32 (the floor), or 64 (what the tester used)? The qcow2 is
-   sparse, but the launcher's preflight asks for the full size free.
+   sparse, but the launcher's preflight asks for the full size free. An
+   install writes a 2G ESP and about 14 GiB of closure (`vm.nix:140-143`),
+   so 32 fits with little room for the user's first rebuild.
 2. Keeping the message: hold the screen in the installer (a "press Return
    for a shell" prompt on every early exit), or change the unit (drop
    `TTYVTDisallocate`, or start a getty on tty1 when the installer stops)?
-3. Should this one PR also cover `installer/vm.nix` (`diskSize = 32768`,
-   exactly at the floor) in the new check, or only the launcher?
+3. Should the new check also cover `installer/vm.nix`'s install target
+   (`emptyDiskImages[0].size = 32768`, line 147; `diskSize` sizes the VM's
+   own disk, not the target), or only the launcher?
+4. A screen hold must not stall an unattended install: the ISO takes
+   `nixarchy.answers=` on the kernel command line (`cd.nix:81-87`). Hold only
+   when interactive?

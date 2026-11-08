@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1686
 intent: intent/2026-11-08-1686-try-disk-minimum.md
 ---

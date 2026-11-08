@@ -4,7 +4,7 @@
 # their popup. Drop when upstream grows a way to hand notifications to another client.
 --- a/shell/plugins/notifications/Service.qml
 +++ b/shell/plugins/notifications/Service.qml
-@@ -51,6 +51,85 @@
+@@ -51,6 +51,87 @@
    // ------------------------------------------------------------- quiet
    //
    property bool doNotDisturb: false
@@ -12,6 +12,7 @@
 +  // #133: the companion (Nixi's snowflake) shows eligible rows itself while it
 +  // holds a lease, renewed over IPC. A lapsed lease puts every queued row back.
 +  property double delegateUntil: 0
++  property bool richLease: false
 +  property var delegatedQueue: []
 +  // Handed-over rows have no card to expire them, so they keep their own clock:
 +  // without it they would hold live slots (maxLiveNotifications) for good.
@@ -34,6 +35,7 @@
 +  // Every queued row back on screen as a normal popup.
 +  function lapse() {
 +    delegateUntil = 0
++    richLease = false
 +    var queued = delegatedQueue
 +    delegatedQueue = []
 +    for (var i = 0; i < queued.length; i++) {
@@ -90,7 +92,7 @@
    function setDoNotDisturb(value) {
      var on = !!value
      if (on === doNotDisturb) return
-@@ -185,6 +264,7 @@
+@@ -185,6 +266,7 @@
  
    function releaseLive(key) {
      if (!liveKeys[key]) return
@@ -98,21 +100,31 @@
      delete liveKeys[key]
      held = held.filter(function(heldKey) { return heldKey !== key })
    }
-@@ -614,7 +694,29 @@
+@@ -614,7 +696,39 @@
        return
      }
  
 -    storePut(row)
 +    // The companion shows it: history and the sender stay as they are, only the popup is skipped.
 +    // Not one already on screen or on its way there (held, scheduled): those finish as cards.
++    var namedActions = actionsOf(key, refsRevision)
++    var carryActions = namedActions.length <= 3 && namedActions.every(function(a) {
++      return a.id.length >= 1 && a.id.length <= 64 && !/[\x00-\x1f\x7f]/.test(a.id)
++    })
 +    if (delegated() && !Delivery.bypassesQuiet(row) && !String(row.code || "")
 +        && notification.urgency !== NotificationUrgency.Critical && row.app !== "Nixi"
 +        && rowIndexFor(key) < 0 && !liveKeys[key].scheduled && !liveKeys[key].held
-+        // A row with buttons stays a card: the companion can only fire "default" (#1558).
-+        && actionsOf(key, refsRevision).length === 0 && !row.execActions) {
++        // A plain lease keeps buttons in the shell; a rich lease carries only safe named actions.
++        && (richLease ? carryActions : namedActions.length === 0) && !row.execActions) {
 +      liveKeys[key].row = row
-+      var queued = delegatedQueue.filter(function(q) { return q.key !== key }).concat([{ key: key, app: row.app, source: row.source, summary: String(row.summary || "").slice(0, 200),
-+        body: String(row.bodyLine || "").slice(0, 200), urgency: row.urgency, category: categoryOf(row) }])
++      var queuedRow = { key: key, app: row.app, source: row.source, summary: String(row.summary || "").slice(0, 200),
++        body: String(row.bodyLine || "").slice(0, 200), urgency: row.urgency, category: categoryOf(row) }
++      if (richLease) {
++        queuedRow.actions = namedActions.map(function(a) { return { id: a.id, text: a.text.slice(0, 40) } })
++        queuedRow.image = String(row.image || "").indexOf("image://qsimage/") === 0 ? "" : String(row.image || "")
++        queuedRow.rich = String(row.bodyRich).slice(0, 600)
++      }
++      var queued = delegatedQueue.filter(function(q) { return q.key !== key }).concat([queuedRow])
 +      if (queued.length > 32) {
 +        var oldest = liveKeys[queued[0].key]
 +        if (oldest && oldest.row) showDelegated(oldest.row)
@@ -129,7 +141,7 @@
  
      // Only a new card waits while the deck is held; an update changes a card in place.
      if (service.holding() && service.rowIndexFor(key) < 0) {
-@@ -1068,7 +1170,7 @@
+@@ -1074,7 +1188,7 @@
    // action, then its window, then its site.
    function activate(key, instant) {
      var at = rowIndexFor(key)
@@ -138,13 +150,14 @@
      var argv = Security.parseExecArgv(row ? row.execArgv : "")
      if (argv) {
        // Detached through bash positional parameters, never a shell string, and
-@@ -1397,6 +1499,50 @@
+@@ -1403,6 +1517,66 @@
  
      function ping(): string { return "ok" }
  
 +    // #133: the companion's lease. ms > 0 renews it and takes the queued rows;
 +    // ms <= 0 gives it up, and the queued rows pop up.
 +    function delegate(ms: int): string {
++      service.richLease = false
 +      if (ms <= 0) { service.lapse(); return "[]" }
 +      service.delegateUntil = Date.now() + Math.min(ms, 10000)
 +      // Taken by the companion: into history now, once per key (updates come again).
@@ -155,7 +168,8 @@
 +      for (var i = 0; i < service.delegatedQueue.length; i++) {
 +        var reservation = service.liveKeys[service.delegatedQueue[i].key]
 +        if (!reservation || !reservation.row) continue
-+        expiry[service.delegatedQueue[i].key] = now + Math.max(reservation.row.duration || 0, 12000)
++        expiry[service.delegatedQueue[i].key] = now + Math.max(reservation.row.duration || 0,
++          service.delegatedQueue[i].actions && service.delegatedQueue[i].actions.length ? 30000 : 12000)
 +        if (reservation.recorded) continue
 +        reservation.recorded = true
 +        if (!Delivery.isEphemeral(reservation.row)) service.storeRecord(reservation.row, "delegated")
@@ -163,6 +177,12 @@
 +      service.delegatedExpiry = expiry
 +      var rows = JSON.stringify(service.delegatedQueue)
 +      service.delegatedQueue = []
++      return rows
++    }
++
++    function delegateRich(ms: int): string {
++      var rows = delegate(ms)
++      service.richLease = ms > 0
 +      return rows
 +    }
 +
@@ -177,6 +197,14 @@
 +    function activateKey(key: string): string {
 +      if (!service.liveKeys[key]) return "none"
 +      service.activate(key, true)
++      return "ok"
++    }
++
++    function invokeKey(key: string, id: string): string {
++      if (!service.liveKeys[key]) return "none"
++      if (!service.actionsOf(key, service.refsRevision).some(function(a) { return a.id === id })) return "none"
++      if (!service.invokeSenderAction(key, id)) return "none"
++      service.closeToast(key, "activated")
 +      return "ok"
 +    }
 +

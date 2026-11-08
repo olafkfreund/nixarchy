@@ -90,6 +90,27 @@ case_fresh45() {
   [[ -L $XDG_CONFIG_HOME/imv/config ]] || fail 'fresh45: managed symlink replaced'
   [[ $(marker_count) -eq $((3 + $(wc -l < "$NIXARCHY_USER_MIGRATIONS/list"))) ]] || fail 'fresh45: markers missing'
 }
+case_1673() {
+  local layouts before
+  case=1673
+  setup 1673 "$FIXTURE_C"
+  layouts=$XDG_STATE_HOME/omarchy/workspace-layouts
+  mkdir -p "$layouts"
+  printf '%s\n' 'hl.workspace_rule({ workspace = "-98", layout = "scrolling" })' > "$layouts/-98.lua"
+  printf '%s\n' 'hl.workspace_rule({ workspace = "3", layout = "scrolling" })' > "$layouts/3.lua"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1787679775.sh && -e $OMARCHY_MIGRATION_STATE/1791698594.sh ]] || fail '1673: migration markers missing'
+  [[ ! -e $layouts/-98.lua ]] || fail '1673: named workspace layout remains'
+  printf '%s\n' 'o.workspace_mode({ workspace = "3", mode = "scrolling" })' | cmp - "$layouts/3.lua" || fail '1673: workspace mode not saved'
+  [[ $(cat "$HOME/calls.log") == 'hyprctl reload' ]] || fail '1673: expected one Hyprland reload'
+
+  before=$work/1673.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1673: second run changed the home'
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -194,5 +215,6 @@ STUB_DRIFT=1 run_port
 [[ ! -e $OMARCHY_MIGRATION_STATE/1791969355.sh ]] || fail 'drift: split marker despite refused move'
 grep 'widget at center\[0\] is not omarchy.indicators' "$HOME/journal.log" >/dev/null || fail 'drift: refusal not observed'
 case_fresh45
+case_1673
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

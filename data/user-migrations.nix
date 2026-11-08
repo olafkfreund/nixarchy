@@ -24,8 +24,9 @@
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
   };
   "1787679775" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "remove saved layouts for named workspaces and reload Hyprland (#1673)";
   };
   "1788129995" = {
     decision = "declined";
@@ -109,8 +110,9 @@
     reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
   };
   "1791698594" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "convert saved workspace layout rules to modes (#1673)";
   };
   "1791705142" = {
     decision = "declined";

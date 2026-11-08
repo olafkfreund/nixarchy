@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1672
 intent: intent/2026-11-08-1672-nvim-transparency.md
 ---

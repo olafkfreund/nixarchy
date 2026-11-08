@@ -731,8 +731,10 @@ boot cost 15 minutes and left no evidence. It now waits in windows of at most
 Both print two samples from the qemu monitor, 5 s apart -- `info cpus`, `info
 registers -a`, `cpu <n>` + `info lapic` per vCPU, `info pic`, `info irq`, `info
 virtio`, and every queue's `info virtio-queue-status` for each virtio device
--- then, on `BootHang` only, two pokes (`nmi`, then
-`sendkey alt-sysrq-w`, each watched for `poke_watch` s, default 15), then the
+-- then, on `BootHang` only, three pokes (`nmi`, `sendkey alt-sysrq-w`, each
+watched for `poke_watch` s, default 15, then `sendkey alt-sysrq-t`, which waits
+until no new console line has arrived for `quiet` s, default 3, or `task_max`
+s, default 90; it is skipped when `w` printed a `state:D` stack), then the
 #1365 systemd probe, and attach the monitor text to the exception as
 `.monitor_dump`. Reading the samples:
 
@@ -767,8 +769,11 @@ Reading the pokes:
   woken and went back to idle;
 - other boot output after the NMI: the guest resumed, and the key's result is
   moot;
-- `This sysrq operation is disabled` after the key: the legacy i8042 -> IOAPIC
-  -> LAPIC path delivered;
+- `Show Blocked State` after the key: the legacy i8042 -> IOAPIC -> LAPIC path
+  delivered;
+- reading `w`: a `state:D` stack names what that task waits on;
+- reading `t`: look for the task whose wait never ends. Up to 3000 console
+  lines are kept per poke, then `(N more console lines not shown)`;
 - silence: weak evidence -- a quietly handled NMI or a key that never reached
   sysrq look the same.
 
@@ -787,10 +792,9 @@ after `sti; hlt`, which matches `HLT=1`. That implies KASLR offsets of
 `0x0b200000` and `0x3b400000`, both 2 MiB-aligned, so every vCPU was in the
 idle loop's halt.
 
-There is still no sysrq task dump: `sendkey alt-sysrq-w` is sent as a poke
-under the shipped `kernel.sysrq=16`, which dumps nothing but prints the
-disabled line above; enabling more would change the shipped closure to diagnose
-a test.
+SysRq is enabled in the test instrumentation only: `sysrq_always_enabled` on
+the kernel command line (an inline module in `etcInstrumentation`, so the
+shipped `kernel.sysrq=16` is untouched) makes `w` and `t` dump stacks.
 
 **What no check proves:** case A's stopped guest cannot print, so nothing shows
 a poke waking a halted-and-hung guest; case C runs the test VM's default
@@ -799,9 +803,9 @@ logs, not job logs, hold hangs before #1643: `bzcat <log> | tr '\r' '\n'`.
 
 The check stops one guest with the monitor's `stop` and expects the first
 reason in under 60 s (case A), boots a second guest that must pass (case B),
-and pokes that healthy guest with `_poke`, expecting the NMI line and the
-sysrq-disabled line (case C). Case A also asserts on the replies (`dumping
-local APIC state for CPU`, `ioapic0: ver=`, `used_idx:`, both poke lines, and
+and pokes that healthy guest with `_poke`, expecting the NMI line, `Show Blocked State`
+and, unless `w` showed a `state:D` stack, a `t` entry holding `task:` (case C). Case A also asserts on the replies (`dumping
+local APIC state for CPU`, `ioapic0: ver=`, `used_idx:`, all three poke lines, and
 none of `unknown command:`, `monitor command failed` or `monitor replied:`).
 Breaks (the first from #1594, the rest run in the VM for #1604): drop the
 silence deadline from the window and case A fails on elapsed time (`AssertionError: took 130 s to notice`); misspell
@@ -811,7 +815,8 @@ strip no escapes from a poke's reply, or send anything but `nmi`, and case A
 fails on `'monitor replied:' in dump`; send `sendkey shift` instead of `nmi` to
 the healthy guest only and case C fails on `NMI poke unanswered`.
 `checks.boot-diagnostics`' stub cases cover command order, every queue of every
-device, the abandoned-join guard and a rejected poke being shown.
+device, the abandoned-join guard, a rejected poke being shown, `t` skipped after a
+`state:D` line, the 3000-line cut and `abandoned` ending `t`'s wait.
 
 ## A test file in tests/ is not a check, and the coverage gate cannot see that
 

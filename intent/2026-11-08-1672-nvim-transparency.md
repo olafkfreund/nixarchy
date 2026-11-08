@@ -35,7 +35,11 @@ byte, because the `omarchy-nvim` pacman package "has no published source"
 
 ## Affected users and systems
 
-- Everyone with `programs.nixarchy.neovim != "off"`.
+- Configs nixarchy seeded: `neovim = "theme-only"` seeding into an absent
+  `~/.config/nvim` (new homes via the package, pre-4.5 seeds via the
+  migration). `adopt`, `off` and a user's own config are untouched.
+
+Corrected after review (2026-11-08): the affected users are narrowed to seeded configs.
 - `pkgs/omarchy-nvim/`, `data/user-migrations.nix`,
   `pkgs/omarchy/user-migrations.nix`, `tests/user-migrations/`.
 

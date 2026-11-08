@@ -19,6 +19,11 @@ let
     MIGRATE_SCRIPT = "${omarchy}/bin/omarchy-migrate-user";
     ORACLE_SOURCE = omarchySrc;
     NIXARCHY_USER_MIGRATIONS = omarchy.passthru.userMigrations;
+    MIGRATION_LEDGER = pkgs.writeText "user-migrations-ledger.json" (
+      builtins.toJSON (import ../data/user-migrations.nix)
+    );
+    NVIM_CONFIG = "${pkgs.omarchy-nvim-config}/share/omarchy-nvim";
+    NVIM_OLD_TRANSPARENCY = ./fixtures/1672/transparency.lua;
     # The oracle's migrations call omarchy-shell-config, which reads it under set -u.
     OMARCHY_PATH = "${omarchy}/share/omarchy";
   };

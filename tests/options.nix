@@ -137,6 +137,7 @@ let
   omathemeMachine = configNamed "omatheme" { user = "someone"; };
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
+  neovimOffHome = homeOn { } { programs.nixarchy.neovim = "off"; };
   # #888: the same machine with the nix-skills input turned off.
   skillsOffHome = homeOn { nixSkills = false; } { };
   # #1238: gliff excluded, so its manager panel has nothing to manage. Bound
@@ -1008,7 +1009,7 @@ let
     # never "selected".
     nixdNeovim = {
       on = defaultHomeOn.home.activation ? nixarchyNixdNeovim;
-      off = (homeOn { } { programs.nixarchy.neovim = "off"; }).home.activation ? nixarchyNixdNeovim;
+      off = neovimOffHome.home.activation ? nixarchyNixdNeovim;
     };
 
     # The half that makes nixd worth shipping: it is told which flake and
@@ -1054,7 +1055,7 @@ let
 
     nixNeovimSpec = {
       on = defaultHomeOn.home.activation ? nixarchyNeovimNix;
-      off = (homeOn { } { programs.nixarchy.neovim = "off"; }).home.activation ? nixarchyNeovimNix;
+      off = neovimOffHome.home.activation ? nixarchyNeovimNix;
     };
     nixNeovimSpecFollowsLanguageServer = {
       on = defaultHomeOn.home.activation ? nixarchyNeovimNix;
@@ -1151,6 +1152,22 @@ let
       # .enable, not ?: the entry exists either way, and enable is what writes the file.
       on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".enable;
       off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".enable;
+    };
+    userMigrationsNeovimSetting = {
+      on =
+        pkgs.lib.hasInfix "export NIXARCHY_NEOVIM=theme-only"
+          defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".text;
+      off =
+        pkgs.lib.hasInfix "export NIXARCHY_NEOVIM=theme-only"
+          neovimOffHome.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".text;
+    };
+    userMigrationsNeovimOff = {
+      on =
+        pkgs.lib.hasInfix "export NIXARCHY_NEOVIM=off"
+          neovimOffHome.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".text;
+      off =
+        pkgs.lib.hasInfix "export NIXARCHY_NEOVIM=off"
+          defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".text;
     };
 
     # ---- upstream's /etc overlay, the rows carried as NixOS options ----

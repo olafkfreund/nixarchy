@@ -137,8 +137,9 @@
     reason = "make the old black Herdr tab bar transparent while retaining a black dim surface (#1678)";
   };
   "1791723398" = {
-    decision = "declined";
-    reason = "needs omarchy-nvim-config to ship lualine-transparent.lua first (#1672)";
+    decision = "ported";
+    run = "edited";
+    reason = "add Omarchy 4.5 transparency files only to configs with an unmodified Omarchy transparency file, unless Neovim is off (#1672)";
   };
   "1791769486" = {
     decision = "not-needed";

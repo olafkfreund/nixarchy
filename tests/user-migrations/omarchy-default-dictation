@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf '%s\n' "omarchy-default-dictation $*" >> "$HOME/calls.log"
+config=${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/defaults/dictation
+[[ -s $config ]] || exit 1
+read -r backend < "$config"
+printf '%s\n' "${STUB_DICTATION_BACKEND:-$backend}"

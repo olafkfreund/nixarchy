@@ -101,12 +101,14 @@
     reason = "repair saved JPG backgrounds after bundled images moved to WebP (#1674)";
   };
   "1791479273" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "port";
+    reason = "switch an unused Superwhisper default to installed Voxtype (#1677)";
   };
   "1791676907" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "restore Shift for an empty Fcitx alternate trigger list (#1677)";
   };
   "1791696584" = {
     decision = "ported";
@@ -180,8 +182,9 @@
     reason = "Apple Silicon ~/.bashrc; bash setup comes from /etc/bashrc (modules/nixos.nix)";
   };
   "1793477875" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "retain existing dictation keys and move Superwhisper off Alt+Space (#1677)";
   };
   "1793565796" = {
     decision = "declined";

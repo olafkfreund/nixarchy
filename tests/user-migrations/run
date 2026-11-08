@@ -237,6 +237,79 @@ case_1676() {
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 }
+case_1677() {
+  local variant config bindings fcitx before expected calls path_with_voxtype
+  for variant in migrate backend marker no-voxtype preferences existing-f9; do
+    case=1677.$variant
+    setup "$case" "$FIXTURE_C"
+    config=$XDG_CONFIG_HOME/omarchy/defaults/dictation
+    bindings=$XDG_CONFIG_HOME/hypr/bindings.lua
+    fcitx=$XDG_CONFIG_HOME/fcitx5/config
+    mkdir -p "${config%/*}" "${bindings%/*}" "${fcitx%/*}" "$HOME/bin"
+    printf '%s\n' superwhisper > "$config"
+    printf '%s\n' '[Hotkey/AltTriggerKeys]' '[Hotkey/TriggerKeys]' '0=Control+space' > "$fcitx"
+    printf '%s\n' '-- old dictation bindings' > "$bindings"
+    if [[ $variant == existing-f9 ]]; then
+      printf '%s\n' 'o.bind_hold("F9", "Existing", "custom-start", "Stop", "custom-stop")' >> "$bindings"
+    fi
+    if [[ $variant == marker ]]; then
+      mkdir -p "$OMARCHY_MIGRATION_STATE"
+      touch "$OMARCHY_MIGRATION_STATE/1791479273.sh"
+    fi
+    if [[ $variant == preferences ]]; then
+      mkdir -p "$HOME/.config/superwhisper"
+      printf '%s\n' '{}' > "$HOME/.config/superwhisper/preferences.json"
+    fi
+    if [[ $variant != no-voxtype ]]; then
+      printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$HOME/bin/voxtype"
+      chmod +x "$HOME/bin/voxtype"
+    fi
+    if [[ $variant == migrate ]]; then
+      cp -a "$HOME" "$work/1677.oracle-fixture"
+    fi
+    path_with_voxtype=$HOME/bin:$PATH
+    if [[ $variant == backend ]]; then
+      STUB_DICTATION_BACKEND=voxtype PATH=$path_with_voxtype run_port
+    else
+      PATH=$path_with_voxtype run_port
+    fi
+    for id in 1791479273 1791676907 1793477875; do
+      [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "$case: marker missing for $id"
+    done
+    expected=superwhisper
+    [[ $variant == migrate || $variant == existing-f9 ]] && expected=voxtype
+    [[ $(<"$config") == "$expected" ]] || fail "$case: dictation default changed unexpectedly"
+    [[ $(grep -c '^0=Shift_L$' "$fcitx") -eq 1 ]] || fail "$case: Shift trigger missing or duplicated"
+    [[ $(grep -cF '"SUPER + CTRL + X"' "$bindings") -eq 1 ]] || fail "$case: legacy toggle missing or duplicated"
+    [[ $(grep -cF '"F9"' "$bindings") -eq 1 ]] || fail "$case: F9 missing or duplicated"
+    [[ $(grep -cF 'o.bind_hold("F9"' "$bindings") -eq 1 ]] || fail "$case: F9 binding duplicated"
+    if [[ $variant == existing-f9 ]]; then
+      [[ $(grep -cF 'custom-start' "$bindings") -eq 1 ]] || fail "$case: existing F9 binding replaced"
+    fi
+    calls=$HOME/calls.log
+    [[ $(grep -c '^busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 ReloadConfig$' "$calls") -eq 1 ]] || fail "$case: Fcitx reload missing"
+    [[ $(grep -c '^omarchy-pkg-present ' "$calls" || true) -eq 0 ]] || fail "$case: port called upstream's package probe"
+    [[ $(grep -c '^omarchy-default-dictation ' "$calls") -ge 1 ]] || fail "$case: dictation default was not read"
+    if [[ $variant == preferences ]]; then
+      grep -Fx 'superwhisper shortcuts show' "$calls" >/dev/null || fail "$case: Superwhisper shortcut not read"
+      grep -Fx 'superwhisper shortcuts set toggle Ctrl+Alt+Space' "$calls" >/dev/null || fail "$case: Superwhisper shortcut not moved"
+    else
+      [[ $(grep -c '^superwhisper ' "$calls" || true) -eq 0 ]] || fail "$case: unexpected Superwhisper call"
+    fi
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    PATH=$path_with_voxtype run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+
+  case=1677.oracle
+  oracle_run 1791479273 "$work/1677.oracle-fixture"
+  config=$XDG_CONFIG_HOME/omarchy/defaults/dictation
+  [[ $(<"$config") == superwhisper ]] || fail '1677: upstream oracle unexpectedly changed an existing default'
+  grep -Fx 'omarchy-pkg-present voxtype-bin' "$HOME/calls.log" >/dev/null || fail '1677: upstream oracle did not test Voxtype'
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -345,5 +418,6 @@ case_1673
 case_1674
 case_1675
 case_1676
+case_1677
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

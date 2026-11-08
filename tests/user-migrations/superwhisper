@@ -1,2 +1,5 @@
 #!/usr/bin/env bash
 printf '%s\n' 'superwhisper '"$*" >> "$HOME/calls.log"
+if [[ $* == 'shortcuts show' ]]; then
+  printf '{"shortcuts":{"toggle":"%s"}}\n' "${STUB_SUPERWHISPER_TOGGLE:-Alt+Space}"
+fi

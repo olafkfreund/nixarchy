@@ -41,15 +41,21 @@ reviewers:
    3. Per target: `drv=$(nix eval --raw ".#<attr>.drvPath")`; roots are the
       `.drv`s in `nix-store -qR "$drv"` whose outputs
       (`nix-store -q --outputs`) are not all valid (`nix-store --check-validity`
-      fails) and that have a log (`nix log` succeeds). No root → the target's
-      own `nix log` if any, else "no build log (it never started, or it was
-      substituted)". Each excerpt: `nix log <root> | failure-excerpt.sh |
-      tail -n 40`, then redaction.
+      fails) and whose `nix log` prints something (success with empty output
+      is no log). No root → the target's own `nix log` if it prints
+      something, else the target is named on its own line, `<attr>: no build
+      log (it never started, or it was substituted)`. Each excerpt:
+      `nix log <root> | failure-excerpt.sh | tail -n 40`; if that is empty,
+      the log's last 10 lines instead, as `failure-digest.sh:76` does, so a
+      killed build that ended without a recognised error still shows where it
+      stopped. Then redaction.
    4. Redaction, per line: a line matching `ghp_|gho_|ghs_|ghu_|github_pat_|AGE-SECRET-KEY-|-----BEGIN`
       or `[A-Z_]*(TOKEN|SECRET|PASSWORD|KEY|AUTH)[A-Z_]*=` (case-insensitive)
       becomes `[line removed: looked like a secret]`.
    5. Output: per job, `### <name>: <failed|timed out|cancelled: …> at step "<step>"`,
-      then per root `**<drv name>**` and a fenced excerpt. All headers are
+      then per target either its roots, each `**<drv name>**` and a fenced
+      excerpt, or the target's no-log line. So every target a failed job
+      names appears, even one its failed step never reached. All headers are
       written first; excerpts share the rest of 50,000 characters, each cut
       at a line boundary with "(excerpt truncated)".
    6. Any failure (the API, `yq`, an evaluation) → `digest unavailable: <what>`,
@@ -95,7 +101,8 @@ reviewers:
    3. `install-iso-net` failed at the ISO size step → job, step, and both its
       targets (`iso-budget`, `install-iso-net`) appear;
    4. `canary` failed → header only;
-   5. no `nix log` anywhere → "no build log";
+   5. `nix log` succeeds and prints nothing (the spec's case) → the target's
+      "no build log" line;
    6. `STUB_GH_FAIL=1` → `digest unavailable:`, exit 0;
    7. four failed jobs with oversized logs → under 50,000 characters, all
       four headers present;
@@ -131,7 +138,8 @@ reviewers:
    - read only the target's own log → case 8;
    - drop the annotation lookup → case 2;
    - drop redaction → case 10;
-   - remove the `|| …` guard on the jobs call → case 6;
+   - remove the `|| …` guard on the jobs call **and** the `ERR` trap → case 6
+     (either alone still recovers, so only both together can fail it);
    - remove `id: digest` → the wiring assertions.
    One commit per step; PR `Closes #1711` linking the three artifacts, saying
    the first failed night is the real run's proof; "@codex review"; merge
@@ -153,3 +161,13 @@ comment on #1604 or any nightly issue is its proof.
 
 Revert the PR. `report` returns to its link-only text; nothing else reads the
 digest.
+
+## Plan review
+
+Codex (model gpt-6-sol) found four gaps, each confirmed against the files
+and fixed above: the last-lines fallback for a log with no recognised error
+(`failure-digest.sh:76`); a no-log line per target, since the ISO size step
+precedes both builds (`nightly.yml:171-194`); the API-guard break also
+disabling the `ERR` trap; case 5 restored to the spec's "prints nothing".
+agy: review not obtained. `UNAVAILABLE (code 503): No capacity available for
+model gpt-oss-120b-medium on the server`.

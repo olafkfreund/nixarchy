@@ -188,8 +188,9 @@
     reason = "retain existing dictation keys and move Superwhisper off Alt+Space (#1677)";
   };
   "1793565796" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "set OpenCode 2 system theme without replacing a chosen theme (#1679)";
   };
   "1793667581" = {
     decision = "not-needed";

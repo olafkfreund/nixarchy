@@ -346,6 +346,54 @@ case_1678() {
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 }
+case_1679() {
+  local variant config before
+  for variant in no-theme chosen-theme no-cli; do
+    case=1679.$variant
+    setup "$case" "$FIXTURE_C"
+    config=$XDG_CONFIG_HOME/opencode/cli.json
+    mkdir -p "${config%/*}"
+    case $variant in
+      no-theme)
+        printf '%s\n' '{"$schema":"https://opencode.ai/v2/cli.json","keybinds":{"quit":"ctrl+q"}}' > "$config"
+        ;;
+      chosen-theme)
+        printf '%s\n' '{"theme":{"name":"custom"},"keybinds":{"quit":"ctrl+q"}}' > "$config"
+        chmod 640 "$config"
+        cp "$config" "$work/$case.expected-cli.json"
+        ;;
+      no-cli)
+        [[ ! -e $config && ! -e $XDG_CONFIG_HOME/opencode/tui.json && ! -e $XDG_STATE_HOME/opencode/kv.json ]] || fail "$case: fixture is not empty"
+        ;;
+    esac
+    : > "$HOME/calls.log"
+
+    run_port
+    [[ -e $OMARCHY_MIGRATION_STATE/1793565796.sh ]] || fail "$case: migration marker missing"
+    case $variant in
+      no-theme)
+        jq -e '.theme == {name:"system"} and .keybinds.quit == "ctrl+q" and ."$schema" == "https://opencode.ai/v2/cli.json"' "$config" >/dev/null || fail "$case: theme or existing config changed"
+        ;;
+      chosen-theme)
+        cmp "$work/$case.expected-cli.json" "$config" || fail "$case: chosen theme changed"
+        [[ $(stat -c %a "$config") == 640 ]] || fail "$case: chosen config permissions changed"
+        ;;
+      no-cli)
+        cmp "$OMARCHY_PATH/config/opencode/cli.json" "$config" || fail "$case: bundled cli.json was not copied"
+        ;;
+    esac
+    if [[ $variant != chosen-theme ]]; then
+      [[ $(stat -c %a "$config") == 600 ]] || fail "$case: cli.json permissions are wrong"
+    fi
+    [[ ! -s $HOME/calls.log ]] || fail "$case: unexpected session calls"
+
+    before=$work/$case.before-second-run
+    mkdir -p "$before"
+    cp -a "$HOME"/. "$before"/
+    run_port
+    same_tree "$before" "$HOME" || fail "$case: second run changed the home"
+  done
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -456,5 +504,6 @@ case_1675
 case_1676
 case_1677
 case_1678
+case_1679
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

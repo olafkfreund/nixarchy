@@ -6,13 +6,22 @@
 # publishes binaries rather than PKGBUILDs -- so unlike every other app here,
 # there is nothing to follow.
 #
-# What there is: Omarchy carried exactly this configuration in-tree, as
-# `config/nvim`, until v3.0.2, and dropped it in v4.0.0 when the package was
-# split out. These files are that tree, byte for byte, at v3.0.2 -- the last
-# revision anyone can read. Same repository, same MIT licence, same content the
-# package installs.
+# What there is: Omarchy carried this configuration in-tree, as `config/nvim`,
+# until v3.0.2, and dropped it in v4.0.0 when the package was split out. The
+# unchanged files here are that tree, byte for byte, at v3.0.2. The package
+# remains under the same MIT licence.
 #
-# It is four files and under three kilobytes, because it is not a Neovim
+# Two files were taken from Omarchy's binary package on 2026-11-08 so the
+# seeded config and the user-file migration carry the 4.5 transparency update:
+# https://pkgs.omarchy.org/stable/x86_64/omarchy-nvim-2026.9.21-5-any.pkg.tar.zst
+# Archive sha256: b46d41973cacfcf2d8be371351336a3f689e2eb7b9bacdb7ca81939354cbcbc9
+# In-archive paths:
+# usr/share/omarchy-nvim/config/lua/plugins/lualine-transparent.lua
+# usr/share/omarchy-nvim/config/plugin/after/transparency.lua
+# This package has no published source, so these files were extracted once;
+# there is no fetch at build time.
+#
+# It is a handful of files, because it is not a Neovim
 # distribution: it is LazyVim, plus the handful of things Omarchy changes about
 # it. LazyVim itself is not vendored and must not be -- it resolves and locks
 # its own plugins at runtime into ~/.local/share/nvim, exactly as it does on
@@ -57,10 +66,11 @@ stdenvNoCC.mkDerivation {
   '';
 
   meta = {
-    description = "Omarchy's LazyVim configuration, vendored from omarchy v3.0.2";
+    description = "Omarchy's LazyVim configuration, from v3.0.2 with two 4.5 transparency files";
     longDescription = ''
       The contents of Omarchy's `omarchy-nvim` package: a LazyVim extras
-      selection, two plugin overrides and a transparency highlight script.
+      selection, plugin overrides, and the 4.5 transparency highlight and
+      lualine scripts.
       Seeded into ~/.config/nvim by programs.nixarchy.neovim, and only when
       there is nothing there already.
     '';

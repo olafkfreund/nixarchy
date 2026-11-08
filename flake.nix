@@ -1879,6 +1879,9 @@
             # this one; see the file header for what it proves and what no
             # sandboxed check can.
             "install-iso-net"
+            # The actual upstream minimal ISO, booted through its own GRUB.
+            # Its large cache and VM run belong to the weekly job only.
+            "install-stock-iso"
             # The #300 guarantee on a real disk: a dark substituter refused with
             # the target intact. installer-store-space covers the same function
             # with stubs; this is the only check that can fail if the installer

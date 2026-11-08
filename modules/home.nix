@@ -2488,6 +2488,7 @@ in
         text = ''
           #!/usr/bin/env bash
           export NIXARCHY_USER_MIGRATIONS=${cfg.package.passthru.userMigrations}
+          export NIXARCHY_NEOVIM=${lib.escapeShellArg cfg.neovim}
           export PATH=${
             lib.makeBinPath [
               cfg.package
@@ -2497,6 +2498,28 @@ in
             ]
           }:$PATH
           exec omarchy-migrate-user
+        '';
+      };
+
+      "omarchy/hooks/post-boot.d/fcitx5-glyphs" = {
+        enable = osConfig.programs.nixarchy.enable or false;
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export PATH=${
+            lib.makeBinPath [
+              cfg.package
+              pkgs.gnused
+              pkgs.coreutils
+            ]
+          }:$PATH
+          dir="$HOME/.local/share/fcitx5/themes/omarchy"
+          [ -f "$dir/theme.conf" ] || exit 0
+          while IFS= read -r name; do
+            if [ ! -e "$dir/$name" ]; then
+              exec omarchy-theme-set-fcitx5
+            fi
+          done < <(sed -n 's/^Image=//p' "$dir/theme.conf")
         '';
       };
 

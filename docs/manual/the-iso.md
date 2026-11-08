@@ -10,6 +10,27 @@ what the image carries, answering the questions ahead of time,
 what the installer leaves in `/etc/nixos`, and the caveats people hit. It used
 to be the README's install section.
 
+## From a stock NixOS ISO
+
+You can also start from the official NixOS minimal ISO. Boot it in UEFI mode,
+connect to the network, and run:
+
+```sh
+nix --extra-experimental-features 'nix-command flakes' run github:olafkfreund/nixarchy#install
+```
+
+The installer asks the same questions and writes the same `/etc/nixos` flake.
+Before it touches the disk, it checks that `cache.nixos.org` and nixarchy's
+binary caches answer, then plans the system build using those caches. If a
+cache is unreachable or the system cannot be planned, it stops and leaves the
+disk untouched. Restore the connection and run the command again.
+
+The stock ISO has no preloaded nixarchy closure. Its live Nix store is a RAM
+overlay, typically limited to half the machine's memory; downloading the
+installer and system uses that space. Use a machine with at least 8 GiB of RAM
+for this route. The regular `#iso-net` image carries the installer and its
+input sources already.
+
 ## Writing the stick from Windows or macOS
 
 **Use [balenaEtcher](https://etcher.balena.io/) with the network image.**

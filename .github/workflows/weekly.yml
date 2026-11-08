@@ -1,6 +1,6 @@
 name: weekly
 
-# Two weekly jobs that keep the release branch honest (#1199).
+# Weekly release and stock installer checks.
 #
 # Installed machines follow `release`, which moves only when a human pushes a
 # tag. Nothing reminded anyone to, and on 2026-10-06 it was 305 commits behind
@@ -20,6 +20,7 @@ name: weekly
 on:
   schedule:
     - cron: "0 9 * * 0" # stable-session, Sunday after edge's 06:00 run
+    - cron: "0 15 * * 0" # install-stock-iso, after stable-session's budget
     - cron: "0 6 * * 1" # propose, Monday after the 03:00 nightly
   workflow_dispatch:
     inputs:
@@ -27,12 +28,26 @@ on:
         description: "Which job to run"
         required: true
         type: choice
-        options: [propose, stable-session]
+        options: [propose, stable-session, install-stock-iso]
 
 permissions:
   contents: read
 
 jobs:
+  install-stock-iso:
+    if: github.event.schedule == '0 15 * * 0' || inputs.job == 'install-stock-iso'
+    runs-on: [self-hosted, nixos, kvm, big]
+    # Provisional until the first VM run gives a measured wall time. The
+    # driver's four-hour timeout must fire first and preserve its log.
+    timeout-minutes: 300
+    concurrency:
+      group: install-stock-iso
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install from the stock NixOS ISO
+        run: nix build .#checks.x86_64-linux.install-stock-iso --print-build-logs
+
   propose:
     if: github.event.schedule == '0 6 * * 1' || inputs.job == 'propose'
     runs-on: ubuntu-26.04
@@ -76,6 +91,8 @@ jobs:
             exit 0
           fi
 
+          # Backticks are literal Markdown delimiters in the grep pattern.
+          # shellcheck disable=SC2016
           tag=$(grep -oE 'Proposed tag: `[^`]+`' body.md | tr -d '`' | sed 's/Proposed tag: //')
           gh label create release-candidate -R "$GITHUB_REPOSITORY" --force \
             --description "The next release, proposed weekly" --color 0e8a16

@@ -2,6 +2,7 @@
   runCommand,
   jq,
   omarchy,
+  omarchy-nvim-config,
 }:
 let
   ledger = builtins.toFile "nixarchy-user-migrations.json" (
@@ -43,6 +44,19 @@ runCommand "nixarchy-user-migrations"
               substituteInPlace "$script" \
                 --replace-fail 'omarchy-pkg-add omasnap' "" \
                 --replace-fail 'omarchy-pkg-drop satty tensaku' ""
+              ;;
+            1791723398)
+              substituteInPlace "$script" \
+                --replace-fail '/usr/share/omarchy-nvim/config' '${omarchy-nvim-config}/share/omarchy-nvim' \
+                --replace-fail 'omarchy-pkg-present omarchy-nvim || exit 0' \
+                  '[[ ''${NIXARCHY_NEOVIM:-} != off ]] || exit 0
+                   [[ -f $config/plugin/after/transparency.lua ]] || exit 0
+                   case $(sha256sum <"$config/plugin/after/transparency.lua") in
+                     bd833dc094e3546b5fad512e61cfb09f3032c2a4461c23be7bd90851de80688e* | \
+                       6e31b917f13e16514ac94ff9270d47f24e76509a3e559ca85116a5aa2d61306a* | \
+                       33d29360df84ed48c70606580749536520384ec64afe650151d4e26e7922b410*) ;;
+                     *) exit 0 ;;
+                   esac'
               ;;
             *) echo "no edit defined for $id" >&2; exit 1 ;;
           esac

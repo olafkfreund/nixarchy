@@ -91,8 +91,10 @@ while IFS= read -r job; do
     id=$(jq -r '.id' <<<"$job") || unavailable
     what="reading annotations for $name"
     annotations=$(gh api "repos/$GH_REPO/check-runs/$id/annotations") || unavailable
+    # Any annotation: a job may warn before it times out.
+    timed_out=$(jq -r 'any(.[]; .message // "" | ascii_downcase | contains("exceeded the maximum execution time"))' <<<"$annotations") || unavailable
     message=$(jq -r '.[0].message // ""' <<<"$annotations") || unavailable
-    if [[ ${message,,} == *"exceeded the maximum execution time"* ]]; then
+    if [ "$timed_out" = true ]; then
       status="timed out"
     elif [ -n "$message" ]; then
       status="cancelled: $message"

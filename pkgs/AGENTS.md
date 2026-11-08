@@ -1368,6 +1368,42 @@ The patch uses /run/wrappers/bin first, then the system profile: the same two di
 
 New in 4.0.3, and `checks.session` caught it. That check scans every shipped command for /usr and is the reason this is a patch rather than a surprise on somebody's laptop.
 
+## User-file migrations (#1610)
+
+Omarchy's migrations are not run here (`omarchy-migrate` is a refusal), so a
+change a release makes to a file the seed copied once never reaches a machine
+installed before it. v4.5 moved the bar to `centerBegin`/`center`/`centerEnd`
+and stopped reading `bar.centerAnchor`, so a v4.0.x seed lost its centred
+clock and never got Elsewhen.
+
+`omarchy-migrate-user` ports the three bar migrations (`1790042972` Elsewhen
+after the clock, `1791968925` tray order, `1791969355` centre split), in that
+order, from the `post-boot.d/user-migrations` hook. It runs only when
+`.bar` still has `centerAnchor` (only v4.0.x seeds do), and the key stays in
+the file because nothing in 4.5 reads it.
+
+- **IPC only.** The running shell owns `shell.json` and rewrites it from
+  memory, so a direct write is lost or clobbers the user's change (#847; the
+  `build.yml` step "Nothing we ship writes shell.json" enforces it). Every
+  change is `putBarWidget` or `moveBarWidget`.
+- **A refused move is a reply, not an exit status.** `moveBarWidget` prints
+  e.g. `widget at center[0] is not omarchy.clock` and leaves the file alone.
+  The script stops at the first reply that is not `ok`, and still judges each
+  step by re-reading the file, because `ok` does not prove the save landed
+  (the shell skips it on an unreadable file).
+- **Markers** are upstream's own: `$OMARCHY_MIGRATION_STATE/<id>.sh`, default
+  `~/.local/state/omarchy/migrations`, written only once the file shows the
+  result. A shell that never answers means no marker, and the next login retries.
+- **Partial:** duplicate trays stay (IPC has no delete, and no nixarchy seed
+  had two), so `1791968925` is `partial` in the ledger.
+
+Every migration that touches a user's files has a decision in
+`data/user-migrations.nix`. **A bump that brings new migrations:** run
+`checks.user-migrations-ledger` and add a row for each id it names.
+`checks.user-migrations` compares the port with upstream's own scripts run on
+the same fixtures, through a stub of the shell's IPC; `checks.plugin` runs it
+against the real shell.
+
 ## Notification history keeps text for the newest rows (#1663)
 
 904-notification-history-text.patch: only the newest

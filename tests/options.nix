@@ -1137,6 +1137,11 @@ let
       on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
       off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/mise-notice".enable;
     };
+    userMigrationsHook = {
+      # .enable, not ?: the entry exists either way, and enable is what writes the file.
+      on = defaultHomeOn.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".enable;
+      off = fixtureNixarchyOff.xdg.configFile."omarchy/hooks/post-boot.d/user-migrations".enable;
+    };
 
     # ---- upstream's /etc overlay, the rows carried as NixOS options ----
     #

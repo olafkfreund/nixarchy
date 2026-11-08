@@ -245,3 +245,20 @@ cannot fail is worse than none).
 - **Untouched and green:** `channel`, `verify-runs`, `installer-lock`,
   `cache-budget`, `options-*`, statix, deadnix, `nix fmt -- --ci`, and
   `.github/scripts/readme-counts.sh`.
+
+
+## Amendment (owner, 2026-11-08)
+
+Step 1's guard measured two non-exempt checks still moving after the
+rev and date leave: `options-files`, through `path:${inputs.self}` at
+`vm/configuration.nix:173`, and `cache-keys`, through whole-tree content.
+Both are evaluation-only checks (minutes, no VM), so the owner chose to
+list both in `data/commit-bound-checks.nix` with those carriers as their
+reasons, rather than filter the source tree. Filtering stays out of scope:
+an offline install needs everything a filter would keep.
+
+The owner also added one change to the same pull request: `build.yml`'s
+jobs that run regardless of the gate (`omarchy`, `system-build`,
+`options-files`, `box`, `devenv-presets`) obey it, and report success for a
+justified no-op so required checks still report. A docs-only pull request
+(#1689) ran all five after #1691.

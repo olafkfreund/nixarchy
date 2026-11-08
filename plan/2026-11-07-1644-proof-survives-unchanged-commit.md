@@ -269,3 +269,20 @@ Revert the merge.
 - Machines rebuild once: `omarchy` regains the splice, and `/etc/nixarchy/version` and the standalone `~/.config/nixarchy/version` disappear. `nixarchy-version` prints the spliced values again.
 - Nothing persists outside the store.
 - The nightly job goes with the revert. Its open issue, if any, is closed by hand.
+
+
+## Deviations (owner, 2026-11-08)
+
+1. **Step 1's stop-gate is resolved by the spec amendment.** `options-files`
+   and `cache-keys` join `data/commit-bound-checks.nix` (done in this commit).
+   Steps 2-9 proceed unchanged.
+2. **Step 10 (new): `build.yml` jobs obey the gate.** For each of `omarchy`,
+   `system-build`, `options` (the `files` shard), `box` and `devenv-presets`:
+   when `needs.gate.outputs.relevant != 'true'`, the job's heavy steps are
+   skipped by an `if:` on the step, and the job ends with a step that prints
+   "no-op: the gate found nothing this job builds" and succeeds, so the
+   required context still reports. The README count step in `omarchy`
+   (which reads README.md, AGENTS.md section 4) keeps running on any change
+   to `README.md`, `data/` or `pkgs/`. That is already "relevant" by the
+   gate's own rules, so nothing extra is needed. A CI-workflow change: the
+   owner merges it (section 11).

@@ -3,6 +3,10 @@ set -euo pipefail
 
 printf '%s\n' "$*" >> "$HOME/ipc.log"
 [[ ${1:-} == -q ]] && shift
+if [[ ${1:-} == background && ${2:-} == set ]]; then
+  printf '%s\n' "omarchy-shell background set ${3:-}" >> "$HOME/calls.log"
+  exit 0
+fi
 [[ ${1:-} == shell ]] || exit 1
 shift
 cfg=$XDG_CONFIG_HOME/omarchy/shell.json

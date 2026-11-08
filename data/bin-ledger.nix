@@ -401,6 +401,10 @@
     class = "new";
     reason = "Not in upstream. Run once per user from a post-boot hook: ports the bar's three 4.5 migrations through the shell's IPC on a v4.0.x seed, with upstream's own migration markers (#1610).";
   };
+  "omarchy-migrate-dictation-default" = {
+    class = "new";
+    reason = "Not in upstream. Replace a Superwhisper default with Voxtype only when Voxtype is installed and Superwhisper has no preferences, preserving configured users (#1677).";
+  };
   "omarchy-mise-default-tools" = {
     class = "replace";
     reason = "Upstream reads /etc/mise/conf.d/omarchy-tools.toml and edits ~/.config/mise/miserc.toml to opt out of default mise tools. nixarchy ships no mise and installs no /etc/mise files, so this refuses (#1625).";

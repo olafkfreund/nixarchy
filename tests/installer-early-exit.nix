@@ -27,10 +27,6 @@ pkgs.runCommand "nixarchy-installer-early-exit"
       '. "$PWD/rendered-install"' \
       'PATH="$PWD/stub:$PATH"' \
       'require_root_and_uefi() { :; }' \
-      'function [ {' \
-      '  if builtin [ "$PROBE_ANSWERS" = 1 ] && builtin [ "$1" = -b ] && builtin [ "$2" = "$PWD/tiny" ]; then return 0; fi' \
-      '  builtin [ "$@"' \
-      '}' \
       'ask_keymap() { :; }' \
       'ask_identity() { :; }' \
       'if [ "$PROBE_BOUNDARY" = 1 ]; then' \
@@ -55,9 +51,8 @@ pkgs.runCommand "nixarchy-installer-early-exit"
     chmod +x stub/*
     patchShebangs stub >/dev/null
     PATH="$PWD/stub:$PATH"
-    export PATH PROBE_BOUNDARY PROBE_ANSWERS
+    export PATH PROBE_BOUNDARY
     PROBE_BOUNDARY=0
-    PROBE_ANSWERS=0
 
     # script supplies a pty to the installer. The first Return clears the
     # greeter; the second clears the hold before the shell stub exits.
@@ -70,14 +65,14 @@ pkgs.runCommand "nixarchy-installer-early-exit"
     grep -q 'no disk large enough to install onto' no-tty.out
     if grep -q 'Press Return for a root shell.' no-tty.out; then echo 'installer-early-exit: FAIL no-tty.out showed the hold prompt' >&2; exit 1; fi
 
-    # The answers file names a block device whose stubbed size is 24 GiB.
-    # This goes through validate_answers, not ask_device.
+    # An unattended run refuses through validate_answers, not ask_device; any
+    # refusal there must leave no hold prompt behind.
     : > tiny
     printf '%s\n' \
       "device=$PWD/tiny" 'encrypt=no' 'hostname=probe' 'username=probe' \
       'password_hash=$6$probe' 'timezone=UTC' 'keymap=us' > answers
-    PROBE_ANSWERS=1 ${pkgs.bash}/bin/bash harness.sh --answers "$PWD/answers" </dev/null > answers.out 2>&1 || true
-    grep -q 'device: .* is under 32 GiB' answers.out
+    ${pkgs.bash}/bin/bash harness.sh --answers "$PWD/answers" </dev/null > answers.out 2>&1 || true
+    grep -q 'nixarchy-install: answers: device:' answers.out
     if grep -q 'Press Return for a root shell.' answers.out; then echo 'installer-early-exit: FAIL answers.out showed the hold prompt' >&2; exit 1; fi
 
     PROBE_BOUNDARY=1

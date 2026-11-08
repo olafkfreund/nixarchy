@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1711
 author: x
 ---
@@ -86,3 +86,11 @@ gained the same.
    Job and step names come from the run's job list in every case.
 2. **How much excerpt?** Recommendation: what `failure-digest.sh` prints
    today for each root failure, plus a cap on the whole issue text.
+
+## Decisions (owner, 2026-11-08: approved with the recommendations)
+
+1. The digest is built on a self-hosted runner after the failed jobs, from
+   `nix log` of each failed check's derivation in p620's store; job and step
+   names come from the run's job list.
+2. Each root failure gets what `failure-digest.sh` prints today, and the whole
+   issue text has a cap of its own.

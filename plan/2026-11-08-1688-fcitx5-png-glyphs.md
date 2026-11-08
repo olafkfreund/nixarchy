@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1688
 spec: spec/2026-11-08-1688-fcitx5-png-glyphs.md
 coders:

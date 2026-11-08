@@ -53,6 +53,9 @@ let
   # one. Null on a standalone home-manager user, exactly like localAi above:
   # there is no NixOS module to have set it.
   defaultAgent = osConfig.programs.nixarchy.defaultAgent or null;
+  # Omarchy 4.5's launcher only accepts agy. Keep the old option spelling for
+  # existing hosts while writing the id the launcher can actually run.
+  selectedDefaultAgent = if defaultAgent == "gemini" then "agy" else defaultAgent;
 
   # #623 and #630, read across from the NixOS side for the same reason
   # `localAi` above is: these are machine decisions -- a package installed, a
@@ -1545,10 +1548,10 @@ in
         # menu reading half an agent name and launching nothing. Beside the
         # file so the move is a rename, and not at all on a dry run (#1276).
         if [[ -v DRY_RUN ]]; then
-          echo "nixarchy: would set the default agent to "${lib.escapeShellArg defaultAgent}
+          echo "nixarchy: would set the default agent to "${lib.escapeShellArg selectedDefaultAgent}
         else
           tmp=$(${pkgs.coreutils}/bin/mktemp "$agentfile.XXXXXX")
-          printf '%s\n' ${lib.escapeShellArg defaultAgent} > "$tmp"
+          printf '%s\n' ${lib.escapeShellArg selectedDefaultAgent} > "$tmp"
           [ ! -e "$agentfile" ] || ${pkgs.coreutils}/bin/chmod --reference="$agentfile" "$tmp"
           ${pkgs.coreutils}/bin/mv "$tmp" "$agentfile"
         fi

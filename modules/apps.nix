@@ -1655,19 +1655,26 @@ in
             # when someone picks one from the menu; this is the same decision made
             # in the configuration instead, so it reproduces on the next machine.
             #
+            # Antigravity is absent on nixos-26.05, so its two names add no
+            # package there while the option and migration remain evaluable.
             # `claude-code` is unfree, so defaultAgent = "claude" without
             # programs.nixarchy.allowUnfree fails to evaluate with nixpkgs' own
             # message naming the package. That is the right failure: the
             # alternative is a missing agent and an Ask menu that never appears.
             ++ map lib.lowPrio (
-              lib.optional (cfg.defaultAgent != null)
+              lib.optional
+                (
+                  cfg.defaultAgent != null
+                  && (cfg.defaultAgent != "agy" && cfg.defaultAgent != "gemini" || pkgs ? antigravity-cli)
+                )
                 {
-                  # Three of the seven are named after their own command, which is
+                  # Three of the eight are named after their own command, which is
                   # the whole reason omarchy-agent can look for `$agent` on PATH.
                   inherit (pkgs) codex opencode crush;
 
                   claude = pkgs.claude-code;
-                  gemini = pkgs.gemini-cli;
+                  agy = pkgs.antigravity-cli;
+                  gemini = pkgs.antigravity-cli;
                   copilot = pkgs.github-copilot-cli;
                   grok = pkgs.grok-cli;
                 }

@@ -108,6 +108,16 @@ let
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
   # distinction this file exists to assert.
   defaultMachine = configWith { };
+  agyDefault = configWith { defaultAgent = "agy"; };
+  geminiDefault = configWith { defaultAgent = "gemini"; };
+  agyDisabled = configWith {
+    enable = false;
+    defaultAgent = "agy";
+  };
+  geminiDisabled = configWith {
+    enable = false;
+    defaultAgent = "gemini";
+  };
   modeAKeyboard = configBeside { services.xserver.xkb.layout = "de"; };
   unitLinkNormalHome = "/srv/nixarchy unit's home";
   unitLinkSystemHome = "/srv/nixarchy-system-probe";
@@ -1928,6 +1938,41 @@ let
   };
 
   casesE = {
+    # #1681: both spellings select the Antigravity package when this nixpkgs
+    # has it; the declared choice remains valid on channels without it.
+    defaultAgentAgy = {
+      on =
+        agyDefault.programs.nixarchy.defaultAgent == "agy"
+        && (hasPackageNamed agyDefault "antigravity-cli" == (pkgs ? antigravity-cli));
+      off =
+        agyDisabled.programs.nixarchy.defaultAgent != "agy"
+        || hasPackageNamed agyDisabled "antigravity-cli";
+    };
+    defaultAgentGemini = {
+      on =
+        geminiDefault.programs.nixarchy.defaultAgent == "gemini"
+        && (hasPackageNamed geminiDefault "antigravity-cli" == (pkgs ? antigravity-cli))
+        && !hasPackageNamed geminiDefault "gemini-cli";
+      off =
+        geminiDisabled.programs.nixarchy.defaultAgent != "gemini"
+        || hasPackageNamed geminiDisabled "antigravity-cli";
+    };
+    defaultAgentGeminiWarning = {
+      on = builtins.any (
+        w: pkgs.lib.hasInfix ''defaultAgent = "gemini" now selects agy'' w
+      ) geminiDefault.warnings;
+      off = builtins.any (w: pkgs.lib.hasInfix ''defaultAgent = "gemini" now selects agy'' w) (
+        agyDefault.warnings ++ geminiDisabled.warnings
+      );
+    };
+    defaultAgentGeminiWritesAgy = {
+      on = pkgs.lib.hasInfix "printf '%s\\n' 'agy'" (
+        (homeOn { defaultAgent = "gemini"; } { }).home.activation.nixarchyDefaultAgent.data
+      );
+      off = pkgs.lib.hasInfix "printf '%s\\n' 'gemini'" (
+        (homeOn { defaultAgent = "agy"; } { }).home.activation.nixarchyDefaultAgent.data
+      );
+    };
     # ---- the free-space floor is the installer's, never an adopter's ----
     #
     # #583, and the correction that came with it: `programs.nh.clean` ALREADY

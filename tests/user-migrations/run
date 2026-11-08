@@ -423,6 +423,76 @@ case_1680() {
   run_port
   same_tree "$before" "$HOME" || fail '1680: second run changed the home'
 }
+case_1681() {
+  local agent wrapper skills before oracle_fixture skill name port_view id listed_script
+  case=1681
+  setup 1681 "$FIXTURE_C"
+  agent=$XDG_CONFIG_HOME/omarchy/defaults/agent
+  wrapper=$HOME/.local/bin/gemini
+  skills=$HOME/.gemini/config/skills
+  mkdir -p "${agent%/*}" "${wrapper%/*}"
+  printf '%s\n' gemini > "$agent"
+  printf '%s\n' '#!/usr/bin/env bash' 'mise use -g "gemini"' > "$wrapper"
+  chmod +x "$wrapper"
+  mkdir -p "$OMARCHY_MIGRATION_STATE"
+  for id in 1790042972 1791968925 1791969355; do
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done
+  while IFS=$'\t' read -r id listed_script; do
+    [[ -n $id && -n $listed_script ]] || fail '1681: invalid migration list entry'
+    [[ $id == 1786719479 ]] || touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done < "$NIXARCHY_USER_MIGRATIONS/list"
+  : > "$HOME/calls.log"
+  oracle_fixture=$work/1681.oracle-fixture
+  cp -a "$HOME" "$oracle_fixture"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1786719479.sh ]] || fail '1681: migration marker missing'
+  [[ $(<"$agent") == agy ]] || fail '1681: Gemini default was not replaced'
+  [[ ! -e $wrapper ]] || fail '1681: old Gemini wrapper remains'
+  [[ -d $skills ]] || fail '1681: agent skills directory missing'
+  for skill in "$OMARCHY_PATH"/default/agents/skills/*/; do
+    [[ -d $skill ]] || continue
+    name=${skill%/}
+    name=${name##*/}
+    [[ -L $skills/$name && $(readlink "$skills/$name") == "${skill%/}" ]] || fail "1681: skill link wrong for $skill"
+  done
+  [[ ! -s $HOME/calls.log ]] || fail '1681: removed mise install or another command was called'
+
+  before=$work/1681.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1681: second run changed the home'
+
+  port_view=$work/1681.port-view
+  cp -a "$HOME" "$port_view"
+
+  case=1681.oracle
+  oracle_run 1786719479 "$oracle_fixture"
+  [[ $(<"$XDG_CONFIG_HOME/omarchy/defaults/agent") == agy ]] || fail '1681: upstream default differs'
+  [[ ! -e $HOME/.local/bin/gemini ]] || fail '1681: upstream wrapper differs'
+  [[ -d $HOME/.gemini/config/skills ]] || fail '1681: upstream skills directory differs'
+  for skill in "$ORACLE_SOURCE"/default/agents/skills/*/; do
+    [[ -d $skill ]] || continue
+    name=${skill%/}
+    name=${name##*/}
+    [[ -L $HOME/.gemini/config/skills/$name && $(readlink "$HOME/.gemini/config/skills/$name") == "${skill%/}" ]] || fail "1681: upstream skill link differs for $skill"
+  done
+  printf '%s\n' 'omarchy-cmd-missing agy' 'omarchy-mise-install antigravity-cli agy' > "$work/1681.expected-oracle-calls"
+  cmp "$work/1681.expected-oracle-calls" "$HOME/calls.log" || fail '1681: oracle did not exercise only the removed install block'
+
+  # The only allowed differences are runner markers, the removed install
+  # block's calls, and the store root used for equivalent skill links.
+  rm -f "$port_view/.local/state/omarchy/migrations/1786719479.sh"
+  rm -f "$port_view/calls.log" "$HOME/calls.log"
+  for skill in "$port_view"/.gemini/config/skills/*; do
+    [[ -L $skill ]] || continue
+    name=${skill##*/}
+    ln -sfn "$ORACLE_SOURCE/default/agents/skills/$name" "$skill"
+  done
+  same_tree "$port_view" "$HOME" || fail '1681: edited migration differs from upstream beyond the removed install block'
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -535,5 +605,6 @@ case_1677
 case_1678
 case_1679
 case_1680
+case_1681
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

@@ -3300,10 +3300,19 @@ pkgs.testers.runNixOSTest {
     def group():
         return json.loads(input_driver("group"))
 
+    # /tmp/typed proves cat opened its file, not that its terminal holds focus;
+    # keys sent before Hyprland focuses it go to another window (#1699).
     def open_typing_terminal():
+        import shlex
         machine.succeed("rm -f /tmp/typed")
+        before = {c["address"] for c in json.loads(
+            machine.succeed(desktop_user("hyprctl clients -j")))}
         input_driver("terminal")
         machine.wait_for_file("/tmp/typed")
+        machine.wait_until_succeeds(desktop_user(
+            "hyprctl activewindow -j | ${pkgs.jq}/bin/jq -e --argjson before "
+            + shlex.quote(json.dumps(sorted(before)))
+            + " '.address as $a | ($a != null) and ($before | index($a) | not)'"), timeout=30)
 
     # Return only commits Mozc's and Chewing's conversion: the first ctrl-d hands
     # cat the unterminated line, the second ends it.

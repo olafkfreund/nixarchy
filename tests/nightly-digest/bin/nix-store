@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# -qR includes the derivation itself, as the real one does. An output is valid
+# only when the case's `valid` file lists it.
+set -eu
+case $1 in
+  -qR)
+    if [ -f "$STUB_COMMON/closure/${2##*/}" ]; then cat "$STUB_COMMON/closure/${2##*/}"; else echo "$2"; fi ;;
+  -q)
+    [ "$2" = --outputs ] || exit 2
+    echo "${3%.drv}" ;;
+  --check-validity)
+    [ -f "$STUB_CASE/valid" ] || exit 1
+    grep -qxF -- "$2" "$STUB_CASE/valid" ;;
+  *) exit 2 ;;
+esac

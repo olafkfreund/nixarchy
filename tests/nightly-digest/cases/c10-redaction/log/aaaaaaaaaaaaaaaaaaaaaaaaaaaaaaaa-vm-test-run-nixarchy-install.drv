@@ -1,0 +1,4 @@
+error: the install check failed
+curl sent the header Authorization: token ghp_0123456789abcdefghijklmnopqrstuvwxyz01
+CACHIX_AUTH_TOKEN=s3cr3t-cachix-value
+error: and then it stopped

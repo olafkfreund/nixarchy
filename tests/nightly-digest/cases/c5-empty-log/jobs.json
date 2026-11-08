@@ -1,0 +1,1 @@
+{"jobs":[{"id":1,"name":"type through LUKS, greeter and lock screen","conclusion":"failure","steps":[{"name":"Set up job","conclusion":"success"},{"name":"Type through LUKS","conclusion":"failure"},{"name":"Complete job","conclusion":"success"}]}]}

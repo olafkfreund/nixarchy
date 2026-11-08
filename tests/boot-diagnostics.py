@@ -108,7 +108,7 @@ def window_ends():
 
 m = Stub(window_ends, lambda: (0, ""))
 start = time.monotonic()
-raised, out = run(m, silence=1, probe_timeout=1, poke_watch=0.1)
+raised, out = run(m, silence=1, probe_timeout=1, poke_watch=0.1, quiet=0.1)
 elapsed = time.monotonic() - start
 if not isinstance(raised, ns["BootHang"]) or "console silent" not in str(raised):
     fail(f"silence was not detected: {raised!r}")
@@ -132,10 +132,12 @@ if queues != want * 2:
     fail(f"wrong virtio queues sampled: {queues}")
 if any(x.startswith("info virtio-status") for x in c):
     fail("info virtio-status was sent; it segfaults QEMU 11.1.2")
-if "nmi" not in c or "sendkey alt-sysrq-w" not in c or c.index("nmi") > c.index("sendkey alt-sysrq-w"):
+pokes = ("nmi", "sendkey alt-sysrq-w", "sendkey alt-sysrq-t")
+if any(x not in c for x in pokes) or [c.index(x) for x in pokes] != sorted(c.index(x) for x in pokes):
     fail(f"pokes missing or out of order: {c[-3:]}")
 for text in ("poke nmi: 1 console lines", "NMI received for unknown reason",
-             "poke sendkey alt-sysrq-w: no console output"):
+             "poke sendkey alt-sysrq-w: no console output",
+             "poke sendkey alt-sysrq-t: 0 console lines within"):
     if text not in raised.monitor_dump:
         fail(f"{text!r} not in the monitor dump")
 if "monitor replied:" in raised.monitor_dump:
@@ -160,7 +162,46 @@ class Rejecting(Stub):
         return super().send_monitor_command(command)
 
 
-entries = ns["_poke"](Rejecting(lambda: None, lambda: (0, "")), 0.1, threading.Event())
+entries = ns["_poke"](Rejecting(lambda: None, lambda: (0, "")), 0.1, threading.Event(), quiet=0.1)
 if "monitor replied: unknown key" not in "\n".join(entries):
     fail(f"the monitor's rejection was not shown: {entries}")
 print("PASS 6: monitor rejection shown")
+
+
+# 7: a blocked task in w's output means t is not sent
+class Blocked(Stub):
+    def send_monitor_command(self, command):
+        if command == "sendkey alt-sysrq-w":
+            self.full_console_log.append("task:x state:D stack:0")
+        return super().send_monitor_command(command)
+
+
+m = Blocked(lambda: None, lambda: (0, ""))
+ns["_poke"](m, 0.1, threading.Event(), quiet=0.1)
+if "sendkey alt-sysrq-t" in m.commands:
+    fail(f"t was sent after a state:D stack: {m.commands}")
+print("PASS 7: state:D skips t")
+
+
+# 8: the cut keeps 3000 lines and counts the rest
+class Flood(Stub):
+    def send_monitor_command(self, command):
+        if command == "nmi":
+            self.full_console_log.extend(f"line {i}" for i in range(3499))
+        return super().send_monitor_command(command)
+
+
+entries = ns["_poke"](Flood(lambda: None, lambda: (0, "")), 0.1, threading.Event(), quiet=0.1)
+if "  line 2999" not in entries[0] or "  line 3000" in entries[0] \
+        or "(500 more console lines not shown)" not in entries[0]:
+    fail(f"the cap is wrong: {entries[0][-80:]}")
+print("PASS 8: 3000 lines kept, 500 counted")
+
+# 9: an abandoned diagnosis leaves t's wait at once
+ev = threading.Event()
+threading.Timer(0.3, ev.set).start()
+start = time.monotonic()
+ns["_poke"](Stub(lambda: None, lambda: (0, "")), 0.1, ev, quiet=30, task_max=30)
+if time.monotonic() - start >= 1:
+    fail("t's wait ignored abandoned")
+print("PASS 9: abandoned ends t's wait")

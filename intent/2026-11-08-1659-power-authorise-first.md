@@ -55,7 +55,13 @@ itself does not ship.
 - §2: the fix needs a probe. `checks.session` can install a polkit rule that
   denies, and assert the windows survive.
 
-## Open questions
+## Decisions (owner, 2026-11-08)
+
+1. Both: carry a patch here now, because the owner's machines are hit, and the owner files it upstream (omacom/omarchy). The patch goes when upstream takes it. No agent files upstream.
+2. The 30-second timeout is fixed in the same change: a killed unit reports a failure.
+3. The one-prompt mechanism is the spec's main question.
+
+## Open questions (as drafted)
 
 1. **Where the fix goes:** carry a patch here, ask you to file upstream
    (omacom/omarchy), or both (carry now, drop it when upstream takes it)?

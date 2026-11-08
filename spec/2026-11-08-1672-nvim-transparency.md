@@ -41,7 +41,16 @@ this issue (its deviation 2):
 
 - `/usr/share/omarchy-nvim/config` becomes
   `${omarchy-nvim-config}/share/omarchy-nvim`;
-- `omarchy-pkg-present omarchy-nvim || exit 0` becomes `[[ -d $package ]] || exit 0`.
+- `omarchy-pkg-present omarchy-nvim || exit 0` becomes
+  `[[ -d $package && -f $config/plugin/after/transparency.lua ]] || exit 0`.
+
+  The second half is new. Upstream adds `lualine-transparent.lua` to any
+  config with a `lua/plugins` directory (`1791723398.sh:56-58`). On Arch
+  that is safe, because owning `omarchy-nvim` means running its config.
+  Here a user's own LazyVim config also has `lua/plugins`, and LazyVim
+  loads every file there as a spec. `plugin/after/transparency.lua` exists
+  only in Omarchy's config, which nixarchy seeds, so requiring it keeps the
+  migration to seeded configs.
 
 `pkgs/omarchy/user-migrations.nix` gets that `case` back, and its
 `omarchy-nvim-config` argument. The script's own guards stay: it exits when
@@ -52,9 +61,12 @@ this issue (its deviation 2):
 Only configs nixarchy seeded. Under `programs.nixarchy.neovim = "theme-only"`
 (the default, `modules/home.nix:652-672`), the seed copies into an absent
 `~/.config/nvim` only (`:464`). So a new seed gets the file from the package,
-and a pre-4.5 seed gets it from the migration. `adopt`, `off` and a user's
-own config are untouched: the migration exits when `~/.config/nvim` is
-absent, and both its symlink guards and the seed's refusal stay.
+and a pre-4.5 seed gets it from the migration. A user's own config is untouched,
+because it lacks Omarchy's `plugin/after/transparency.lua` (section 2's
+guard). The migration also exits when `~/.config/nvim` is absent, and its
+symlink guards and the seed's refusal stay. `off` stops the seed only, so
+under `off` an older seeded config is still updated, which is the same
+config `theme-only` would update.
 
 ### 4. Branch order
 
@@ -93,8 +105,11 @@ not need it, but the row in section 2 does, and they land together.
   its first line matches the package's. §1: point the extraction at a
   wrong path and the build fails.
 - `checks.user-migrations` (on the stacked branch): a `case_1672` fixture
-  with a seeded `~/.config/nvim` lacking both files gets both. A second
-  run changes nothing, and a symlinked `lua/plugins` is left alone.
+  with a seeded `~/.config/nvim` lacking `lualine-transparent.lua` gets it.
+  A second run changes nothing, and a symlinked `lua/plugins` is left alone.
+  A user's own LazyVim config (a `lua/plugins` directory, no
+  `plugin/after/transparency.lua`) stays byte-identical. That last case
+  is the one the new guard exists for: with the guard removed, it fails.
   `oracle_run` with upstream's original, its `/usr/share/omarchy-nvim/config`
   pointed at the fixture's package directory, differs only by that path.
   §1: the row back to `declined` fails the case.

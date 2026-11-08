@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1711
 spec: spec/2026-11-08-1711-nightly-digest.md
 coders:

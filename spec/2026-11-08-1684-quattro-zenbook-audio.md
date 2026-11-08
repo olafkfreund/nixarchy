@@ -22,9 +22,13 @@ are equal today at `64fa36f`:
   };
   ```
 
-- `flake.nix`: both copies of the quattro pin, the input `url` and
-  `omarchyVersion`, move to `d9cc361` (or to the newest quattro commit when
-  the carry is made, after reading its diff for new install-list entries).
+- `flake.nix`, the two values the workflow itself writes
+  (`omarchy-edge.yml:244`): the input `url` carries the full 40-character
+  SHA, and `omarchyVersion` becomes `edge-<YYYYMMDD>-<short sha>`, today
+  `edge-20261108-d9cc361`. `checks.review-pins` reads the `edge-` prefix as
+  "a revision pin" (`tests/review-pins.nix:138`). The target is `d9cc361`,
+  or the newest quattro commit when the carry is made, after reading its
+  diff for new install-list entries.
 - `flake.lock`: `nix flake lock --update-input omarchy`, checked to name
   that rev.
 
@@ -61,6 +65,8 @@ that lands on `main`. It is a separate one-file PR from this branch.
   commits (Snapdragon fixes, NVIDIA setup removal, a translation-file read).
   The dispatched run is the measurement. A new failure is a new finding on
   #1684, not a reason to widen this carry by guessing.
+- A green run proves the checks, not runtime behaviour across the other 19
+  upstream commits. The nightly edge boot (`verify`) is what exercises them.
 - None for `main` machines: edge only.
 
 ## Verification
@@ -72,5 +78,11 @@ that lands on `main`. It is a separate one-file PR from this branch.
 - Then the cheap checks `generated-checks.sh` prints for the carry's tree,
   under the build lock.
 - The dispatched `omarchy-edge` run is the confirmation. #1684 closes when
-  edge has advanced, not when the carry is pushed.
-- The `main` PR for section 2: `nix fmt -- --ci`. It changes prose only.
+  edge has advanced, not when the carry is pushed. "Advanced" is read, not
+  inferred: `git show origin/edge:flake.lock`'s omarchy `rev` equals the
+  carry's target SHA. The workflow can fall back to an older pin and still
+  promote (`omarchy-edge.yml:276`), and a green run on the fallback is not
+  this carry landing.
+- The `main` PR for section 2 changes prose only, so nothing mechanical can
+  fail on its removal. It is verified by reading the sentence against intent
+  decision 2 in review, plus `nix fmt -- --ci`.

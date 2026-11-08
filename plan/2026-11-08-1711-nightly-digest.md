@@ -38,7 +38,11 @@ reviewers:
    2. Targets per job from the checked-out `nightly.yml` with Go `yq`: the job
       id whose `.name // key` equals the API's name; every `.#<attr>` after a
       `nix build` in its steps' `run`.
-   3. Per target: `drv=$(nix eval --raw ".#<attr>.drvPath")`; roots are the
+   3. Per target: `drv=$(nix eval --raw ".#<attr>.drvPath")`. If `drv`'s own
+      outputs are all valid, the target built: it gets one line
+      `<attr>: built` and no excerpt (`nix-store -qR` includes `drv` itself,
+      so this is the only way a target with a log has no failing root; agy
+      review). Otherwise roots are the
       `.drv`s in `nix-store -qR "$drv"` whose outputs
       (`nix-store -q --outputs`) are not all valid (`nix-store --check-validity`
       fails) and whose `nix log` prints something (success with empty output
@@ -59,7 +63,14 @@ reviewers:
       written first; excerpts share the rest of 50,000 characters, each cut
       at a line boundary with "(excerpt truncated)".
    6. Any failure (the API, `yq`, an evaluation) → `digest unavailable: <what>`,
-      exit 0.
+      exit 0. **Both the digest and this line go to `$GITHUB_OUTPUT`** as
+      `text<<DELIM`, and also to stdout: the `ERR` trap writes the output
+      block itself before `exit 0`, or `report` would see an empty `text` from
+      a `success` job (agy review). `set -Eeuo pipefail`, so functions inherit
+      the trap.
+   7. The cap is `DIGEST_MAX` (default 50000), so the check can test it with a
+      small value: every excerpt is already cut to 40 lines, and real logs
+      seldom reach 50,000 characters across four jobs (agy review).
    Measured for this plan (2026-11-08): re-evaluating
    `checks.x86_64-linux.install-iso-net` at that night's commit `0687162`
    gives `/nix/store/27w94zcayzw9…-vm-test-run-nixarchy-install-iso-net.drv`,
@@ -77,7 +88,7 @@ reviewers:
 ## Steps
 
 1. **The script** (`.github/scripts/nightly-digest.sh`, new, executable,
-   `#!/usr/bin/env bash`, `set -euo pipefail` with an `ERR` trap that prints
+   `#!/usr/bin/env bash`, `set -Eeuo pipefail` with an `ERR` trap that prints
    `digest unavailable: …` and exits 0, as `failure-digest.sh:12-13` does):
    decision 2 exactly.
    Verify: `bash -n`; `nix run nixpkgs#shellcheck -- .github/scripts/nightly-digest.sh`.
@@ -98,18 +109,22 @@ reviewers:
       names job, step, and the excerpt has the traceback;
    2. `install-iso-net` cancelled with a timeout annotation, truncated log →
       "timed out", the log's last lines;
-   3. `install-iso-net` failed at the ISO size step → job, step, and both its
-      targets (`iso-budget`, `install-iso-net`) appear;
+   3. `install-iso-net` failed at the ISO size step → job, step, and all
+      three of its targets (`iso-net`, `iso-budget`, `install-iso-net`)
+      appear; a target whose outputs are valid reads `built` with no excerpt;
    4. `canary` failed → header only;
    5. `nix log` succeeds and prints nothing (the spec's case) → the target's
       "no build log" line;
    6. `STUB_GH_FAIL=1` → `digest unavailable:`, exit 0;
-   7. four failed jobs with oversized logs → under 50,000 characters, all
-      four headers present;
+   7. four failed jobs, `DIGEST_MAX=2000`, logs whose excerpts exceed it →
+      under 2,000 characters, all four headers present;
    8. a check whose dependency failed → the dependency's excerpt, named;
    9. cancelled with another annotation → "cancelled" and its message;
    10. log lines with `ghp_…` and `CACHIX_AUTH_TOKEN=…` → replaced.
-   Every assertion prints its reason via `if … then echo FAIL…; exit 1; fi`,
+   The stub's `nix-store -qR <drv>` includes `<drv>` itself, as the real one
+   does, and a failed target's outputs are invalid. Assertions read the
+   `text` value parsed out of a `GITHUB_OUTPUT` file the case sets, not
+   stdout. Every assertion prints its reason via `if … then echo FAIL…; exit 1; fi`,
    never `! grep`. Fixtures written as files under `tests/nightly-digest/`,
    not heredocs inside the `''` string (§5 nixfmt reindent).
    Verify: `nix build .#checks.x86_64-linux.nightly-digest`.
@@ -169,5 +184,9 @@ and fixed above: the last-lines fallback for a log with no recognised error
 (`failure-digest.sh:76`); a no-log line per target, since the ISO size step
 precedes both builds (`nightly.yml:171-194`); the API-guard break also
 disabling the `ERR` trap; case 5 restored to the spec's "prints nothing".
-agy: review not obtained. `UNAVAILABLE (code 503): No capacity available for
-model gpt-oss-120b-medium on the server`.
+agy: first run not obtained (`UNAVAILABLE (code 503): No capacity available
+for model gpt-oss-120b-medium on the server`); after the owner fixed it, a
+second run found four more, each confirmed and fixed above: a succeeded
+target's log would be printed (`-qR` is reflexive); the `ERR` trap must
+write `$GITHUB_OUTPUT` and use `set -E`; case 7's cap cannot be reached
+after `tail -n 40`, so it is configurable; `.#iso-net` is a third target.

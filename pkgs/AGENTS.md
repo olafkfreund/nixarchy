@@ -1417,6 +1417,10 @@ Every migration that touches a user's files has a decision in
 the same fixtures, through a stub of the shell's IPC; `checks.plugin` runs it
 against the real shell.
 
+1787481315 is the second port, re-staging a repository-installed theme once
+(#1705). It uses nixarchy's own script because activation repairs vanished
+themes, and its refresh must reach only repository-installed themes.
+
 ## Notification history keeps text for the newest rows (#1663)
 
 904-notification-history-text.patch: only the newest

@@ -10,7 +10,11 @@
 #
 # ## The trap, and why this test is shaped the way it is
 #
-# A naive version of this test -- net-image marker present, no network at all
+# The node is stock-shaped: base NixOS with the default cache.nixos.org and no
+# iso-net marker, as a stock NixOS ISO has. Both guards key on a configured
+# substituter (offline_by_design in install.sh), so they run here (#1646).
+#
+# A naive version of this test -- a substituter configured, no network at all
 # -- tests the WRONG GUARD. With no network, ask_network (install.sh:295, the
 # guard that predates #302) refuses in its unattended branch before
 # preflight_build ever runs, and the test goes green having never executed a
@@ -56,10 +60,6 @@ pkgs.testers.runNixOSTest {
           pkgs.git
           pkgs.curl
         ];
-
-        # The net-image marker. Both guards key on it: ask_network asks only
-        # on this image, and preflight_build probes only on it.
-        etc."nixarchy-iso-net".text = "";
 
         etc."nixarchy/answers".text = ''
           device=/dev/vdb
@@ -171,10 +171,11 @@ pkgs.testers.runNixOSTest {
 
     # (a) THE GUARANTEE, checked first because it is the one #300 is about:
     # whatever else happened, the disk is intact. tests/installer-store-space
-    # cannot make this assertion at all -- it has no disk -- and proving this
-    # line can bite is the red that justifies the whole VM: delete the
-    # iso-net marker above and the install proceeds to format_disk, and this
-    # fails with partitions in the output.
+    # cannot make this assertion at all -- it has no disk. Restoring the
+    # marker gate (`on_net_image || return 0` in ask_network and
+    # preflight_build) no longer reaches the wipe: format_disk's own layout
+    # evaluation fails offline first ("could not inspect the disko layout"),
+    # so that break goes red at (c), not here (measured for #1646).
     after = machine.succeed("lsblk -no NAME /dev/vdb").strip()
     assert after == "vdb", f"the disk was touched despite the refusal:\n{after}"
     machine.succeed("test -z \"$(blkid /dev/vdb 2>/dev/null)\"")
@@ -191,7 +192,7 @@ pkgs.testers.runNixOSTest {
         "the refusal does not say the disk is intact:\n" + out)
     # ...and not ask_network's, which is the wrong-guard trap the header
     # describes: if this fires, the test stopped covering #302's code.
-    assert "this image installs over the network and there is none" not in out, (
+    assert "this install downloads the desktop, and there is no network" not in out, (
         "ask_network refused before preflight ever ran -- wrong guard exercised")
 
     print("refused before the wipe; /dev/vdb untouched")

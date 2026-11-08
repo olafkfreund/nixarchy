@@ -41,6 +41,8 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     printf 'custom\n' > "$repo/.notes/custom.txt"
     printf 'secret\n' > "$repo/.ssh/authorized_keys"
     printf 'clipboard\n' > "$repo/.local/state/omarchy/clipboard-history.json"
+    mkdir -p "$repo/.local/state/omarchy/notifications"
+    printf 'notification\n' > "$repo/.local/state/omarchy/notifications/history.json"
     printf 'hook\n' > "$repo/.config/hypr/hook.sh"
     chmod +x "$repo/.config/hypr/hook.sh"
     printf 'old hook\n' > "$home/.config/hypr/hook.sh"
@@ -51,6 +53,7 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     test ! -e "$home/.notes/custom.txt" || fail "repo backup.list authorized a custom file"
     test ! -e "$home/.ssh/authorized_keys" || fail "extra repo file restored"
     test ! -e "$home/.local/state/omarchy/clipboard-history.json" || fail "excluded clipboard restored"
+    test ! -e "$home/.local/state/omarchy/notifications/history.json" || fail "excluded notifications restored"
     cmp -s "$TMPDIR/local-list-original" "$home/.config/omarchy/backup.list" || fail "restore changed the local allowlist"
     grep -qF '2 restored, 0 already matched, 1 of yours saved' "$log" || fail "first-run counts were wrong"
     grep -qF '.ssh/' "$log" || fail "repo-only path was not named"
@@ -243,6 +246,24 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     if HOME=$home git -C "$repo" rev-parse HEAD >/dev/null 2>&1; then fail "$case_name: a link to an excluded file was committed: $(cat "$log")"; fi
     if grep -rq --exclude-dir=.git clipboard-body-xyz "$repo"; then fail "$case_name: the excluded file was copied through a link"; fi
     grep -q 'clip.json.*outside the backup list' "$log" || fail "$case_name: the link was not put to the credential review: $(cat "$log")"
+
+    # #1663: a repository that already tracks the notification history loses it
+    # from the newest commit on the next run.
+    case_name=backup-drops-notifications
+    bsetup "$case_name"
+    mkdir -p "$repo" "$home/.local/state/omarchy/notifications"
+    HOME=$home git init -q -b main "$repo"
+    touch "$repo/.git/nixarchy-home-backup"
+    mkdir -p "$repo/.local/state/omarchy/notifications"
+    printf 'notification\n' > "$repo/.local/state/omarchy/notifications/history.json"
+    printf 'notification\n' > "$home/.local/state/omarchy/notifications/history.json"
+    HOME=$home git -C "$repo" add -A
+    HOME=$home git -C "$repo" commit -qm first
+    HOME=$home git -C "$repo" ls-files --error-unmatch .local/state/omarchy/notifications/history.json >/dev/null 2>&1 || fail "$case_name: fixture not tracked"
+    backup || fail "$case_name: backup failed: $(cat "$log")"
+    tracked=$(HOME=$home git -C "$repo" ls-files)
+    case $tracked in *notifications*) fail "$case_name: notifications still tracked: $(cat "$log")" ;; esac
+    HOME=$home git -C "$repo" ls-files --error-unmatch .local/state/omarchy/theme.name >/dev/null 2>&1 || fail "$case_name: theme.name not committed"
 
     # #1270: an allowlist directory that is itself a symlink (stow's layout).
     case_name=backup-dir-link

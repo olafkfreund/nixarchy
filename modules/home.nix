@@ -101,7 +101,6 @@ let
   # to resolve.
   owe = (pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe;
 
-  opencodeHashFixed = import ../pkgs/opencode-hash-fixed.nix pkgs;
   aiMirrorConfig =
     args:
     inputs.mcp-servers-nix.lib.mkConfig pkgs (
@@ -877,22 +876,8 @@ in
       nixi = {
         enable = lib.mkDefault true;
         # Nixi's menu search merges rows with the stock menu's patched file (#1314).
-        # Nixi's module calls .override with an opencodeAcp from pkgs, so correct it there.
-        # Why: modules/AGENTS.md#opencode-hash-until-the-channel-catches-up
         package = lib.mkDefault (
-          let
-            nixi = inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override {
-              omarchySrc = menuModelSrc;
-            };
-          in
-          nixi
-          // {
-            override =
-              args:
-              nixi.override (
-                args // lib.optionalAttrs ((args.opencodeAcp or null) != null) { opencodeAcp = opencodeHashFixed; }
-              );
-          }
+          inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override { omarchySrc = menuModelSrc; }
         );
         # Off unless the user enables it; nixi pins its bridge into this package.
         companion.package =

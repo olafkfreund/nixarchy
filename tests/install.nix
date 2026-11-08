@@ -418,9 +418,9 @@ pkgs.testers.runNixOSTest {
     if True:
         wanted = sorted(set(re.findall(r"unable to download '([^']+)'", installer_log)))
         # Substituter metadata is not evidence of this: a nix-cache-info that
-        # cannot be reached is what a no-network VM is supposed to look like,
-        # and install.sh only configures those caches when the ISO marker is
-        # absent. Source fetches are the ones that mean a path was missing.
+        # cannot be reached is what a no-network VM is supposed to look like:
+        # install.sh names those caches on every build, and a no-network VM
+        # cannot reach them. Source fetches are the ones that mean a path was missing.
         sources = [u for u in wanted if not u.endswith("/nix-cache-info")]
         if sources:
             listed = "\n  ".join(sources[:5])

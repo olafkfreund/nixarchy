@@ -1403,3 +1403,20 @@ Every migration that touches a user's files has a decision in
 `checks.user-migrations` compares the port with upstream's own scripts run on
 the same fixtures, through a stub of the shell's IPC; `checks.plugin` runs it
 against the real shell.
+
+## Notification history keeps text for the newest rows (#1663)
+
+904-notification-history-text.patch: only the newest
+notifications keep their text in the shell's history;
+older rows keep who and when, and day-old cards don't
+come back (Nixi #220). It sits on 902/903, which patch
+the same file. checks.notification-store and
+checks.session prove it.
+
+CARRIED until omacom/omarchy takes it. --fuzz=0, so a
+source bump that rewords the hunk fails at build time
+instead of applying somewhere else.
+
+The comment lives here, not in installPhase, because
+installPhase is measured by checks.install-phase-budget
+(#997): this text tipped the edge build over it.

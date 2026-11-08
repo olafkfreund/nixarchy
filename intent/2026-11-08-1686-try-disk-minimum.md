@@ -59,7 +59,14 @@ Two constants that must agree live in two files with nothing comparing them
 - §3: the screen fix needs a probe that can see it, at the cheapest layer
   that can (the refusal path in a VM, or a stubbed run).
 
-## Open questions
+## Decisions (owner, 2026-11-08)
+
+1. The launcher defaults to 64 GB: what the tester proved installs, with room for a first rebuild. The space preflight asks for it, and `NIXARCHY_TRY_DISK` still lowers it to the floor.
+2. The installer holds its own screen on an early exit (a "press Return for a shell" prompt), only when interactive (`ui_interactive`). The unit's `conflicts` and TTY settings stay as they are.
+3. The new check covers the launcher default and `installer/vm.nix`'s install target (`emptyDiskImages`), both against `MIN_DISK_GIB`.
+4. An existing undersized disk gets a refusal that names its size and the minimum.
+
+## Open questions (as drafted)
 
 1. Default size: 32 (the floor), or 64 (what the tester used)? The qcow2 is
    sparse, but the launcher's preflight asks for the full size free. An

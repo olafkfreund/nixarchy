@@ -394,6 +394,35 @@ case_1679() {
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 }
+case_1680() {
+  local notifications before
+  case=1680
+  setup 1680 "$FIXTURE_C"
+  notifications=$XDG_STATE_HOME/omarchy/notifications
+  mkdir -p "$notifications/history" "$notifications/images"
+  printf '%s\n' '{"dnd":true}' > "$XDG_STATE_HOME/omarchy/notifications.json"
+  printf '%s\n' '{"message":"old notification"}' > "$notifications/history/old.json"
+  printf '%s\n' 'old image' > "$notifications/images/old.png"
+  printf '%s\n' '{"message":"old popup"}' > "$notifications/1234-abc.json"
+  printf '%s\n' 'keep this file' > "$notifications/notes.txt"
+  : > "$HOME/calls.log"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1792648436.sh ]] || fail '1680: migration marker missing'
+  jq -e '. == {snoozes:{},dnd:true,silencedSince:0,codesBypassQuiet:true}' \
+    "$notifications/quiet.json" >/dev/null || fail '1680: Do Not Disturb was not carried into quiet state'
+  [[ $(stat -c %a "$notifications/quiet.json") == 600 ]] || fail '1680: quiet state permissions changed'
+  [[ ! -e $XDG_STATE_HOME/omarchy/notifications.json ]] || fail '1680: legacy notification state remains'
+  [[ ! -e $notifications/history && ! -e $notifications/images && ! -e $notifications/1234-abc.json ]] || fail '1680: legacy notification files remain'
+  [[ $(<"$notifications/notes.txt") == 'keep this file' ]] || fail '1680: unrelated notification file changed'
+  [[ ! -s $HOME/calls.log ]] || fail '1680: unexpected session calls'
+
+  before=$work/1680.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1680: second run changed the home'
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -505,5 +534,6 @@ case_1676
 case_1677
 case_1678
 case_1679
+case_1680
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

@@ -175,8 +175,9 @@
     reason = "Brave Origin is unavailable on nixarchy (data/apps.nix) (#1676)";
   };
   "1792648436" = {
-    decision = "declined";
-    reason = "real user-file edit that may apply; needs its own fixture first (#1610 follow-up)";
+    decision = "ported";
+    run = "upstream";
+    reason = "removes 4.0 notification files and carries Do Not Disturb into quiet state (#1680)";
   };
   "1793315076" = {
     decision = "not-needed";

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1686
 spec: spec/2026-11-08-1686-try-disk-minimum.md
 coders:

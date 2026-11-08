@@ -155,3 +155,21 @@ links the intent, the spec and this plan, says which steps Codex did,
 carries step 1's probe results and the §1 output, and flags `weekly.yml` as
 the owner's merge (§11). Comment "@codex review". Merge with a merge commit
 (`--merge`).
+
+## Deviations (Codex plan review, 2026-11-08)
+
+1. **RAM:** the stock machine gets 8 GiB. The ISO's overlay is half of
+   memory (install.sh's live-store check), and the install needs room for
+   the closure in the overlay; the check prints the peak overlay use.
+2. **Registration:** `checks.install-stock-iso` is added to `flake.nix`'s
+   checks beside the other installer checks (step 4).
+3. **Verifications that can fail:** step 3 boots the server alone and
+   `curl`s `nix-cache-info` and one closure `.narinfo` from the client
+   side. Step 6's list entries are checked with
+   `generated-checks.sh generated | grep -c install-stock-iso` = 0.
+4. **OVMF vars are a writable copy** (`cp` to the test's tmp, then
+   `-drive if=pflash,...` writable), per the spec. `tests/install.nix:143`
+   uses a read-only drive, which is not the pattern here.
+5. **Step 1's coverage probe:** call `lib.inputSources { flake = self; }`
+   as `tests/iso-source.nix:4` does, through `nix eval --impure --expr`
+   on the flake, not `.#lib.inputSources` with no argument.

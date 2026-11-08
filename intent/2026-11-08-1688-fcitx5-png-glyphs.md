@@ -32,6 +32,10 @@ Two checks encode the unstable layout as a fixed `.svg` path:
   exists"), not a fixed extension, so they hold on both channels and fail on
   either if a glyph goes missing.
 - The weekly `stable-session` is green again.
+- An existing 26.05 machine gets the arrows without a theme change, since
+  nothing reruns the sync on upgrade (#1624's own note).
+
+Corrected after review (2026-11-08): the outcome now covers existing machines.
 
 ## Affected users and systems
 

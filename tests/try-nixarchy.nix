@@ -158,6 +158,11 @@ pkgs.runCommand "nixarchy-try-nixarchy"
       *) echo "--fresh accepted a non-integer disk size" >&2; fail=1 ;;
     esac
     [ -f "$PWD/w3/nixarchy-try.qcow2" ] || { echo 'non-integer --fresh removed the disk' >&2; fail=1; }
+    res=$(NIXARCHY_TRY_DIR=$PWD/w3 NIXARCHY_TRY_DISK=24 bash ./try-nixarchy.sh --boot 2>&1 || true)
+    case "$res" in
+      *"under the installer's"*) echo "--boot was refused for a creation size it never uses" >&2; fail=1 ;;
+      *) echo "  --boot ignores the creation size" ;;
+    esac
 
     res=$(NIXARCHY_TRY_DIR=$PWD/w4 bash ./try-nixarchy.sh --boot 2>&1 || true)
     case "$res" in

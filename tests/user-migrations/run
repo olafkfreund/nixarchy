@@ -40,6 +40,16 @@ setup() {
 run_port() { bash "$script"; }
 # The bar cases test the three bar ports alone: an empty upstream list keeps
 # the runner's listed migrations out of their marker counts.
+# A per-issue case runs only its own migrations, so its assertions measure them
+# and not every other listed script's effects.
+run_ids() {
+  local dir=$work/list-$case id
+  mkdir -p "$dir"; : > "$dir/list"
+  for id in "$@"; do
+    grep -P "^$id\t" "$NIXARCHY_USER_MIGRATIONS/list" >> "$dir/list" || fail "$case: $id is not in the runner's list"
+  done
+  NIXARCHY_USER_MIGRATIONS=$dir bash "$script"
+}
 run_bar() { mkdir -p "$work/no-upstream"; : > "$work/no-upstream/list"; NIXARCHY_USER_MIGRATIONS=$work/no-upstream bash "$script"; }
 run_oracle() {
   bash "$oracle/migrations/1790042972.sh"
@@ -58,11 +68,13 @@ same_tree() { diff -u <(snapshot "$1") <(snapshot "$2"); }
 oracle_run() {
   local id=$1 fixture=$2
   setup "$case.oracle.$id" "$FIXTURE_C"
-  cp -a "$fixture"/. "$HOME"/
-  OMARCHY_PATH=$ORACLE_SOURCE bash -euo pipefail "$ORACLE_SOURCE/migrations/$id.sh"
+  cp -a --remove-destination "$fixture"/. "$HOME"/
+  # $oracle, not $ORACLE_SOURCE: a case may point it at a retargeted copy.
+  OMARCHY_PATH=$ORACLE_SOURCE bash -euo pipefail "$oracle/migrations/$id.sh"
 }
 case_fresh45() {
-  local before id script
+  # Not `script`: that is the global path to the runner, and read clears it at EOF.
+  local before id entry
   case=fresh45
   setup fresh45 "$FIXTURE_C"
   mkdir -p "$XDG_STATE_HOME/omarchy/notifications" \
@@ -81,8 +93,8 @@ case_fresh45() {
   for id in 1790042972 1791968925 1791969355; do
     touch "$OMARCHY_MIGRATION_STATE/$id.sh"
   done
-  while IFS=$'\t' read -r id script; do
-    [[ -n $id && -n $script ]] || fail 'fresh45: invalid list entry'
+  while IFS=$'\t' read -r id entry; do
+    [[ -n $id && -n $entry ]] || fail 'fresh45: invalid list entry'
     touch "$OMARCHY_MIGRATION_STATE/$id.sh"
   done < "$NIXARCHY_USER_MIGRATIONS/list"
   before=$work/fresh45.before
@@ -102,7 +114,7 @@ case_1673() {
   printf '%s\n' 'hl.workspace_rule({ workspace = "-98", layout = "scrolling" })' > "$layouts/-98.lua"
   printf '%s\n' 'hl.workspace_rule({ workspace = "3", layout = "scrolling" })' > "$layouts/3.lua"
 
-  run_port
+  run_ids 1787679775 1791698594
   [[ -e $OMARCHY_MIGRATION_STATE/1787679775.sh && -e $OMARCHY_MIGRATION_STATE/1791698594.sh ]] || fail '1673: migration markers missing'
   [[ ! -e $layouts/-98.lua ]] || fail '1673: named workspace layout remains'
   printf '%s\n' 'o.workspace_mode({ workspace = "3", mode = "scrolling" })' | cmp - "$layouts/3.lua" || fail '1673: workspace mode not saved'
@@ -111,7 +123,7 @@ case_1673() {
   before=$work/1673.before-second-run
   mkdir -p "$before"
   cp -a "$HOME"/. "$before"/
-  run_port
+  run_ids 1787679775 1791698594
   same_tree "$before" "$HOME" || fail '1673: second run changed the home'
 }
 case_1674() {
@@ -132,30 +144,31 @@ case_1674() {
   printf '%s\n' '-- existing look and feel' > "$XDG_CONFIG_HOME/hypr/looknfeel.lua"
   : > "$HOME/calls.log"
 
-  OMARCHY_SESSION_ID=fixture-session run_port
+  OMARCHY_SESSION_ID=fixture-session run_ids 1788281348 1791470456 1791705142 1792259038
   for id in 1788281348 1791470456 1791705142 1792259038; do
     [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1674: marker missing for $id"
   done
   [[ ! -e $OMARCHY_MIGRATION_STATE/1791123731.sh ]] || fail '1674: declined example ran'
-  [[ $(<"$current/background-intro.session-id") == fixture-session ]] || fail '1674: intro session was not recorded'
+  [[ $(<"$XDG_STATE_HOME/omarchy/background-intro.session-id") == fixture-session ]] || fail '1674: intro session was not recorded'
   webp=$staged/1-totoro.webp
   [[ $(readlink "$current/background") == "$webp" ]] || fail '1674: active background was not repaired'
   source=$OMARCHY_PATH/themes/catppuccin/backgrounds/1-totoro.webp
   cmp "$source" "$webp" || fail '1674: bundled WebP was not staged'
   [[ $(<"$remembered/catppuccin") == "$webp" ]] || fail '1674: remembered JPG was not repaired'
   renamed=$staged/1-winding-road.webp
-  cmp "$OMARCHY_PATH/themes/tokyo-night/backgrounds/1-winding-road.webp" "$renamed" || fail '1674: renamed background was not staged'
+  # Only the active theme's background is staged; another theme's selection is
+  # rewritten in theme-backgrounds/ and staged when that theme is next set.
   [[ $(<"$remembered/tokyo-night") == "$renamed" ]] || fail '1674: renumbered selection was not repaired'
   [[ $(<"$toggles/no-animations.lua") == 'hl.config({ animations = { enabled = false } })' ]] || fail '1674: animation flag still forces opacity'
   cmp "$OMARCHY_PATH/default/hypr/toggles/window-opaque.lua" "$toggles/window-opaque.lua" || fail '1674: opaque toggle missing'
   [[ $(<"$XDG_CONFIG_HOME/hypr/looknfeel.lua") == '-- existing look and feel' ]] || fail '1674: declined example changed looknfeel'
   printf '%s\n' 'omarchy-theme-refresh ' "omarchy-shell background set $webp" > "$work/1674.expected-calls"
-  cmp "$work/1674.expected-calls" "$HOME/calls.log" || fail '1674: unexpected session calls'
+  diff -u "$work/1674.expected-calls" "$HOME/calls.log" || fail '1674: unexpected session calls'
 
   before=$work/1674.before-second-run
   mkdir -p "$before"
   cp -a "$HOME"/. "$before"/
-  OMARCHY_SESSION_ID=fixture-session run_port
+  OMARCHY_SESSION_ID=fixture-session run_ids 1788281348 1791470456 1791705142 1792259038
   same_tree "$before" "$HOME" || fail '1674: second run changed the home'
 }
 case_1675() {
@@ -176,7 +189,7 @@ case_1675() {
     'Exec=custom-browser https://custom.example' > "$applications/custom.desktop"
   : > "$HOME/calls.log"
 
-  run_port
+  run_ids 1791696584 1791875754
   for id in 1791696584 1791875754; do
     [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1675: marker missing for $id"
   done
@@ -199,12 +212,12 @@ case_1675() {
   printf '%s\n' \
     'omarchy-webapp-window-class https://example.com/dashboard' \
     'omarchy-webapp-window-class https://app.hey.com' > "$work/1675.expected-calls"
-  cmp "$work/1675.expected-calls" "$HOME/calls.log" || fail '1675: unexpected window class calls'
+  diff -u "$work/1675.expected-calls" "$HOME/calls.log" || fail '1675: unexpected window class calls'
 
   before=$work/1675.before-second-run
   mkdir -p "$before"
   cp -a "$HOME"/. "$before"/
-  run_port
+  run_ids 1791696584 1791875754
   same_tree "$before" "$HOME" || fail '1675: second run changed the home'
 }
 case_1676() {
@@ -227,7 +240,7 @@ case_1676() {
     esac
     : > "$HOME/calls.log"
 
-    run_port
+    run_ids 1791376887
     [[ -e $OMARCHY_MIGRATION_STATE/1791376887.sh ]] || fail "$case: overlay scrollbar marker missing"
     [[ ! -e $OMARCHY_MIGRATION_STATE/1792474908.sh ]] || fail "$case: declined Brave Origin migration ran"
     cmp "$work/$case.expected-flags" "$flags" || fail "$case: Chromium flags differ from 4.5 result"
@@ -236,7 +249,7 @@ case_1676() {
     before=$work/$case.before-second-run
     mkdir -p "$before"
     cp -a "$HOME"/. "$before"/
-    run_port
+    run_ids 1791376887
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 }
@@ -272,9 +285,9 @@ case_1677() {
     fi
     path_with_voxtype=$HOME/bin:$PATH
     if [[ $variant == backend ]]; then
-      STUB_DICTATION_BACKEND=voxtype PATH=$path_with_voxtype run_port
+      STUB_DICTATION_BACKEND=voxtype PATH=$path_with_voxtype run_ids 1791676907 1793477875 1791479273
     else
-      PATH=$path_with_voxtype run_port
+      PATH=$path_with_voxtype run_ids 1791676907 1793477875 1791479273
     fi
     for id in 1791479273 1791676907 1793477875; do
       [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "$case: marker missing for $id"
@@ -303,7 +316,7 @@ case_1677() {
     before=$work/$case.before-second-run
     mkdir -p "$before"
     cp -a "$HOME"/. "$before"/
-    PATH=$path_with_voxtype run_port
+    PATH=$path_with_voxtype run_ids 1791676907 1793477875 1791479273
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 
@@ -311,7 +324,7 @@ case_1677() {
   oracle_run 1791479273 "$work/1677.oracle-fixture"
   config=$XDG_CONFIG_HOME/omarchy/defaults/dictation
   [[ $(<"$config") == superwhisper ]] || fail '1677: upstream oracle unexpectedly changed an existing default'
-  grep -Fx 'omarchy-pkg-present voxtype-bin' "$HOME/calls.log" >/dev/null || fail '1677: upstream oracle did not test Voxtype'
+  # Upstream tests for the file first, so with one present it never asks about voxtype.
 }
 case_1678() {
   local variant config before
@@ -328,7 +341,7 @@ case_1678() {
     fi
     : > "$HOME/calls.log"
 
-    run_port
+    run_ids 1791722809
     [[ -e $OMARCHY_MIGRATION_STATE/1791722809.sh ]] || fail "$case: migration marker missing"
     if [[ $variant == symlink ]]; then
       [[ -L $config && $(readlink "$config") == managed.toml ]] || fail "$case: managed config link changed"
@@ -345,7 +358,7 @@ case_1678() {
     before=$work/$case.before-second-run
     mkdir -p "$before"
     cp -a "$HOME"/. "$before"/
-    run_port
+    run_ids 1791722809
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 }
@@ -371,7 +384,7 @@ case_1679() {
     esac
     : > "$HOME/calls.log"
 
-    run_port
+    run_ids 1793565796
     [[ -e $OMARCHY_MIGRATION_STATE/1793565796.sh ]] || fail "$case: migration marker missing"
     case $variant in
       no-theme)
@@ -393,7 +406,7 @@ case_1679() {
     before=$work/$case.before-second-run
     mkdir -p "$before"
     cp -a "$HOME"/. "$before"/
-    run_port
+    run_ids 1793565796
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 }
@@ -410,7 +423,7 @@ case_1680() {
   printf '%s\n' 'keep this file' > "$notifications/notes.txt"
   : > "$HOME/calls.log"
 
-  run_port
+  run_ids 1792648436
   [[ -e $OMARCHY_MIGRATION_STATE/1792648436.sh ]] || fail '1680: migration marker missing'
   jq -e '. == {snoozes:{},dnd:true,silencedSince:0,codesBypassQuiet:true}' \
     "$notifications/quiet.json" >/dev/null || fail '1680: Do Not Disturb was not carried into quiet state'
@@ -423,7 +436,7 @@ case_1680() {
   before=$work/1680.before-second-run
   mkdir -p "$before"
   cp -a "$HOME"/. "$before"/
-  run_port
+  run_ids 1792648436
   same_tree "$before" "$HOME" || fail '1680: second run changed the home'
 }
 case_1681() {
@@ -449,7 +462,7 @@ case_1681() {
   oracle_fixture=$work/1681.oracle-fixture
   cp -a "$HOME" "$oracle_fixture"
 
-  run_port
+  run_ids 1786719479
   [[ -e $OMARCHY_MIGRATION_STATE/1786719479.sh ]] || fail '1681: migration marker missing'
   [[ $(<"$agent") == agy ]] || fail '1681: Gemini default was not replaced'
   [[ ! -e $wrapper ]] || fail '1681: old Gemini wrapper remains'
@@ -465,7 +478,7 @@ case_1681() {
   before=$work/1681.before-second-run
   mkdir -p "$before"
   cp -a "$HOME"/. "$before"/
-  run_port
+  run_ids 1786719479
   same_tree "$before" "$HOME" || fail '1681: second run changed the home'
 
   port_view=$work/1681.port-view
@@ -489,11 +502,11 @@ case_1681() {
   # block's calls, and the store root used for equivalent skill links.
   rm -f "$port_view/.local/state/omarchy/migrations/1786719479.sh"
   rm -f "$port_view/calls.log" "$HOME/calls.log"
-  for skill in "$port_view"/.gemini/config/skills/*; do
-    [[ -L $skill ]] || continue
-    name=${skill##*/}
-    ln -sfn "$ORACLE_SOURCE/default/agents/skills/$name" "$skill"
-  done
+  # The skill set differs by design (nixarchy ships its own skills), so the port
+  # must link exactly ours, and the rest of the tree must match upstream's run.
+  diff -u <(ls "$OMARCHY_PATH/default/agents/skills") <(ls "$port_view/.gemini/config/skills") \
+    || fail "1681: the port does not link every skill nixarchy ships"
+  rm -rf "$port_view/.gemini/config/skills" "$HOME/.gemini/config/skills"
   same_tree "$port_view" "$HOME" || fail '1681: edited migration differs from upstream beyond the removed install block'
 }
 case_1671() {
@@ -522,7 +535,7 @@ case_1671() {
   oracle_fixture=$work/1671.oracle-fixture
   cp -a "$HOME" "$oracle_fixture"
 
-  run_port
+  run_ids 1788129995
   [[ -e $OMARCHY_MIGRATION_STATE/1788129995.sh ]] || fail '1671: migration marker missing'
   printf '%s\n' \
     '# Edit the current image in Omasnap and quit the viewer' \
@@ -539,7 +552,7 @@ case_1671() {
   before=$work/1671.before-second-run
   mkdir -p "$before"
   cp -a "$HOME"/. "$before"/
-  run_port
+  run_ids 1788129995
   same_tree "$before" "$HOME" || fail '1671: second run changed the home'
 
   port_view=$work/1671.port-view
@@ -583,7 +596,7 @@ case_1672() {
   oracle_fixture=$work/1672.oracle-fixture
   cp -a "$HOME" "$oracle_fixture"
 
-  NIXARCHY_NEOVIM=theme-only run_port
+  NIXARCHY_NEOVIM=theme-only run_ids 1791723398
   [[ -e $OMARCHY_MIGRATION_STATE/1791723398.sh ]] || fail '1672.seed: migration marker missing'
   cmp "$NVIM_CONFIG/lua/plugins/lualine-transparent.lua" "$nvim/lua/plugins/lualine-transparent.lua" || fail '1672.seed: lualine transparency missing'
   cmp "$NVIM_CONFIG/plugin/after/transparency.lua" "$nvim/plugin/after/transparency.lua" || fail '1672.seed: transparency was not updated'
@@ -591,7 +604,7 @@ case_1672() {
   cp -a "$nvim" "$port_view"
   before=$work/1672.before-second-run
   cp -a "$HOME" "$before"
-  NIXARCHY_NEOVIM=theme-only run_port
+  NIXARCHY_NEOVIM=theme-only run_ids 1791723398
   same_tree "$before" "$HOME" || fail '1672.seed: second run changed the home'
 
   # The upstream script names /usr/share directly. Retarget only that package
@@ -609,7 +622,7 @@ case_1672() {
   nvim=$XDG_CONFIG_HOME/nvim
   before=$work/1672.off-before
   cp -a "$nvim" "$before"
-  NIXARCHY_NEOVIM=off run_port
+  NIXARCHY_NEOVIM=off run_ids 1791723398
   same_tree "$before" "$nvim" || fail '1672.off: Neovim config changed'
 
   prepare_1672 own
@@ -620,7 +633,7 @@ case_1672() {
   printf '%s\n' '-- user LazyVim plugin' > "$nvim/lua/plugins/user.lua"
   before=$work/1672.own-before
   cp -a "$nvim" "$before"
-  NIXARCHY_NEOVIM=theme-only run_port
+  NIXARCHY_NEOVIM=theme-only run_ids 1791723398
   same_tree "$before" "$nvim" || fail '1672.own: user config changed'
 
   prepare_1672 edited
@@ -628,7 +641,7 @@ case_1672() {
   printf '%s\n' '-- user edit' >> "$nvim/plugin/after/transparency.lua"
   before=$work/1672.edited-before
   cp -a "$nvim" "$before"
-  NIXARCHY_NEOVIM=theme-only run_port
+  NIXARCHY_NEOVIM=theme-only run_ids 1791723398
   same_tree "$before" "$nvim" || fail '1672.edited: edited transparency changed'
 
   prepare_1672 symlink
@@ -637,7 +650,7 @@ case_1672() {
   ln -s "$HOME/owned-plugins" "$nvim/lua/plugins"
   before=$work/1672.symlink-before
   cp -a "$HOME" "$before"
-  NIXARCHY_NEOVIM=theme-only run_port
+  NIXARCHY_NEOVIM=theme-only run_ids 1791723398
   # The runner writes its marker, but must not change either the link or target.
   same_tree "$before/.config/nvim" "$nvim" || fail '1672.symlink: Neovim config changed'
   same_tree "$before/owned-plugins" "$HOME/owned-plugins" || fail '1672.symlink: link target changed'

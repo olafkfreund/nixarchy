@@ -38,6 +38,7 @@ package itself as well as the function check after changing its shell source.
 | `install` | the installer's output boots — a real disk, real bootloader | self-hosted |
 | `install-encrypted` | the LUKS path, unlocked over the serial console | self-hosted |
 | `install-iso-net` | the published image installs through a substituter | self-hosted |
+| `install-stock-iso` | the upstream minimal ISO installs through local TLS caches | weekly, self-hosted |
 | `free-space` | installing beside an existing OS without eating it | self-hosted |
 | `session` | a booted desktop; **does not run locally**, CI only | self-hosted |
 | `microvm-boot` | a guest actually boots, not just builds | `-tcg` runner |

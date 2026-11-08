@@ -213,8 +213,8 @@
 
   # In v4.0.6 already; every nixarchy seed carries its effect.
   "1787481314" = {
-    decision = "declined";
-    reason = "clones the Osaka Jade theme repository at login and otherwise switches the theme to Jade Horse; the hook has no git, so here it would always switch the user's theme unasked (#1698)";
+    decision = "not-needed";
+    reason = "the package bundles Osaka Jade, so $OMARCHY_PATH/themes/osaka-jade/colors.toml exists and the migration exits 0 before it clones or switches (#1698)";
   };
   "1793650506" = {
     decision = "not-needed";

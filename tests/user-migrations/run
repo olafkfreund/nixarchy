@@ -493,6 +493,66 @@ case_1681() {
   done
   same_tree "$port_view" "$HOME" || fail '1681: edited migration differs from upstream beyond the removed install block'
 }
+case_1671() {
+  local config launcher before oracle_fixture port_view id listed_script
+  case=1671
+  setup 1671 "$FIXTURE_C"
+  config=$XDG_CONFIG_HOME/imv/config
+  launcher=$XDG_DATA_HOME/applications/omasnap.desktop
+  mkdir -p "${config%/*}" "${launcher%/*}" "$OMARCHY_MIGRATION_STATE"
+  printf '%s\n' \
+    '# Edit the current image in Tensaku and quit the viewer' \
+    '<Ctrl+e> = exec tensaku-edit "$imv_current_file" & ; quit' \
+    '# Edit the current image in Satty and quit the viewer' \
+    '<Ctrl+e> = exec satty --filename "$imv_current_file" & ; quit' \
+    '# Keep this custom binding' \
+    '<Ctrl+x> = quit' > "$config"
+  printf '%s\n' '[Desktop Entry]' 'Name=Old Omasnap' 'NoDisplay=true' > "$launcher"
+  for id in 1790042972 1791968925 1791969355; do
+    touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done
+  while IFS=$'\t' read -r id listed_script; do
+    [[ -n $id && -n $listed_script ]] || fail '1671: invalid migration list entry'
+    [[ $id == 1788129995 ]] || touch "$OMARCHY_MIGRATION_STATE/$id.sh"
+  done < "$NIXARCHY_USER_MIGRATIONS/list"
+  : > "$HOME/calls.log"
+  oracle_fixture=$work/1671.oracle-fixture
+  cp -a "$HOME" "$oracle_fixture"
+
+  run_port
+  [[ -e $OMARCHY_MIGRATION_STATE/1788129995.sh ]] || fail '1671: migration marker missing'
+  printf '%s\n' \
+    '# Edit the current image in Omasnap and quit the viewer' \
+    '<Ctrl+e> = exec omasnap "$imv_current_file" & ; quit' \
+    '# Edit the current image in Omasnap and quit the viewer' \
+    '<Ctrl+e> = exec omasnap "$imv_current_file" & ; quit' \
+    '# Keep this custom binding' \
+    '<Ctrl+x> = quit' > "$work/1671.expected-config"
+  cmp "$work/1671.expected-config" "$config" || fail '1671: imv bindings differ from 4.5 result'
+  [[ ! -e $launcher ]] || fail '1671: stale Omasnap launcher remains'
+  [[ $(grep -Ec '^omarchy-pkg-(add|drop)( |$)' "$HOME/calls.log" || true) -eq 0 ]] || fail '1671: package command was called'
+  [[ ! -s $HOME/calls.log ]] || fail '1671: unexpected session call'
+
+  before=$work/1671.before-second-run
+  mkdir -p "$before"
+  cp -a "$HOME"/. "$before"/
+  run_port
+  same_tree "$before" "$HOME" || fail '1671: second run changed the home'
+
+  port_view=$work/1671.port-view
+  cp -a "$HOME" "$port_view"
+  case=1671.oracle
+  oracle_run 1788129995 "$oracle_fixture"
+  cmp "$work/1671.expected-config" "$XDG_CONFIG_HOME/imv/config" || fail '1671: upstream imv result differs'
+  [[ ! -e $XDG_DATA_HOME/applications/omasnap.desktop ]] || fail '1671: upstream left stale launcher'
+  printf '%s\n' 'omarchy-pkg-add omasnap' 'omarchy-pkg-drop satty tensaku' > "$work/1671.expected-oracle-calls"
+  cmp "$work/1671.expected-oracle-calls" "$HOME/calls.log" || fail '1671: upstream package calls differ'
+
+  # The edited copy differs only by the omitted package calls and its runner marker.
+  rm -f "$port_view/.local/state/omarchy/migrations/1788129995.sh"
+  rm -f "$port_view/calls.log" "$HOME/calls.log"
+  same_tree "$port_view" "$HOME" || fail '1671: edited migration differs from upstream beyond package calls'
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -606,5 +666,6 @@ case_1678
 case_1679
 case_1680
 case_1681
+case_1671
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

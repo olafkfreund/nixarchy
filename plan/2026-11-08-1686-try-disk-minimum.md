@@ -148,3 +148,26 @@ Not run locally: the `install` job (CI only, an install slot).
 
 Revert the PR. The launcher's old default comes back, the trap goes, and
 nothing installed is affected: only the ISO and the launcher change.
+
+## Deviations (Codex plan review, 2026-11-08, before coding)
+
+1. **Each code step lands with its own probe.** Step 1 with its launcher
+   cases (including a non-integer `NIXARCHY_TRY_DISK`), step 3 with the
+   installer probe. shellcheck alone cannot see a reverted default.
+2. **Wiring:** `try-nixarchy` leaves `uniformChecks` (`flake.nix:1931`,
+   imported with only `inputs` and `pkgs` at line 2833) and gets an explicit
+   entry that passes `vmTargetMiB` from `installer-vm` (`flake.nix:1463`,
+   which imports `vm.nix`).
+3. **The installer probe runs the rendered launcher**, the packaged
+   `install` that `flake.nix:995` builds from `install.sh` with `@gumenv@`
+   and `@ui@` substituted, with stubs first on `PATH`. The source file
+   cannot run as-is.
+4. **The boundary break** is to remove `ui_dashboard_start`'s own EXIT trap
+   replacement, or to re-set `early_exit_hold` after line 3091. Moving
+   `trap - EXIT` does nothing, because `dashboard.sh:171` installs a new
+   trap anyway. The boundary case asserts `ui_failed`'s screen text **and**
+   no hold prompt.
+5. **The non-TTY case runs without `script`**, with stdin from `/dev/null`,
+   and asserts it reached the refusal. The `--answers` case asserts its
+   own refusal path (answers mode skips `ask_device`, `install.sh:2943`),
+   with an answers file naming a 24 GiB disk.

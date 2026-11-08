@@ -16,19 +16,24 @@ let
   arms = lib.filter (m: m != null) (
     map (builtins.match " +([a-z0-9-]+)\\) +echo ([a-z0-9-]+) ;;") (lib.splitString "\n" body)
   );
+  # Ids kept as aliases of another agent's command (#1681: 4.5 replaced gemini with agy).
+  aliases = {
+    gemini = "agy";
+  };
   problem =
     arm:
     let
       id = builtins.elemAt arm 0;
       attr = builtins.elemAt arm 1;
+      want = aliases.${id} or id;
       main = builtins.tryEval (pkgs.${attr}.meta.mainProgram or null);
     in
     if !(pkgs ? ${attr}) then
       "${id}: no pkgs.${attr}"
-    else if !main.success || main.value != id then
+    else if !main.success || main.value != want then
       "${id}: pkgs.${attr} installs ${
         if main.success then toString main.value else "<throws>"
-      }, not ${id}"
+      }, not ${want}"
     else
       null;
   # A parse that matched almost nothing would pass having checked nothing.

@@ -153,3 +153,7 @@ three §1 outputs. Comment "@codex review". Merge with a merge commit
    to vendor the new one (then it must equal the new one).
 4. **Merge conflicts are resolved by reading both sides**, not by "keep
    both". A duplicated ledger row or runner entry is a bug.
+
+## Decision (owner, 2026-11-08, after step 1)
+
+Vendor **both** files from the package: the new `lua/plugins/lualine-transparent.lua` (sha256 `d59f78b5...75bcb7`) and the new `plugin/after/transparency.lua` (sha256 `2f4ab7aa...`), which replaces the v3.0.2 copy (`bd833dc0...`). That is what the migration gives a seeded config upstream. Their provenance (URL, archive sha256 `b46d4197...cbcbc9`, in-archive paths) goes in `pkgs/omarchy-nvim/default.nix`'s header. Step 4's fixture asserts `transparency.lua` ends up equal to the new one. The extracted files are in the session scratchpad under `dl-nvim/usr/share/omarchy-nvim/config/`.

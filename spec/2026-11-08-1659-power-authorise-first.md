@@ -69,8 +69,11 @@ upstream issue the owner files. No agent files it.
 
 - **`/run/nologin` for N seconds.** Harmless at shutdown. A cancelled
   schedule removes it (systemd does so on cancel).
-- **A lingering schedule.** If the window-close step crashed, the shutdown
-  still fires at `+N`, which is what the user asked for.
+- **A lingering schedule.** If the window-close step fails or hangs, the
+  shutdown still fires at `+N`, and an app that did not close loses unsaved
+  work. Today is the same: the 2 s close is bounded and `systemctl` runs
+  straight after it. The change keeps that bound and adds 3 s to it, and it
+  does not add a new way to lose work.
 - **Upstream drift:** a source bump that rewords `exit_session` fails the
   patch at build time (`--fuzz=0`), not silently.
 
@@ -85,9 +88,18 @@ upstream issue the owner files. No agent files it.
   org.freedesktop.login1.Manager ScheduledShutdown`). §1 break: the patch
   reverted fails "the window still exists".
 - **The timeout path:** the same block with a rule returning
-  `AUTH_ADMIN` and no agent answering, `RuntimeMaxSec` overridden to 3 s by
-  the test, asserts the timeout notification and the window.
-- **The allowed path:** no rule. Assert a shutdown was scheduled
+  `AUTH_ADMIN`, while the session's polkit agent **is registered** (the
+  session runs one) and the test never answers its dialog. With no agent,
+  polkit would fail at once and never reach the limit. `RuntimeMaxSec` is
+  overridden to 5 s by the test. It asserts that the unit's result was
+  `timeout` (`systemctl --user show -p Result` on the transient unit), that
+  the timeout notification was sent, and that the window survived.
+- **Power-off and the inhibited path:** the denied case is repeated for
+  `omarchy-system shutdown --execute`, which goes through
+  `systemd-inhibit ... --inhibited`, so a mistake confined to power-off or
+  that wrapper fails too.
+- **The allowed path**, for both verbs: no rule. Assert a
+  shutdown was scheduled
   (`ScheduledShutdown` set), then cancel it with `--when=cancel` so the VM
   stays up. This proves the patch still reboots on a stock machine.
 - `checks.omarchy` (package tier) for the patch applying, plus

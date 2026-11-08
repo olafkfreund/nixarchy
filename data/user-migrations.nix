@@ -20,6 +20,11 @@
     decision = "not-needed";
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
   };
+  "1787481315" = {
+    decision = "ported";
+    run = "port";
+    reason = "re-stage a repository-installed theme once, so staged code from an older install is dropped (#1705)";
+  };
   "1787573629" = {
     decision = "not-needed";
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
@@ -239,7 +244,6 @@
     "1786539345"
     "1786643346"
     "1786782461"
-    "1787481315"
     "1787580187"
     "1787618700"
     "1787843905"

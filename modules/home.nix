@@ -2488,6 +2488,7 @@ in
         text = ''
           #!/usr/bin/env bash
           export NIXARCHY_USER_MIGRATIONS=${cfg.package.passthru.userMigrations}
+          export NIXARCHY_NEOVIM=${lib.escapeShellArg cfg.neovim}
           export PATH=${
             lib.makeBinPath [
               cfg.package

@@ -56,7 +56,12 @@ never changes theme would keep the missing arrows. So a post-boot hook,
 `~/.local/share/fcitx5/themes/omarchy/theme.conf` exists and any of its
 `Image=` values names a file missing from that directory. Otherwise it
 does nothing. It is idempotent: once the images resolve, it never runs the
-script again. It sits under the same `enable` as the user-migrations hook,
+script again.
+
+**Timing limit:** the hook runs at login (`post-boot.d`). A machine upgraded
+mid-session gets its arrows at the next login, not at the switch. The
+candidate window works without them meanwhile, only without its page and
+menu arrows. It sits under the same `enable` as the user-migrations hook,
 so Mode A is untouched.
 
 ### 3. The probes (§1 read backwards)
@@ -75,9 +80,13 @@ Two checks, two properties:
   `${linked}/share/fcitx5/themes/default/prev.svg`. It becomes: each of
   `prev`, `next`, `radio` and `arrow` exists as `.svg` or `.png`. The
   property it guards is "the packaged glyphs are linked", not their format.
-- The repair hook: `checks.session` deletes the glyph links, starts the
-  hook directly, and asserts every `Image=` resolves again. With the links
-  present, a second run must not touch the directory (mtime unchanged).
+- The repair hook, from a pre-fix state on each channel: `checks.session`
+  (unstable) and `stable-session` (26.05) both write a theme directory as a
+  26.05 machine has it before this fix: a `theme.conf` copied from the
+  template, whose `Image=` lines still name `.svg`, and no glyph links. Then
+  they run the hook and assert every `Image=` resolves. On 26.05 that needs
+  the rewrite to `.png`; on unstable it needs the links. A second run must
+  not touch the directory (mtime unchanged).
 
 ## Alternatives rejected
 
@@ -102,11 +111,15 @@ Two checks, two properties:
 - `checks.input-methods` (cheap): passes. Built with the `.png`-or-`.svg`
   edit reverted to `.svg` only, it still passes on unstable, which is
   expected. Its job is "linked", not "format".
-- `checks.session` (VM tier): the new `Image=` loop passes. §1 break: the
-  patch line removed from `default.nix`, with a fixture `theme.conf` naming
-  `prev.png` placed in `$THEME_SOURCE`, fails "names a file that does not
-  exist". This proves the loop sees a missing image, since unstable alone
-  cannot produce one.
+- `checks.session` (VM tier): the new `Image=` loop passes. §1 break, the
+  same on both channels: the script reads `OMARCHY_FCITX5_PACKAGED_THEME`
+  before its default (upstream line 12). The probe points it at a fixture
+  directory holding only `prev.png`, `next.png`, `radio.png` and `arrow.png`,
+  which is the 26.05 layout, made on any channel. With the patch, the theme
+  resolves (PNG links, `Image=` rewritten). With the patch line removed from
+  `default.nix`, nothing is linked and `Image=prev.svg` fails "names a file
+  that does not exist". The patched run passes and the reverted run fails,
+  whichever channel builds it.
 - The weekly `stable-session`, dispatched once on the branch
   (`gh workflow run weekly.yml -f job=stable-session --ref <branch>`), is
   the 26.05 proof. It failed at `tests/session.nix:3413` before (run

@@ -253,6 +253,27 @@ case_1676() {
     same_tree "$before" "$HOME" || fail "$case: second run changed the home"
   done
 }
+case_1705() {
+  local variant want themes state
+  for variant in repo bundled user-theme no-name; do
+    case=1705.$variant
+    setup "$case" "$FIXTURE_C"
+    themes=$XDG_CONFIG_HOME/omarchy/themes
+    state=$XDG_STATE_HOME/omarchy/current
+    mkdir -p "$themes" "$state"
+    want=0
+    case $variant in
+      repo) printf '%s\n' x > "$state/theme.name"; mkdir -p "$themes/x/.git"; want=1 ;;
+      bundled) printf '%s\n' tokyo-night > "$state/theme.name" ;;
+      user-theme) printf '%s\n' x > "$state/theme.name"; mkdir -p "$themes/x" ;;
+    esac
+    : > "$HOME/calls.log"
+
+    run_ids 1787481315
+    [[ -e $OMARCHY_MIGRATION_STATE/1787481315.sh ]] || fail "$case: marker missing"
+    [[ $(grep -c '^omarchy-theme-refresh' "$HOME/calls.log" || true) -eq $want ]] || fail "$case: expected $want omarchy-theme-refresh call(s), got: $(cat "$HOME/calls.log")"
+  done
+}
 case_1677() {
   local variant config bindings fcitx before expected calls path_with_voxtype
   for variant in migrate backend marker no-voxtype preferences existing-f9; do
@@ -774,6 +795,7 @@ case_1674
 case_1675
 case_1676
 case_1677
+case_1705
 case_1678
 case_1679
 case_1680

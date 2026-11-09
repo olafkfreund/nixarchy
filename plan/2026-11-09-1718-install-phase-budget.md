@@ -66,9 +66,9 @@ indent.
 - `#default-agent-menu-commands-use-the-id` ends mid-sentence ("The
   direction that would matter -- ticking for an agent that"). Append "is
   absent -- is the one this loop exists to prevent." so it reads whole.
-- In `## Why the install phase says so little` (`:652`), delete the two
-  sentences that begin "The figure moves by 12 bytes with git state":
-  `nixarchyRev` no longer exists.
+- In `## Why the install phase says so little` (`:652`), delete the one
+  sentence that begins "The figure moves by 12 bytes with git state"
+  (`:668-670`): `nixarchyRev` no longer exists.
 
 ## Steps
 
@@ -86,8 +86,10 @@ indent.
      prints 1.
    - Traps: keep each block's wording; only the leading `# ` goes.
 3. **Measure, run, break, commit, PR** (session).
-   - **Shell unchanged.** Evaluate `.#omarchy.installPhase` on `3c56f888`
-     and on the branch head, both committed. Then, for each:
+   - **Shell unchanged.** Evaluate `nix eval --raw .#omarchy.installPhase`
+     (`--raw`, or the text arrives as one quoted line with escaped `\n` and
+     nothing is filtered) on `3c56f888` and on the branch head, both
+     committed. Then, for each:
      `sed -E 's#/nix/store/[a-z0-9]{32}-#STORE-#g' | grep -Ev '^[[:space:]]*(#|$)'`.
      `diff` the two results; the diff must be empty.
      - §1 break: change one character of one shell line in the branch copy
@@ -98,8 +100,11 @@ indent.
      and merge the branch into it. Then `nix eval --raw
      .#omarchy.installPhase | wc -c` must print at most 120,000, and
      `checks.install-phase-budget` must pass there.
-     - The §1 proof is the same check on `main`'s tree, which fails
-       (runs 42544068473 and 42571154200).
+     - §1 proof: the same measurement and check on `origin/edge-candidate`
+       merged with `main` as it is (`3c56f888`), before this change. It
+       measures 123,181 bytes and the check fails, as it did in runs
+       42544068473 and 42571154200. `main`'s own tree passes (122,676), so
+       it is not the negative control.
    - **Package tier**, when both `vm-host-free.sh install` and `edge` print
      `free`: `nix build .#omarchy`.
    - **Cheap tier:** `nix fmt -- --ci`, statix, deadnix, `patched-files`,

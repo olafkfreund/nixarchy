@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1718
 author: x
 ---
@@ -104,3 +104,5 @@ Both runs that day, 42544068473 and 42571154200, stopped in `prepare` on
    target account for quattro's growth, or should `main` measure the budget
    against quattro too? Proposed: the headroom target only, in this change.
    A second measurement is a separate decision for the owner.
+
+Approved by the owner on 2026-11-09 with every proposed answer above.

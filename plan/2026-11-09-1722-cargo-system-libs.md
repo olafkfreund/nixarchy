@@ -1,12 +1,13 @@
 ---
-status: approved
+status: draft
 issue: 1722
 spec: spec/2026-11-09-1722-cargo-system-libs.md
 coders:
   1: codex  # the carry: short Nix whose every guard (hook, pname, present, empty) changes what users build
-  2: coder  # an evaluation check with fixtures, in the shape the spec's table gives
-  3: codex  # a pure review row and its report call; small logic where the unreadable case matters
-  4: coder  # a pkgs/AGENTS.md section: prose
+  2: codex  # two one-line consumer edits where plain pkgs bypasses the overlay; small and easy to get subtly wrong
+  3: coder  # an evaluation check with fixtures, in the shape the spec's table gives
+  4: codex  # a pure review row and its report call; small logic where the unreadable case matters
+  5: coder  # a pkgs/AGENTS.md section: prose
 reviewers:
   - codex  # line by line against this plan
   - agy    # an independent read of the diff
@@ -37,6 +38,31 @@ reviewers:
    `final: prev: {`, and the closing `};` of that attribute set (`:1338`; nothing in it defines `codex` or `omp`) becomes
    `} // (import ./pkgs/cargo-system-libs.nix { inherit (prev) lib; inherit prev; }).packages;`.
    Nothing else in the overlay changes.
+2b. **The consumers the overlay does not reach** (revision, 2026-11-09:
+   Codex's read of this plan; owner: implement now, not wait). nixarchy sets
+   `nixpkgs.overlays` nowhere (`modules/services/default.nix:45-50`), so a
+   machine's `pkgs.codex` never sees decision 2. Two places install Codex
+   from plain `pkgs`:
+   - **`modules/apps.nix`, the `package` option's default.** Its last
+     branch, `pkgs.${app.attr}` (`data/apps.nix:433` gives Codex
+     `attr = "codex"`), becomes
+     `(import ../pkgs/cargo-system-libs.nix { inherit lib; prev = pkgs; }).packages.${app.attr} or pkgs.${app.attr}`.
+     - Bind the import once in the file's `let`, not per app.
+     - `defaultText` stays `pkgs.${app.attr}`. That is what a user writes,
+       and the carry is the identity on a nixpkgs without the hook or with
+       the fix.
+   - **`modules/microvm/templates/agent-claude.nix:35`.** `pkgs.codex`
+     becomes the same `.packages.codex or pkgs.codex`, through a `let` with
+     the same import, written relative to that file
+     (`../../../pkgs/cargo-system-libs.nix`).
+   - **omp** is installed from nothing but `pkgsFor`, the agent-no-node
+     check's `pkgs`, which decision 2 covers. A `grep -rnw omp modules/
+     data/` finds no plain-`pkgs` consumer; re-run it at implementation time.
+   - The proof that each consumer gets the carry is in step 6: a machine's
+     `programs.nixarchy` Codex package and the agent MicroVM's
+     `environment.systemPackages` both evaluate to the carried derivation on
+     the bump. That is a drvPath, not the `vm.pkgs.codex` comparison, which
+     would read the overlay's set and pass while the consumers still fail.
 3. **`checks.cargo-system-libs`** (`tests/cargo-system-libs.nix`), an
    evaluation check, registered in `flake.nix` beside the other script
    checks with a `# See tests/cargo-system-libs.nix.` line.
@@ -159,23 +185,31 @@ reviewers:
    - Traps: `nix fmt`, then `git diff --stat` (§5 formatter hook). Do not
      rename anything else in the overlay. `prev` is now used, so deadnix
      stays quiet.
-2. **`tests/cargo-system-libs.nix`, its fixtures and its `flake.nix`
+2. **The two consumers**: decision 2b (Codex).
+   - Verify: under the lock, on `main`'s pin (no hook), a machine's Codex
+     package drvPath is unchanged with and without the edit, in this one
+     tree (§5). The carry is the identity there.
+   - Traps: the relative import paths differ per file. `nix fmt`, then
+     `git diff --stat`.
+3. **`tests/cargo-system-libs.nix`, its fixtures and its `flake.nix`
    entry**: decision 3 (coder).
    - Verify: `git add` the new files, then build
      `.#checks.x86_64-linux.cargo-system-libs` under the lock.
    - Traps: no `${` inside a `''` string except interpolation; fixture
      directories are referenced as paths (`./cargo-system-libs/with-hook`),
      so they must be tracked.
-3. **`pkgs/review.sh` and `tests/review-pins.nix`**: decision 4 (Codex).
+4. **`pkgs/review.sh` and `tests/review-pins.nix`**: decision 4 (Codex).
    - Verify: build `.#checks.x86_64-linux.review-pins` under the lock; and
      `bash pkgs/review.sh --carry-row codex dead` prints the finding row.
    - Traps: `checks.grep-q-pipefail` (no `| grep -q` under pipefail);
      `writeShellApplication` adds `errexit`, so the `|| carry=""` and
      `|| st=""` fallbacks must stay (`pkgs/AGENTS.md`).
-4. **`pkgs/AGENTS.md`**: decision 5 (coder).
+5. **`pkgs/AGENTS.md`**: decision 5 (coder). The section also names the
+   two consumer sites from decision 2b, which a row's removal must leave
+   alone, because the carry is the identity once `needs` is empty.
    - Verify: `grep -c '<a id="cargo-system-libs-1722">' pkgs/AGENTS.md`
      prints 1, matching the two `# Why:` pointers.
-5. **Run, prove, commit, PR** (session).
+6. **Run, prove, commit, PR** (session).
    - Cheap tier: `cargo-system-libs`, `review-pins`, `grep-q-pipefail`,
      `test-registration`, `nix fmt -- --ci`, statix, deadnix.
    - §1 breaks on `checks.cargo-system-libs`, each shown failing:
@@ -187,16 +221,25 @@ reviewers:
      And on `checks.review-pins`: map `dead` to `ok` → the `dead` case.
    - **No change on `main`**: step 1's `drvPath` equality, shown in the PR.
    - **The bump builds.**
-     - Make a detached worktree of `origin/update/nixpkgs-42577556388` and
-       cherry-pick the branch's code commits onto it.
+     - That bump branch was deleted after #1721 closed. Make a detached
+       worktree of this branch instead, run `nix flake update nixpkgs` in
+       it, and commit the lock. That is the nixos-unstable that has the
+       hook and lacks upstream's fixes. Prove both with
+       `gh api repos/NixOS/nixpkgs/compare/16b463698a...<locked rev>` and
+       the same for `43c51fe5d9` (`behind` or `diverged`, not `ahead`).
      - When both `vm-host-free.sh install` and `edge` print `free`, build
        `codex` and `omp` there
        (`.#nixosConfigurations.vm.pkgs.{codex,omp}`).
      - Then build `vm-toplevel` and `reference-toplevel`. Any other package
        failing with a `*-sys` crate's "not found" is added as a `needs` row
        and recorded here as a deviation.
-     - Negative control: the same `codex` build in that worktree without
-       the cherry-pick fails as in #1722.
+     - Then the consumers (decision 2b), on that bumped worktree:
+       `nix build` the drvPath of `nixosConfigurations.vm`'s
+       `programs.nixarchy` Codex app package, and the agent-claude MicroVM
+       template's Codex, and check that each equals the carried
+       `codex.drvPath`.
+     - Negative control: the same `codex` build with the carry removed
+       (a commit in the scratch worktree) fails as in #1722.
    - **The review row, through the packaged binary.** `nix run
      .#review -- --carry-row codex dead` prints the finding, and
      `nix run .#review -- --report` shows both packages `inactive`
@@ -210,7 +253,8 @@ reviewers:
    - **After merge:** dispatch `flake update`
      (`gh workflow run flake-update.yml -R olafkfreund/nixarchy --ref main`).
      The new bump PR's `build` and `install check` are the end-to-end
-     proof. Close #1721 as superseded once that PR is open.
+     proof. Close #1722 when that PR is green. (#1721 is already closed.)
+     Stop the channel watcher (`brr6mbh0o`); it is no longer the path.
 
 ## Tests
 

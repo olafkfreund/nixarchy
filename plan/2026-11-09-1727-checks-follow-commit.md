@@ -81,9 +81,12 @@ be followed without them.
     `mkMicrovm = mkMicrovmWith inputs;` (`:1783`).
   - In `checkInputs.self` (`:908-958`), add
     `lib = self.lib // { mkUserIso = mkUserIsoWith checkInputs; };`.
-  - Before moving, read the body for any other reference to the enclosing
-    scope (`self.lib.*`, `lib`, `nixpkgs`), and keep each one resolving to
-    the same value. Report each one.
+  - The body's `lib.concatStringsSep` and `lib.attrNames` (`:1764-1769`)
+    are the lexical nixpkgs `lib`, not `self.lib`, because the output
+    attrset at `:1718` is not recursive. They stay as they are; do not
+    rewrite them to `self.lib.*`, which has neither (Codex, agy).
+    `nixpkgs` (`:1770`) and `./installer/cd.nix` (`:1776`) also resolve
+    the same from the new position.
 - **Not in this step:** builds, commits, other files. Codex's sandbox
   cannot reach the nix daemon.
 - **Verify** (the lead):
@@ -96,8 +99,8 @@ be followed without them.
 - **Traps:**
   - an editor hook may reformat with `nixpkgs-fmt`, so run `nix fmt` and
     read `git diff --stat` (§5);
-  - a `let` binding cannot see `lib.*` siblings by name, only what the
-    `let` scope has.
+  - `self` inside `checkInputs.self = self // { … }` is the outer real
+    `self` (not `rec`), which is what the `lib` override needs.
 
 ### 2. `tests/stable-eval.nix` and `data/commit-bound-checks.nix`: D5, D4 (coder: codex)
 
@@ -114,9 +117,22 @@ be followed without them.
   Measured: on a real path this returns
   `nixos-system-nixarchy-26.05.20260910.d58a46e.drv`. It still forces the
   full evaluation.
-- **`tests/stable-eval.nix:102`:** `/nix/store/*-nixos-system-*.drv)`
-  becomes `nixos-system-*.drv)`. The refusal text at `:105` changes from
-  "derivation path" to "derivation name".
+- **`tests/stable-eval.nix:102-103`:** the floor refuses a name with a `/`
+  or nothing after the prefix (Codex):
+
+  ```bash
+  case "$toplevel" in
+    */*) ;;
+    nixos-system-?*.drv) toplevel_ok=1 ;;
+  esac
+  ```
+
+  - Written so that only the second branch passes. Keep the existing
+    refusal block for every other case, as `[ "''${toplevel_ok:-}" = 1 ] ||
+    { …refusal… }`, or as an equivalent `case` with `*/*` falling into the
+    refusal.
+  - The refusal text at `:105` changes from "derivation path" to
+    "derivation name".
 - **`data/commit-bound-checks.nix`:** add after `install-iso-net`:
 
   ```nix
@@ -140,22 +156,27 @@ be followed without them.
 
    It needs a clean, committed tree, so commit steps 1 and 2 first.
    Expected: `none moved`.
-2. **What ships is unchanged** (spec verification 2).
-   - In this tree, put `git show origin/main:flake.nix` beside the new one
-     as `flake-old.nix`. Evaluate both through a throwaway `default.nix`
-     shim, with the same `self` (CLAUDE.md §5: never across commits).
-   - These must be identical:
+2. **What ships is unchanged** (spec verification 2). Both sides must see
+   one source tree and differ only in `flake.nix` (Codex, agy):
+   - In a detached scratch worktree of the branch, add
+     `git show origin/main:flake.nix > flake-old.nix` and commit it. The
+     tree is clean and committed, so `self` keeps a rev (§5).
+   - Evaluate, with `nix eval --impure --expr`:
+     - `new = builtins.getFlake "git+file://<scratch>?rev=<sha>"`;
+     - `old = new.sourceInfo // ((import "${new}/flake-old.nix").outputs (new.inputs // { self = old; }))`.
+
+     Each side ties its own knot, so the old `lib.mkUserIso` cannot resolve
+     to the new one. Both read the same tree, so outputs that carry it are
+     comparable.
+   - Identical, with no fallback:
      - every `packages.x86_64-linux.*` drvPath;
      - every `nixosConfigurations.*.config.system.build.toplevel` drvPath;
      - `iso-net`'s `isoImage`;
-     - `lib.mkUserIso { flake = self; host = "vm"; }`'s image and its
+     - `lib.mkUserIso { flake = new; host = "vm"; }`'s image and its
        `installerLauncher`.
-   - If no shim can evaluate both in one tree, fall back to:
-     - a `main` worktree and this branch, each with the same `.commit-probe`
-       commit at the same timestamp and message;
-     - comparing only the outputs that do not carry the tree.
-     
-     Say which method ran.
+   - A difference is investigated with `nix-diff` before anything else. If
+     this method cannot evaluate, stop and report. It is not replaced by a
+     weaker comparison.
 3. **Placeholder consumers** (spec verification 3).
    - For every check not in `data/commit-bound-checks.nix`, run
      `nix-store -qR "$(nix eval --raw .#checks.x86_64-linux.<c>.drvPath)" | grep -c flake-template`.
@@ -169,15 +190,22 @@ Each break is made in a detached worktree (`git worktree add --detach`).
 Prove it landed with `git diff`, commit it (the guard refuses a dirty tree),
 then run the guard on the six. Each must name exactly the checks given:
 
-1. drop D1's `narHash` → `installer-input-validation`, `initrd-pin-guard`,
-   `installer-wizard`, `installer-early-exit`, `reinstall-image`;
-2. drop D1's `lastModified` → the same five;
+1. drop D1's `narHash` → at least `installer-input-validation`,
+   `initrd-pin-guard` and `installer-wizard`, which are measured to move
+   through it;
+2. drop D1's `lastModified` → at least the same three.
+
+For breaks 1 and 2, `installer-early-exit` and `reinstall-image` are expected
+to move too, through the same template. Any name beyond those five, or any of
+the five missing, is checked with `nix-diff` before it is called a failure
+of the fix (Codex).
 3. revert D2 → `installer-early-exit`;
 4. revert D3's `checkInputs.self.lib` line → `reinstall-image`;
 5. revert D5's `:54` → `stable-eval`.
 
-**Floor:** set `toplevel = "";` and build `checks.stable-eval`. It must
-fail with "is not a system derivation name".
+**Floor:** build `checks.stable-eval` with `toplevel = "";`, and again with
+`toplevel = "nixos-system-.drv";`. Each must fail with "is not a system
+derivation name".
 
 ### 5. Local checks before push (lead, §6 tiers)
 
@@ -203,7 +231,8 @@ fail with "is not a system derivation name".
   - D6's statement on what is not asserted.
 - Comment `@codex review`, and verify its findings. The Opus review and the
   `reviewers:` reviews run on `git diff origin/main` before the push.
-- Merge with `gh pr merge --auto --merge --delete-branch`.
+- Merge with `gh pr merge --auto --merge --delete-branch`, and only after
+  step 3.2's full comparison is identical (Codex).
 - After merge, dispatch the nightly (`gh workflow run nightly.yml --ref
   main`) when no install job is in flight. Close #1685 and #1727 on a green
   `commit-independent`.

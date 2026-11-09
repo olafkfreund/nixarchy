@@ -12,13 +12,15 @@ The nightly nixpkgs bump (#1721, nixpkgs `f4a03c0`, the `nixos-unstable`
 head of 2026-11-07 09:04) fails `build` and `install check` (runs
 42578177371 and 42578177500).
 
-- nixpkgs' `pkgs/build-support/rust/hooks/cargo-setup-hook.sh` now runs
-  `cargoUseSystemLibs` before configure in every Rust package, unless the
-  package sets `dontCargoUseSystemLibs`. It exports `ZSTD_SYS_USE_PKG_CONFIG`,
-  `RUSTONIG_SYSTEM_LIBONIG`, `AWS_LC_SYS_USE_SYSTEM`,
-  `LIBSQLITE3_SYS_USE_PKG_CONFIG` and others. A package that does not list
-  those libraries in `buildInputs` can no longer build. `main`'s nixpkgs
-  (`f9a75f4`, 2026-11-05) does not have the hook.
+- nixpkgs' `pkgs/build-support/rust/hooks/cargo-setup-hook.sh` now adds
+  `cargoUseSystemLibs` to `preConfigureHooks` for every package that uses
+  the cargo setup hook (as `rustPlatform.buildRustPackage` does), unless the
+  package sets `dontCargoUseSystemLibs`. It exports
+  `ZSTD_SYS_USE_PKG_CONFIG`, `RUSTONIG_SYSTEM_LIBONIG`,
+  `AWS_LC_SYS_USE_SYSTEM`, `LIBSQLITE3_SYS_USE_PKG_CONFIG` and others.
+  - A package whose crates link one of those libraries, and that does not
+    list it in `buildInputs`, now fails to build.
+  - `main`'s nixpkgs (`f9a75f4`, 2026-11-05) does not have the hook.
 - Two packages in nixarchy's closure fail that way:
   - **codex 0.167.0**: `zstd-sys`, `aws-lc-sys` and `onig_sys` find no
     library;
@@ -57,8 +59,17 @@ head of 2026-11-07 09:04) fails `build` and `install check` (runs
   Do not set `dontCargoUseSystemLibs`, which would vendor libraries that
   upstream now links from the system.
 - Change a package only when two things hold: the nixpkgs in use has the
-  hook, and the package still lacks the library. On `main` today, and on
-  any nixpkgs with upstream's fix, the derivation must be unchanged.
+  hook, and the package still lacks one of the libraries. On `main` today,
+  and on any nixpkgs with upstream's fix, the derivation must be unchanged.
+  - "The nixpkgs in use" is the overlay's `prev`, which can be nixarchy's
+    pinned nixpkgs, `nixpkgs-stable` (the stable VM), or a Mode A user's own.
+    So the test reads `prev.path`'s `cargo-setup-hook.sh` source, not
+    nixarchy's lock, and never a built hook (that would be
+    import-from-derivation). The overlay is `final: _prev:` today, so `prev`
+    must be named (agy review).
+  - Per package, add only the libraries it lacks. When none is missing, or
+    the hook is absent, return `prev.<pkg>` itself with no `overrideAttrs`,
+    so the derivation is equal by construction.
 - Mode A (CLAUDE.md §7, §14): a user's own override of codex or omp must
   still apply on top. The carry builds on `prev`, never replaces the
   package.
@@ -66,7 +77,14 @@ head of 2026-11-07 09:04) fails `build` and `install check` (runs
   Without it, they fail with the errors above. On `main`, their `drvPath`s
   are equal with and without it.
 - A carried override of a nixpkgs package needs a line saying when to drop
-  it, and something that fails once it is dead.
+  it, and something that says once it is dead, judged per package.
+  - Dead means the hook is present and the package no longer lacks a library.
+  - That must not fail the nightly bump. The bump is a bot's PR, and it
+    cannot delete the carry, so a failing check would stall nixpkgs exactly as
+    this issue does.
+  - So the dead carry is reported (for example as a row in the nightly
+    review), never a red check. The two upstream fixes are a day apart, so
+    one can be dead while the other is still needed.
 
 ## Open questions
 

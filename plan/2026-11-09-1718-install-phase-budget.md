@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1718
 spec: spec/2026-11-09-1718-install-phase-budget.md
 coders:

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1719
 spec: spec/2026-11-09-1719-commit-independent-shallow.md
 coders:

@@ -525,6 +525,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gp
   . ./fd.sh
   findmnt() { return 1; }   # nothing mounted at /mnt
   check_disks() { return 0; }
+  udevadm() { :; }   # format_disk settles before its post-build check (#1725)
   fails=0
   t() {
     want=$1 name=$2

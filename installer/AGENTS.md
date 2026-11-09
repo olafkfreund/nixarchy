@@ -52,6 +52,11 @@ before that resolves against the ISO's passwd, not the target's.
 - **A flake in a git worktree sees only tracked or staged files.** The installer
   stages everything and deliberately makes no commit: git needs an identity, and
   choosing the user's is not the installer's business.
+- **A by-partlabel link seen straight after sgdisk can vanish.** The kernel
+  removes and re-adds the new partitions more than once, and the last cycle
+  can land after the links first appear. Settle, pause, settle again, and
+  re-check before trusting a link (#1725; evidence in
+  `spec/2026-11-09-1725-free-space-silent-exit.md`).
 
 ## The network image builds the target system
 

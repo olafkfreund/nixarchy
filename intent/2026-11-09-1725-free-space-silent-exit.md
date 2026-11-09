@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1725
 author: x
 ---
@@ -119,3 +119,10 @@ The likely cause, which is inferred and not reproduced:
    propose only `partition_free_space`, `check_free_partitions`, `check_disks`
    and `format_disk`, from sgdisk to disko's run, to keep the diff reviewable.
    Codex and agy both agree.
+
+## Decisions (owner, 2026-11-09)
+
+1. Messages and the race fix together. The race fix ships only if the spec
+   proves the race; otherwise the messages ship alone.
+2. Scope: `partition_free_space`, `check_free_partitions`, `check_disks` and
+   `format_disk`, from sgdisk to disko's run.

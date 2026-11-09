@@ -442,15 +442,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     find "$theme_dir" -type l -delete
                     find "$theme_dir" \( -name '*.lua' -o -name alacritty.toml -o -name foot.ini -o -name ghostty.conf -o -name kitty.conf -o -name vscode.json \) -delete
 
-                    # CARRIED, for #1153: video and GIF desktop backgrounds and a
-                    # video-aware lock poster, backported onto v4.0.4 from
-                    # omacom/omarchy #6792 and #12429. Applied FIRST, so every
-                    # substituteInPlace below targets the backported text rather
-                    # than what this patch replaces. See the patch's own header,
-                    # and pkgs/AGENTS.md, for what it carries and why.
-
-                    # CARRIED (#1155): upstream's per-entry panel sync. Applied first so the
-                    # #901 part-A edits below target the patched text.
                     # CARRIED (#1192): the panel Loader's error handler called a function Qt 6's Loader lacks.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1192-panel-loader-errorstring.patch}
 
@@ -583,15 +574,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       exit 1
                     }
 
-                    # Both launchers accept a handful of browser desktop-file names and fall
-                    # back to "chromium.desktop" for anything else. nixpkgs ships chromium's
-                    # entry as chromium-browser.desktop, so xdg-settings returns a name that
-                    # matches nothing, gets replaced by one that does not exist, and every web
-                    # app fails with
-                    #
-                    #   Error: Path "--app=https://..." does not exist!
-                    # Only launch-webapp has this list; launch-browser uses whatever
-                    # xdg-settings returns and needed nothing beyond the path fix below.
+                    # Why: pkgs/AGENTS.md#every-web-app-failed-with
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
                       --replace-fail \
                         'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;' \
@@ -956,10 +939,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
               'HOST_PATH=/run/current-system/sw/bin/omarchy-chromium-ytdlp-host'
 
             # Why: pkgs/AGENTS.md#the-browser-theme-policy-and-why-402-broke-it
-            #
-            # Short version: 4.0.2 moved the policy write into a helper that runs
-            # with a PATH this port does not have, so the accent stopped reaching
-            # the browser and checks.session sat on it for 900 seconds.
             substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-browser-policy \
               --replace-fail 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin' \
               'export PATH=${lib.makeBinPath [ coreutils ]}' \
@@ -1082,15 +1061,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     done
 
                     # Why: pkgs/AGENTS.md#the-agent-skills-upstream-writes-for-arch
-                    #
-                    # Short version: upstream's skills are written for Arch and tell an
-                    # agent to run `omarchy pkg add`, which this repo replaced with a
-                    # script that refuses. Shipping them unchanged means an agent
-                    # confidently doing imperative things a rebuild then wipes.
                     menu=$out/share/omarchy/default/omarchy/omarchy-menu.jsonc
                     # Each id is its own command; antigravity is the one that differs.
                     # Why: pkgs/AGENTS.md#default-agent-menu-commands-use-the-id
-                    # is absent -- is the one this loop exists to prevent.
                     for a in agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen; do
                       substituteInPlace $menu \
                         --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"

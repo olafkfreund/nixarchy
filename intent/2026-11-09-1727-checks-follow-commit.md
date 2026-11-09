@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1727
 author: x
 ---
@@ -123,3 +123,8 @@ tree moves, as well as anything that reads the commit's metadata.
 2. **`reinstall-image`: shipped artifact or check?** The spec states what
    `checks.reinstall-image` tests. That way, moving it to the placeholder
    cannot leave the shipped reinstall image unchecked (agy).
+
+## Decisions (owner, 2026-11-09)
+
+- Approved as revised: the six installer checks are fixed, not listed.
+- `stable-eval` and `reinstall-image` follow the open questions as proposed: trace the carrier first, then fix or list with a provenance reason.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1719
 author: x
 ---
@@ -93,3 +93,5 @@ nix fetching by rev ("shallow repositories are only allowed when
    clone (deterministic), plus a Determinate Nix reproduction if the spec
    can get one cheaply. Otherwise the next nightly is the proof of the
    CI half.
+
+Approved by the owner on 2026-11-09 with every proposed answer above.

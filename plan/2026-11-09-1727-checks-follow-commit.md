@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1727
 spec: spec/2026-11-09-1727-checks-follow-commit.md
 coders:

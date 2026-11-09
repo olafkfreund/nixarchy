@@ -53,6 +53,10 @@ in
 - **Nothing to add returns `prev.${n}` itself**, with no `overrideAttrs`.
   So on `main` (no hook) and on any nixpkgs with upstream's fix, the
   derivation is the same object and its `drvPath` cannot differ.
+  - The property is equal `drvPath`s. An `overrideAttrs` that appends an
+    empty list would give the same `drvPath`, so the `m == [ ]` half of
+    the guard only saves work. Case B tests the property, not that half
+    (agy review).
 - **Only what is missing is added**, so a partial upstream fix (one library
   added, another not) still builds, with no duplicate inputs.
 - **`present`** skips a package the nixpkgs does not have (an older
@@ -74,16 +78,31 @@ in
 the precedent: a carried override that nothing checked "would have outlived
 its reason silently".
 
-- It evaluates `status` against the current `nixpkgs` registry flake (as
-  that row does with `nixpkgs#quickshell.version`), through
-  `nix eval --impure --json --expr` and `builtins.getFlake "nixpkgs"`.
-- Per package:
+- It evaluates `status` against **nixarchy's own pinned nixpkgs**: the
+  flake's root `nixpkgs` input, through `nix eval --impure --json --expr`,
+  with `prev` set to
+  `(builtins.getFlake "git+file://$PWD").inputs.nixpkgs.legacyPackages.x86_64-linux`.
+  - The package set, not the flake. Given the flake, `prev ? codex` is
+    false, and the result is `{}` with exit 0 (agy review).
+  - The shell loops over the expected names (`codex omp`) and reads each
+    one's status from the JSON. A missing name or a failed evaluation then
+    still produces a row for each, never zero rows (the #690 trap at
+    `pkgs/review.sh:168-170`). That is the
+  nixpkgs the carry is applied to on `main`. The registry's nixpkgs can be
+  newer, and would report a carry dead while nixarchy's pin still needs it
+  (Codex review).
+- The row itself is a pure function, `carry_row NAME STATUS`, with a
+  `--carry-row` mode. This is the shape `blocked_row` and `--blocked-row`
+  already have (`:281-296`, `:44`), which `tests/review-pins.nix:354`
+  exercises. Per package:
   - `needed` → `ok`, "still needed";
   - `inactive` → `ok`, "hook absent";
   - `dead` → `finding`, "nixpkgs carries the fix -- drop <name> from
     pkgs/cargo-system-libs.nix";
-  - an unreadable answer → `ok`, "status unread", as the quickshell row
-    does.
+  - anything else, including an empty answer from a failed evaluation →
+    `finding`, "carry status unread". A query that breaks must not leave
+    the carry in place silently (Codex review). That differs from the
+    quickshell row, which reads unreadable as `ok`.
 - A finding is a row in the review issue, never a red check. The bump is a
   bot's PR and cannot delete the carry, so a failing check would stall
   nixpkgs, exactly as this issue does.
@@ -159,9 +178,13 @@ Fixtures (`tests/cargo-system-libs/`):
 4. **The bump's closures.** In that worktree, build `vm-toplevel` and
    `reference-toplevel` (package tier), and the cheap tier of checks.
    Anything else that fails under the hook is added as a row.
-5. **The review row.** Run `pkgs/review.sh --report` (or the row alone)
-   on the branch: codex and omp report `inactive` against today's registry
-   nixpkgs if it lacks the hook, or `needed` if it has it.
+5. **The review row.**
+   - `checks.review-pins` gains `--carry-row` cases: `needed` and
+     `inactive` give `ok`, while `dead`, an empty status and `garbage` each
+     give a finding.
+   - §1 break: map `dead` to `ok`, and the `dead` case fails.
+   - Then `pkgs/review.sh --report` on the branch shows codex and omp as
+     `inactive`: `main`'s pinned nixpkgs lacks the hook.
 6. Cheap tier: `nix fmt -- --ci`, statix, deadnix, `checks.review-pins`,
    `test-registration`, `grep-q-pipefail`.
 7. **After merge:** dispatch the `flake update` workflow so a new bump PR

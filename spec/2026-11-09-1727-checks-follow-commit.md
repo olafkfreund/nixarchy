@@ -19,9 +19,9 @@ names, until the leaf).
 | `initrd-pin-guard` | same | same | D1: fix |
 | `installer-wizard` | same, under its VM's closure | same | D1: fix |
 | `installer-early-exit` | `nixarchy-flake-template`: `rev`, `url`, `narHash`, `lastModified` | `flake.nix:2326` reads the real `self.packages…install` | D1 + D2: fix |
-| `reinstall-image` | both `nixarchy-installer-launcher`s → `nixarchy-install` → `nixarchy-flake-template`: `rev`, `url`, `narHash`, `lastModified` | `self.lib.mkUserIso` passes the real `inputs` into the ISO's `specialArgs` (`flake.nix:1773`). `checkInputs.self` keeps the real `lib` | D1 + D3: fix |
-| `install-stock-iso` | the flake template's `narHash` and `lastModified`, **and** the input source `source` (the nixarchy tree) inside the `nixos-system-nixarchy-26.11` closure that `stock-iso-test-cache` carries | the install cache holds the installed machine's closure, and that closure holds the source tree | D4: list |
-| `stable-eval` | the input source `source` (the nixarchy tree) in its 26.05 toplevel | `vm/configuration.nix:173` writes `inputs.nixarchy.url = "path:${inputs.self}"` into the VM's generated flake | D5: list |
+| `reinstall-image` | `launcher` (`tests/reinstall-image.nix:32`) → `nixarchy-install` → `nixarchy-flake-template`: `rev`, `url`, `narHash`, `lastModified`. `publishedLauncher` (`:33`): `narHash`, `lastModified` only | `launcher` comes from `self.lib.mkUserIso`, which passes the real `inputs` into the ISO's `specialArgs` (`flake.nix:1773`), and `checkInputs.self` keeps the real `lib`. `publishedLauncher` comes from `checkInputs`' `iso-net`, so only D1's fields move it (agy) | D1 + D3: fix |
+| `install-stock-iso` | the flake template's `narHash` and `lastModified`, **and** the nixarchy tree in `stock-iso-test-cache` | `tests/install-stock-iso.nix:15`: `inputSources = inputs.self.lib.inputSources { flake = inputs.self; }`, which collects `flake.outPath` (`flake.nix:1732`) into the offline cache the install evaluates from | D4: **your decision** |
+| `stable-eval` | its derivation's `toplevel` environment string: the 26.05 toplevel's `drvPath`, whose input sources include the nixarchy tree | `tests/stable-eval.nix:54` puts `cfg.system.build.toplevel.drvPath` into the check's environment. The tree enters that toplevel through `vm/configuration.nix:173` (`path:${inputs.self}` in an activation script's text) | D5: fix |
 
 How the source tree was identified: the two toplevels' `inputs.srcs` differ
 in exactly one path each (`db3cd5p4…-source` → `52xsd0wh…-source`), and
@@ -47,16 +47,16 @@ checkInputs = realInputs // {
 
 - `lastModified = 0` agrees with `lastModifiedDate = "19700101000000"`
   (agy). `mkFlake.nix:63` writes `toString self.lastModified`, and
-  `installer-lock` requires a positive timestamp. `installer-lock` is
-  commit-bound and gets the real inputs (`commitBound`), so it does not see
-  0. That still has to be proven: break 4 below.
-- **Where the placeholder template is consumed.** The placeholder lock is
-  written by the `install` package that checks build. No check on
-  `checkInputs` fetches the nixarchy input from it: the install VMs that
-  run `nix` against the generated flake (`install`, `free-space`,
-  `installer-refusal`, `install-encrypted`) are commit-bound, and get the
-  real inputs. Verification step 3 proves this by grep and by running
-  `installer-wizard`, the one VM on the placeholder.
+  `installer-lock` requires a positive timestamp. It never sees 0: it
+  reads the real `self.packages…flake-template` directly (D6), so the
+  placeholder cannot reach it.
+- **Where the placeholder template is consumed.** It is written by the
+  `install` package that checks build.
+  - The install VMs that run `nix` against the generated flake (`install`,
+    `free-space`, `installer-refusal`, `install-encrypted`) are commit-bound,
+    and get the real inputs.
+  - That no other check verifies the placeholder lock is not assumed.
+    Verification step 3 enumerates every consumer.
 
 ### D2. `installer-early-exit` reads `inputs.self` (`flake.nix:2326`)
 
@@ -77,42 +77,82 @@ The check tests that the launcher carries that flake and host, and that is
 unchanged. Only the installer package inside the ISO now comes from the
 placeholder.
 
-### D4. `install-stock-iso` is commit-bound (`data/commit-bound-checks.nix`)
+### D4. `install-stock-iso`: a decision for you
 
-```nix
-install-stock-iso = "its offline cache carries the installed machine's closure, which holds the source tree, as install does";
-```
+Your intent decision was that "the six installer checks are fixed, not
+listed", and `install-stock-iso` is one of the six. D1 removes its
+template's movement, but not the tree's:
 
-This check installs from a stock ISO and an offline cache of the machine it
-installs, and that machine's closure contains the nixarchy tree. Removing the
-tree would change what it installs. The reason is the same provenance as
-`install`'s, and D1 does not move it.
+- `tests/install-stock-iso.nix:15` collects `inputSources { flake =
+  inputs.self; }` into the cache the stock ISO installs from offline.
+  `inputSources` starts with `flake.outPath` (`flake.nix:1732`), the source
+  tree itself.
+- The offline install evaluates the user's flake against that tree. A
+  placeholder tree would install something other than nixarchy. Keeping the
+  real tree means the check follows every commit.
 
-### D5. `stable-eval` is commit-bound
+So the check cannot be both fixed and still test what it tests today. Two
+options:
 
-```nix
-stable-eval = "vm/configuration.nix:173 writes path: plus inputs.self into the VM's generated flake (evaluation only, as options-files)";
-```
+- **(a) List it (recommended):**
+  `install-stock-iso = "tests/install-stock-iso.nix:15 collects inputSources, which starts with the source tree, into the cache it installs from offline";`.
+  - This is the provenance `iso-source` is already listed for.
+  - Listing switches its `inputs` to `realInputs` (`flake.nix:2926`), so
+    its drvPath changes once, to the real rev (agy).
+  - D1 still applies to every other check.
+- **(b) Leave it unlisted.** The guard stays red on it, and the nightly
+  cannot go green.
 
-This is the carrier you ruled on for `options-files` on 2026-11-08: evaluation
-only, so it stays commit-bound. `stable-eval` evaluates the same
-`vm/configuration.nix` against stable. Giving it a placeholder tree would
-change the flake the VM evaluates.
+### D5. `stable-eval` keeps the toplevel's name, not its hash (`tests/stable-eval.nix:54`, `:101-102`)
 
-### D6. The guard and the flake read the new entries
+`stable-eval` exists to prove that nixarchy evaluates against stable. It
+forces `toplevel.drvPath`, then checks that the result is a system
+derivation (`:101-102`). The hash in that path is incidental: it follows the
+tree only because the VM's activation script names `${inputs.self}`. Nothing
+evaluates the generated flake here (agy).
 
-`flake.nix` gives commit-bound checks the real inputs through `commitBound`.
-Both new entries already evaluate against real inputs today, so they need no
-other edit. Verification step 2 checks that their drvPaths do not change.
+- `:54` keeps the store name without its hash:
+  `toplevel = builtins.substring 44 (-1) (builtins.unsafeDiscardStringContext cfg.system.build.toplevel.drvPath);`.
+  That is the store directory plus a 32-character hash plus `-`, so 44
+  characters. This still forces the full evaluation.
+- `:102`'s pattern becomes `nixos-system-*.drv`, so the floor still refuses
+  an empty or malformed result.
+- The name keeps nixpkgs' release string (`26.05.20260910.d58a46e`), which
+  is a fact about the stable input, and the check prints it.
+
+### D6. What already asserts the real values
+
+The intent asks for this to be stated exactly (Codex, agy):
+
+- `installer-lock` reads the real `self.packages.${system}.flake-template`
+  directly (`flake.nix`, its definition). It never sees `checkInputs`, and
+  this spec does not change that. It asserts that every field `mkFlake`
+  writes is present, that `lastModified` is a number, and that it is
+  positive (`tests/installer-lock.nix:42-68`).
+- `nixarchy-options` asserts the real rev.
+- **No check asserts that `narHash` or `lastModified` equals the real
+  commit's.** This spec does not add one, and does not claim one.
+
+### D3, what it changes for `reinstall-image`
+
+The check tests `mkUserIsoWith checkInputs`. The public `lib.mkUserIso` is
+`mkUserIsoWith inputs`: the same body, with real inputs. So the check still
+tests the function's code, the launcher's flake and host pairing, and its
+command-line handling (`tests/reinstall-image.nix:35-55`). What it no longer
+tests is the real rev inside the ISO's installer. The intent permits exactly
+that (Codex). The public function's output is covered only by verification
+step 2's drvPath comparison.
 
 ## Alternatives rejected
 
-- **Listing the five fixable checks.** It makes the nightly green while
+- **Listing the checks D1, D2, D3 and D5 fix.** It makes the nightly green while
   leaving them unable to reuse a proof. Your ruling, and the intent's
   constraint.
-- **A placeholder source tree for `stable-eval` and `install-stock-iso`**,
-  such as a fixed `outPath`. It changes what each check evaluates or
-  installs, which breaks "a check keeps testing what it tests today".
+- **A placeholder source tree for `install-stock-iso`**, such as a fixed
+  `outPath`. It changes what the check installs, which breaks "a check
+  keeps testing what it tests today".
+- **Listing `stable-eval`**, on the `options-files` precedent. Its carrier
+  is incidental to what it checks, so the intent says fix it (D5).
 - **An arbitrary string for `narHash`**, such as `"0"`. A lock carrying it is
   not one a real flake could have (agy). The zero SRI hash is well-formed.
 
@@ -131,36 +171,47 @@ other edit. Verification step 2 checks that their drvPaths do not change.
 
 ## Verification
 
-1. **The guard on the five fixed checks, locally:**
-   `.github/scripts/commit-independent.sh initrd-pin-guard installer-early-exit installer-input-validation installer-wizard reinstall-image`.
-   Expected: `none moved`. With no arguments, the guard skips the
-   commit-bound names, so D4 and D5 are covered by step 6.
-2. **What ships is unchanged**, compared in the same tree, old and new files
-   side by side (CLAUDE.md §5). These must be identical:
-   - `packages.x86_64-linux.{install,flake-template,omarchy}`;
-   - `nixosConfigurations.{iso-net,vm,reference}.config.system.build.toplevel`;
+1. **The guard on the six fixed checks, locally:**
+   `.github/scripts/commit-independent.sh initrd-pin-guard installer-early-exit installer-input-validation installer-wizard reinstall-image stable-eval`.
+   Expected: `none moved`.
+2. **What ships is unchanged.** Compare in the same tree, with the old
+   `flake.nix` checked out beside the new one (CLAUDE.md §5), and all
+   outputs, not a sample (agy):
+   - every `packages.x86_64-linux.*` drvPath;
+   - every `nixosConfigurations.*.config.system.build.toplevel` drvPath;
    - `iso-net`'s `isoImage`;
-   - `lib.mkUserIso { flake = self; host = "vm"; }`.
-3. **The placeholder lock is never verified.**
-   - `grep -rn 'flake.lock\|nix flake\|--offline' tests/` over the checks
-     that use `checkInputs`;
-   - `installer-wizard` built locally, as a VM.
+   - `lib.mkUserIso { flake = self; host = "vm"; }`, both its image and its
+     `installerLauncher`.
+
+   An output that evaluated `checkInputs` would move under D1, so identical
+   drvPaths also show that none does.
+3. **The placeholder lock is never verified.** Enumerate it mechanically,
+   not by grep (Codex, agy):
+   - Every check not in `data/commit-bound-checks.nix` whose derivation
+     closure contains a `nixarchy-flake-template`
+     (`nix-store -qR <drv> | grep flake-template`).
+   - For each, the spec's plan records whether it runs `nix`,
+     `nixos-install` or `nixos-rebuild` against the generated flake.
+   - A check that does goes on the list, with its reason. `installer-wizard`
+     is built locally, as a VM.
 4. **§1 breaks**, each in a detached worktree, with `git diff` proving it
-   landed. Each makes the guard name the check, and nothing else changes:
-   1. drop D1's `narHash` → `installer-input-validation`, `initrd-pin-guard`, `installer-wizard`;
-   2. drop D1's `lastModified` → the same;
+   landed. Each makes the guard name exactly the checks given:
+   1. drop D1's `narHash` → `installer-input-validation`, `initrd-pin-guard`,
+      `installer-wizard`, `installer-early-exit`, `reinstall-image`;
+   2. drop D1's `lastModified` → the same five;
    3. revert D2 → `installer-early-exit`;
    4. revert D3's `checkInputs.self.lib` → `reinstall-image`;
-   5. take `installer-lock` off the commit-bound list → `installer-lock` fails
-      its positive-timestamp check. This proves the placeholder would be
-      caught where the real value is asserted.
+   5. revert D5 → `stable-eval`.
+   - Also: D5's floor still refuses. Make `toplevel` an empty string, and
+     `stable-eval` fails on build.
 5. **Cheap tier:**
    - `nix fmt -- --ci`, statix, deadnix;
-   - `installer-lock`, `nixarchy-options`, `iso-source`,
+   - `installer-lock`, `nixarchy-options`, `iso-source`, `stable-eval`,
      `installer-input-validation`, `initrd-pin-guard`,
      `installer-early-exit`, `reinstall-image`;
    - every reachable target `generated-checks.sh` prints.
-6. **VM tier:** `installer-wizard`, then the full guard, once, with no busy
+6. **VM tier:** `installer-wizard`, and `install-stock-iso` under its new
+   inputs if D4(a) is chosen. Then the full guard, once, with no busy
    runner.
 7. **After merge:** the next nightly's `commit-independent` is green, and
    #1685 closes.

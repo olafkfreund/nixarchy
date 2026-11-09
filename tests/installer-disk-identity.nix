@@ -20,6 +20,24 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   readlink() { printf '%s\n' "$2"; }
   boot_medium() { :; }
   ui_interactive() { return 1; }
+  late=0 due=0 udev_fail=0 rl_fail=
+  udevadm() {
+    [ "$1" = settle ] || return 0
+    echo settle >> events
+    if [ "$due" -gt 0 ]; then due=$((due - 1)); [ "$due" -gt 0 ] || touch esp root; fi
+    [ "$udev_fail" != 1 ] || ! grep -Fxq build events || return 1
+  }
+  sleep() { if [ "$late" = 1 ]; then rm -f esp root; late=0; due=2; fi; }
+  L2='  Partition entries may exist and signatures may have been cleared. Inspect before retrying.'
+  msg_case() {
+    local name=$1 line=$2 l2=$3 rc
+    shift 3
+    "$@" >out 2>err
+    rc=$?
+    [ "$rc" = 1 ] || failed "$name: exit status $rc, not 1"
+    grep -Fxq -- "$line" err || failed "$name: stderr lacks: $line"
+    [ -z "$l2" ] || grep -Fxq -- "$L2" err || failed "$name: stderr lacks the inspect line"
+  }
   printf 'alpha\n' > a-id
   printf 'bravo\n' > b-id
   lsblk() {
@@ -208,21 +226,29 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   printf 'alpha\n' > a-id
   remember_disk /dev/a || failed "free-space target was not recorded"
   device=/dev/a
+  # The links resolve to nodes of their own, and only while the link exists.
   readlink() {
+    [ "$2" != "$rl_fail" ] || return 1
     case "$2" in
-      /dev/disk/by-partlabel/nixarchy-esp) echo /dev/esp ;;
-      /dev/disk/by-partlabel/nixarchy-root) echo /dev/root ;;
+      /dev/disk/by-partlabel/nixarchy-esp) if [ -e esp ]; then echo "$PWD/node-esp"; else echo "$2"; fi ;;
+      /dev/disk/by-partlabel/nixarchy-root) if [ -e root ]; then echo "$PWD/node-root"; else echo "$2"; fi ;;
       *) echo "$2" ;;
     esac
   }
   old_lsblk=$(declare -f lsblk)
   lsblk() {
     if [ "$2" = PKNAME ]; then
-      case "$3" in /dev/esp) echo a ;; /dev/root) cat root-parent ;; esac
+      [ ! -e pkname-fail ] || return 1
+      case "$3" in "$PWD/node-esp") echo a ;; "$PWD/node-root") cat root-parent ;; esac
+    elif [ "$2" = MODEL ] && [ -e model-fail ]; then
+      return 1
     else
       (eval "$old_lsblk"; lsblk "$@")
     fi
   }
+  touch esp root node-esp node-root
+  sed 's|\[ -b |[ -e |g' check_free_partitions.sh > cfp-fixture.sh
+  . ./cfp-fixture.sh
   printf 'b\n' > root-parent
   if check_free_partitions >msg 2>&1; then failed "foreign root partition was accepted"; fi
   grep -q 'does not belong to the selected disk' msg || failed "foreign-partition refusal has no explanation"
@@ -230,27 +256,85 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   check_free_partitions >msg 2>&1 || failed "selected disk partitions were refused"
   sed "s|/dev/disk/by-partlabel/nixarchy-esp|$PWD/esp|g; s|/dev/disk/by-partlabel/nixarchy-root|$PWD/root|g; s|\[ -b |[ -e |g" partition_free_space.sh > pfs-fixture.sh
   . ./pfs-fixture.sh
-  touch esp root
+  eval "$(declare -f check_free_partitions | sed '1s/check_free_partitions/real_check_free_partitions/')"
+  check_free_partitions() {
+    if [ "$late" != 0 ] || [ "$due" != 0 ] || [ ! -e esp ] || [ ! -e root ]; then
+      failed "check_free_partitions ran before the late re-read settled"
+    fi
+    late=0 due=0
+    touch esp root
+    real_check_free_partitions "$@"
+  }
   free_start=2048 free_end=500000 FREE_ESP_MIB=1 encrypt=false
   free_space_possible() { free_start=2048; free_end=500000; return 0; }
   blockdev() { echo 512; }
-  sgdisk() { touch first-sgdisk; return 0; }
+  sgdisk() { touch first-sgdisk; late=1; return 0; }
   partx() { :; }
-  wipefs() { touch wipefs-called; return 0; }
+  wipefs() { echo "$*" > wipefs-args; touch wipefs-called; return 0; }
   printf 'b\n' > root-parent
   if partition_free_space >msg 2>&1; then failed "foreign partition reached wipefs"; fi
   [ ! -e wipefs-called ] || failed "wipefs touched a foreign partition"
   printf 'a\n' > root-parent
   partition_free_space >msg 2>&1 || failed "owned partitions could not reach wipefs"
   [ -e wipefs-called ] || failed "owned partitions never reached wipefs"
+  echo "ok free-space waits out the late partition re-read"
+  [ "$(cat wipefs-args)" = "-a $PWD/node-esp $PWD/node-root" ] || failed "wipefs was not given the checked device nodes"
+  echo "ok wipefs clears the nodes that were checked"
   wipefs() { return 1; }
   if partition_free_space >msg 2>&1; then failed "wipefs failure was swallowed"; fi
-  wipefs() { touch wipefs-called; return 0; }
+  wipefs() { echo "$*" > wipefs-args; touch wipefs-called; return 0; }
   rm -f first-sgdisk wipefs-called
   printf 'replacement\n' > a-id
   if partition_free_space >msg 2>&1; then failed "swapped disk reached sgdisk"; fi
   [ ! -e first-sgdisk ] || failed "sgdisk ran on swapped disk"
+  printf 'alpha\n' > a-id
   echo "ok free-space rechecks identity before sgdisk and parentage before wipefs"
+
+  # Every refusal says which call refused, on stderr.
+  rl_fail=/dev/a
+  msg_case "case a" "nixarchy-install: could not resolve /dev/a. Nothing further was formatted; start again." "" check_disks
+  rl_fail=
+  touch model-fail
+  msg_case "case b" "nixarchy-install: lsblk could not read the WWN, serial, size or model of /dev/a. Nothing further was formatted; start again." "" check_disks
+  rm -f model-fail
+  device=/dev/by-id-a rl_fail=/dev/by-id-a
+  msg_case "case c" "nixarchy-install: could not resolve /dev/by-id-a." l2 check_free_partitions
+  device=/dev/a rl_fail=/dev/disk/by-partlabel/nixarchy-root
+  msg_case "case d" "nixarchy-install: could not resolve /dev/disk/by-partlabel/nixarchy-root." l2 check_free_partitions
+  rl_fail=
+  rm -f node-root
+  msg_case "case e" "nixarchy-install: /dev/disk/by-partlabel/nixarchy-root does not point at a block device ($PWD/node-root)." l2 check_free_partitions
+  touch node-root
+  touch pkname-fail
+  msg_case "case f" "nixarchy-install: lsblk could not read the parent disk of $PWD/node-esp." l2 check_free_partitions
+  rm -f pkname-fail
+  wipefs() { return 3; }
+  msg_case "case g" "nixarchy-install: wipefs could not clear $PWD/node-esp and $PWD/node-root (exit 3)." l2 partition_free_space
+  wipefs() { echo "$*" > wipefs-args; touch wipefs-called; return 0; }
+  disk_mode=whole luks_passphrase=secret
+  nix() { if [ "$1" = eval ]; then echo true; else echo "$PWD/disko"; fi; }
+  rm -f disko-ran
+  mkdir -p /tmp/nixarchy-luks.key
+  msg_case "case h" "nixarchy-install: could not write the LUKS key file. Nothing was formatted." "" format_disk
+  rmdir /tmp/nixarchy-luks.key
+  [ ! -e disko-ran ] || failed "case h: disko ran without its key"
+  : > events
+  nix() { if [ "$1" = eval ]; then echo false; else echo build >> events; echo "$PWD/disko"; fi; }
+  udev_fail=1
+  msg_case "case i" "nixarchy-install: udevadm settle did not finish after the disko build. Nothing was formatted; start again." "" format_disk
+  udev_fail=0
+  [ ! -e disko-ran ] || failed "case i: disko ran after a failed settle"
+  echo "ok every refusal names its call"
+
+  # The post-build identity check must see settled links.
+  : > events
+  eval "$(declare -f check_disks | sed '1s/check_disks/real_check_disks/')"
+  check_disks() { echo check >> events; real_check_disks "$@"; }
+  format_disk >msg 2>&1 || failed "settled post-build format did not complete"
+  [ "$(sed -n '/^build$/,$p' events | tr '\n' ' ')" = "build settle check " ] || failed "post-build check_disks did not follow a settle"
+  eval "$(declare -f real_check_disks | sed '1s/real_check_disks/check_disks/')"
+  rm -f disko-ran
+  echo "ok post-build identity check follows a settle"
 
   printf 'alpha\n' > a-id
   rm -f disko-ran

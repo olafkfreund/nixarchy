@@ -585,6 +585,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Why: .github/scripts/commit-independent.sh refuses a shallow clone (#1719).
+          fetch-depth: 0
       - uses: ./.github/actions/setup-nix
       - uses: cachix/cachix-action@v17
         continue-on-error: true

@@ -2341,3 +2341,16 @@ A test's key or certificate is a committed fixture. So is anything else that ano
 ## Superwhisper (#1613)
 
 The real app, audio and the panel's `~/.local/bin` to `PATH` fallback are covered only by the disposable-VM run in the plan's step 10, never on a runner, because no check may build the unfree app.
+
+## A stub that reports a failure inside `call >msg 2>&1` reports it to `msg`
+
+`checks.installer-disk-identity` wraps the real `check_free_partitions` in a
+stub that calls `failed` when the settle loop let it run too early. The caller
+is `partition_free_space >msg 2>&1`, so the stub's `FAILED` line went into
+`msg`. The counter still rose and the build still exited 1, but the log named
+no case: three of #1725's break proofs read as red for an unknown reason.
+
+So a stubbed check's `failed` writes to a descriptor the calls under test
+cannot redirect: `exec 3>&1` once, then `echo "FAILED $1" >&3`. Any check whose
+stubs can fail while a caller's output is captured needs the same, and a break
+proof that goes red with no `FAILED` line is the sign it does not have it.

@@ -2473,6 +2473,11 @@
           nightly-digest = import ./tests/nightly-digest.nix {
             pkgs = pkgsFor.${system};
           };
+          # #1719: commit-independent.sh refuses a shallow clone.
+          # See tests/commit-independent-shallow.nix.
+          commit-independent-shallow = import ./tests/commit-independent-shallow.nix {
+            pkgs = pkgsFor.${system};
+          };
           panel-loaders = import ./tests/panel-loaders.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

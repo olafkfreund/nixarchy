@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1722
 intent: intent/2026-11-09-1722-cargo-system-libs.md
 ---

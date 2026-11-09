@@ -28,8 +28,8 @@ Line numbers are on `main` at `3c56f888`.
 | `445-450` | the #1153 "CARRIED … backported onto v4.0.4" comment | the patch and its `patch` line are gone (`ls pkgs/omarchy/*1153*` finds nothing); `pkgs/AGENTS.md#video-and-gif-desktop-backgrounds…` keeps the history |
 | `452-453` | the #1155 "upstream's per-entry panel sync" comment | same: no #1155 patch remains, and `pkgs/AGENTS.md` "Panel loaders survive a plugin change (#1155)" holds it |
 | `586-594` | the `chromium.desktop` fallback explanation | `pkgs/AGENTS.md#every-web-app-failed-with` says the same. Replace it with that anchor's `# Why:` line, as `:941` already does |
-| `958-962` | the `# Short version:` under the browser-theme-policy pointer | the pointer above it stays; the anchor holds the long version |
-| `1084-1089` | the `# Short version:` under the agent-skills pointer | same |
+| `959-962` | the `# Short version:` under the browser-theme-policy pointer | the pointer above it stays; the anchor holds the long version |
+| `1085-1089` | the `# Short version:` under the agent-skills pointer | same |
 | `1093` | `# is absent -- is the one this loop exists to prevent.` | the second half of a sentence whose first half is already in `pkgs/AGENTS.md#default-agent-menu-commands-use-the-id`. It moves there to finish the sentence |
 
 ### 2. Move: the two largest remaining blocks
@@ -48,8 +48,18 @@ the code (CLAUDE.md §7).
   `'"'"'`, a leftover of quoting. In `pkgs/AGENTS.md` it becomes a plain
   apostrophe.
 - If sections 1 and 2 together do not reach 3,181 bytes on edge's merged
-  tree, the next-largest block moves the same way: `1187` (the boot-splash
-  wordmark, 944 bytes). The plan records which blocks were needed.
+  tree, the next-largest block moves the same way: the boot-splash wordmark
+  comment that starts at `1607` ("The same wordmark on the boot splash",
+  944 bytes). The plan records which blocks were needed.
+
+### 2a. The history sections say the patches are gone
+
+Deleting the #1153 and #1155 comments would leave `pkgs/AGENTS.md`
+describing both patches as live: "applied FIRST" at `:936` and `:994`.
+Neither patch file nor its `patch` line exists. Each section gets a
+**Retired** line at its top, in the form #953's section already uses: the
+release that dropped the patch, and that what follows is history. The plan
+finds that release with `git log -S` on the patch file name.
 
 ### 3. Nothing else changes
 
@@ -81,15 +91,24 @@ the code (CLAUDE.md §7).
   can change what nixfmt does (CLAUDE.md §5). Run `nix fmt`, then read
   `git diff --stat`: only `pkgs/omarchy/default.nix` and `pkgs/AGENTS.md`
   should change, by about the lines named here.
-- **The 12-byte git-state wobble** (`pkgs/AGENTS.md`: `-dirty` is spliced in
-  twice). Both measurements are taken on committed trees.
+- **A stale sentence in `pkgs/AGENTS.md`.** "Why the install phase says so
+  little" says the figure moves by 12 bytes with git state because
+  `nixarchyRev` is spliced in twice. `nixarchyRev` no longer appears in
+  `pkgs/omarchy/default.nix` or `flake.nix` (agy review, checked
+  2026-11-09), so that sentence is deleted in the same edit.
 
 ## Verification
 
 1. **Shell unchanged.** Evaluate `.#omarchy.installPhase` on `main`
-   (`3c56f888`) and on the branch, both committed. Normalise the two
-   `nixarchyRev` values (40 hex characters) to `REV`, drop comment lines
-   and blank lines, and diff. The diff must be empty.
+   (`3c56f888`) and on the branch, both committed. Normalise:
+   - every store path hash (`/nix/store/<32 chars>-` to `STORE-`). The
+     phase interpolates repository files such as
+     `${./1192-panel-loader-errorstring.patch}` (`:455`) and
+     `${./nixarchy-logo.py}` (`:1604`), whose store paths move with every
+     commit (Codex review);
+   Then drop comment lines and blank lines
+   (`grep -Ev '^[[:space:]]*(#|$)'`), keeping every remaining line's leading
+   spaces so a reindent shows, and diff. The diff must be empty.
    - §1 break: change one character of one shell line in the branch copy,
      re-run, and show a non-empty diff. Then restore it.
 2. **Budget.** `checks.install-phase-budget` passes on the branch, and its

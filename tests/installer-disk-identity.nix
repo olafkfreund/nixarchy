@@ -16,7 +16,9 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   . ./format_disk.sh
   . ./check_free_partitions.sh
   fails=0
-  failed() { echo "FAILED $1"; fails=$((fails + 1)); }
+  # fd 3 is the log: a stub's failure inside `call >msg 2>&1` must still show.
+  exec 3>&1
+  failed() { echo "FAILED $1" >&3; fails=$((fails + 1)); }
   readlink() { printf '%s\n' "$2"; }
   boot_medium() { :; }
   ui_interactive() { return 1; }

@@ -369,6 +369,25 @@ pkgs.runCommand "nixarchy-review-pins"
     blockedrow "| nixpkgs bump | - | no blocked bump | ok |" "" "" 0
     blockedrow "| nixpkgs bump | - | - | **cannot read pull requests** |" "" "" 1
 
+    carryrow() { # expected text, then STATUS
+      local want=$1 got
+      shift
+      got=$(bash ${../pkgs/review.sh} --carry-row codex "$1" 2>&1)
+      case "$got" in
+        *"$want"*) ;;
+        *)
+          echo "review: carry row for '$*' was: $got" >&2
+          echo "  expected it to contain: $want" >&2
+          fail=1
+          ;;
+      esac
+    }
+    carryrow "| cargo carry: codex | needed | still needed | ok |" needed
+    carryrow "| cargo carry: codex | inactive | hook absent | ok |" inactive
+    carryrow "| cargo carry: codex | dead | - | **nixpkgs carries the fix -- drop codex from pkgs/cargo-system-libs.nix** |" dead
+    carryrow "| cargo carry: codex | - | - | **carry status unread** |" ""
+    carryrow "| cargo carry: codex | garbage | - | **carry status unread** |" garbage
+
     [ "$fail" -eq 0 ] || exit 1
 
     echo "all $want pins are readable, and every version looks like one"

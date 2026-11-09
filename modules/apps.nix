@@ -8,6 +8,11 @@ inputs:
 let
   cfg = config.programs.nixarchy;
   apps = import ../data/apps.nix;
+  carried =
+    (import ../pkgs/cargo-system-libs.nix {
+      inherit lib;
+      prev = pkgs;
+    }).packages;
 
   # Same gate modules/services/boxes.nix itself applies -- the menu rows
   # below must not exist at all (not just be hidden) when boxes are off, the
@@ -83,11 +88,11 @@ let
           else if app.ours or false then
             inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.${app.attr}
           else
-            pkgs.${app.attr};
+            carried.${app.attr} or pkgs.${app.attr};
         defaultText = lib.literalExpression (
           if app.ours or false then "nixarchy.packages.\${system}.${app.attr}" else "pkgs.${app.attr}"
         );
-        description = "Package used for ${app.label}. Override to pin or patch it.";
+        description = "Package used for ${app.label}, with nixarchy's cargo carry applied while nixpkgs needs it (#1722). Override to pin or patch it.";
       };
     }
     // lib.optionalAttrs (app ? option) {
@@ -1670,7 +1675,8 @@ in
                 {
                   # Three of the eight are named after their own command, which is
                   # the whole reason omarchy-agent can look for `$agent` on PATH.
-                  inherit (pkgs) codex opencode crush;
+                  inherit (pkgs) opencode crush;
+                  codex = carried.codex or pkgs.codex;
 
                   claude = pkgs.claude-code;
                   agy = pkgs.antigravity-cli;

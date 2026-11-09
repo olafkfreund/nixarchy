@@ -34,7 +34,7 @@ reviewers:
    - `present` skips names the nixpkgs does not have.
    - `status` is `inactive`, `needed` or `dead`.
 2. **The overlay** (`flake.nix:975`): `final: _prev: {` becomes
-   `final: prev: {`, and the closing `};` of that attribute set becomes
+   `final: prev: {`, and the closing `};` of that attribute set (`:1338`; nothing in it defines `codex` or `omp`) becomes
    `} // (import ./pkgs/cargo-system-libs.nix { inherit (prev) lib; inherit prev; }).packages;`.
    Nothing else in the overlay changes.
 3. **`checks.cargo-system-libs`** (`tests/cargo-system-libs.nix`), an
@@ -57,6 +57,13 @@ reviewers:
        `buildInputs` with the stand-in's own plus the missing ones.
      - Case E's omp holds a stand-in with `pname = "zstd"` that is a
        different derivation from `prev.zstd` (another `version`).
+   - Every fixture `prev` in cases A to E holds both `codex` and `omp` and
+     all four library stand-ins; only case F omits `omp`. Then each break
+     fails on its named case's assertion, not on a missing attribute
+     somewhere else (agy review).
+   - The sorted `pname` comparison keeps duplicates
+     (`lib.sort lib.lessThan (map (d: d.pname) …)`, never `lib.unique`).
+     Otherwise breaks 2 and 3, which add a second `zstd`, would pass case E.
    - The assertions are forced. The `runCommand`'s env carries
      `ok = builtins.deepSeq results "yes"`, so an assertion that fails stops
      evaluation of the check, with `lib.assertMsg`'s message naming the
@@ -79,18 +86,30 @@ reviewers:
      `ok` takes three arguments and `finding` four (`:159-165`).
    - A `--carry-row) mode=carryrow ;;` line in the option `case` (`:39-45`),
      added to the usage text. Then
-     `if [ "$mode" = carryrow ]; then carry_row "$2" "$3"; printf '%s' "$rows"; exit 0; fi`
+     `if [ "$mode" = carryrow ]; then carry_row "$2" "${3-}"; printf '%s' "$rows"; exit 0; fi`
+     (`${3-}`: the wrapper sets `nounset`, and an empty status is a tested
+     case)
      beside the `blockedrow` block (`:309-313`).
    - In the report, directly after the quickshell-override row (`:488-502`):
 
      ```bash
      # Why: pkgs/AGENTS.md#cargo-system-libs-1722
+     if [ -f pkgs/cargo-system-libs.nix ]; then
      carry=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status" 2>/dev/null) || carry=""
      for n in codex omp; do
        st=$(jq -r --arg n "$n" '.[$n] // ""' <<<"$carry" 2>/dev/null) || st=""
        carry_row "$n" "$st"
      done
+     fi
      ```
+
+     - The `if [ -f … ]` gate works as the quickshell row's `grep` gate
+       does: deleting the carry file retires the row without leaving
+       "status unread" findings behind (agy review). Indent the block body
+       as the surrounding report code is indented.
+     - The names in `for n in codex omp` are the keys of `needs`. Dropping a
+       row from `needs` also drops that name here, and drops its
+       `review-pins` cases if they name it (the cases use `codex` only).
 
      - It reads nixarchy's pinned nixpkgs (the root `nixpkgs` input), never
        the registry.
@@ -99,7 +118,7 @@ reviewers:
        `:168-170`).
      - `jq` and `nix` are already in the review package's `runtimeInputs`
        (`flake.nix:1454-1464`).
-   - In `tests/review-pins.nix`, after the `blockedrow` cases (`:367`), a
+   - In `tests/review-pins.nix`, after the last `blockedrow` case (`:370`) and before the `fail` gate (`:372`), a
      `carryrow` helper of the same shape, with five cases:
 
      | status | expected row |
@@ -118,8 +137,12 @@ reviewers:
    - why the carry is gated (no rebuild on a nixpkgs without the hook or
      with the fix);
    - how to add a row when another package breaks the same way;
-   - how to drop one: when the review shows `dead`, delete the row, and
-     delete the file and the overlay line once `needs` is empty.
+   - how to drop one:
+     - when the review shows `dead`, delete the row from `needs` and the
+       name from `review.sh`'s `for n in …` loop;
+     - once `needs` is empty, delete the file, the overlay line, the
+       `review.sh` block (its `if [ -f … ]` gate keeps a forgotten block
+       silent), and `checks.cargo-system-libs` with its fixtures.
 
 ## Steps
 
@@ -128,9 +151,11 @@ reviewers:
    - Verify: `git add pkgs/cargo-system-libs.nix` (§5), then under
      `flock /mnt/data/vmtest/codex-build.lock`:
      `nix eval --raw .#nixosConfigurations.vm.pkgs.codex.drvPath` and the
-     same for `omp`. Each must equal the value on `main` (the worktree at
-     `/mnt/code/Source-home/nixarchy`, at `3c56f888`). Comparing across
-     commits is sound here: neither derivation contains the flake source.
+     same for `omp`, in this one tree, with and without the overlay's
+     `// (import ./pkgs/cargo-system-libs.nix …).packages` (removed by hand,
+     then restored with `git checkout HEAD --` after a commit). The values
+     must be equal. This is the spec's same-tree rule (§5), not a
+     comparison with `main` (Codex review).
    - Traps: `nix fmt`, then `git diff --stat` (§5 formatter hook). Do not
      rename anything else in the overlay. `prev` is now used, so deadnix
      stays quiet.
@@ -172,8 +197,13 @@ reviewers:
        and recorded here as a deviation.
      - Negative control: the same `codex` build in that worktree without
        the cherry-pick fails as in #1722.
-   - **The review row:** `pkgs/review.sh --report` on the branch shows
-     both packages `inactive` (`main`'s pin lacks the hook).
+   - **The review row, through the packaged binary.** `nix run
+     .#review -- --carry-row codex dead` prints the finding, and
+     `nix run .#review -- --report` shows both packages `inactive`
+     (`main`'s pin lacks the hook). This runs `writeShellApplication`'s
+     `errexit` wrapper, not just the source script (`pkgs/AGENTS.md`; Codex
+     review). If the attribute is not `.#review`, the plan records the one
+     that is.
    - One commit per step. The PR says `Closes #1722`, links the three
      artifacts, and names what ran locally. Then "@codex review". Merge
      commit.

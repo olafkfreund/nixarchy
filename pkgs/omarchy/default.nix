@@ -766,21 +766,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                   'echo "The tuning limiter needs the LSP LV2 plugins, which are not installed." >&2
                   echo "Add pkgs.lsp-plugins to environment.systemPackages and rebuild." >&2'
 
-                # Every unit in default/systemd/user has ExecStart=/usr/bin/..., and one
-                # of them is not a dead file: the script above installs
-                # omarchy-speaker-tuning.service from there into ~/.config/systemd/user
-                # every time the tuning is switched on, so that /usr path travels out of
-                # the store and into a real unit. systemd requires an absolute ExecStart,
-                # so there is nothing to fall back to on PATH -- the service would fail to
-                # start with status=203/EXEC and the tuning would never appear.
-                #
-                # /run/current-system/sw rather than pipewire's store path, for the same
-                # reason install/user/xcompose.sh points at /etc: what this writes into
-                # $HOME outlives the generation that wrote it, and a store path would go
-                # stale the first time that generation was collected, taking the
-                # already-installed tuning down with it. pipewire is deliberately not a
-                # dependency of this package either -- it is the audio daemon the running
-                # system provides, and services.pipewire.enable is what puts it there.
+                # Why: pkgs/AGENTS.md#speaker-tuning-execstart
                 substituteInPlace $out/share/omarchy/default/systemd/user/omarchy-speaker-tuning.service \
                   --replace-fail 'ExecStart=/usr/bin/pipewire' \
                   'ExecStart=/run/current-system/sw/bin/pipewire'
@@ -886,24 +872,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 # quattro routes both former tensaku-edit call sites through omasnap,
                 # which is in the runtime list above, so neither needs a patch.
 
-                # 1Password'"'"'s Chromium extension, installed the way NixOS installs one.
-                #
-                # Upstream drops a JSON stub into /usr/share/chromium/extensions with sudo,
-                # which Chromium reads on startup. That directory is in the store here and
-                # the write simply fails. NixOS has the same feature as an option, so the
-                # answer is to name it rather than to find somewhere writable to imitate it.
-                #
-                # echo lines rather than the heredoc this was first written as. A heredoc
-                # terminator has to sit at column 0 of the generated script, and this text
-                # is indented twice over -- once as an indented Nix string and once as the
-                # body of a shell function -- so bash never found EXTMSG and the whole
-                # script stopped parsing:
-                #
-                #   syntax error: unexpected end of file
-                #
-                # substituteInPlace cannot see that and neither can the build: the
-                # installer was a syntax error for as long as this patch existed. `bash -n`
-                # over the patched bins is what catches this class, and nothing else does.
+                # Why: pkgs/AGENTS.md#onepassword-extension-dir
                 substituteInPlace $out/share/omarchy/bin/omarchy-install-service-1password \
                   --replace-fail 'sudo mkdir -p "$EXTENSION_DIR"' \
                   'echo "Chromium extensions are declared on NixOS, not dropped into a directory." >&2

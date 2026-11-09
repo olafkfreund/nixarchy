@@ -1880,7 +1880,10 @@ partition_free_space() {
 check_free_partitions() {
   local part real parent selected why=
   free_esp_real='' free_root_real=''
-  check_disks || return 1
+  check_disks || {
+    echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
+    return 1
+  }
   if ! selected=$(readlink -f "$device"); then
     why="could not resolve $device."
   else
@@ -1982,15 +1985,21 @@ format_disk() {
     rm -f /tmp/nixarchy-luks.key
     echo "nixarchy-install: the disko script did not build (exit $rc)." >&2
     echo "  Nothing was formatted; the error above this is the one to read." >&2
+    [ "$disk_mode" != free ] || echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
     return 1
   fi
   # wipefs's close and the build leave udev events queued; check settled links.
   udevadm settle || {
     rm -f /tmp/nixarchy-luks.key
     echo "nixarchy-install: udevadm settle did not finish after the disko build. Nothing was formatted; start again." >&2
+    [ "$disk_mode" != free ] || echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
     return 1
   }
-  check_disks || { rm -f /tmp/nixarchy-luks.key; return 1; }
+  check_disks || {
+    rm -f /tmp/nixarchy-luks.key
+    [ "$disk_mode" != free ] || echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
+    return 1
+  }
   if [ "$disk_mode" = free ]; then
     check_free_partitions || { rm -f /tmp/nixarchy-luks.key; return 1; }
   fi
@@ -1999,6 +2008,7 @@ format_disk() {
     ( umask 077 && printf '%s' "$luks_passphrase" >/tmp/nixarchy-luks.key ) || {
       rm -f /tmp/nixarchy-luks.key
       echo "nixarchy-install: could not write the LUKS key file. Nothing was formatted." >&2
+      [ "$disk_mode" != free ] || echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
       return 1
     }
   fi

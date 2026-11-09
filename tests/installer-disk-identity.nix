@@ -22,14 +22,18 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   readlink() { printf '%s\n' "$2"; }
   boot_medium() { :; }
   ui_interactive() { return 1; }
-  late=0 due=0 udev_fail=0 rl_fail=
+  late=0 pending=0 due=0 udev_fail=0 rl_fail=
   udevadm() {
     [ "$1" = settle ] || return 0
     echo settle >> events
-    if [ "$due" -gt 0 ]; then due=$((due - 1)); [ "$due" -gt 0 ] || touch esp root; fi
+    # A settle applies a queued removal; the re-add then needs two more.
+    if [ "$pending" = 1 ]; then rm -f esp root; pending=0; due=2
+    elif [ "$due" -gt 0 ]; then due=$((due - 1)); [ "$due" -gt 0 ] || touch esp root; fi
     [ "$udev_fail" != 1 ] || ! grep -Fxq build events || return 1
   }
-  sleep() { if [ "$late" = 1 ]; then rm -f esp root; late=0; due=2; fi; }
+  # The late cycle's removal is queued during the pause, not applied: only a
+  # settle after the pause can see it.
+  sleep() { if [ "$late" = 1 ]; then late=0; pending=1; fi; }
   L2='  Partition entries may exist and signatures may have been cleared. Inspect before retrying.'
   msg_case() {
     local name=$1 line=$2 l2=$3 rc
@@ -260,10 +264,10 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   . ./pfs-fixture.sh
   eval "$(declare -f check_free_partitions | sed '1s/check_free_partitions/real_check_free_partitions/')"
   check_free_partitions() {
-    if [ "$late" != 0 ] || [ "$due" != 0 ] || [ ! -e esp ] || [ ! -e root ]; then
+    if [ "$late" != 0 ] || [ "$pending" != 0 ] || [ "$due" != 0 ] || [ ! -e esp ] || [ ! -e root ]; then
       failed "check_free_partitions ran before the late re-read settled"
     fi
-    late=0 due=0
+    late=0 pending=0 due=0
     touch esp root
     real_check_free_partitions "$@"
   }
@@ -295,6 +299,8 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   # Every refusal says which call refused, on stderr.
   rl_fail=/dev/a
   msg_case "case a" "nixarchy-install: could not resolve /dev/a. Nothing further was formatted; start again." "" check_disks
+  rl_fail=/dev/a
+  msg_case "case a2" "nixarchy-install: could not resolve /dev/a. Nothing further was formatted; start again." l2 check_free_partitions
   rl_fail=
   touch model-fail
   msg_case "case b" "nixarchy-install: lsblk could not read the WWN, serial, size or model of /dev/a. Nothing further was formatted; start again." "" check_disks
@@ -342,6 +348,24 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   rm -f disko-ran
   disk_mode=free
   partition_free_space() { :; }
+  # After partition_free_space, every refusal says the partitions may exist.
+  check_free_partitions() { :; }
+  nix() { [ "$1" = eval ] && echo false || return 1; }
+  msg_case "case free-build" "nixarchy-install: the disko script did not build (exit 1)." l2 format_disk
+  nix() { if [ "$1" = eval ]; then echo false; else echo build >> events; echo "$PWD/disko"; fi; }
+  : > events
+  udev_fail=1
+  msg_case "case free-settle" "nixarchy-install: udevadm settle did not finish after the disko build. Nothing was formatted; start again." l2 format_disk
+  udev_fail=0
+  nix() { if [ "$1" = eval ]; then echo false; else printf 'replacement\n' > a-id; echo "$PWD/disko"; fi; }
+  msg_case "case free-identity" "nixarchy-install: /dev/a has a different WWN or serial. Nothing further was formatted; start again." l2 format_disk
+  printf 'alpha\n' > a-id
+  nix() { if [ "$1" = eval ]; then echo true; else echo "$PWD/disko"; fi; }
+  mkdir -p /tmp/nixarchy-luks.key
+  msg_case "case free-key" "nixarchy-install: could not write the LUKS key file. Nothing was formatted." l2 format_disk
+  rmdir /tmp/nixarchy-luks.key
+  [ ! -e disko-ran ] || failed "free-mode refusals let disko run"
+  echo "ok free-mode refusals after partitioning say the partitions may exist"
   check_free_partitions() { return 1; }
   nix() { [ "$1" = eval ] && echo false || echo "$PWD/disko"; }
   if format_disk >msg 2>&1; then failed "post-build foreign partition was accepted"; fi

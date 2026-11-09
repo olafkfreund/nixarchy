@@ -307,6 +307,16 @@ exists. Otherwise it prints the path unchanged with exit 0, which is how GNU
   form without quotes fails shellcheck SC1007 in the installer package.
 - **`failed` writes to fd 3.** A failure raised inside a call redirected to
   `msg` (the re-read wrapper) then still reaches the log.
+- **In free mode, every refusal after `partition_free_space` prints L2**
+  (Opus review). That covers the build failure, D4's settle, the post-build
+  `check_disks`, and the key write in `format_disk`, plus a `check_disks`
+  refusal from inside `check_free_partitions`. Without L2, "start again"
+  sends the user back to a free region that now holds nixarchy's
+  partitions. Cases a2 and free-build/settle/identity/key cover them.
+- **The model's `sleep` queues the removal, and the next settle applies it**
+  (Opus review). The model used to delete the links during the pause itself,
+  so a loop with the settle after the pause dropped stayed green. Break 9
+  covers it.
 
 ### 3. `installer/AGENTS.md`: D7 (coder: coder, same agent)
 
@@ -335,7 +345,10 @@ each break landed with `git diff` before reading the result. Each must make
 5. `wipefs -a "$esp_dev" "$root_dev"` restored → the wipefs-target case;
 6. D4's settle dropped → the post-build settle case;
 7. one message reverted (case f's) → case f;
-8. D4's refusal replaced by `|| true` → case i.
+8. D4's refusal replaced by `|| true` → case i;
+9. the settle after the pause dropped → the re-read case;
+10. L2 dropped from `check_free_partitions`' `check_disks` guard → case a2;
+11. L2 dropped from D4's refusal → case free-settle.
 
 Each failing output goes in the PR.
 
@@ -394,7 +407,7 @@ Expected: 0 failed rounds of 1,200. `run4.log` is the before.
 
 | check | expected |
 |---|---|
-| `installer-disk-identity` | green, and red under each of step 4's eight breaks |
+| `installer-disk-identity` | green, and red under each of step 4's eleven breaks |
 | probe (step 5) | 0 of 1,200 rounds fail |
 | `free-space`, `install`, `installer-refusal` | green locally |
 | cheap tier | green |

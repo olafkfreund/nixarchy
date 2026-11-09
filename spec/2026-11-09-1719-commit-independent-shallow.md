@@ -21,9 +21,11 @@ Two changes and one check, all from the approved intent's answers.
           fetch-depth: 0
 ```
 
-- The tree the guard evaluates is then a user's full clone. `revCount`
-  exists and moves with the probe commit, so a check that read
-  `self.revCount` would be named as moved rather than slip through.
+- The tree the guard evaluates is then a user's full clone, where
+  `revCount` exists and moves with the probe commit, as it does for a user.
+  This is the reason for full history over `shallow=1`. Nothing here tests
+  that the guard names a `revCount`-dependent check: the check below covers
+  the refusal only, and the guard's comparison stays as #1694 proved it.
 - `release.yml`, `weekly.yml` and `omarchy-edge.yml` already check out with
   `fetch-depth: 0`. The cost is a full-history fetch on a hosted runner,
   for a job with a 90-minute budget whose evaluation is the expensive part.
@@ -75,6 +77,16 @@ loudly if it is ever called:
 Each case sets `RUNNER_TEMP` to a directory under the build's `$TMPDIR`. The
 script's default, `/mnt/data/vmtest`, does not exist in a sandbox, and the
 script would refuse on that first.
+
+Traps for the check (agy review):
+
+- The script's shebang is `#!/usr/bin/env bash`, and a sandbox has no
+  `/usr/bin/env` (CLAUDE.md §4). Run it as `bash ${…/commit-independent.sh}`.
+- The script refuses a dirty tree (`:5-9`) before the new refusal, with the
+  same exit 2. Case 2's worktree, `RUNNER_TEMP` and the stub's marker file
+  all sit outside the tested repositories, so neither case can pass on
+  "dirty tree". Each case also asserts the message, not only the status.
+- Case 3 also asserts exit 1, from the stub `nix` failing at `:20`.
 
 The stub `nix` keeps the check hermetic. The sandbox has no nix daemon, and
 the cases only ask whether the script reaches nix.

@@ -25,7 +25,8 @@ followed without them.
   late cycle then made `readlink -f` or `lsblk -nro PKNAME` fail in 6 of
   1,200 rounds. The new loop failed 0.
 - **D1, the settle loop.** Settle, check both links, pause 1 s, settle, check
-  both links again. The bound is 30 failed rounds, and each settle has its
+  both links again. The bound is today's `-gt 30`, which allows 31 failed
+  rounds; the spec's "30" was a rounding of that (Codex). Each settle has its
   own 120 s timeout. The "never appeared" message is unchanged.
 - **D2.** `check_free_partitions` refuses a link that does not resolve to a
   block device. After a link's parent check passes, it records that link's
@@ -33,6 +34,9 @@ followed without them.
 - **D3.** `wipefs -a "$free_esp_real" "$free_root_real"`, not the
   `by-partlabel` links.
 - **D4.** `udevadm settle` before the post-build `check_disks`, in both modes.
+  **A failed settle refuses**, with its own message. It is not `|| true`:
+  that would let disko run on links still changing, which is what D4
+  exists to prevent (Codex).
 - **D5.** Every exit gets a message, listed in step 1. Each goes to stderr
   with the `nixarchy-install:` prefix.
   - The `check_free_partitions` and `wipefs` messages are followed by L2:
@@ -158,11 +162,12 @@ exists. Otherwise it prints the path unchanged with exit 0, which is how GNU
 
   ```bash
   # wipefs's close and the build leave udev events queued; check settled links.
-  udevadm settle || true
+  udevadm settle || {
+    rm -f /tmp/nixarchy-luks.key
+    echo "nixarchy-install: udevadm settle did not finish after the disko build. Nothing was formatted; start again." >&2
+    return 1
+  }
   ```
-
-  A failed settle does not refuse anything by itself; the checks after it
-  decide.
 - **D5, LUKS key write `:1969-1972`.** Inside the existing `|| { … }`, before
   `return 1`:
 
@@ -232,26 +237,40 @@ exists. Otherwise it prints the path unchanged with exit 0, which is how GNU
     `eval "$(declare -f check_free_partitions | sed '1s/check_free_partitions/real_check_free_partitions/')"`;
   - define a `check_free_partitions` that calls
     `failed "check_free_partitions ran before the late re-read settled"`
-    unless `late=0`, `due=0`, and `esp` and `root` both exist, then calls
-    `real_check_free_partitions`.
+    unless `late=0`, `due=0`, and `esp` and `root` both exist;
+  - after that assertion, the wrapper resets the model
+    (`late=0 due=0; touch esp root`), then calls
+    `real_check_free_partitions`. Without the reset, a break that leaves
+    `late=1` makes every later case fail too, and the break's output no longer
+    names the one case it should (agy).
 
   Every existing `partition_free_space` case then also runs the model. The
   `ok free-space …` line stays, with a new `ok` line for the re-read.
-- **Message cases**, one per row. Each makes the call fail, asserts
-  `exit 1`, and runs `grep -F` for the call and its target:
+- **Message cases**, one per row.
+  - Each runs the call with `>out 2>err` and asserts exit 1.
+  - Each asserts that `grep -F` finds the whole line, prefix included, in
+    `err`. So a message moved to stdout or stripped of its `nixarchy-install:`
+    prefix turns the case red (Codex).
+  - Where the row says + L2, the case also greps `err` for L2.
 
-  | # | how it is made to fail | `grep -F` |
+  | # | how it is made to fail | line in `err` |
   |---|---|---|
-  | a | `readlink` returns 1 for `/dev/a`, `check_disks` | `could not resolve /dev/a. Nothing further was formatted` |
-  | b | the `lsblk` stub returns 1 for `WWN` (`TYPE` still `disk`) | `lsblk could not read the WWN, serial, size or model of /dev/a` |
-  | c | `device=/dev/by-id-a`; `readlink` returns 1 for it alone, so `check_disks` on `/dev/a` passes | `could not resolve /dev/by-id-a.` + L2 |
-  | d | `readlink` returns 1 for `/dev/disk/by-partlabel/nixarchy-root` | `could not resolve /dev/disk/by-partlabel/nixarchy-root.` + L2 |
-  | e | `rm -f root` (the link has gone, the directory stays) | `/dev/disk/by-partlabel/nixarchy-root does not point at a block device` |
-  | f | the `PKNAME` stub returns 1 | `lsblk could not read the parent disk of $PWD/node-esp` |
-  | g | the `wipefs` stub returns 3 | `wipefs could not clear $PWD/node-esp and $PWD/node-root (exit 3)` + L2 |
-  | h | `mkdir /tmp/nixarchy-luks.key`; `nix eval` stub prints `true`; `luks_passphrase=secret`; `disk_mode=whole`; `rmdir` afterwards | `could not write the LUKS key file. Nothing was formatted.`, and `disko-ran` absent |
+  | a | `readlink` returns 1 for `/dev/a`, `check_disks` | `nixarchy-install: could not resolve /dev/a. Nothing further was formatted; start again.` |
+  | b | the `lsblk` stub returns 1 for `MODEL`, the last of the four, so the chain is shown reaching it (agy). `TYPE` stays `disk` | `nixarchy-install: lsblk could not read the WWN, serial, size or model of /dev/a. Nothing further was formatted; start again.` |
+  | c | `device=/dev/by-id-a`; `readlink` returns 1 for it alone, so `check_disks` on `/dev/a` passes | `nixarchy-install: could not resolve /dev/by-id-a.` + L2 |
+  | d | `readlink` returns 1 for `/dev/disk/by-partlabel/nixarchy-root` | `nixarchy-install: could not resolve /dev/disk/by-partlabel/nixarchy-root.` + L2 |
+  | e | `rm -f node-root`: the link resolves, but to nothing, and the `PKNAME` stub would still answer `a` | `nixarchy-install: /dev/disk/by-partlabel/nixarchy-root does not point at a block device ($PWD/node-root).` + L2 |
+  | f | the `PKNAME` stub returns 1 | `nixarchy-install: lsblk could not read the parent disk of $PWD/node-esp.` + L2 |
+  | g | the `wipefs` stub returns 3 | `nixarchy-install: wipefs could not clear $PWD/node-esp and $PWD/node-root (exit 3).` + L2 |
+  | h | `mkdir /tmp/nixarchy-luks.key`; the `nix eval` stub prints `true`; `luks_passphrase=secret`; `disk_mode=whole`; `rmdir` afterwards | `nixarchy-install: could not write the LUKS key file. Nothing was formatted.`, and `disko-ran` absent |
+  | i | the `udevadm` stub returns 1 once `events` holds `build` | `nixarchy-install: udevadm settle did not finish after the disko build. Nothing was formatted; start again.`, and `disko-ran` absent |
 
-  Each case restores the stubs and fixture files it changed.
+  - **Why case e removes the node, not the link (agy).** Removing the link
+    leaves the unchanged `by-partlabel` path. The `PKNAME` stub does not know
+    that path, so with the block test dropped the case still refuses, as
+    "does not belong". Removing the node makes the dropped test an
+    acceptance (exit 0), which the exit-status assertion catches.
+  - Each case restores the stubs and fixture files it changed.
 - **wipefs-target case.** The `wipefs` stub writes `"$*"` to `wipefs-args`.
   Assert it equals `-a $PWD/node-esp $PWD/node-root`.
 - **Post-build settle case**, beside "post-build parent refusal prevents
@@ -261,8 +280,10 @@ exists. Otherwise it prints the path unchanged with exit 0, which is how GNU
   - wrap `check_disks` (eval-rename, as above) to append `check`, then call
     the real one;
   - run `format_disk` with `disk_mode=whole`;
-  - assert the three lines from `build` onward are `build`, `settle`,
-    `check`.
+  - assert the three lines from `build` onward
+    (`sed -n '/^build$/,$p' events`) are `build`, `settle`, `check`. Do not
+    compare the whole file: `check_disks` also runs at `:1884`, before the
+    build (agy).
 - **Verify:**
 
   ```bash
@@ -303,17 +324,31 @@ each break landed with `git diff` before reading the result. Each must make
 4. `! [ -b "$real" ]` dropped → case e;
 5. `wipefs -a "$esp_dev" "$root_dev"` restored → the wipefs-target case;
 6. D4's settle dropped → the post-build settle case;
-7. one message reverted (case f's) → case f.
+7. one message reverted (case f's) → case f;
+8. D4's refusal replaced by `|| true` → case i.
 
 Each failing output goes in the PR.
 
 ### 5. Probe on the branch's own loop (lead)
 
-Point `/mnt/data/vmtest/probe-1725/flake.nix` at the branch's text, extracted
-from `installer/install.sh` with
-`sed -n '/^partition_free_space()/,/^}/p'`. Run three iterations once, in a VM
-slot (step 6's gate). Expected: 0 failed rounds of 1,200. `run4.log` is the
-before.
+The probe runs an inline snippet against `/dev/vdb`, not the whole function.
+`partition_free_space` needs `free_space_possible`, `check_disks` and the
+wizard's variables, so it cannot run alone (agy).
+
+- Replace the probe's copy of the loop with the loop from the branch's
+  `installer/install.sh`. Extract the function first, then the loop inside
+  it:
+
+  ```bash
+  sed -n '/^partition_free_space()/,/^}/p' installer/install.sh | sed -n '/^  waited=0$/,/^  done$/p'
+  ```
+
+- Set `esp_dev` and `root_dev` to the two `by-partlabel` paths.
+- Prove the extract is non-empty, and contains `sleep 1 && udevadm settle`,
+  before booting.
+- Run three iterations once, in a VM slot (step 6's gate).
+
+Expected: 0 failed rounds of 1,200. `run4.log` is the before.
 
 ### 6. Local checks before push (lead, §6 tiers)
 
@@ -349,7 +384,7 @@ before.
 
 | check | expected |
 |---|---|
-| `installer-disk-identity` | green, and red under each of step 4's seven breaks |
+| `installer-disk-identity` | green, and red under each of step 4's eight breaks |
 | probe (step 5) | 0 of 1,200 rounds fail |
 | `free-space`, `install`, `installer-refusal` | green locally |
 | cheap tier | green |

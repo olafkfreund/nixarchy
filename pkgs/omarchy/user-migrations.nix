@@ -27,8 +27,17 @@ runCommand "nixarchy-user-migrations"
           test -f "$script"
           ;;
         port)
-          script=${omarchy}/bin/omarchy-migrate-dictation-default
-          test -f "$script"
+          case $id in
+            1791479273)
+              script=${omarchy}/bin/omarchy-migrate-dictation-default
+              test -f "$script"
+              ;;
+            1787481315)
+              script=$out/scripts/$id.sh
+              cp ${./user-migrations/1787481315.sh} "$script"
+              ;;
+            *) echo "no port defined for $id" >&2; exit 1 ;;
+          esac
           ;;
         edited)
           script=$out/scripts/$id.sh

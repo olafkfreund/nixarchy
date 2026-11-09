@@ -84,7 +84,7 @@ let
     read -r go < /dev/ttyS0
     step HANDSHAKE test "$go" = GO
     step UEFI test -d /sys/firmware/efi
-    step SHARE test -r /mnt/share/install-path
+    step SHARE test -r /run/stockshare/install-path
 
     # DNS is supplied by the server's DHCP; these names are also pinned here
     # so the cache probes cannot silently escape the two-machine test network.
@@ -93,13 +93,15 @@ let
     printf '%s\n' '192.168.1.1 cache.nixos.org nixarchy.cachix.org hyprland.cachix.org' >> /tmp/stock-hosts
     rm /etc/hosts
     cp /tmp/stock-hosts /etc/hosts
-    SSL_CERT_FILE=/mnt/share/ca.pem
-    NIX_SSL_CERT_FILE=/mnt/share/ca.pem
+    SSL_CERT_FILE=/run/stockshare/ca.pem
+    NIX_SSL_CERT_FILE=/run/stockshare/ca.pem
     NIX_CONFIG='require-sigs = false
-    ssl-cert-file = /mnt/share/ca.pem'
+    ssl-cert-file = /run/stockshare/ca.pem'
     export SSL_CERT_FILE NIX_SSL_CERT_FILE NIX_CONFIG
 
-    step CACHE nix copy --from https://nixarchy.cachix.org --no-check-sigs "$(cat /mnt/share/install-path)"
+    # The flag a user types on a stock ISO (docs/manual/the-iso.md); not NIX_CONFIG,
+    # which would also cover a nix call inside the installer that lacks its own.
+    step CACHE nix --extra-experimental-features 'nix-command flakes' copy --from https://nixarchy.cachix.org --no-check-sigs "$(cat /run/stockshare/install-path)"
     started=$(date +%s)
     (while [ ! -s /var/log/nixarchy-install.log ]; do sleep 1; done
      first=$(date +%s)
@@ -115,7 +117,7 @@ let
     # The installer writes progress to its own log. Forward it so a stall has
     # a visible phase, while the exit marker comes from the command itself.
     (tail -F /var/log/nixarchy-install.log > /dev/ttyS0 2>/dev/null &)
-    step INSTALLED "$(cat /mnt/share/install-path)"/bin/nixarchy-install --answers /mnt/share/answers
+    step INSTALLED "$(cat /run/stockshare/install-path)"/bin/nixarchy-install --answers /run/stockshare/answers
     kill "$monitor"
     echo "PEAK-$(cat /tmp/stock-peak)-X" > /dev/ttyS0
     step HOST test -d /mnt/etc/nixos/hosts/stocktest
@@ -233,11 +235,13 @@ pkgs.testers.runNixOSTest {
         # ttyS0; this keeps the ISO and its boot parameters untouched.
         stock.wait_for_text(r"nixos@nixos|nixos.*login", timeout=900)
         print(f"stock ISO reached login in {time.monotonic() - started:.1f}s")
-        stock.send_chars("sudo mkdir -p /mnt/share\n")
+        # Not under /mnt: the installer mounts the new root there, which hides
+        # the share and the CA its caches need (INSTALLED-1-X, #1712).
+        stock.send_chars("sudo mkdir -p /run/stockshare\n")
         time.sleep(2)
-        stock.send_chars("sudo mount -t 9p -o trans=virtio stockshare /mnt/share\n")
+        stock.send_chars("sudo mount -t 9p -o trans=virtio stockshare /run/stockshare\n")
         time.sleep(4)
-        stock.send_chars("sudo bash /mnt/share/drive\n")
+        stock.send_chars("sudo bash /run/stockshare/drive\n")
         # Wait for the step's marker with any exit code, then read the code: waiting
         # for -0- alone turns a failing step into a bare timeout (tests/AGENTS.md).
         def step_ok(tag, timeout):

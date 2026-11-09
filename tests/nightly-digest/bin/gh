@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Serves jobs.json and annotations-<id>.json from the case directory.
+set -eu
+if [ -n "${STUB_GH_FAIL:-}" ]; then echo "gh: HTTP 502" >&2; exit 1; fi
+[ "$1" = api ] || exit 2
+shift
+if [ "$1" = --paginate ]; then shift; fi
+case $1 in
+  */jobs) cat "$STUB_CASE/jobs.json" ;;
+  */annotations)
+    id=${1%/annotations}
+    cat "$STUB_CASE/annotations-${id##*/}.json" ;;
+  *) echo "gh stub: unexpected $1" >&2; exit 2 ;;
+esac

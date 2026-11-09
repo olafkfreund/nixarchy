@@ -8,6 +8,12 @@ if ! git diff --quiet HEAD || ! git diff --cached --quiet || [ -n "$untracked" ]
   exit 2
 fi
 
+shallow=$(git rev-parse --is-shallow-repository) || exit 1
+if [ "$shallow" != false ]; then
+  echo 'commit-independent: shallow clone; fetch full history (actions/checkout fetch-depth: 0)' >&2
+  exit 2
+fi
+
 scratch_root=${RUNNER_TEMP:-/mnt/data/vmtest}
 if [ ! -d "$scratch_root" ]; then
   echo "commit-independent: scratch directory missing: $scratch_root" >&2

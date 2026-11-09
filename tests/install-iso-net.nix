@@ -101,6 +101,8 @@ let
         step() {
           tag=$1
           shift
+          # Said before the command runs, so a hang in it reads apart from a script that never started (#1604).
+          echo "$tag-START" > /dev/ttyS0
           "$@" > /tmp/out 2>&1
           rc=$?
           cat /tmp/out > /dev/ttyS0

@@ -2371,6 +2371,11 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          osaka-jade-theme = import ./tests/osaka-jade-theme.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           home-manager-writers = import ./tests/home-manager-writers.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
@@ -2461,6 +2466,16 @@
           # #1384: a failed build job ends with the failing check and its error.
           # See tests/failure-digest.nix.
           failure-digest = import ./tests/failure-digest.nix {
+            pkgs = pkgsFor.${system};
+          };
+          # #1711: a failed nightly's issue carries the failing log's excerpt.
+          # See tests/nightly-digest.nix.
+          nightly-digest = import ./tests/nightly-digest.nix {
+            pkgs = pkgsFor.${system};
+          };
+          # #1719: commit-independent.sh refuses a shallow clone.
+          # See tests/commit-independent-shallow.nix.
+          commit-independent-shallow = import ./tests/commit-independent-shallow.nix {
             pkgs = pkgsFor.${system};
           };
           panel-loaders = import ./tests/panel-loaders.nix {

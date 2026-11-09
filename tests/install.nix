@@ -648,6 +648,7 @@ pkgs.testers.runNixOSTest {
     # /etc/nixarchy among the generated symlinks.
     target.succeed("test -f /var/lib/nixarchy/password.hash")
     target.fail("grep -rq '[$]6[$]' /etc/nixos")
+    target.succeed("grep -qw sysrq_always_enabled /proc/cmdline")
     print("the hash survived the boot, and the repo is still clean of it")
 
     # ---- the flake on disk is the user's -------------------------------

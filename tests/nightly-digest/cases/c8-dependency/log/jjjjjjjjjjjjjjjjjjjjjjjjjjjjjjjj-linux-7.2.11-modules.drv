@@ -1,0 +1,2 @@
+error: builder for '/nix/store/jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj-linux-7.2.11-modules.drv' failed with exit code 2
+linux-7.2.11-modules> conflicting subpath in the module tree

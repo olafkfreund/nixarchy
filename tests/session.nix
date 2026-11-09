@@ -134,7 +134,7 @@ let
     elif action == "terminal":
         reply = subprocess.check_output([
             "hyprctl", "dispatch",
-            "hl.dsp.exec_cmd(\"xdg-terminal-exec -e sh -c 'cat > /tmp/typed'\")"
+            "hl.dsp.exec_cmd(\"xdg-terminal-exec -e sh -c 'stty -icanon min 1 time 0; exec cat > /tmp/typed'\")"
         ], text=True).strip()
         assert reply == "ok", "terminal dispatch: " + reply
     else:
@@ -3384,16 +3384,21 @@ pkgs.testers.runNixOSTest {
                 "the new typing terminal never took focus; focused: " + repr(win.get("class")))
             time.sleep(0.5)
 
-    # Return only commits Mozc's and Chewing's conversion: the first ctrl-d hands
-    # cat the unterminated line, the second ends it.
+    # Return commits Mozc's and Chewing's conversion. Committed text and raw keys
+    # are not ordered against each other, so the terminal is non-canonical (each
+    # byte lands at once), newlines are ignored, and ctrl-c ends it (#1715).
     def finish_typing(keys, expected, label):
+        import time
         machine.send_chars(keys)
         machine.send_key("ret")
-        machine.send_key("ctrl-d")
-        machine.send_key("ctrl-d")
-        typed = machine.wait_until_succeeds("test -s /tmp/typed && cat /tmp/typed", timeout=30)
-        assert typed.rstrip("\n") == expected, (
-            f"{label}: expected {expected!r}, got {typed.rstrip(chr(10))!r}")
+        deadline = time.monotonic() + 30
+        while machine.succeed("cat /tmp/typed").replace("\n", "") != expected:
+            if time.monotonic() > deadline:
+                break
+            time.sleep(0.5)
+        machine.send_key("ctrl-c")
+        typed = machine.succeed("cat /tmp/typed").replace("\n", "")
+        assert typed == expected, f"{label}: expected {expected!r}, got {typed!r}"
 
     # The new terminal has no input context until it is focused, and a picker
     # apply restarts fcitx5: retry until the focused context holds the method.
@@ -3428,7 +3433,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed(desktop_user("omarchy-input-method cycle"))
     machine.wait_until_succeeds(desktop_user(
         "test $(fcitx5-remote -n) != " + before), timeout=30)
-    machine.send_key("ctrl-d")
+    machine.send_key("ctrl-c")
     print("#1614: the shell input reader cycles the focused terminal")
 
     input_driver("keyboard", "de")
@@ -3477,7 +3482,7 @@ pkgs.testers.runNixOSTest {
     # fcitx5-remote -n is empty until something focused has an input context.
     open_typing_terminal()
     select_method("mozc")
-    machine.send_key("ctrl-d")
+    machine.send_key("ctrl-c")
     print("#1614: picking Mozc replaces a stale addon-less unit")
 
     machine.succeed(desktop_user(unitctl + "stop omarchy-fcitx5"))

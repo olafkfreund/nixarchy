@@ -106,7 +106,10 @@ let
   etcInstrumentation = ''
     { modulesPath, lib, ... }:
     {
-      imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
+      imports = [
+        "''${modulesPath}/testing/test-instrumentation.nix"
+        { boot.kernelParams = [ "sysrq_always_enabled" ]; }
+      ];
       ${extraInstrumentationText}
     }
   '';

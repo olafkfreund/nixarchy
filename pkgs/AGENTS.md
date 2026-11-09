@@ -665,9 +665,7 @@ means tidy up, not a broken build. It measures only this phase, and it
 retires itself, failing with a message that says so, if the package ever
 moves to `__structuredAttrs`, which takes the phase out of the environment
 and the limit with it. The budget is one line in
-`tests/install-phase-budget.nix`. The figure moves by 12 bytes with git
-state, because `nixarchyRev` is spliced in twice and a dirty tree adds
-`-dirty` to each.
+`tests/install-phase-budget.nix`.
 
 ## The web-app keybinding upstream breaks, and the one-word fix
 
@@ -914,6 +912,8 @@ printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-inden
 
 ## Panel loaders survive a plugin change (#1155)
 
+**Retired 2026-10-21** with the move to Omarchy v4.5 (#1405, 2cd3c23), which carries both upstream. What follows is history.
+
 The Instantiator rebuilt every panel -- not just the changed
 one -- because `#901`'s fix above only stopped the fan-out that
 ANY save caused; a REAL plugin change still handed
@@ -981,6 +981,8 @@ carried at the owner's request until `omacom/omarchy` fixes the
 same handler. `--fuzz=0`, so a reworded handler fails this build.
 
 ## Video and GIF desktop backgrounds, backported onto v4.0.4 (#1153)
+
+**Retired 2026-10-21** with the move to Omarchy v4.5 (#1405, 2cd3c23), which carries both upstream. What follows is history.
 
 `1153-owe-video-backgrounds.patch` squashes two upstream pull requests --
 omacom/omarchy #6792 ("Add native video wallpaper support") and #12429
@@ -1230,6 +1232,7 @@ exactly that reason.
 Getting a command name wrong here fails SAFE: the row simply
 never ticks, which reads as "that agent is not installed".
 The direction that would matter -- ticking for an agent that
+is absent -- is the one this loop exists to prevent.
 
 <a id="omarchy-agent-gets-antigravity"></a>
 ## omarchy-agent gets Antigravity (#1398)
@@ -1368,6 +1371,19 @@ The patch uses /run/wrappers/bin first, then the system profile: the same two di
 
 New in 4.0.3, and `checks.session` caught it. That check scans every shipped command for /usr and is the reason this is a patch rather than a surprise on somebody's laptop.
 
+<a id="osaka-jade-is-bundled-again-1698"></a>
+
+## Osaka Jade is bundled again (#1698)
+
+Upstream dropped Osaka Jade in a1ea6096d, leaving a staged copy usable but no
+source for refresh or re-selection (#1698). The package pins
+`omacom/omarchy-osaka-jade-theme` and adds it to the packaged themes tree.
+Treat it as an installed theme: `bin/omarchy-theme-set:25-35,290-294` excludes
+all `*.lua`, `alacritty.toml`, `foot.ini`, `ghostty.conf`, `kitty.conf`,
+`vscode.json`, and symlinks. Refresh the pin by hand because the nightly reviews
+`flake.lock`, not `fetchFromGitHub` revisions; inspect and refilter the new tree.
+If upstream bundles it again, the collision refusal signals dropping this carry.
+
 ## User-file migrations (#1610)
 
 Omarchy's migrations are not run here (`omarchy-migrate` is a refusal), so a
@@ -1403,6 +1419,10 @@ Every migration that touches a user's files has a decision in
 `checks.user-migrations` compares the port with upstream's own scripts run on
 the same fixtures, through a stub of the shell's IPC; `checks.plugin` runs it
 against the real shell.
+
+1787481315 is the second port, re-staging a repository-installed theme once
+(#1705). It uses nixarchy's own script because activation repairs vanished
+themes, and its refresh must reach only repository-installed themes.
 
 ## Notification history keeps text for the newest rows (#1663)
 
@@ -1442,3 +1462,44 @@ before closing windows, so a refused polkit request leaves the session intact
 `checks.session` probes denial, timeout and success for both verbs.
 Drop the patch when omacom/omarchy authorises before closing windows and
 reports a timed-out dialog; `--fuzz=0` will catch changed upstream context.
+
+<a id="speaker-tuning-execstart"></a>
+## Speaker tuning's unit names `/run/current-system/sw`
+
+Every unit in default/systemd/user has ExecStart=/usr/bin/..., and one
+of them is not a dead file: `omarchy-audio-tuning` installs
+omarchy-speaker-tuning.service from there into ~/.config/systemd/user
+every time the tuning is switched on, so that /usr path travels out of
+the store and into a real unit. systemd requires an absolute ExecStart,
+so there is nothing to fall back to on PATH -- the service would fail to
+start with status=203/EXEC and the tuning would never appear.
+
+/run/current-system/sw rather than pipewire's store path, for the same
+reason install/user/xcompose.sh points at /etc: what this writes into
+$HOME outlives the generation that wrote it, and a store path would go
+stale the first time that generation was collected, taking the
+already-installed tuning down with it. pipewire is deliberately not a
+dependency of this package either -- it is the audio daemon the running
+system provides, and services.pipewire.enable is what puts it there.
+
+<a id="onepassword-extension-dir"></a>
+## 1Password's Chromium extension is a NixOS option
+
+1Password's Chromium extension, installed the way NixOS installs one.
+
+Upstream drops a JSON stub into /usr/share/chromium/extensions with sudo,
+which Chromium reads on startup. That directory is in the store here and
+the write simply fails. NixOS has the same feature as an option, so the
+answer is to name it rather than to find somewhere writable to imitate it.
+
+echo lines rather than the heredoc this was first written as. A heredoc
+terminator has to sit at column 0 of the generated script, and this text
+is indented twice over -- once as an indented Nix string and once as the
+body of a shell function -- so bash never found EXTMSG and the whole
+script stopped parsing:
+
+  syntax error: unexpected end of file
+
+substituteInPlace cannot see that and neither can the build: the
+installer was a syntax error for as long as this patch existed. `bash -n`
+over the patched bins is what catches this class, and nothing else does.

@@ -585,6 +585,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Why: .github/scripts/commit-independent.sh refuses a shallow clone (#1719).
+          fetch-depth: 0
       - uses: ./.github/actions/setup-nix
       - uses: cachix/cachix-action@v17
         continue-on-error: true
@@ -597,6 +600,28 @@ jobs:
       - name: A commit that changes nothing built preserves every check proof
         run: .github/scripts/commit-independent.sh
 
+  digest:
+    runs-on: [self-hosted, nixos, kvm, big]
+    needs: [install, install-encrypted, keyboard-boot, install-iso-net, microvm, cache, repush, canary, pkg-new, commit-independent]
+    # See report's comment below for why this condition includes cancelled jobs.
+    if: >-
+      always() && (contains(join(needs.*.result, ','), 'failure')
+      || contains(join(needs.*.result, ','), 'cancelled'))
+    permissions: { contents: read, actions: read }
+    outputs:
+      text: ${{ steps.digest.outputs.text }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - id: digest
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: nix shell --inputs-from . nixpkgs#gh nixpkgs#jq nixpkgs#yq-go -c .github/scripts/nightly-digest.sh
+
   report:
     name: report a failure
     runs-on: ubuntu-26.04
@@ -607,7 +632,7 @@ jobs:
     # dependencies, and reported SUCCESS. The encrypted install is the DEFAULT
     # answer to the installer's own question, and it was the one failure that
     # filed no issue.
-    needs: [install, install-encrypted, keyboard-boot, install-iso-net, microvm, cache, repush, canary, pkg-new, commit-independent]
+    needs: [install, install-encrypted, keyboard-boot, install-iso-net, microvm, cache, repush, canary, pkg-new, commit-independent, digest]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -642,6 +667,8 @@ jobs:
           # which is the worst place for this bug to have been.
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DIGEST: ${{ needs.digest.outputs.text }}
+          DIGEST_RESULT: ${{ needs.digest.result }}
         run: |
           # WHICH nightly broke. The title is the issue's identity -- it is what
           # the dedupe below searches on -- so a cache failure filed under "the
@@ -714,6 +741,12 @@ jobs:
           /mnt/games/nix-build and /. A VM test that runs out of room does not
           fail cleanly, it wedges."
           fi
+          if [ -z "$DIGEST" ]; then
+            DIGEST="Digest unavailable (digest job: $DIGEST_RESULT)."
+          fi
+          body="$body
+
+          $DIGEST"
           existing=$(gh issue list --state open --search "$title in:title" \
             --json number --jq '.[0].number // empty')
           # A milestone on both paths: the review's board row flags any open
@@ -721,7 +754,9 @@ jobs:
           milestone="Keeping the lights on"
           if [ -n "$existing" ]; then
             gh issue edit "$existing" --milestone "$milestone"
-            gh issue comment "$existing" --body "Still failing ($what): $RUN"
+            gh issue comment "$existing" --body "Still failing ($what): $RUN
+
+          $DIGEST"
           else
             gh issue create --title "$title" "${labels[@]}" --milestone "$milestone" --body "$body"
           fi

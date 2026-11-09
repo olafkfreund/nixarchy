@@ -1879,7 +1879,7 @@ partition_free_space() {
 # this disk's free-space install into a wipe of another disk's partition.
 check_free_partitions() {
   local part real parent selected why=
-  free_esp_real= free_root_real=
+  free_esp_real='' free_root_real=''
   check_disks || return 1
   if ! selected=$(readlink -f "$device"); then
     why="could not resolve $device."

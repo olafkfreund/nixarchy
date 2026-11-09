@@ -105,7 +105,7 @@ exists. Otherwise it prints the path unchanged with exit 0, which is how GNU
   ```bash
   check_free_partitions() {
     local part real parent selected why=
-    free_esp_real= free_root_real=
+    free_esp_real='' free_root_real=''
     check_disks || return 1
     if ! selected=$(readlink -f "$device"); then
       why="could not resolve $device."
@@ -297,6 +297,16 @@ exists. Otherwise it prints the path unchanged with exit 0, which is how GNU
   - a hook may run `nixpkgs-fmt`, so run `nix fmt` and read
     `git diff --stat` (§5);
   - no `| grep -q`.
+
+**Deviations found while implementing:**
+
+- **`tests/installer-store-space.nix` gains a `udevadm` stub.** It sources
+  the real `format_disk` with no `udevadm` on its path, so D4's settle
+  refused there.
+- **The globals are reset as `free_esp_real='' free_root_real=''`.** The
+  form without quotes fails shellcheck SC1007 in the installer package.
+- **`failed` writes to fd 3.** A failure raised inside a call redirected to
+  `msg` (the re-read wrapper) then still reaches the log.
 
 ### 3. `installer/AGENTS.md`: D7 (coder: coder, same agent)
 

@@ -51,7 +51,11 @@ let
   # twenty-second evaluation would become a full system build of a package set
   # nothing here has cached -- which is precisely the install-slot cost this
   # check exists to avoid.
-  toplevel = builtins.unsafeDiscardStringContext cfg.system.build.toplevel.drvPath;
+  # The store name, not the hash: the hash follows the source tree through
+  # the VM's activation script, which this check is not about (#1727).
+  toplevel = builtins.substring 44 (-1) (
+    builtins.unsafeDiscardStringContext cfg.system.build.toplevel.drvPath
+  );
 
   release = stableVm.pkgs.lib.trivial.release;
 
@@ -100,15 +104,16 @@ pkgs.runCommand "nixarchy-stable-eval"
     # inputs came back empty satisfies every comparison below while proving
     # nothing. tests/reference-initrd.nix refuses for the same reason.
     case "$toplevel" in
-      /nix/store/*-nixos-system-*.drv) ;;
-      *)
-        echo "::error::the stable toplevel is not a system derivation path:" >&2
-        echo "  '$toplevel'" >&2
-        echo "  This check cannot answer anything and is refusing rather" >&2
-        echo "  than passing." >&2
-        exit 1
-        ;;
+      */*) ;;
+      nixos-system-?*.drv) toplevel_ok=1 ;;
     esac
+    [ "''${toplevel_ok:-}" = 1 ] || {
+      echo "::error::the stable toplevel is not a system derivation name:" >&2
+      echo "  '$toplevel'" >&2
+      echo "  This check cannot answer anything and is refusing rather" >&2
+      echo "  than passing." >&2
+      exit 1
+    }
 
     if [ "$release" != "${cfg.system.nixos.release}" ]; then
       echo "::error::the evaluated release ($release) is not the one the" >&2

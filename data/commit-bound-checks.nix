@@ -12,6 +12,7 @@
   iso-wifi = "installer/cd.nix inputSources collects the source commit";
   iso-budget = "installer/cd.nix inputSources collects the source commit";
   install-iso-net = "installer/cd.nix inputSources collects the source commit";
+  install-stock-iso = "tests/install-stock-iso.nix:15 collects inputSources, which starts with the source tree, into the cache it installs from offline";
   installer-lock = "installer/mkFlake.nix:22 pins self.rev";
   nixarchy-options = "tests/nixarchy-options.nix asserts the real rev";
   options-files = "vm/configuration.nix:173 writes path: plus inputs.self into the VM's generated flake (owner, 2026-11-08: evaluation only, so it stays commit-bound)";

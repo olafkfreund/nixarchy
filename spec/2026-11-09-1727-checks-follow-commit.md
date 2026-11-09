@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1727
 intent: intent/2026-11-09-1727-checks-follow-commit.md
 ---
@@ -215,3 +215,8 @@ step 2's drvPath comparison.
    runner.
 7. **After merge:** the next nightly's `commit-independent` is green, and
    #1685 closes.
+
+## Decisions (owner, 2026-11-09)
+
+- Approved with the recommendations.
+- D4: option (a). `install-stock-iso` is listed in `data/commit-bound-checks.nix` with the `inputSources` reason. It is the one installer check listed, by your ruling, because its offline cache must carry the real source tree.

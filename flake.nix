@@ -1824,6 +1824,8 @@
             # A hung install-target boot fails fast with a monitor dump (#1594). Needs KVM.
             "boot-hang-detect"
             "branch-guard"
+            # The cargo carry, against stand-in nixpkgs sets (#1722). See tests/cargo-system-libs.nix.
+            "cargo-system-libs"
             # Boots the Omarchy session on a machine whose hyprland.lua belongs to
             # somebody else -- the case the session entry exists for.
             "coexist"

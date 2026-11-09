@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1725
 spec: spec/2026-11-09-1725-free-space-silent-exit.md
 coders:

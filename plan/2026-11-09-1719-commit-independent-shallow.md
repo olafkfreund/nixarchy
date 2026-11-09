@@ -44,7 +44,9 @@ reviewers:
      which always passes in a linked worktree.
    - `!= false`: anything but `false` refuses.
    - Exit 2 is "this tree cannot be measured", as for a dirty tree.
-   - Captured, then tested (CLAUDE.md §5: `set -e` does not reach `$(...)`).
+   - Captured, then tested, with `|| exit 1`. A failed `rev-parse` then
+     exits 1, rather than leaving `shallow` empty. An empty answer would
+     also refuse, through `!= false`, but with the wrong message.
 3. **`checks.commit-independent-shallow`** (`tests/commit-independent-shallow.nix`).
    It is a `runCommand` with `bash`, `git` and `coreutils`, and a stub `nix`
    on `PATH` that writes a marker file and exits 1.
@@ -75,8 +77,13 @@ reviewers:
 
 1. **`.github/scripts/commit-independent.sh`**: decision 2 (Codex).
    - Verify: `bash -n .github/scripts/commit-independent.sh`; then, by hand,
-     `git clone -q --depth 1 file://$PWD /mnt/data/vmtest/shallow1719` and
-     run the script there: exit 2 with the message. Remove the clone with
+     `git clone -q --depth 1 file://$PWD /mnt/data/vmtest/shallow1719` and,
+     from inside the clone, run the edited script by path:
+     `(cd /mnt/data/vmtest/shallow1719 && bash "$OLDPWD/.github/scripts/commit-independent.sh")`.
+     Expect exit 2 with the message.
+     - The clone holds committed `HEAD`, without the uncommitted edit.
+     - Copying the script into the clone would make it dirty, so it would
+       refuse on that first (agy review). Remove the clone with
      `rm -rf -- /mnt/data/vmtest/shallow1719` (a literal path).
    - Traps: no other line moves; the message is exactly the one in decision
      2, because step 2 matches it.

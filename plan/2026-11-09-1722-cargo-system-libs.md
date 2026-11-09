@@ -38,6 +38,16 @@ reviewers:
    `final: prev: {`, and the closing `};` of that attribute set (`:1338`; nothing in it defines `codex` or `omp`) becomes
    `} // (import ./pkgs/cargo-system-libs.nix { inherit (prev) lib; inherit prev; }).packages;`.
    Nothing else in the overlay changes.
+   - **Deviation (implementation, 2026-11-09).** Written as planned, the
+     `} // …` (and any `… // {` head) makes nixfmt re-indent the whole
+     overlay body: 712 lines of noise (CLAUDE.md §5). Instead, the attrset is
+     renamed `overlays.nixarchy`, with its body byte-identical, and
+     `overlays.default = lib.composeExtensions self.overlays.nixarchy (_final: prev: (import ./pkgs/cargo-system-libs.nix { … }).packages);`.
+     - `overlays.default` means what the plan said: the overlay plus the
+       carry, with the carry seeing `prev`.
+     - The cost is one new flake output, `overlays.nixarchy`. Nothing
+       enumerates `overlays`: a grep of `tests/`, `.github/` and
+       `docs/internals/flake.md` finds no reader.
 2b. **The consumers the overlay does not reach** (revision, 2026-11-09:
    Codex's read of this plan; owner: implement now, not wait).
    - **Why they are missed.** The overlay sits only in `pkgsFor`

@@ -32,7 +32,10 @@
   imports = [ ./agent.nix ];
 
   environment.systemPackages = [
-    pkgs.codex
+    (import ../../../pkgs/cargo-system-libs.nix {
+      inherit lib;
+      prev = pkgs;
+    }).packages.codex or pkgs.codex
     pkgs.opencode
   ]
   ++ lib.optional (builtins.tryEval pkgs.claude-code.outPath).success pkgs.claude-code;

@@ -972,7 +972,7 @@
       ownLock = builtins.fromJSON (builtins.readFile ./flake.lock);
     in
     {
-      overlays.default = final: _prev: {
+      overlays.nixarchy = final: _prev: {
 
         # nixarchy-doctor and nixarchy-verify live here rather than only under
         # `packages` so the module can install them. A module cannot take them
@@ -1336,6 +1336,17 @@
             $out/share/plymouth/themes/omarchy
         '';
       };
+
+      # The overlay above, plus the cargo carry, which must see `prev` and not
+      # sit inside that attrset (nixfmt would reindent all of it).
+      # Why: pkgs/AGENTS.md#cargo-system-libs-1722
+      overlays.default = lib.composeExtensions self.overlays.nixarchy (
+        _final: prev:
+        (import ./pkgs/cargo-system-libs.nix {
+          inherit (prev) lib;
+          inherit prev;
+        }).packages
+      );
 
       packages = eachSystem (
         system:

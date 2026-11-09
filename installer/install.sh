@@ -909,16 +909,22 @@ check_disks() {
   fi
   for i in "${!disk_paths[@]}"; do
     path=${disk_paths[$i]}
-    real=$(readlink -f "$path") || return 1
+    real=$(readlink -f "$path") || {
+      echo "nixarchy-install: could not resolve $path. Nothing further was formatted; start again." >&2
+      return 1
+    }
     if [ "$real" != "${disk_reals[$i]}" ] ||
       [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" != disk ]; then
       echo "nixarchy-install: $path changed or vanished. Nothing further was formatted; start again." >&2
       return 1
     fi
-    wwn=$(lsblk -dnro WWN "$real" 2>/dev/null) || return 1
-    serial=$(lsblk -dnro SERIAL "$real" 2>/dev/null) || return 1
-    size=$(lsblk -bdnro SIZE "$real" 2>/dev/null) || return 1
-    model=$(lsblk -dnro MODEL "$real" 2>/dev/null) || return 1
+    { wwn=$(lsblk -dnro WWN "$real" 2>/dev/null) &&
+      serial=$(lsblk -dnro SERIAL "$real" 2>/dev/null) &&
+      size=$(lsblk -bdnro SIZE "$real" 2>/dev/null) &&
+      model=$(lsblk -dnro MODEL "$real" 2>/dev/null); } || {
+      echo "nixarchy-install: lsblk could not read the WWN, serial, size or model of $real. Nothing further was formatted; start again." >&2
+      return 1
+    }
     if [ "$wwn" != "${disk_wwns[$i]}" ] || [ "$serial" != "${disk_serials[$i]}" ]; then
       echo "nixarchy-install: $path has a different WWN or serial. Nothing further was formatted; start again." >&2
       return 1
@@ -1833,9 +1839,12 @@ partition_free_space() {
   # /dev/disk/by-partlabel and those symlinks are udev's work, not the
   # kernel's. Without the wait the disko script runs against paths that do not
   # exist yet.
+  # The new partitions are removed and re-added more than once after sgdisk
+  # (spec/2026-11-09-1725-free-space-silent-exit.md). Settle before looking,
+  # and again after a pause, so the links checked below are the last ones.
   waited=0
-  until [ -b "$esp_dev" ] && [ -b "$root_dev" ]; do
-    udevadm settle
+  until udevadm settle && [ -b "$esp_dev" ] && [ -b "$root_dev" ] &&
+    sleep 1 && udevadm settle && [ -b "$esp_dev" ] && [ -b "$root_dev" ]; do
     waited=$((waited + 1))
     if [ "$waited" -gt 30 ]; then
       echo "nixarchy-install: $esp_dev and $root_dev never appeared." >&2
@@ -1856,28 +1865,43 @@ partition_free_space() {
   # happen, and the install proceeds to mount and write over whatever the
   # previous owner of those sectors left behind.
   #
-  # Only these two paths, and only after the wait above proved they are the
-  # partitions this function just created. wipefs takes a device, and the two
-  # arguments it gets here are the only two devices in this script that are
-  # ours by construction.
-  wipefs -a "$esp_dev" "$root_dev"
+  # Only the two device nodes check_free_partitions just resolved and checked
+  # against the selected disk. The by-partlabel links are global and can change
+  # after that check; a kernel device name cannot move to another disk.
+  wipefs -a "$free_esp_real" "$free_root_real" || {
+    echo "nixarchy-install: wipefs could not clear $free_esp_real and $free_root_real (exit $?)." >&2
+    echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
+    return 1
+  }
 }
 
 # The by-partlabel names are global: a stale or foreign label must not turn
 # this disk's free-space install into a wipe of another disk's partition.
 check_free_partitions() {
-  local part real parent selected
+  local part real parent selected why=
+  free_esp_real= free_root_real=
   check_disks || return 1
-  selected=$(readlink -f "$device") || return 1
-  for part in /dev/disk/by-partlabel/nixarchy-{esp,root}; do
-    real=$(readlink -f "$part") || return 1
-    parent=$(lsblk -nro PKNAME "$real" 2>/dev/null) || return 1
-    if [ -z "$parent" ] || [ "$(readlink -f "/dev/$parent")" != "$selected" ]; then
-      echo "nixarchy-install: $part does not belong to the selected disk." >&2
-      echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
-      return 1
-    fi
-  done
+  if ! selected=$(readlink -f "$device"); then
+    why="could not resolve $device."
+  else
+    for part in /dev/disk/by-partlabel/nixarchy-{esp,root}; do
+      if ! real=$(readlink -f "$part"); then
+        why="could not resolve $part."
+      elif ! [ -b "$real" ]; then
+        why="$part does not point at a block device ($real)."
+      elif ! parent=$(lsblk -nro PKNAME "$real" 2>/dev/null); then
+        why="lsblk could not read the parent disk of $real."
+      elif [ -z "$parent" ] || [ "$(readlink -f "/dev/$parent")" != "$selected" ]; then
+        why="$part does not belong to the selected disk."
+      fi
+      [ -z "$why" ] || break
+      case $part in *-esp) free_esp_real=$real ;; *) free_root_real=$real ;; esac
+    done
+  fi
+  [ -n "$why" ] || return 0
+  echo "nixarchy-install: $why" >&2
+  echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
+  return 1
 }
 
 format_disk() {
@@ -1960,6 +1984,12 @@ format_disk() {
     echo "  Nothing was formatted; the error above this is the one to read." >&2
     return 1
   fi
+  # wipefs's close and the build leave udev events queued; check settled links.
+  udevadm settle || {
+    rm -f /tmp/nixarchy-luks.key
+    echo "nixarchy-install: udevadm settle did not finish after the disko build. Nothing was formatted; start again." >&2
+    return 1
+  }
   check_disks || { rm -f /tmp/nixarchy-luks.key; return 1; }
   if [ "$disk_mode" = free ]; then
     check_free_partitions || { rm -f /tmp/nixarchy-luks.key; return 1; }
@@ -1968,6 +1998,7 @@ format_disk() {
   if [ "$needs_key" = true ]; then
     ( umask 077 && printf '%s' "$luks_passphrase" >/tmp/nixarchy-luks.key ) || {
       rm -f /tmp/nixarchy-luks.key
+      echo "nixarchy-install: could not write the LUKS key file. Nothing was formatted." >&2
       return 1
     }
   fi

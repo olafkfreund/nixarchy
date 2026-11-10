@@ -792,6 +792,13 @@ after `sti; hlt`, which matches `HLT=1`. That implies KASLR offsets of
 `0x0b200000` and `0x3b400000`, both 2 MiB-aligned, so every vCPU was in the
 idle loop's halt.
 
+**End a driver node with `terminate()`, never `kill()`.** Since nixpkgs added
+virtiofs shares, `machine.process` can be `run-virtiofsd-qemu`, which starts
+qemu as a child and forwards SIGTERM to it. A SIGKILL orphans qemu with the
+serial pty open, and the driver's cleanup blocks in `serial_thread.join()`
+until the job's timeout: #1737's `box` job hung 28 minutes after this check's
+script had passed in 99 s. With `terminate()`, cleanup takes 0.2 s on both pins.
+
 SysRq is enabled in the test instrumentation only: `sysrq_always_enabled` on
 the kernel command line (an inline module in `etcInstrumentation`, so the
 shipped `kernel.sysrq=16` is untouched) makes `w` and `t` dump stacks.

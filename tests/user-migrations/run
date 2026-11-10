@@ -705,6 +705,53 @@ case_runner_stop() {
   [[ $(cat "$HOME/order") == $'first\nsecond' ]] || fail 'runner-stop: recovery order wrong'
   [[ -e $OMARCHY_MIGRATION_STATE/100.sh && -e $OMARCHY_MIGRATION_STATE/200.sh ]] || fail 'runner-stop: recovery markers missing'
 }
+case_1794165002() {
+  local mime target
+  case=1794165002
+  setup 1794165002 "$FIXTURE_C"
+  mime=$HOME/.config/mimeapps.list
+  printf '%s\n' '[Default Applications]' 'application/pdf=org.gnome.Evince.desktop' 'text/plain=nvim.desktop' > "$mime"
+  run_ids 1794165002 > "$work/1794165002.out"
+  [[ $(<"$mime") == $'[Default Applications]\napplication/pdf=org.gnome.Papers.desktop\ntext/plain=nvim.desktop' ]] || fail '1794165002: regular file not rewritten exactly'
+
+  setup 1794165002-link "$FIXTURE_C"
+  target=$HOME/dotfiles/mimeapps.list
+  mkdir -p "${target%/*}"
+  printf '%s\n' 'application/pdf=org.gnome.Evince.desktop' > "$target"
+  ln -s "$target" "$HOME/.config/mimeapps.list"
+  run_ids 1794165002 > "$work/1794165002-link.out"
+  [[ -L $HOME/.config/mimeapps.list ]] || fail '1794165002: symlink was replaced'
+  [[ $(<"$target") == 'application/pdf=org.gnome.Evince.desktop' ]] || fail '1794165002: symlink target was edited'
+  grep -F 'left alone' "$work/1794165002-link.out" > /dev/null || fail '1794165002: link message not printed'
+
+  setup 1794165002-none "$FIXTURE_C"
+  run_ids 1794165002 > "$work/1794165002-none.out"
+  [[ ! -e $HOME/.config/mimeapps.list && ! -L $HOME/.config/mimeapps.list ]] || fail '1794165002: created a mimeapps.list'
+  ! grep -F 'left alone' "$work/1794165002-none.out" > /dev/null || fail '1794165002: message with no file'
+
+  setup 1794165002-dangling "$FIXTURE_C"
+  ln -s "$HOME/nowhere" "$HOME/.config/mimeapps.list"
+  run_ids 1794165002 > "$work/1794165002-dangling.out"
+  [[ -L $HOME/.config/mimeapps.list && ! -e $HOME/nowhere ]] || fail '1794165002: dangling link changed'
+  ! grep -F 'left alone' "$work/1794165002-dangling.out" > /dev/null || fail '1794165002: message for a dangling link'
+}
+case_1792902457() {
+  local cfg
+  case=1792902457
+  setup 1792902457 "$FIXTURE_C"
+  cfg=$XDG_CONFIG_HOME/qtengine/config.json
+  : > "$HOME/calls.log"
+  run_ids 1792902457
+  [[ -f $cfg && -w $cfg ]] || fail '1792902457: config not seeded writable'
+  grep -F 'omarchy-theme-refresh' "$HOME/calls.log" > /dev/null || fail '1792902457: theme refresh not called'
+
+  setup 1792902457-own "$FIXTURE_C"
+  cfg=$XDG_CONFIG_HOME/qtengine/config.json
+  mkdir -p "${cfg%/*}"
+  printf '%s\n' '{"mine":true}' > "$cfg"
+  run_ids 1792902457
+  [[ $(<"$cfg") == '{"mine":true}' ]] || fail '1792902457: existing config touched'
+}
 compare_oracle() {
   local fixture=$1
   normalise "$XDG_CONFIG_HOME/omarchy/shell.json" "$work/$case.actual.json"
@@ -802,5 +849,7 @@ case_1680
 case_1681
 case_1671
 case_1672
+case_1794165002
+case_1792902457
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

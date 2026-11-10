@@ -2504,6 +2504,10 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
+          agent-local-detach = import ./tests/agent-local-detach.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
           user-migrations = import ./tests/user-migrations.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

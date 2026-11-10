@@ -298,6 +298,14 @@
       services.openssh.settings.PasswordAuthentication = lib.mkDefault true;
     };
 
+  # nixarchy exports /lib/qt-6/plugins for qtengine (#1736); the qt module adds
+  # the same string. Both must reach the merged list, so a check for one
+  # element would stay green with nixarchy's line removed.
+  qt-own-platform-theme = {
+    qt.enable = true;
+    qt.platformTheme = "kde";
+  };
+
   openssh-plain-line =
     { lib, ... }:
     {

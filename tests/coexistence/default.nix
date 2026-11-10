@@ -486,6 +486,20 @@ let
         fi
       '';
 
+  qtPluginPaths =
+    (configOf fixtures.qt-own-platform-theme)
+    .environment.profileRelativeSessionVariables.QT_PLUGIN_PATH;
+  qtScript =
+    if lib.count (p: p == "/lib/qt-6/plugins") qtPluginPaths == 2 then
+      ''
+        echo "qt-own-platform-theme: ok"
+      ''
+    else
+      ''
+        echo ${shQuote "qt-own-platform-theme: FAIL /lib/qt-6/plugins is not provided by both modules: ${builtins.toJSON qtPluginPaths}"} >&2
+        fail=1
+      '';
+
   nmScript =
     if nmConnectivity.uri == "http://example.invalid/check" && nmConnectivity.enabled == false then
       ''
@@ -515,6 +529,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${lib.concatStrings viScripts}
     ${ownHypeScript}
     ${nmScript}
+    ${qtScript}
     ${hyprlandScript}
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}

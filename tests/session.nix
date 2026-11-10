@@ -6,6 +6,7 @@
   doctor,
 }:
 let
+  omarchyPkg = (pkgs.extend inputs.self.overlays.default).omarchy;
   # ai-mirror's MCP requests for the #773 block at the end of the script, one
   # JSON-RPC message per line, as the server reads them.
   aimMsg =
@@ -2198,7 +2199,7 @@ pkgs.testers.runNixOSTest {
         machine.fail(user % f"command -v {app}")
     # The new apps claim these types (#1612); adding them must not move the handler.
     # Markdown is not asserted: upstream sets no default for it.
-    for mime, want in [("application/pdf", "org.gnome.Evince.desktop"),
+    for mime, want in [("application/pdf", "${omarchyPkg.passthru.pdfDesktop}"),
                        ("video/mp4", "mpv.desktop"),
                        ("text/plain", "nvim.desktop")]:
         got = machine.succeed(user % (
@@ -2206,6 +2207,56 @@ pkgs.testers.runNixOSTest {
             "XDG_DATA_DIRS=/run/current-system/sw/share:/etc/profiles/per-user/omarchy/share "
             f"xdg-mime query default {mime}")).strip()
         assert got == want, f"{mime} opens with {got!r}, not {want}"
+    # Qt themes through qtengine on Omarchy builds that ship it (#1736). qtdiag
+    # runs inside Hyprland's environment: a plain su shell lacks envs.lua's
+    # QT_QPA_PLATFORMTHEME and WAYLAND_DISPLAY and would fail a working session.
+    if ${if omarchyPkg.passthru.hasQtengine then "True" else "False"}:
+        colors = "/home/omarchy/.local/state/omarchy/current/theme/qtengine.colors"
+        machine.wait_until_succeeds(f"test -s {colors}")
+        machine.succeed("touch /tmp/qtdiag.out && chmod 666 /tmp/qtdiag.out")
+        runner = "${pkgs.qt6.qttools}/bin/qtdiag > /tmp/qtdiag.out 2>&1\n"
+        dispatch = (
+            "export XDG_RUNTIME_DIR=/run/user/1000\n"
+            "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+            "hyprctl dispatch 'hl.dsp.exec_cmd(\"sh /tmp/qtdiag-run.sh\")'\n"
+        )
+        machine.succeed("cat > /tmp/qtdiag-run.sh <<'QTDIAG_EOF'\n" + runner + "QTDIAG_EOF")
+        machine.succeed("cat > /tmp/qtdiag-dispatch.sh <<'QTDIAG_EOF'\n" + dispatch + "QTDIAG_EOF")
+        machine.succeed("su omarchy -c 'bash /tmp/qtdiag-dispatch.sh'")
+        machine.wait_until_succeeds("grep -q QPalette /tmp/qtdiag.out")
+        diag = machine.succeed("cat /tmp/qtdiag.out")
+        ini = machine.succeed(f"cat {colors}")
+        want = None
+        section = ""
+        for line in ini.splitlines():
+            line = line.strip()
+            if line.startswith("["):
+                section = line
+            elif section == "[Colors:Window]" and line.startswith("BackgroundNormal="):
+                want = "".join(f"{int(v):02x}" for v in line.split("=", 1)[1].split(","))
+        # qtdiag's Theme block: "  Platforms requested : x" then "            available : a,b"
+        # on the next line; palette roles print in enum order, WindowText before Window.
+        got = None
+        requested = available = ""
+        lines = diag.splitlines()
+        for i, line in enumerate(lines):
+            s = line.strip()
+            if s.startswith("QPalette::Window:"):
+                got = s.split("#", 1)[1].split()[0][-6:].lower()
+            elif s.startswith("Platforms requested"):
+                requested = s.split(":", 1)[1]
+                if i + 1 < len(lines) and lines[i + 1].strip().startswith("available"):
+                    available = lines[i + 1].split(":", 1)[1]
+        env_block = diag[diag.find("Environment"):] if "Environment" in diag else diag
+        assert "qtengine" in requested.replace(",", " ").split(), (
+            f"qtdiag requested {requested.strip()!r}, not qtengine. Its output:\n{env_block}")
+        assert "qtengine" in available.replace(",", " ").split(), (
+            f"qtdiag found platform themes {available.strip()!r}, no qtengine. Its output:\n{env_block}")
+        assert want is not None and got == want, (
+            f"QPalette::Window is {got!r}, qtengine.colors [Colors:Window] BackgroundNormal is {want!r}. "
+            f"qtdiag's output:\n{diag}")
+        print("Qt apps take their palette from qtengine")
+
     # LC_ALL and QT_QPA_PLATFORM only on this command (pkgs/AGENTS.md: a parsed
     # tool run in the C locale warns on stdout).
     machine.succeed(user % "LC_ALL=C.UTF-8 QT_QPA_PLATFORM=offscreen hype check --help")

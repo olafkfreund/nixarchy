@@ -73,6 +73,7 @@ pkgs.runCommand "nixarchy-cache-budget"
       ".#flaky":  { "/nix/store/hhh-flaky": $((7 * MiB)) },
       ".#forced-on": { "${forcedPath}": $((1 * MiB)) },
       ".#omarchy": { "/nix/store/ooo-omarchy": $((1 * MiB)) },
+      ".#checks.x86_64-linux.vm-toplevel": { "/nix/store/vvv-toplevel": $((1 * MiB)), "/nix/store/kkk-sysdep": $((1 * MiB)) },
       ".#bumpy":  { "/nix/store/iii-refsrc": $((1 * MiB)), "/nix/store/jjj-keep": $((1 * MiB)) },
       ".#checks.x86_64-linux.lonely":  { "/nix/store/eee-lonely": 96 },
       ".#checks.x86_64-linux.clingy":  { "/nix/store/fff-clingy": 200, "/nix/store/ggg-dep": 4096 }
@@ -97,9 +98,10 @@ pkgs.runCommand "nixarchy-cache-budget"
           for a in "\$@"; do closure_of "\$a" | jq -c '{ outputs: { out: keys_unsorted[0] } }'; done | jq -cs .
         else [ -n "\$(closure_of "\$3")" ]; fi ;;
       "build --keep-going") exit 0 ;;
-      "flake metadata")
-        [ -z "\$STUB_META_FAILS" ] || exit 1
-        echo '{"path":"/nix/store/src-flake"}' ;;
+      "flake archive")
+        [ -z "\$STUB_ARCHIVE_FAILS" ] || exit 1
+        if [ -n "\$STUB_ARCHIVE_NULL" ]; then echo '{"path":null}'
+        else echo '{"path":"/nix/store/src-flake"}'; fi ;;
       "eval --raw")
         if [ "\$3" = .#omarchy.outPath ]; then
           [ -z "\$STUB_EVAL_FAILS" ] || exit 1
@@ -112,7 +114,9 @@ pkgs.runCommand "nixarchy-cache-budget"
       path-info*)
         # The tree is not in the local store when STUB_TREE_ABSENT is set.
         [ -z "\$STUB_TREE_ABSENT" ] || [ "\$2" != /nix/store/ooo-omarchy ] || exit 1
-        [ -n "\$(closure_of "\$2")" ] ;;
+        c=\$(closure_of "\$2")
+        [ -n "\$c" ] || exit 1
+        jq -r 'keys_unsorted[0]' <<<"\$c" ;;
       *) echo "stub nix: unexpected \$*" >&2; exit 9 ;;
     esac
     EOF
@@ -126,7 +130,12 @@ pkgs.runCommand "nixarchy-cache-budget"
     shift 2
     printf '%s\n' "\$@" >> $work/calls/nixstore-roots
     printf '%s\n' "\$@"
-    for a in "\$@"; do [ "\$a" != /nix/store/src-flake ] || echo /nix/store/iii-refsrc; done
+    # The toplevel embeds the commit, so it is a referrer too -- unless the
+    # test says the source path was wrong and it escaped (#1738).
+    for a in "\$@"; do
+      [ "\$a" != /nix/store/src-flake ] || echo /nix/store/iii-refsrc
+      [ "\$a" != /nix/store/src-flake ] || [ -n "\$STUB_REFS_WITHOUT_TOPLEVEL" ] || echo /nix/store/vvv-toplevel
+    done
     EOF
     # curl: 200 for an up-* narinfo on either upstream, 404 otherwise.
     cat > bin/curl <<EOF
@@ -143,7 +152,13 @@ pkgs.runCommand "nixarchy-cache-budget"
     chmod +x bin/*
     export PATH=$work/bin:$PATH UPSTREAM_CACHES="https://up.one https://up.two" LOOKUP_JOBS=4
     budget=$scripts/cache-budget.sh
-    push=$scripts/cachix-push.sh
+    # cachix-push.sh runs its sibling cache-allowlist.sh, whose #!/usr/bin/env
+    # shebang the sandbox cannot execute: use patched copies of the real pair.
+    mkdir -p pushdir
+    cp $scripts/cachix-push.sh $scripts/cache-allowlist.sh pushdir/
+    chmod +x pushdir/*
+    patchShebangs pushdir >/dev/null
+    push=$work/pushdir/cachix-push.sh
     fails=0
     ok()   { echo "  ok      $1"; }
     bad()  { echo "  FAILED  $1"; fails=$((fails + 1)); }
@@ -259,9 +274,9 @@ pkgs.runCommand "nixarchy-cache-budget"
     # push nothing.
     printf '%s\n' '{"pull_request":{"head":{"repo":{"full_name":"o/r"}}}}' > own.json
     printf '%s\n' '{"pull_request":{"head":{"repo":{"full_name":"fork/r"}}}}' > fork.json
-    pr() { # head-ref event-file; STUB_* set by the caller reach the stubs
+    pr() { # head-ref event-file [entry]; STUB_* set by the caller reach the stubs
       GITHUB_REF=refs/pull/1/merge GITHUB_EVENT_NAME=pull_request GITHUB_REPOSITORY=o/r \
-        GITHUB_HEAD_REF=$1 GITHUB_EVENT_PATH=$2 bash $push .#bumpy >pr.log 2>&1
+        GITHUB_HEAD_REF=$1 GITHUB_EVENT_PATH=$2 bash $push "''${3:-.#bumpy}" >pr.log 2>&1
     }
     rm -f calls/pushed calls/nixstore-roots
     pr update/nixpkgs-2026-10-26 own.json
@@ -310,9 +325,34 @@ pkgs.runCommand "nixarchy-cache-budget"
       bad "tree-absent: pushed $(tr '\n' ' ' < calls/pushed 2>/dev/null), roots $(tr '\n' ' ' < calls/nixstore-roots 2>/dev/null)"
     fi
 
+    # A commit-specific entry (the real `cache-allowlist.sh commit-specific`)
+    # must be among the source's referrers, or the bump pushes nothing (#1738).
+    top=.#checks.x86_64-linux.vm-toplevel
+    rm -f calls/pushed
+    pr update/nixpkgs-2026-10-26 own.json $top
+    if [ "$(cat calls/pushed 2>/dev/null)" = /nix/store/kkk-sysdep ]; then
+      ok "a commit-specific entry that is excluded pushes only its dependencies"
+    else
+      bad "excluded toplevel: pushed $(tr '\n' ' ' < calls/pushed 2>/dev/null); log: $(cat pr.log)"
+    fi
+    rm -f calls/pushed
+    STUB_REFS_WITHOUT_TOPLEVEL=1 pr update/nixpkgs-2026-10-26 own.json $top || true
+    if [ ! -s calls/pushed ] && grep -q 'embeds the commit' pr.log; then
+      ok "a commit-specific entry missing from the referrers pushes nothing"
+    else
+      bad "missing toplevel: pushed $(tr '\n' ' ' < calls/pushed 2>/dev/null); log: $(cat pr.log)"
+    fi
+    rm -f calls/pushed
+    STUB_REFS_WITHOUT_TOPLEVEL=1 pr update/nixpkgs-2026-10-26 own.json .#other
+    if [ "$(sort calls/pushed 2>/dev/null | tr '\n' ' ')" = "/nix/store/bbb-other /nix/store/shared-qemu " ]; then
+      ok "a package-only entry is pushed when the referrers are the roots alone"
+    else
+      bad "package-only: pushed $(tr '\n' ' ' < calls/pushed 2>/dev/null); log: $(cat pr.log)"
+    fi
+
     # Every fail-safe pushes NOTHING: not knowing what is commit-specific must
     # never read as "nothing is".
-    for failure in STUB_META_FAILS STUB_EVAL_FAILS STUB_NIXSTORE_FAILS; do
+    for failure in STUB_ARCHIVE_FAILS STUB_ARCHIVE_NULL STUB_EVAL_FAILS STUB_NIXSTORE_FAILS; do
       rm -f calls/pushed
       env "$failure=1" bash -c "$(declare -f pr); push=$push; pr update/nixpkgs-2026-10-26 own.json" || true
       if [ ! -s calls/pushed ] && grep -q 'pushes nothing without the exclusion set' pr.log; then

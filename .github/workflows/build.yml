@@ -292,7 +292,7 @@ jobs:
         run: nix run .#devenv-presets
 
   omarchy:
-    needs: gate
+    needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     # Warm runs measured 675-878s against the old 900s limit (2026-09-13), and
@@ -311,6 +311,12 @@ jobs:
         if: needs.gate.result != 'success'
         run: |
           echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: The carry did not succeed, so this check cannot pass
+        if: needs.carry.result != 'success'
+        run: |
+          echo "::error::carry concluded '${{ needs.carry.result }}'; refusing to report this required check as passed (#1738)"
           exit 1
 
       - name: Nothing here can affect a build
@@ -1379,8 +1385,83 @@ jobs:
           mapfile -t entries < <(.github/scripts/cache-allowlist.sh apps)
           .github/scripts/cachix-push.sh "${entries[@]}"
 
-  system-build:
+  # Builds the cargo carry on a nixpkgs bump and pushes it, so no hand push is
+  # needed (#1738). `!cancelled()` plus the first step: a failed gate or carry
+  # must fail the dependents, not skip them (#1134, #1144).
+  carry:
     needs: gate
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
+      - uses: ./.github/actions/setup-nix
+        if: needs.gate.outputs.relevant == 'true'
+      - uses: cachix/cachix-action@v17
+        if: needs.gate.outputs.relevant == 'true'
+        # A cache upload failing must not fail a build that succeeded (#235).
+        continue-on-error: true
+        with:
+          skipPush: true
+          # Why: .github/actions/setup-nix/action.yml -- `cachix use` would replace its substituters.
+          skipAddingSubstituter: true
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Does this nixpkgs need the cargo carry?
+        id: need
+        if: needs.gate.outputs.relevant == 'true'
+        run: |
+          set -o pipefail
+          status=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status") || { echo "::error::could not evaluate the cargo carry"; exit 1; }
+          needed=$(jq -r 'to_entries[] | select(.value=="needed") | .key' <<<"$status") || exit 1
+          if [ -z "$needed" ]; then
+            echo "no cargo carry is needed"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "carry needed for: $needed"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the carried packages and check they are in the system closure
+        if: needs.gate.outputs.relevant == 'true' && steps.need.outputs.needed == 'true'
+        run: |
+          set -o pipefail
+          names=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in builtins.attrNames (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).packages" | jq -r '.[]') || exit 1
+          top=$(nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath) || exit 1
+          nix derivation show -r "$top" | jq -r '(.derivations // .) | keys[] | sub("^/nix/store/"; "")' > drvs || exit 1
+          : > "$RUNNER_TEMP/carry-outs"
+          for name in $names; do
+            drv=$(nix eval --impure --raw --expr "let f = builtins.getFlake \"git+file://$PWD\"; in (f.inputs.nixpkgs.legacyPackages.x86_64-linux.extend f.overlays.default).$name.drvPath") || exit 1
+            # Only what the allowlisted system closure holds is cached; a carried
+            # package outside it (omp, today) is neither built nor pushed here (#1738).
+            if ! grep -qxF -- "${drv#/nix/store/}" drvs; then
+              echo "::notice::$name is carried but not in vm-toplevel's closure; not caching it"
+              continue
+            fi
+            built=$(nix build --no-link --print-out-paths "$drv^*") || exit 1
+            echo "$built" >> "$RUNNER_TEMP/carry-outs"
+          done
+
+      - name: Push the carried packages to cachix
+        if: needs.gate.outputs.relevant == 'true' && steps.need.outputs.needed == 'true'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          mapfile -t outs < "$RUNNER_TEMP/carry-outs"
+          .github/scripts/cachix-push.sh "${outs[@]}"
+
+  system-build:
+    needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     outputs:
@@ -1437,6 +1518,12 @@ jobs:
         if: needs.gate.result != 'success'
         run: |
           echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: The carry did not succeed, so this check cannot pass
+        if: needs.carry.result != 'success'
+        run: |
+          echo "::error::carry concluded '${{ needs.carry.result }}'; refusing to report this required check as passed (#1738)"
           exit 1
 
       # Step-level `if:`s, so a run with nothing to do reports a real `success`.
@@ -1542,7 +1629,7 @@ jobs:
   # A third part of `system` below. 75 like its siblings: a cold bump
   # compiles its own VM closure before the test.
   system-session:
-    needs: gate
+    needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     outputs:
@@ -1558,6 +1645,12 @@ jobs:
         if: needs.gate.result != 'success'
         run: |
           echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: The carry did not succeed, so this check cannot pass
+        if: needs.carry.result != 'success'
+        run: |
+          echo "::error::carry concluded '${{ needs.carry.result }}'; refusing to report this required check as passed (#1738)"
           exit 1
 
       - name: Nothing here can affect a build
@@ -1602,7 +1695,7 @@ jobs:
         run: .github/scripts/failure-digest.sh
 
   system-checks:
-    needs: gate
+    needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     outputs:
@@ -1619,6 +1712,12 @@ jobs:
         if: needs.gate.result != 'success'
         run: |
           echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: The carry did not succeed, so this check cannot pass
+        if: needs.carry.result != 'success'
+        run: |
+          echo "::error::carry concluded '${{ needs.carry.result }}'; refusing to report this required check as passed (#1738)"
           exit 1
 
       # Step-level `if:`s, so a run with nothing to do reports a real `success`.
@@ -1772,7 +1871,7 @@ jobs:
   # generated step in `omarchy` builds it. A matrix job's result is failure if
   # any leg fails, so `system` needs only `options`.
   options:
-    needs: gate
+    needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 75
@@ -1804,6 +1903,12 @@ jobs:
         if: needs.gate.result != 'success'
         run: |
           echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: The carry did not succeed, so this check cannot pass
+        if: needs.carry.result != 'success'
+        run: |
+          echo "::error::carry concluded '${{ needs.carry.result }}'; refusing to report this required check as passed (#1738)"
           exit 1
 
       - name: Nothing here can affect a build
@@ -2003,7 +2108,7 @@ jobs:
   # tests/box-boot.nix. Its own job, with its own budget and an explicit KVM
   # assertion.
   box:
-    needs: gate
+    needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -2012,6 +2117,12 @@ jobs:
         if: needs.gate.result != 'success'
         run: |
           echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: The carry did not succeed, so this check cannot pass
+        if: needs.carry.result != 'success'
+        run: |
+          echo "::error::carry concluded '${{ needs.carry.result }}'; refusing to report this required check as passed (#1738)"
           exit 1
 
       # Step-level `if:`s, so a run with nothing to do reports a real `success`.

@@ -36,8 +36,10 @@ pkgs.testers.runNixOSTest {
     assert "Reached target Multi-User System" not in "\n".join(frozen.full_console_log), \
         "guest reached multi-user before the stop landed; case A proves nothing"
     assert frozen.process is not None
-    frozen.process.kill()
-    frozen.process.wait()
+    # SIGTERM, not SIGKILL: the process may be run-virtiofsd-qemu, which forwards
+    # TERM to qemu; a KILL orphans qemu and cleanup's serial join hangs.
+    frozen.process.terminate()
+    frozen.process.wait(timeout=60)
 
     # Case B: a fresh, healthy guest must pass the same helper.
     healthy.start()

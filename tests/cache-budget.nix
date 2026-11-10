@@ -69,7 +69,7 @@ pkgs.runCommand "nixarchy-cache-budget"
       ".#small":  { "/nix/store/aaa-small": $((10 * MiB)), "/nix/store/up1-glibc": $((500 * MiB)) },
       ".#other":  { "/nix/store/bbb-other": $((20 * MiB)), "/nix/store/shared-qemu": $((400 * MiB)) },
       ".#twin":   { "/nix/store/ccc-twin":  $((5 * MiB)),  "/nix/store/shared-qemu": $((400 * MiB)) },
-      ".#huge":   { "/nix/store/ddd-huge":  $((3000 * MiB)) },
+      ".#huge":   { "/nix/store/ddd-huge":  $((3500 * MiB)) },
       ".#flaky":  { "/nix/store/hhh-flaky": $((7 * MiB)) },
       ".#forced-on": { "${forcedPath}": $((1 * MiB)) },
       ".#omarchy": { "/nix/store/ooo-omarchy": $((1 * MiB)) },
@@ -148,7 +148,7 @@ pkgs.runCommand "nixarchy-cache-budget"
     ok()   { echo "  ok      $1"; }
     bad()  { echo "  FAILED  $1"; fails=$((fails + 1)); }
 
-    # (a) Under budget: 10 + 20 + 5 + 400 (shared once) = 435 MiB of 2560.
+    # (a) Under budget: 10 + 20 + 5 + 400 (shared once) = 435 MiB of 3072.
     if got=$(bash $budget .#small .#other .#twin 2>&1); then
       ok "entries under the budget pass"
     else
@@ -190,8 +190,8 @@ pkgs.runCommand "nixarchy-cache-budget"
 
     # (b) Over budget: fails, and names the entry that pulled it in.
     if got=$(bash $budget .#small .#huge 2>&1); then
-      bad "3 GB of allowlist passed a 2.5 GB budget"
-    elif grep -q '::error::the allowlist costs 3010 MiB' <<<"$got" && grep -q 'from .#huge' <<<"$got"; then
+      bad "3.5 GB of allowlist passed a 3 GB budget"
+    elif grep -q '::error::the allowlist costs 3510 MiB' <<<"$got" && grep -q 'from .#huge' <<<"$got"; then
       ok "over budget fails, naming the entry that grew"
     else
       bad "over budget failed without naming the entry:"; printf '%s\n' "$got"

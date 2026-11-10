@@ -613,7 +613,8 @@ requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
 - check results are pushed from any ref by `cachix-push.sh --proof`, as a
   single path, which is how `build-unless-proven.sh` skips what already passed;
 - `cache-budget.sh` fails the `system-build` job when the allowlist would cost more
-  than 2.5 GB, which leaves room for a nixpkgs bump (#1231).
+  than 3 GB: a nixpkgs bump that needs the cargo carry pushes codex too, so a
+  bump may now evict the previous commit's coldest paths (#1231, #1738).
 
 Adding something to the cache means adding it to the allowlist in the same PR,
 and the budget step tells you what it costs. Unfree packages stay off: the

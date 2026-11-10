@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 1738
 intent: intent/2026-11-10-1738-bump-cache-carry.md
 ---
@@ -48,20 +48,38 @@ same on both Nixes, and it matches the path the build referenced (measured
 above). Everything after it is unchanged: the `.#omarchy` tree root, the
 referrers-closure, and the empty-set refusal.
 
-### 2. A guard against an exclusion set that excludes nothing commit-specific
+### 2. Known commit-specific entries must be excluded (revised after review)
 
-After the exclusion set is built, bump mode also refuses, through the
-existing `skip_all` with its warning, when the set holds nothing but the
-roots. The source is its own referrer, so a set of exactly `{src, tree}`
-means no built path referenced them. That is the materialized-path failure
-from the intent, and it must not turn into "push everything".
+The first draft had two guards: a "roots only" refusal, and "an entry that
+references the source must be excluded". Review found both wrong.
 
-Then, per entry, before pushing: when the entry's own output references the
-source (the toplevels do), it must appear in the exclusion set, and the
-script refuses otherwise. This is the real-`nix` assertion the intent asks
-for. It runs on CI's own runner, with CI's Nix, on every bump push. A
-lazy-trees change that breaks the referrer relation then refuses loudly
-instead of uploading commit-specific paths.
+- **The roots-only refusal would break design 3's job.** That job builds
+  standalone packages, and none of them references the source. Its
+  exclusion set is legitimately just the roots.
+- **The per-entry rule is a tautology on real `nix`.** Forward references
+  and `--referrers-closure` read the same table, so it can never fail. And
+  when the source path is the wrong one, its condition is false, so it stays
+  silent on exactly the bug it was for.
+
+So the guard asserts a fact that does not depend on the source path being
+right. **An entry known to be commit-specific must be in the exclusion set.**
+
+- `vm-toplevel` and `reference-toplevel` are commit-specific by
+  construction: they embed the flake revision (`etc-nixarchy-version`,
+  `installer/cd.nix`'s `inputSources`).
+- `cachix-push.sh` takes those attribute names in a `commit_specific` list,
+  defined beside the `system` group in `cache-allowlist.sh`, so a new
+  toplevel lands in one place.
+- In bump mode, for each such entry, its output path must be a line of the
+  exclusion file (`grep -qxF`, a whole-line match), or the script refuses
+  with `skip_all`.
+- If the archived source is not what the build referenced, the toplevel is
+  not among its referrers, so the guard fires. That is the lazy-trees
+  failure, and this guard can fail on it.
+- Entries not on the list, such as the carried packages, get no such
+  requirement, so design 3's push is untouched.
+
+The existing empty-set refusal stays as it is.
 
 ### 3. One job produces the carried packages (open question 1a)
 
@@ -70,29 +88,51 @@ A new job, `carry`, in `.github/workflows/build.yml`, on hosted
 skipped job makes every job that `needs:` it skip too, and a skipped required
 check passes the merge gate (#1144, CLAUDE.md §4).
 
+- **When it does work:** whenever the carry is `needed` for the pin being
+  tested. Since #1741 merged, that includes `main` and every ordinary PR,
+  until nixpkgs ships the fix. The first draft said no carry was needed
+  there; review showed that was false. On those refs it still builds, and
+  `closure_context` decides the push: `main` pushes, so ordinary PRs then
+  substitute from the cache instead of compiling; an ordinary PR never pushes.
 - **The status**, with `pkgs/review.sh:519`'s own expression, which evaluates
   the carry against the flake's pinned nixpkgs:
   `nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status"`.
 - **The names** are the keys whose value is `needed`. None means the step
   prints `no cargo carry is needed` and the job succeeds in under a minute.
-  That is every `main` push and every ordinary PR.
-- **For each needed name**, and for `codex-acp` when `codex` is needed
-  (the carry carries it with codex), build the carried package as the
+- **For each needed name**, plus every other key the carry's `packages`
+  returns for that pin (it adds `codex-acp` only when `prev ? codex-acp`, so
+  this follows the helper and assumes nothing), build the carried package as the
   machines get it, from the flake's own overlay:
   `(builtins.getFlake "git+file://$PWD").inputs.nixpkgs.legacyPackages.x86_64-linux.extend (builtins.getFlake "git+file://$PWD").overlays.default`.
   Then hand the output paths to `cachix-push.sh`.
 - **The push** goes through `cachix-push.sh` unchanged in policy:
   - `closure_context` still decides. Only `main` and this repo's dated
     `update/nixpkgs-*` PRs push, so an ordinary PR builds and pushes nothing;
-  - only packages `cargo-system-libs` marks `needed`, which are already in
-    the allowlisted `vm-toplevel` closure (intent, Constraints);
+  - only packages `cargo-system-libs` marks `needed`. That they lie inside
+    the allowlisted `vm-toplevel` closure is **checked, not assumed**: before
+    pushing, the job asserts that each carried output's `.drv` appears in
+    `vm-toplevel`'s derivation graph (`nix derivation show -r` on its
+    `drvPath`, matching the basename). That is evaluation only, no build. A
+    package built through a different package set would not match, and the
+    job refuses to push it;
   - unfree stays off, because the carried packages are codex, codex-acp and
     omp, all free.
-- **Ordering:** `system-build`, `system-checks`, `system-session`, `omarchy`,
-  `box` and the `options` matrix gain `needs: carry`, and run when it
-  succeeds. A failed `carry` fails them through the jobs' existing `needs`
-  handling. The `!cancelled()` jobs keep their own gate logic, so a failed
-  carry is red, not skipped.
+- **Ordering and failure:** `system-build`, `system-checks`,
+  `system-session`, `omarchy`, `box` and the `options` matrix add `carry`
+  to their existing `needs` (`gate` stays).
+  - A failed dependency normally **skips** a job, and the jobs under
+    `if: !cancelled()` would instead run on. Neither is the wanted outcome.
+  - So each of those jobs' existing first step, the gate-result check that
+    already fails when `gate` did not succeed (#1134), also fails when
+    `needs.carry.result != 'success'`, naming carry.
+  - A plain job (no `!cancelled()`) with `needs: carry` is skipped by
+    GitHub on a carry failure, and a skipped required check passes the merge
+    gate (#1144). Every job given `needs: carry` therefore gets the same
+    `!cancelled()` and first-step check.
+  - The aggregate `system` job (`build.yml:1981`) reports those jobs'
+    results as it does today, so a carry failure reaches it as their failure.
+  - On cancellation, a cancelled workflow cancels `carry` and its
+    dependents, which report `cancelled` as today (§6).
 - **Cost on a non-bump run:** one hosted job of about a minute, evaluation
   only, before the others start.
 
@@ -124,6 +164,9 @@ check passes the merge gate (#1144, CLAUDE.md §4).
   CI across two files.
 - **A job-level `if:` on `carry`.** It skips dependents on every non-bump
   run (#1144).
+- **The first draft's guards** (roots-only, and "references source implies
+  excluded"). They are described in design 2: one breaks the carry push, and
+  the other cannot fail.
 
 ## Risks
 
@@ -131,8 +174,9 @@ check passes the merge gate (#1144, CLAUDE.md §4).
   store and prints them. On a runner with the inputs already fetched, that
   costs seconds. The output's `.path` is the top-level source; the inputs are
   under `.inputs`, which is ignored.
-- **`needs: carry` serializes about a minute** in front of the heavy jobs on
-  every run. That is accepted for a fix to a whole-pipeline timeout. A
+- **`needs: carry` serializes about a minute** in front of the heavy jobs
+  when no carry is needed. While one is needed and not yet cached, the first
+  run compiles it, about 20 minutes, once, instead of six times in parallel. That is accepted for a fix to a whole-pipeline timeout. A
   `carry` failure on a non-bump run, an evaluation error say, would block
   every PR. It is an evaluation `main` already does in the nightly
   (`review.sh`), so it fails only when `review.sh` would too.
@@ -142,19 +186,35 @@ check passes the merge gate (#1144, CLAUDE.md §4).
 
 ## Verification
 
-- **Cheap, locally:** `checks.cache-budget` with the new cases. §1 breaks:
+- **Cheap, locally:** `checks.cache-budget` with the new cases:
+  - **commit-specific excluded:** the stub's exclusion set holds the
+    toplevel, and the push proceeds;
+  - **commit-specific missing:** the stub's referrers omit the toplevel, and
+    bump refuses;
+  - **package-only entry**, the carry case: the exclusion set is roots only,
+    the entry is not on the list, and the push proceeds.
+
+  §1 breaks:
   - restore the `flake metadata` read → the stub case returning only
     `flake archive` fails;
-  - delete design 2's roots-only guard → the roots-only case fails;
-  - delete the per-entry check → the unexcluded-entry case fails.
-- **Hosted runner, with real Determinate Nix:** re-run the probe branch with
-  `cachix-push.sh`'s exclusion computation alone, no push. It must report an
-  exclusion set holding the toplevel. This is the real-`nix` measurement, on
-  the environment CI uses, before the PR.
+  - delete design 2's check → the commit-specific-missing case fails;
+  - make the check apply to every entry → the package-only case fails.
+- **Hosted runner, with real Determinate Nix:** this is still outstanding,
+  because the probe measured derivation `inputs.srcs`, not the
+  referrers-closure of built outputs that the script uses. So re-run the
+  probe branch with the same checkout and invocation as `system-build`:
+  build `vm-toplevel`, then run the exclusion computation alone, with no
+  push. It must report an exclusion set holding `vm-toplevel`'s output path.
+  That is the real-`nix` measurement, on CI's environment, before the PR.
+  If it does not hold, this spec returns for a decision (intent 2b).
+- **A deliberate `carry` failure on the PR branch** (a temporary commit
+  making the step exit 1). Every dependent goes red naming carry, and none is
+  skipped. The commit is then dropped.
 - **actionlint** on `build.yml`. Also confirm `checks.cache-budget` and the
   check-coverage guard still see every job.
-- **On the PR itself**, an ordinary PR: `carry` prints `no cargo carry is
-  needed`, and every job runs as before.
+- **On the PR itself**, an ordinary PR with the carry active on `main`:
+  `carry` builds the carried packages, or substitutes them once `main` has
+  pushed, and pushes nothing. Every job runs as before.
 - **On the next dated bump PR:**
   - the run log shows `carry` building the needed packages once;
   - `pushing … left out as commit-specific` lines from `system-build`;
@@ -164,3 +224,20 @@ check passes the merge gate (#1144, CLAUDE.md §4).
   A bump with no carry needed shows `no cargo carry is needed` and the
   exclusion push lines.
 - `install` is not affected. No self-hosted job gains `needs: carry`.
+
+## Review (2026-11-10, after the first approval)
+
+Codex (gpt-6.1-sol) and agy (model not reported) reviewed the approved
+draft. Their findings, all confirmed against `cachix-push.sh` and
+`build.yml`, changed design 2 and parts of design 3. So this revision is a
+draft again, for re-approval:
+
+- design 2's two guards: the first breaks carry, the second is a tautology.
+  Replaced;
+- `needs: carry` failure handling was wrong: skip, or run on under
+  `!cancelled()`. Now explicit;
+- "no carry on `main`/ordinary PRs" was false since #1741. Corrected;
+- allowlist membership was asserted. Now checked;
+- `codex-acp` was assumed. Now follows the helper;
+- the hosted verification of the referrers-closure is still outstanding,
+  and named.

@@ -9,7 +9,7 @@ from it. nixarchy lets you choose which Omarchy your desktop runs:
 
 | channel | what you get | who it is for |
 |---|---|---|
-| **stable** (the default) | Omarchy's latest release (on `main`, a pinned release candidate; [see below](#main-carries-omarchy-v450-rc1)) | everyone |
+| **stable** (the default) | Omarchy's latest release | everyone |
 | **edge** | Omarchy's development branch, `quattro`, after nixarchy has built and booted it | trying what is coming before it is released |
 | **dev** | Omarchy built from your own git checkout | working on Omarchy itself |
 
@@ -121,24 +121,9 @@ installing from the ISO, the channel is still one line: the `url` of your
 | your `nixarchy.url` | what you run | what `nixarchy channel omarchy` reports |
 |---|---|---|
 | `github:olafkfreund/nixarchy/release` | stable releases | stable |
-| `github:olafkfreund/nixarchy/v4.0.4-3` (a tag) | that release, pinned | custom |
+| `github:olafkfreund/nixarchy/v4.5.0-1` (a tag) | that release, pinned | custom |
 | `github:olafkfreund/nixarchy` (no branch) | **`main`**: every merge, ahead of releases | stable |
 | `github:olafkfreund/nixarchy/edge` | edge | edge |
-
-### `main` carries Omarchy v4.5.0-rc1
-
-While Omarchy 4.5 is a release candidate, `main` builds Omarchy
-**v4.5.0-rc1** and `release` stays on the last release. To try 4.5 now, follow
-`main`: set `url = "github:olafkfreund/nixarchy";` on your `nixarchy` input,
-run `nix flake update nixarchy` and rebuild. A release candidate can still
-change before the final release.
-
-To go back, pin `github:olafkfreund/nixarchy/release` (or a tag such as
-`/v4.0.6-1`) and rebuild. If you already switched to the new build, boot or
-roll back to the previous generation first. A rollback does not undo what 4.5
-wrote to `~/.config`, so keep a copy of anything you care about.
-`nixarchy channel omarchy` reports a bare `main` input as "stable", as the
-table above says.
 
 ### Switching with the command
 

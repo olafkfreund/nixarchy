@@ -30,14 +30,14 @@ pkgs.runCommand "nixarchy-agent-local-detach" { } ''
 
   for args in "use --detach m" "use m --detach"; do
     reset
-    run_without $args
+    run_without $args || fail "$args: the failing detached run exited instead of opening a terminal"
     logged=$(<"$work/launcher.log")
     [ "$logged" = "omarchy-agent-local 'use' 'm'" ] || fail "$args: launcher got [$logged]"
     [ ! -s "$work/local-ai.log" ] || fail "$args: reached omarchy-local-ai"
   done
 
   reset
-  run_without use --detach "a b"
+  run_without use --detach "a b" || fail "quoted: the failing detached run exited instead of opening a terminal"
   logged=$(<"$work/launcher.log")
   [ "$logged" = "omarchy-agent-local 'use' 'a b'" ] || fail "quoted: launcher got [$logged]"
   eval "set -- ''${logged#omarchy-agent-local }"
@@ -52,7 +52,7 @@ pkgs.runCommand "nixarchy-agent-local-detach" { } ''
     echo "SKIP passing case: /proc/driver/nvidia exists here"
   else
     reset
-    PATH=$work/stubs:$work/with-podman "$script" use --detach m
+    PATH=$work/stubs:$work/with-podman "$script" use --detach m || fail "passing run exited non-zero"
     [ "$(<"$work/local-ai.log")" = "use --detach m" ] || fail "passing run: omarchy-local-ai got [$(<"$work/local-ai.log")]"
     [ ! -s "$work/launcher.log" ] || fail "passing run opened a launcher"
   fi

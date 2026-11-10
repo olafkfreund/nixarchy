@@ -1419,7 +1419,6 @@ jobs:
         id: need
         if: needs.gate.outputs.relevant == 'true'
         run: |
-          echo "::error::deliberate carry failure, temporary (#1738 verification)"; exit 1
           set -o pipefail
           status=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status") || { echo "::error::could not evaluate the cargo carry"; exit 1; }
           needed=$(jq -r 'to_entries[] | select(.value=="needed") | .key' <<<"$status") || exit 1

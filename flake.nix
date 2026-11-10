@@ -884,6 +884,49 @@
               (builtins.readFile ./installer/try.sh);
         };
 
+      # Why: docs/internals/flake.md#one-closure-per-template-shared-by-every-vm-a-user
+      # An installable image carrying somebody else's machine (#478).
+      #
+      # The same installer/cd.nix as the published network image, with
+      # `source` pointing at the caller's flake.
+      #
+      # Called from the generated flake (installer/template/flake.nix), which
+      # is why it takes `flake` and `host` rather than reading anything here:
+      # at that point `self` is the USER's repository and this repository is
+      # one of its inputs.
+      #
+      # It is a reinstaller, not a backup. It carries the flake inputs, then
+      # fetches the system from the network. It does not carry /home,
+      # service state or secrets, and booting it erases the target disk. The
+      # command that builds it says so; this is the machinery underneath.
+      mkUserIsoWith =
+        inputs:
+        {
+          flake,
+          host,
+          # Accept stale generated flakes that still pass offline.
+          ...
+        }:
+        let
+          machine =
+            flake.nixosConfigurations.${host} or (throw ''
+              mkUserIso: this flake has no machine called "${host}".
+              It has: ${lib.concatStringsSep ", " (lib.attrNames flake.nixosConfigurations)}
+            '');
+          # host reaches the launcher, which is what makes the image this machine's (#1649).
+          iso = nixpkgs.lib.nixosSystem {
+            system = "x86_64-linux";
+            specialArgs = {
+              inherit inputs;
+              source = { inherit flake host; };
+            };
+            modules = [ ./installer/cd.nix ];
+          };
+        in
+        builtins.seq machine (
+          iso.config.system.build.isoImage // { inherit (iso.config.system.build) installerLauncher; }
+        );
+
       mkMicrovmWith =
         inputs:
         {
@@ -909,6 +952,12 @@
           rev = "0000000000000000000000000000000000000000";
           shortRev = "0000000";
           lastModifiedDate = "19700101000000";
+          lastModified = 0;
+          # 32 zero bytes: a well-formed SRI hash that names no real tree.
+          narHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+          lib = self.lib // {
+            mkUserIso = mkUserIsoWith checkInputs;
+          };
           nixosModules = self.nixosModules // {
             nixarchy = import ./modules/nixos.nix checkInputs;
           };
@@ -972,7 +1021,7 @@
       ownLock = builtins.fromJSON (builtins.readFile ./flake.lock);
     in
     {
-      overlays.default = final: _prev: {
+      overlays.nixarchy = final: _prev: {
 
         # nixarchy-doctor and nixarchy-verify live here rather than only under
         # `packages` so the module can install them. A module cannot take them
@@ -1336,6 +1385,17 @@
             $out/share/plymouth/themes/omarchy
         '';
       };
+
+      # The overlay above, plus the cargo carry, which must see `prev` and not
+      # sit inside that attrset (nixfmt would reindent all of it).
+      # Why: pkgs/AGENTS.md#cargo-system-libs-1722
+      overlays.default = lib.composeExtensions self.overlays.nixarchy (
+        _final: prev:
+        (import ./pkgs/cargo-system-libs.nix {
+          inherit (prev) lib;
+          inherit prev;
+        }).packages
+      );
 
       packages = eachSystem (
         system:
@@ -1738,48 +1798,7 @@
         # can bake each one onto the image without restating the host.
         mkReference = mkReferenceWith inputs;
 
-        # Why: docs/internals/flake.md#one-closure-per-template-shared-by-every-vm-a-user
-        # An installable image carrying somebody else's machine (#478).
-        #
-        # The same installer/cd.nix as the published network image, with
-        # `source` pointing at the caller's flake.
-        #
-        # Called from the generated flake (installer/template/flake.nix), which
-        # is why it takes `flake` and `host` rather than reading anything here:
-        # at that point `self` is the USER's repository and this repository is
-        # one of its inputs.
-        #
-        # It is a reinstaller, not a backup. It carries the flake inputs, then
-        # fetches the system from the network. It does not carry /home,
-        # service state or secrets, and booting it erases the target disk. The
-        # command that builds it says so; this is the machinery underneath.
-        mkUserIso =
-          {
-            flake,
-            host,
-            # Accept stale generated flakes that still pass offline.
-            ...
-          }:
-          let
-            machine =
-              flake.nixosConfigurations.${host} or (throw ''
-                mkUserIso: this flake has no machine called "${host}".
-                It has: ${lib.concatStringsSep ", " (lib.attrNames flake.nixosConfigurations)}
-              '');
-            # host reaches the launcher, which is what makes the image this machine's (#1649).
-            iso = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-              specialArgs = {
-                inherit inputs;
-                source = { inherit flake host; };
-              };
-              modules = [ ./installer/cd.nix ];
-            };
-          in
-          builtins.seq machine (
-            iso.config.system.build.isoImage // { inherit (iso.config.system.build) installerLauncher; }
-          );
-
+        mkUserIso = mkUserIsoWith inputs;
         mkMicrovm = mkMicrovmWith inputs;
       };
 
@@ -1813,6 +1832,8 @@
             # A hung install-target boot fails fast with a monitor dump (#1594). Needs KVM.
             "boot-hang-detect"
             "branch-guard"
+            # The cargo carry, against stand-in nixpkgs sets (#1722). See tests/cargo-system-libs.nix.
+            "cargo-system-libs"
             # Boots the Omarchy session on a machine whose hyprland.lua belongs to
             # somebody else -- the case the session entry exists for.
             "coexist"
@@ -2323,7 +2344,7 @@
 
           installer-early-exit = import ./tests/installer-early-exit.nix {
             pkgs = pkgsFor.${system};
-            renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
+            renderedInstallScript = "${inputs.self.packages.${system}.install}/bin/nixarchy-install";
           };
 
           try-nixarchy = import ./tests/try-nixarchy.nix {

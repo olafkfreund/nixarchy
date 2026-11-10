@@ -1503,3 +1503,38 @@ script stopped parsing:
 substituteInPlace cannot see that and neither can the build: the
 installer was a syntax error for as long as this patch existed. `bash -n`
 over the patched bins is what catches this class, and nothing else does.
+
+<a id="cargo-system-libs-1722"></a>
+## Rust packages under nixpkgs' system-library hook (#1722)
+
+nixpkgs' cargo setup hook gained `cargoUseSystemLibs`, which links `*-sys`
+crates against system libraries instead of vendoring them. A package that
+does not list those libraries in `buildInputs` then fails with "not found"
+(`zstd-sys`, `oniguruma-sys`). `pkgs/cargo-system-libs.nix` carries
+upstream's fix for `codex` (NixOS/nixpkgs@16b463698a) and `omp`
+(NixOS/nixpkgs@43c51fe5d9).
+- **Gated**, so nothing rebuilds on a nixpkgs without the hook, or once it
+  carries the fix: the result is then `prev.<name>` itself, the same
+  `drvPath`.
+- **A dependent that names the carried package by store path is carried
+  too.** nixpkgs' `codex-acp` execs `codex`, and nixi's Home Manager module
+  pins `pkgs.codex-acp` from the user's plain pkgs, so the carry also returns
+  `codex-acp` and `modules/home.nix` re-points nixi's `codexAcp` at it. That
+  path was missed until the bump's closures were built (#1731): search every
+  closure for the package's name, not only its direct consumers. A module
+  cannot set `nixpkgs.overlays` instead, as VM tests make it read-only.
+- **Add a row** to `needs` when another package breaks the same way, with
+  the upstream commit as a comment, and add its name to `review.sh`'s `for n
+  in …` loop.
+- **Drop a row** when the review shows `dead`: delete it from `needs` and
+  the name from that loop. The three consumers (`modules/apps.nix` twice,
+  `modules/microvm/templates/agent-claude.nix`) read `carried.<name> or
+  pkgs.<name>`, so they fall back by themselves. Dropping `codex` also drops
+  the `codex-acp` entry and the nixi wrapper in `modules/home.nix`.
+- **Full retirement**, once `needs` is empty: delete the file, the
+  `overlays.default = lib.composeExtensions …` composition in `flake.nix`
+  (back to the plain overlay), the `review.sh` block (its `if [ -f … ]` gate
+  keeps a forgotten one silent), `checks.cargo-system-libs` with its
+  fixtures, and **revert the four consumer sites** (the fourth is nixi's
+  `package` default in `modules/home.nix`) — or every machine fails
+  to evaluate on the missing file.

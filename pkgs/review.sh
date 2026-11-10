@@ -21,6 +21,7 @@
 #   nix run .#review              print the table
 #   nix run .#review -- --report  and sync the rolling issue
 #   nix run .#review -- --list-pins   what we pin, no network (checks.review-pins)
+#   nix run .#review -- --carry-row NAME STATUS   one cargo carry's row
 #
 # Exit status is 0 whether or not there are findings. Findings are the output,
 # not an error -- the same rule verify.sh states in its own header. Only being
@@ -42,10 +43,11 @@ case "${1-}" in
   --ci-row) mode=cirow ;;
   --rev-row) mode=revrow ;;
   --blocked-row) mode=blockedrow ;;
+  --carry-row) mode=carryrow ;;
   --compare-tsv) mode=comparetsv ;;
   "") ;;
   *)
-    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW|--rev-row ...|--blocked-row ...|--compare-tsv PIN_ISO]" >&2
+    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW|--rev-row ...|--blocked-row ...|--carry-row NAME STATUS|--compare-tsv PIN_ISO]" >&2
     exit 2
     ;;
 esac
@@ -296,6 +298,16 @@ blocked_row() {
   fi
 }
 
+# One cargo carry's row, from its status in pkgs/cargo-system-libs.nix. Pure.
+carry_row() {
+  case "$2" in
+    needed) ok "cargo carry: $1" "$2" "still needed" ;;
+    inactive) ok "cargo carry: $1" "$2" "hook absent" ;;
+    dead) finding "cargo carry: $1" "$2" "-" "nixpkgs carries the fix -- drop $1 from pkgs/cargo-system-libs.nix" ;;
+    *) finding "cargo carry: $1" "${2:--}" "-" "carry status unread" ;;
+  esac
+}
+
 if [ "$mode" = revrow ]; then
   rev_row "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11-}"
   printf '%s' "$rows"
@@ -311,6 +323,7 @@ if [ "$mode" = blockedrow ]; then
   printf '%s' "$rows"
   exit 0
 fi
+if [ "$mode" = carryrow ]; then carry_row "$2" "${3-}"; printf '%s' "$rows"; exit 0; fi
 
 if [ "$mode" = cirow ]; then
   ci_row "$2" "$3" "$4" "$(cat)" "$5"
@@ -499,6 +512,15 @@ if grep -q 'quickshell = final.quickshell.overrideAttrs' flake.nix; then
   else
     ok "quickshell override" "$pinned" "nixpkgs has $upstream, still needed"
   fi
+fi
+
+# Why: pkgs/AGENTS.md#cargo-system-libs-1722
+if [ -f pkgs/cargo-system-libs.nix ]; then
+  carry=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status" 2>/dev/null) || carry=""
+  for n in codex omp; do
+    st=$(jq -r --arg n "$n" '.[$n] // ""' <<<"$carry" 2>/dev/null) || st=""
+    carry_row "$n" "$st"
+  done
 fi
 
 # ------------------------------------------------------------------ inputs --

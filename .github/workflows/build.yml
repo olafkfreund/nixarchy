@@ -1420,7 +1420,7 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         run: |
           set -o pipefail
-          status=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status") || { echo "::error::could not evaluate the cargo carry"; exit 1; }
+          status=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD?shallow=1\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status") || { echo "::error::could not evaluate the cargo carry"; exit 1; }
           needed=$(jq -r 'to_entries[] | select(.value=="needed") | .key' <<<"$status") || exit 1
           if [ -z "$needed" ]; then
             echo "no cargo carry is needed"
@@ -1434,12 +1434,12 @@ jobs:
         if: needs.gate.outputs.relevant == 'true' && steps.need.outputs.needed == 'true'
         run: |
           set -o pipefail
-          names=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in builtins.attrNames (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).packages" | jq -r '.[]') || exit 1
+          names=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD?shallow=1\").inputs.nixpkgs.legacyPackages.x86_64-linux; in builtins.attrNames (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).packages" | jq -r '.[]') || exit 1
           top=$(nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath) || exit 1
           nix derivation show -r "$top" | jq -r '(.derivations // .) | keys[] | sub("^/nix/store/"; "")' > drvs || exit 1
           : > "$RUNNER_TEMP/carry-outs"
           for name in $names; do
-            drv=$(nix eval --impure --raw --expr "let f = builtins.getFlake \"git+file://$PWD\"; in (f.inputs.nixpkgs.legacyPackages.x86_64-linux.extend f.overlays.default).$name.drvPath") || exit 1
+            drv=$(nix eval --impure --raw --expr "let f = builtins.getFlake \"git+file://$PWD?shallow=1\"; in (f.inputs.nixpkgs.legacyPackages.x86_64-linux.extend f.overlays.default).$name.drvPath") || exit 1
             # Only what the allowlisted system closure holds is cached; a carried
             # package outside it (omp, today) is neither built nor pushed here (#1738).
             if ! grep -qxF -- "${drv#/nix/store/}" drvs; then

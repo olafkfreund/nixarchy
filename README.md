@@ -690,7 +690,7 @@ inputs.nixarchy = {
 `release` follows the newest tagged release; to pin one exactly,
 use its tag instead, for example `github:olafkfreund/nixarchy/v4.5.0-1`.
 
-From `v4.0.1-3` on, a tag also publishes the two ISOs and a `SHA256SUMS` to
+A tag also publishes the network ISO and a `SHA256SUMS` to
 the [Releases](https://github.com/olafkfreund/nixarchy/releases) page, so a tag
 is both something to pin and something to install from.
 

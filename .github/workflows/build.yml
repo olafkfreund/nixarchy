@@ -492,6 +492,9 @@ jobs:
           # audit rather than a condition per job.
           # The two failure() forms are the failure digest and the install
           # classification (#1384): they only add output after a red, never skip.
+          # carry's two (#1738): its dependents' fail-loud step, the twin of the
+          # gate's; and its own build/push steps, which skip only when no carry
+          # is needed and gate no check result.
           allowed_ifs="needs.gate.outputs.relevant == 'true'
           needs.gate.outputs.relevant != 'true'
           always() && needs.gate.outputs.relevant == 'true'
@@ -501,6 +504,8 @@ jobs:
           always() && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
           \${{ '${{' }} !cancelled() }}
           needs.gate.result != 'success'
+          needs.carry.result != 'success'
+          needs.gate.outputs.relevant == 'true' && steps.need.outputs.needed == 'true'
           failure()
           (failure() || cancelled()) && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'"
 

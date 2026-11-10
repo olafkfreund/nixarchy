@@ -12,16 +12,19 @@
 # all five KVM runners' QEMU) and adding them up per entry would count those
 # several times over.
 #
-# 2.5 GB per commit, not 5: the cache must hold this commit and the one before.
-# They share the box images, pinned by digest (508 MiB), so the worst case, a
-# nixpkgs bump, costs 2 x 2560 - 508 = 4612 MiB of 5120. Pushes come from main
+# 3 GB per commit, not 5: the cache should hold this commit and the one before.
+# They share the box images, pinned by digest (508 MiB), so a nixpkgs bump costs
+# up to 2 x 3072 - 508 = 5636 MiB of 5120: the previous commit's least-downloaded
+# paths are evicted first. Raised from 2560 because a bump that needs the cargo
+# carry also pushes the carried codex, which cache.nixos.org cannot serve (#1738).
+# Pushes come from main
 # and from the newest dated bump branches (minus commit-specific paths, #1461);
 # the free tier evicts by last download, so an unmerged bump's paths go first.
 # See spec/2026-10-10-1231-cache-budget-headroom.md.
 set -uo pipefail
 
 here=$(dirname "$0")
-budget_mib=${CACHE_BUDGET_MIB:-2560}
+budget_mib=${CACHE_BUDGET_MIB:-3072}
 upstreams=${UPSTREAM_CACHES:-https://cache.nixos.org}
 jobs=${LOOKUP_JOBS:-16}
 

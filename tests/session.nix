@@ -2234,22 +2234,25 @@ pkgs.testers.runNixOSTest {
                 section = line
             elif section == "[Colors:Window]" and line.startswith("BackgroundNormal="):
                 want = "".join(f"{int(v):02x}" for v in line.split("=", 1)[1].split(","))
-        # qtdiag's Theme block: "  Platforms requested : x" then "            available : a,b"
-        # on the next line; palette roles print in enum order, WindowText before Window.
+        # qtdiag's Theme block: "Platforms requested" is the integration's own list
+        # (hyprland,generic), not QT_QPA_PLATFORMTHEME, so it cannot show qtengine;
+        # "Styles requested" comes from the active platform theme. Roles print in enum
+        # order, WindowText before Window.
         got = None
-        requested = available = ""
+        styles = available = ""
         lines = diag.splitlines()
         for i, line in enumerate(lines):
             s = line.strip()
             if s.startswith("QPalette::Window:"):
                 got = s.split("#", 1)[1].split()[0][-6:].lower()
             elif s.startswith("Platforms requested"):
-                requested = s.split(":", 1)[1]
                 if i + 1 < len(lines) and lines[i + 1].strip().startswith("available"):
                     available = lines[i + 1].split(":", 1)[1]
+            elif s.startswith("Styles requested"):
+                styles = s.split(":", 1)[1]
         env_block = diag[diag.find("Environment"):] if "Environment" in diag else diag
-        assert "qtengine" in requested.replace(",", " ").split(), (
-            f"qtdiag requested {requested.strip()!r}, not qtengine. Its output:\n{env_block}")
+        assert "qtengine" in styles.replace(",", " ").split(), (
+            f"the active platform theme asks for styles {styles.strip()!r}, not qtengine's. Its output:\n{env_block}")
         assert "qtengine" in available.replace(",", " ").split(), (
             f"qtdiag found platform themes {available.strip()!r}, no qtengine. Its output:\n{env_block}")
         assert want is not None and got == want, (

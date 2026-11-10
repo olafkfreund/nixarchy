@@ -29,10 +29,17 @@ let
       withOmp ? true,
     }:
     libs
-    // {
-      path = hook;
-      codex = stand "codex" "0" codex;
-    }
+    // (
+      let
+        prevCodex = stand "codex" "0" codex;
+      in
+      {
+        path = hook;
+        codex = prevCodex;
+        # Like nixpkgs': codex-acp takes codex as an argument.
+        codex-acp = lib.makeOverridable (a: stand "codex-acp" "0" [ a.codex ]) { codex = prevCodex; };
+      }
+    )
     // lib.optionalAttrs withOmp { omp = stand "omp" "0" omp; };
 
   run =
@@ -96,6 +103,11 @@ let
       ]
     ) "case E: omp must gain only oniguruma, got ${toString (pnames e.packages.omp)}")
     (lib.assertMsg (e.status.omp == "needed") "case E: status.omp must be needed")
+    (lib.assertMsg (
+      (lib.head a.packages.codex-acp.buildInputs).drvPath == a.packages.codex.drvPath
+    ) "case G: when codex is carried, codex-acp must take the carried codex")
+    (lib.assertMsg (same c "codex-acp") "case G: without the hook codex-acp must be prev.codex-acp")
+    (lib.assertMsg (same b "codex-acp") "case G: with codex dead, codex-acp must be prev.codex-acp")
     (lib.assertMsg (
       !(f.packages ? omp) && !(f.status ? omp)
     ) "case F: no omp in prev, none in the carry")

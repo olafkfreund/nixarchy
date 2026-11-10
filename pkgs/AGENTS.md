@@ -883,6 +883,13 @@ The whole function is the needle, so a reworded one fails
 this build.
 printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
 
+Quattro (from 2026-11, edge's pin since #1736) fixed it upstream
+another way: the IPC's rescanPlugins is now an in-place rescan
+that reloads nothing, and mid-scan it sets pluginRescanPending,
+not pluginReloadPending, so it cannot discard a reload. The
+block now applies only where the old function is present
+(main's v4.5.0 tag), and goes when main moves past it.
+
 ## A layout-only shell.json save rebuilt every plugin and froze the bar
 
 A layout-only shell.json save -- moving one bar icon --

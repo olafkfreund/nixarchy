@@ -66,9 +66,6 @@
   "dosfstools" = {
     nix = "dosfstools";
   };
-  "evince" = {
-    nix = "evince";
-  };
   "eza" = {
     nix = "eza";
   };
@@ -228,6 +225,9 @@
   "owe" = {
     nix = "nixarchy-apps.owe";
   };
+  "papers" = {
+    nix = "papers";
+  };
   "pamixer" = {
     nix = "pamixer";
   };
@@ -239,6 +239,9 @@
   };
   "qrencode" = {
     nix = "qrencode";
+  };
+  "qtengine" = {
+    nix = "qtengine";
   };
   "quickshell" = {
     nix = "quickshell";
@@ -483,10 +486,10 @@
   "iptsd" = {
     skip = "Surface touch and pen daemon; a Surface host gets it from nixos-hardware's microsoft-surface modules, not from this port.";
   };
-  "surface-pro-11-sensors" = {
+  "microsoft-surface-pro-11-sensors" = {
     skip = "Surface Pro 11 (Snapdragon) sensors; aarch64 hardware, not targeted.";
   };
-  "surface-pro-11-support" = {
+  "microsoft-surface-pro-11-support" = {
     skip = "Surface Pro 11 (Snapdragon) board support; aarch64 hardware, not targeted.";
   };
   "apple-bcm-firmware-fetcher" = {
@@ -498,10 +501,13 @@
   "asahi-bless" = {
     skip = "Apple Silicon hardware; this port targets x86_64.";
   };
+  "ath12k-board-fallback" = {
+    skip = "Arch board-data fallback for unlisted Qualcomm Wi-Fi cards; not targeted.";
+  };
   "asdcontrol" = {
     skip = "Apple Studio Display brightness; not shipped.";
   };
-  "asus-proart-p14-speaker-firmware" = {
+  "asus-proart-p14-audio" = {
     skip = "One ASUS laptop; not targeted.";
   };
   "asus-zenbook-14-ux3480qa-audio" = {
@@ -780,8 +786,5 @@
   };
   "whois" = {
     skip = "Not installed by default.";
-  };
-  "xorg-xsetroot" = {
-    skip = "X11 tool; the session is Wayland.";
   };
 }

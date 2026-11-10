@@ -67,6 +67,23 @@ runCommand "nixarchy-user-migrations"
                      *) exit 0 ;;
                    esac'
               ;;
+            1792902457)
+              substituteInPlace "$script" --replace-fail 'omarchy-pkg-add qtengine' ""
+              ;;
+            1794165002)
+              substituteInPlace "$script" \
+                --replace-fail 'omarchy-pkg-add papers' "" \
+                --replace-fail 'omarchy-pkg-drop evince' ""
+              block=$(sed -n '/^if \[\[ -f \$user_mimeapps \]\] && grep -q/,/^fi$/p' "$script")
+              [[ $block == *"sed --follow-symlinks -i 's/org\\.gnome\\.Evince\\.desktop/org.gnome.Papers.desktop/g' \"\$user_mimeapps\""* ]] || exit 1
+              substituteInPlace "$script" --replace-fail "$block" 'if [[ -L $user_mimeapps ]]; then
+                if [[ -e $user_mimeapps && -r $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Evince.desktop* ]]; then
+                  echo "nixarchy: $user_mimeapps is a link, left alone; it still names Evince"
+                fi
+              elif [[ -f $user_mimeapps && -w $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Evince.desktop* ]]; then
+                sed -i '"'"'s/org\.gnome\.Evince\.desktop/org.gnome.Papers.desktop/g'"'"' "$user_mimeapps"
+              fi'
+              ;;
             *) echo "no edit defined for $id" >&2; exit 1 ;;
           esac
           ;;

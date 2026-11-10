@@ -93,6 +93,7 @@
   alsa-utils,
   imv,
   evince,
+  papers,
   libretro-core-info,
   localsend,
   runCommand,
@@ -124,6 +125,13 @@
   symlinkJoin,
 }:
 let
+  # Derived from the pinned source, so one line holds under both Omarchy pins
+  # (v4.5.0 ships Evince and no qtengine). `src` is a flake input path: no IFD.
+  hasPapers = builtins.elem "papers" (
+    lib.splitString "\n" (builtins.readFile "${src}/install/omarchy-base.packages")
+  );
+  hasQtengine = builtins.pathExists "${src}/config/qtengine";
+
   osakaJadeTheme = fetchFromGitHub {
     owner = "omacom";
     repo = "omarchy-osaka-jade-theme";
@@ -291,7 +299,7 @@ let
     pamixer # audio bins
     alsa-utils # amixer/alsamixer
     imv # image viewer the menus open
-    evince # PDF viewer
+    (if hasPapers then papers else evince) # PDF viewer
     # See pkgs/omarchy/pacman-shim.sh: turns `pacman: command not found` into
     # a pointer at the Nix equivalent, for the ~15 upstream bins that still
     # call it. nixpkgs does carry a `pacman`, so a user who installs that one
@@ -1802,7 +1810,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       '      // watcher, so one removal costs one reload rather than two.' \
                       '      localPluginReloadTimer.restart()' \
                       '    }')
-                    substituteInPlace "$shellQml" --replace-fail "$rescanOld" "$rescanNew"
+                    # Quattro made the IPC an in-place rescan (#1736): only the old tree needs it.
+                    if [[ $(<"$shellQml") == *"$rescanOld"* ]]; then
+                      substituteInPlace "$shellQml" --replace-fail "$rescanOld" "$rescanNew"
+                    fi
 
                     # Why: pkgs/AGENTS.md#a-layout-only-shelljson-save-rebuilt-every-plugin-and-froze-the-bar
 
@@ -2066,7 +2077,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   passthru = {
-    inherit runtimeDeps;
+    inherit runtimeDeps hasQtengine;
+    pdfViewer = if hasPapers then papers else evince;
+    pdfDesktop = if hasPapers then "org.gnome.Papers.desktop" else "org.gnome.Evince.desktop";
     userMigrations = callPackage ./user-migrations.nix {
       omarchy = finalAttrs.finalPackage;
     };

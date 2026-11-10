@@ -1427,6 +1427,7 @@ in
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.
         ++ map lib.lowPrio (lib.optional cfg.session omarchySession)
+        ++ lib.optionals cfg.package.passthru.hasQtengine [ pkgs.qtengine ]
         # Built against the session's own Hyprland, so its ABI matches (#1572).
         # lowPrio like everything else here: a user's own copy wins (#1167).
         ++ lib.optional cfg.session (
@@ -2356,10 +2357,18 @@ in
       "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}"
     ];
 
+    # Hyprland sets QT_QPA_PLATFORMTHEME=qtengine; Qt finds that platform-theme
+    # plugin only through QT_PLUGIN_PATH (#1736).
+    environment.profileRelativeSessionVariables.QT_PLUGIN_PATH =
+      lib.mkIf cfg.package.passthru.hasQtengine
+        [
+          "/lib/qt-6/plugins"
+        ];
+
     # Without defaults, sorted mimeinfo.cache hands PDFs to the browser.
     # mkDefault per key avoids conflicting strings when a user picks a handler.
     xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) {
-      "application/pdf" = "org.gnome.Evince.desktop";
+      "application/pdf" = cfg.package.passthru.pdfDesktop;
       "video/mp4" = "mpv.desktop";
       "video/x-matroska" = "mpv.desktop";
       "video/quicktime" = "mpv.desktop";

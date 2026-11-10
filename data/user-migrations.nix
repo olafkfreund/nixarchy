@@ -187,6 +187,11 @@
     run = "upstream";
     reason = "removes 4.0 notification files and carries Do Not Disturb into quiet state (#1680)";
   };
+  "1792902457" = {
+    decision = "ported";
+    run = "edited";
+    reason = "points Qt at qtengine; nixpkgs provides the qtengine package (#1736)";
+  };
   "1793179949" = {
     decision = "ported";
     run = "upstream";
@@ -224,6 +229,11 @@
   "1793650506" = {
     decision = "not-needed";
     reason = "Snapdragon OEM firmware through pacman, sudo and mkinitcpio; aarch64 Qualcomm only, which this port does not target";
+  };
+  "1794165002" = {
+    decision = "ported";
+    run = "edited";
+    reason = "switches the PDF default from Evince to Papers; nixpkgs provides papers, and the rewrite leaves a symlinked mimeapps.list alone (#1736)";
   };
   "1794068501" = {
     decision = "ported";

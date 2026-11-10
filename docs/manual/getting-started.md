@@ -302,7 +302,7 @@ From the README, the whole of it:
 ```
 
 `release` follows the newest tagged release; to pin one exactly,
-use its tag instead, for example `github:olafkfreund/nixarchy/v4.0.6-1`.
+use its tag instead, for example `github:olafkfreund/nixarchy/v4.5.0-1`.
 
 And for the user who will sit at the desktop, in Home Manager:
 

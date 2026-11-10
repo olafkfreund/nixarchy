@@ -20,7 +20,8 @@
 let
   # The real 4.0.1 -> 4.0.2 compare, trimmed: two bins this port replaces with
   # a stub, one it patches, one it edits only with `sed -i`, one file it reads
-  # straight out of the source, one seeded config file, and four upstream
+  # straight out of the source, one package list it reads at evaluation (the
+  # PDF viewer follows it, #1736), one seeded config file, and three upstream
   # changes that need no thought here.
   changed = builtins.toFile "changed.txt" ''
     bin/omarchy-plymouth-set
@@ -125,7 +126,7 @@ pkgs.runCommand "nixarchy-patched-files"
     # derive the prefix `bin/`, which matches every bin upstream touched --
     # 167 changed files would come back as a hundred "worth a second look",
     # which is the same as none.
-    for noise in bin/omarchy-theme-bg-next install/omarchy-base.packages \
+    for noise in bin/omarchy-theme-bg-next \
       themes/catppuccin/alacritty.toml README.md; do
       <<<"$report" grep -q "$noise" && {
         echo "patched files: $noise is untouched here and was reported anyway" >&2
@@ -148,8 +149,8 @@ pkgs.runCommand "nixarchy-patched-files"
 
     # --list is what the workflow asks before it goes to the network.
     listed=$(bash "$script" --list ${changed} root)
-    [ "$(echo "$listed" | wc -l)" = 6 ] || {
-      echo "patched files: --list printed $(echo "$listed" | wc -l) paths, expected 6" >&2
+    [ "$(echo "$listed" | wc -l)" = 7 ] || {
+      echo "patched files: --list printed $(echo "$listed" | wc -l) paths, expected 7" >&2
       echo "$listed" >&2
       fail=1
     }

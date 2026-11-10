@@ -1427,7 +1427,7 @@ in
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.
         ++ map lib.lowPrio (lib.optional cfg.session omarchySession)
-        ++ lib.optionals cfg.package.passthru.hasQtengine [ pkgs.qtengine ]
+        ++ map lib.lowPrio (lib.optional cfg.package.passthru.hasQtengine pkgs.qtengine)
         # Built against the session's own Hyprland, so its ABI matches (#1572).
         # lowPrio like everything else here: a user's own copy wins (#1167).
         ++ lib.optional cfg.session (

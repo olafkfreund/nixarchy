@@ -133,6 +133,10 @@
     reason = "MODULES+=(i2c-hid-of) for mkinitcpio, only when omarchy-hw-aarch64-qualcomm detects a Snapdragon laptop, so its internal keyboard can type the disk passphrase. nixarchy builds x86_64-linux only, and NixOS builds its initrd from boot.initrd.*; there is no MODULES list to append to.";
   };
 
+  "mkinitcpio.conf.d/omarchy_compression.conf" = {
+    class = "na";
+    reason = "Sets mkinitcpio's COMPRESSION to zstd, because Arch Linux ARM patches its fallback to single-core gzip. NixOS builds its initrd from boot.initrd.*, whose compressor is boot.initrd.compressor (zstd by default), so there is no mkinitcpio setting to make.";
+  };
   "mkinitcpio.conf.d/omarchy_hooks.conf" = {
     class = "na";
     reason = "HOOKS for mkinitcpio, including dropping kms on an NVIDIA-only machine. NixOS builds its initrd from boot.initrd.*; there is no hook list to order.";

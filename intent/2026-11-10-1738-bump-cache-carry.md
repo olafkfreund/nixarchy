@@ -36,18 +36,29 @@ is left.
      installs. Its lazy trees may not copy the flake source into the store,
      so `.path` is absent. Not yet confirmed.
 
-So `main` rebuilds whatever a bump compiled, and the next carry-needing bump,
-or a codex version bump under the carry, will time out the same way.
+So `main` rebuilds whatever a bump compiled, and the next dated nixpkgs bump
+that changes a carried package's derivation will time out the same way. Codex
+comes from nixpkgs, so a new codex version only ever arrives through such a
+bump, and no other branch kind is affected.
 
 ## Proposed outcome
 
-- **A bump that needs the carry passes CI with no hand push.** Each carried
-  package is compiled at most once per bump run, not once per job.
+- **A bump that needs the carry passes CI with no hand push.** In a
+  successful workflow attempt, one job produces each carried package, and
+  every other job takes it from the cache. A re-run, or a cache outage, may
+  compile again; that is accepted.
 - **The bump-branch push uploads the closures it should**, minus the
   commit-specific paths, as #1461 intended. A bump whose exclusion set cannot
   be computed still pushes nothing, and says so: that refusal stays.
-- **A check fails when the bump push would push nothing on a runner like
-  CI's.** At minimum, a fixture that varies the empty-path case.
+- **Two checks, because they answer different questions:**
+  - a stub fixture in `tests/cache-budget.nix` for the empty or null-path
+    refusal, which is today's stub-only gap;
+  - an assertion with **real `nix`, in the runner environment CI uses**,
+    that the exclusion set holds known commit-specific paths: at least one
+    derivation that embeds the commit, not just the source path itself. A
+    stub cannot see real `nix` change its output, which is how this bug went
+    unseen (§3). An exclusion set of only `$src` is the failure this has to
+    catch (open question 2).
 
 ## Affected users and systems
 
@@ -63,7 +74,11 @@ or a codex version bump under the carry, will time out the same way.
 - **These change CI gates (§11).** They are proposed in a PR, and the owner
   merges.
 - **Only allowlisted closures are pushed (§6, #697):** nothing per job, no
-  store diff, and no unfree paths.
+  store diff, and no unfree paths. The carried packages are already inside
+  the allowlisted `vm-toplevel` closure, so pushing them early is a subset of
+  what the allowlist already permits, not a new entry. The spec must keep it
+  that way: only packages `cargo-system-libs` marks `needed`, and only those
+  that are in an allowlisted closure.
 - **The exclusion set must keep refusing rather than pushing everything**
   when it cannot be computed.
 - **Hosted runners only.** Nothing here may move work onto p620's
@@ -82,15 +97,24 @@ or a codex version bump under the carry, will time out the same way.
      carried packages before it opens the PR.
    - (c) Leave it, and rely on the timeout plus a hand push when it happens.
 
-   Recommendation: (a). It lives where the bump is tested, and runs only
-   when a carry is `needed`, so `main` is untouched. (b) pushes from a job
-   that has not yet proven the bump. (c) is today's state.
-2. **The empty path: fix the read, or change what is excluded.** Once the
-   cause is confirmed:
-   - (a) obtain the source path another way that works under lazy trees,
-     such as `builtins.getFlake`'s `outPath`, or `nix flake archive --json`,
-     which CLAUDE.md §5 already names for inputs;
-   - (b) exclude by derivation rather than by store-path referrers.
+   Recommendation: (a). It lives in the workflow that tests the bump, beside
+   the jobs it unblocks, and runs only when a carry is `needed`, so `main` is
+   untouched. Both (a) and (b) push before the heavy checks have proven
+   anything. That is acceptable for the carried packages alone, because they
+   are allowlisted and their own build is the proof. (c) is today's state.
+2. **The empty path: what to exclude, under lazy trees.** The question is not
+   only how to read the source path. Under lazy trees, the built derivations
+   may not reference one top-level source store path at all. Then
+   materializing the source separately (`builtins.getFlake`'s `outPath`,
+   `nix flake archive --json`) gives a path nothing references. Its
+   referrers-closure is itself, which passes the script's non-empty test, so
+   the script would push commit-specific paths instead of refusing.
+   - (a) If the measurement shows the built paths do reference a source path
+     reachable another way, read that path, and keep the referrer exclusion.
+   - (b) Otherwise, exclude by what makes a path commit-specific (for
+     example, its closure containing the derivations that embed `self.rev`)
+     rather than by referrers of the source.
 
-   Recommendation: (a), the smallest change. Decide in the spec from the
-   measurement.
+   Recommendation: decide in the spec from the measurement. Either way, the
+   real-`nix` check above must show that a known commit-specific path is
+   excluded.

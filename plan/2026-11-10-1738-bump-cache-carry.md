@@ -33,7 +33,16 @@ it.
    refuses (`skip_all`). There is no roots-only guard and no per-entry
    "references the source" rule: one breaks carry, and the other cannot fail.
 3. **The `carry` job** in `build.yml`:
-   - hosted, with no job-level `if:`;
+   - hosted, `needs: gate`, with `if: ${{ !cancelled() }}`, exactly as its
+     dependents have. The spec says "no job-level `if:`"; review showed that
+     taken literally, GitHub's default `success()` skips carry when gate
+     fails, before any step runs. `!cancelled()` is not a skip condition:
+     carry still runs whatever gate concluded, and its first step fails on a
+     failed gate (#1134). This is a clarification of the spec's intent,
+     raised with the owner in the plan review;
+   - its work steps run only when `needs.gate.outputs.relevant == 'true'`,
+     as `omarchy`'s and `system-build`'s do (`build.yml:316-318`, `1445`),
+     so a docs-only change does no carry work and still succeeds;
    - it evaluates the carry status with `pkgs/review.sh:519`'s expression,
      and builds every key of the carry's `packages` for `needed` names
      through `legacyPackages.extend overlays.default`;
@@ -43,8 +52,10 @@ it.
 4. **Its dependents:** `system-build`, `system-checks`, `system-session`,
    `omarchy`, `box` and `options` add `carry` to `needs`.
    - Each has `if: !cancelled()`.
-   - Each one's first step, the existing gate-result check, also fails on
-     `needs.carry.result != 'success'`, naming carry.
+   - Each one keeps its existing gate-result step, and gains a second
+     step after it that fails when `needs.carry.result != 'success'`, with
+     its own message (`carry concluded '<result>'`). So the log says which
+     dependency failed.
    - `gate` stays in `needs`.
 5. **Tests** in `tests/cache-budget.nix`: an archive-based stub, a null path,
    the commit-specific entry excluded, the commit-specific entry missing, and
@@ -79,15 +90,27 @@ probe worktree is `/mnt/data/vmtest/wt-1738-probe` (`probe/1738-lazy-trees`).
      `src=$(nix flake archive --json . 2>/dev/null | jq -r '.path // empty') || skip_all "could not archive the flake source"`.
      `set -uo pipefail` (line 40) makes the pipeline's status the `nix`
      failure. Line 176's emptiness test stays.
-   - After line 186: when `ctx=bump`, for each attr given on the command
-     line whose name (minus `.#checks.$system.`) is in `commit_specific`,
-     resolve its output with `nix path-info "$attr"`. Then
-     `grep -qxF -- "$out" "$excl" || skip_all "<attr> embeds the commit but is not among the source's referrers"`.
-     That is a file read, so no `grep -q` on a pipe (`checks.grep-q-pipefail`).
-   - `commit_specific` comes from `.github/scripts/cache-allowlist.sh`: add a
-     `commit-specific` group that echoes the two toplevel attrs. The script
-     reads it with `mapfile` after `out=$(…) || skip_all` (§4: capture, then
-     split).
+   - After line 186, before the push loop (so a refusal pushes nothing,
+     not part), when `ctx=bump`:
+     ```bash
+     cs=$("$here/cache-allowlist.sh" commit-specific) || skip_all "could not list commit-specific entries"
+     for attr in "$@"; do
+       grep -qxF -- "$attr" <<<"$cs" || continue
+       o=$(nix path-info "$attr" 2>/dev/null) || skip_all "$attr is not built"
+       grep -qxF -- "$o" "$excl" || skip_all "$attr embeds the commit but is not among the source's referrers"
+     done
+     ```
+     Representation, one on both sides: the group echoes **full
+     installables**, `.#checks.x86_64-linux.vm-toplevel` and
+     `.#checks.x86_64-linux.reference-toplevel`, the same strings
+     `cache-allowlist.sh system` gives and `build.yml` passes, so a whole-line
+     match compares like with like. `here=$(dirname "$0")` is defined if the
+     script lacks it. The here-strings are not pipes
+     (`checks.grep-q-pipefail`).
+   - `cache-allowlist.sh`: add a `commit-specific)` case. Leave the default
+     `groups=${1:-omarchy system runners apps}` unchanged, which keeps it out
+     of the no-argument output that `cache-budget.sh`, `cache-entries.sh` and
+     `eval-gate.sh` read (Codex checked).
    - Verify: step 3's checks.
    - Traps:
      - `set -e` is off here (`-uo` only), so check each status explicitly;
@@ -105,6 +128,9 @@ probe worktree is `/mnt/data/vmtest/wt-1738-probe` (`probe/1738-lazy-trees`).
      nothing.
    - The stub `nix-store --referrers-closure` gains a switch,
      `STUB_REFS_WITHOUT_TOPLEVEL`, that omits the toplevel's output path.
+   - The tests call the real `cache-allowlist.sh commit-specific` (it is
+     already copied into the check's `$scripts`), not a fixture of their own,
+     so a format drift between the two scripts fails here.
    - Cases, beside line 269's positive control:
      - **commit-specific excluded** (the default): the push proceeds;
      - **commit-specific missing** (`STUB_REFS_WITHOUT_TOPLEVEL=1`): refused,
@@ -120,19 +146,39 @@ probe worktree is `/mnt/data/vmtest/wt-1738-probe` (`probe/1738-lazy-trees`).
      - read statuses unpiped.
 4. **`build.yml`.**
    - **The new `carry` job**, before `system-build` (line 1382):
-     - `runs-on: ubuntu-26.04`, a timeout of 60, no `if:`, and
-       `needs: gate`. If gate failed, carry's first step fails like the
-       others' (#1134);
+     - `runs-on: ubuntu-26.04`, a timeout of 60,
+       `if: ${{ !cancelled() }}` and `needs: gate`;
+     - first step: copy `system-build`'s gate-result step (lines 1437-1440)
+       unchanged, so a failed gate fails carry;
+     - every step after it has
+       `if: needs.gate.outputs.relevant == 'true'`;
      - steps: checkout, `./.github/actions/setup-nix`, and cachix-action
        (`skipPush: true`, `skipAddingSubstituter: true`, matching the other
        jobs);
-     - a step that evaluates the status (decision 3) and writes the needed
-       names, or `none`.
+     - a step that evaluates the status, `pkgs/review.sh:519`'s expression
+       verbatim:
+       ```bash
+       status=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status") || { echo "::error::could not evaluate the cargo carry"; exit 1; }
+       ```
+       It is `{ "<name>": "needed" | "inactive" | "dead" }`. Then
+       `needed=$(jq -r 'to_entries[] | select(.value=="needed") | .key' <<<"$status")`.
+       Empty: echo `no cargo carry is needed`, and set an output for the
+       later steps' `if:`.
    - **When something is needed:**
-     - build the carried packages through the overlay expression;
-     - assert each `.drv` basename appears in
-       `nix derivation show -r $(nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath)`'s
-       derivation keys;
+     - the carried attributes are every key of the carry's `packages`:
+       `nix eval --impure --json --expr "builtins.attrNames (import $PWD/pkgs/cargo-system-libs.nix { …same p… }).packages"`.
+       That already includes `codex-acp` exactly when the helper adds it;
+     - each one is built from the overlaid set:
+       `drv=$(nix eval --impure --raw --expr "let f = builtins.getFlake \"git+file://$PWD\"; in (f.inputs.nixpkgs.legacyPackages.x86_64-linux.extend f.overlays.default).$name.drvPath")`,
+       then `out=$(nix build --no-link --print-out-paths "$drv^*")`. Each
+       capture is checked on its own (`|| exit 1`): a failure inside
+       `$(…)` does not stop the step;
+     - the allowlist check: `top=$(nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath) || exit 1`.
+       Then
+       `nix derivation show -r "$top" | jq -r '(.derivations // .) | keys[] | sub("^/nix/store/"; "")' > drvs`,
+       which gives basenames on both JSON versions (the probe found v4 keys
+       are basenames). Then `grep -qxF -- "${drv#/nix/store/}" drvs`, or
+       refuse that package with `::error::`;
      - run `.github/scripts/cachix-push.sh <out paths>`.
    - **Dependents:** the six jobs listed in decision 4 (lines 294, 1382,
      1544, 1604, 1774, 2005):
@@ -195,3 +241,19 @@ Revert the merge commit: `cachix-push.sh`, `cache-allowlist.sh`,
 `cache-budget.nix` and `build.yml` return to today. Nothing is stored that
 needs undoing; cache entries pushed in the meantime are ordinary allowlisted
 paths.
+
+## Review (Codex gpt-6.1-sol, agy model not reported), folded in
+
+- **carry's gate step was unreachable** with no job-level `if:` (both
+  reviewers). Now `if: ${{ !cancelled() }}`, which is decision 3's
+  clarification for the owner.
+- **carry did work on docs-only changes** (agy). Now gated on
+  `relevant == 'true'`, like its neighbours.
+- **The `commit_specific` format mismatch** (both): the group emits full
+  installables, the guard matches whole lines, and the tests use the real
+  group.
+- **The guard's placement** (agy): before the push loop, so a refusal never
+  pushes part of the list.
+- **Distinct messages for gate and carry** in dependents (agy).
+- **The concrete status, overlay and derivation-comparison expressions**
+  (both). Each capture is checked on its own.

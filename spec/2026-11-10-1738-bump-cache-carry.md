@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1738
 intent: intent/2026-11-10-1738-bump-cache-carry.md
 ---

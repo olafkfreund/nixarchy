@@ -2,7 +2,7 @@
 # What nixarchy.cachix.org is for: the flake installables whose closures are
 # pushed from main, one per line.
 #
-#   cache-allowlist.sh [omarchy|system|runners|apps]    no argument: all of them
+#   cache-allowlist.sh [omarchy|system|runners|apps|commit-specific]    no argument: first four; commit-specific is explicit-only
 #
 # The free tier is 5 GB, evicted by last DOWNLOAD (a push is not a use). Every
 # job used to push whatever it built, pull requests included, and that evicted
@@ -45,6 +45,11 @@ group() {
       # in build.yml's producer step. Keep the pinned images unmodified.
       echo ".#box-test-image"
       ;;
+    # Commit-specific system closures must be excluded on dated bump PRs (#1738).
+    commit-specific)
+      echo ".#checks.x86_64-linux.vm-toplevel"
+      echo ".#checks.x86_64-linux.reference-toplevel"
+      ;;
     # `nixarchy vm run` downloads the KVM runner instead of building QEMU;
     # checks.microvm-boot downloads -tcg every night. From the data file, so a
     # new template brings its runners.
@@ -77,7 +82,7 @@ group() {
       echo
       ;;
     *)
-      echo "cache-allowlist.sh: unknown group '$1' (omarchy, system, runners, apps)" >&2
+      echo "cache-allowlist.sh: unknown group '$1' (omarchy, system, runners, apps, commit-specific)" >&2
       return 2
       ;;
   esac

@@ -299,6 +299,49 @@ reviewers:
      proof. Close #1722 when that PR is green. (#1721 is already closed.)
      Stop the channel watcher (`brr6mbh0o`); it is no longer the path.
 
+## Deviation, after merge: nixi's codex adapter (#1731)
+
+Step 6 deferred `vm-toplevel` and `reference-toplevel` on the bump to the
+bump PR's CI. That PR (#1731) failed `install`, `system-build`,
+`options-files` and `box`: nixi's Home Manager module pins `pkgs.codex-acp`
+from the user's plain `pkgs` (`nix/hm-module.nix`, through
+`nix/adapters.nix`), and nixpkgs' `codex-acp` takes `codex` as an argument
+and execs it by store path. So the uncarried codex reached every machine
+through nixi, a fourth consumer decision 2b did not list.
+
+Decided by the owner ("bump what is needed and continue"), recorded here:
+
+7. **`pkgs/cargo-system-libs.nix`** also returns `codex-acp`, re-pointed at
+   the carried codex when `status.codex` is `needed`, and `prev.codex-acp`
+   otherwise. The key is present whenever `prev` has both packages: an
+   overlay's attribute names must not read `status`, because `status` forces
+   `prev.codex`, which nixpkgs builds from `final` (measured: infinite
+   recursion in `vm-toplevel`).
+8. **`modules/home.nix`'s `services.nixi.package` default** wraps nixi's
+   package so the `codexAcp` that nixi's module passes to `.override` is
+   replaced by the carried one, only while `status.codex` is `needed`.
+   Otherwise the default is the same expression as before.
+9. **`checks.cargo-system-libs` case G**: codex-acp takes the carried codex
+   when codex is carried, and is `prev.codex-acp` when the hook is absent or
+   codex is `dead`.
+
+Rejected: `nixpkgs.overlays` from the module. Besides the documented
+decision against it (`modules/services/default.nix`), NixOS VM tests import
+`nixos/modules/misc/nixpkgs/read-only.nix`, which makes `nixpkgs.overlays`
+a unique option, so any definition fails every `runNixOSTest` node. A nixi
+option for the adapter would need a nixi release first.
+
+Proof, on the bump tree (`d8a6114f` plus this fix):
+- every `codex` and `codex-acp` derivation in `vm-toplevel`'s and
+  `reference-toplevel`'s closures is the carried one (2 of 2 each);
+- **break**: with `modules/home.nix` reverted and the carry kept, both
+  closures hold the uncarried `kilr7m19…-codex` and `zcrzi0qc…-codex-acp`;
+- case G fails when the carry keeps `prev.codex-acp`;
+- on `main`'s pin the carry is `inactive`, `codex-acp` is `prev.codex-acp`
+  (same `drvPath`), and `vm-toplevel` differs only in commit-bound paths
+  (`source`, `etc-nixarchy-version`, `options.json`, `nixarchy-vm`);
+- `vm-toplevel` and `reference-toplevel` built on the bump.
+
 ## Tests
 
 | check | tier | expect |

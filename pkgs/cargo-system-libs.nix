@@ -24,9 +24,7 @@ let
       have = map (d: d.pname or null) (prev.${n}.buildInputs or [ ]);
     in
     lib.filter (l: !(lib.elem prev.${l}.pname have)) libs;
-in
-{
-  packages = lib.mapAttrs (
+  carried = lib.mapAttrs (
     n: libs:
     let
       m = missing n libs;
@@ -47,4 +45,18 @@ in
     else
       "needed"
   ) present;
+in
+{
+  inherit status;
+  # codex-acp execs codex by store path, so it must name the carried one. The key
+  # set must not read `status`: an overlay's names cannot force prev.codex.
+  packages =
+    carried
+    // lib.optionalAttrs (prev ? codex-acp && carried ? codex) {
+      codex-acp =
+        if status.codex == "needed" then
+          prev.codex-acp.override { inherit (carried) codex; }
+        else
+          prev.codex-acp;
+    };
 }

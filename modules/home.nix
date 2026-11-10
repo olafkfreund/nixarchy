@@ -880,7 +880,23 @@ in
         enable = lib.mkDefault true;
         # Nixi's menu search merges rows with the stock menu's patched file (#1314).
         package = lib.mkDefault (
-          inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override { omarchySrc = menuModelSrc; }
+          let
+            base = inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override {
+              omarchySrc = menuModelSrc;
+            };
+            # nixi pins pkgs.codex-acp over any codexAcp we pass, so re-point its override (#1722).
+            carry = import ../pkgs/cargo-system-libs.nix {
+              inherit lib;
+              prev = pkgs;
+            };
+            acp = carry.packages.codex-acp;
+          in
+          if (carry.status.codex or "") != "needed" then
+            base
+          else
+            lib.makeOverridable (
+              a: base.override (a // lib.optionalAttrs ((a.codexAcp or null) != null) { codexAcp = acp; })
+            ) { }
         );
         # Off unless the user enables it; nixi pins its bridge into this package.
         companion.package =

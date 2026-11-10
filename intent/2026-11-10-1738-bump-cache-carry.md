@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1738
 author: olafkfreund
 ---
@@ -118,3 +118,7 @@ bump, and no other branch kind is affected.
    Recommendation: decide in the spec from the measurement. Either way, the
    real-`nix` check above must show that a known commit-specific path is
    excluded.
+
+## Decisions (owner, 2026-11-10)
+
+Approved as revised, with both recommendations: a producer job on the bump branch for the carried packages (Q1), and the exclusion design decided in the spec from a hosted-runner measurement (Q2).

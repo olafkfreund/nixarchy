@@ -24,7 +24,13 @@
 let
   inherit (pkgs) lib;
 
-  manifest = import ../data/etc-overlay.nix;
+  allRows = import ../data/etc-overlay.nix;
+  # An optional `edge` marker ("only" or "absent"): validated on every row, then
+  # rows inactive under this pin leave the comparison (#1752).
+  isEdge = lib.hasPrefix "edge-" (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
+  manifest = lib.filterAttrs (
+    _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
+  ) allRows;
 
   classes = [
     "covered"
@@ -40,8 +46,16 @@ let
   # reason, is the rubber stamp this file exists to prevent.
   malformed = lib.attrNames (
     lib.filterAttrs (
-      _: row: !(builtins.elem row.class classes) || builtins.stringLength row.reason < 80
-    ) manifest
+      _: row:
+      !(builtins.elem row.class classes)
+      || builtins.stringLength row.reason < 80
+      ||
+        row ? edge
+        && !(builtins.elem row.edge [
+          "only"
+          "absent"
+        ])
+    ) allRows
   );
 in
 if malformed != [ ] then

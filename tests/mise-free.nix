@@ -4,8 +4,29 @@ let
   installedMise = pkgs.lib.filterAttrs (
     name: row: pkgs.lib.hasPrefix "mise/" name && row.class == "installed"
   ) (import ../data/etc-overlay.nix);
-  allow = pkgs.writeText "mise-allow.json" (builtins.toJSON (import ../data/mise-allow.nix));
+  inherit (pkgs) lib;
+  allRows = import ../data/mise-allow.nix;
+  # An optional `edge` marker ("only" or "absent"), validated on every row first (#1752).
+  isEdge = lib.hasPrefix "edge-" pkgs.omarchy.version;
+  badMarker = lib.attrNames (
+    lib.filterAttrs (
+      _: r:
+      r ? edge
+      && !(lib.elem r.edge [
+        "only"
+        "absent"
+      ])
+    ) allRows
+  );
+  active = lib.filterAttrs (
+    _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
+  ) allRows;
+  allow = pkgs.writeText "mise-allow.json" (
+    builtins.toJSON (lib.mapAttrs (_: r: removeAttrs r [ "edge" ]) active)
+  );
 in
+assert lib.assertMsg (badMarker == [ ])
+  "data/mise-allow.nix: edge must be \"only\" or \"absent\": ${lib.concatStringsSep ", " badMarker}";
 assert pkgs.lib.assertMsg (
   builtins.attrNames installedMise == [ ]
 ) "mise-free: /etc/mise is installed";

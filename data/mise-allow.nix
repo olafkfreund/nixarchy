@@ -37,6 +37,7 @@
     ];
   };
   "tree/bin/omarchy-agent-integrate-herdr" = {
+    edge = "only";
     reason = "reads an environment variable mise would set; empty here, and it runs nothing";
     lines = [
       "done < <(jq -r '.[].name' <<<\"\${MISE_INSTALLED_TOOLS:-[]}\" 2>/dev/null)"

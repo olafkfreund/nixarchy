@@ -134,6 +134,7 @@
   };
 
   "mkinitcpio.conf.d/omarchy_compression.conf" = {
+    edge = "only";
     class = "na";
     reason = "Sets mkinitcpio's COMPRESSION to zstd, because Arch Linux ARM patches its fallback to single-core gzip. NixOS builds its initrd from boot.initrd.*, whose compressor is boot.initrd.compressor (zstd by default), so there is no mkinitcpio setting to make.";
   };
@@ -168,11 +169,13 @@
   };
 
   "pipewire/client.conf.d/50-omarchy-rtkit.conf" = {
+    edge = "only";
     class = "native";
     reason = "module.rt.args rtportal.enabled = false, so PipeWire clients ask rtkit for realtime directly rather than through xdg-desktop-portal, whose budget reads 0 when it started before rtkit. modules/nixos.nix declares the same key through services.pipewire.extraConfig.client.\"50-omarchy-rtkit\", which nixpkgs writes to this path; nixpkgs asserts against environment.etc.\"pipewire/...\", so the shipped file cannot be installed as it is (#1498).";
   };
 
   "pipewire/jack.conf.d/50-omarchy-rtkit.conf" = {
+    edge = "only";
     class = "native";
     reason = "module.rt.args rtportal.enabled = false, so JACK clients ask rtkit for realtime directly rather than through xdg-desktop-portal, whose budget reads 0 when it started before rtkit. modules/nixos.nix declares the same key through services.pipewire.extraConfig.jack.\"50-omarchy-rtkit\", which nixpkgs writes to this path; nixpkgs asserts against environment.etc.\"pipewire/...\", so the shipped file cannot be installed as it is (#1498).";
   };
@@ -343,6 +346,7 @@
   };
 
   "udev/rules.d/60-omarchy-hp-zbook-ultra-g3a-usb.rules" = {
+    edge = "only";
     class = "divergent";
     reason = "Disables a phantom USB2 port on the HP ZBook Ultra G3a, which stalls its fingerprint reader. It would act on that laptop only, through services.udev.extraRules since NixOS generates /etc/udev/rules.d, and is not adopted: no machine here can test it. A host with this laptop can carry the rule in that option itself.";
   };

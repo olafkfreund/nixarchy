@@ -247,6 +247,7 @@
   "## Example Requests" = {
     class = "adapted";
     upstream = "08ba553a2bf6";
+    tag_upstream = "fd34bada703c";
     anchor = "\"My change disappeared after a reboot\"";
     reason = "Upstream's examples are kept where the answer is the same command. Three are replaced by the two mistakes that only happen here -- asking this skill to install something, and an imperative change that does not survive a reboot -- because an example is how an agent learns the boundary. Upstream's monitor example now names `omarchy hyprland monitor resolution`, which the tag does not ship, so this one keeps the monitors.lua edit that works on both.";
   };

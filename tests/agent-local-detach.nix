@@ -7,9 +7,18 @@
 #
 # The script is upstream's and unwrapped, so PATH stubs are reached
 # (tests/AGENTS.md, "A PATH stub loses to runtimeInputs").
-pkgs.runCommand "nixarchy-agent-local-detach" { } ''
+let
+  isEdge = if pkgs.lib.hasPrefix "edge-" omarchy.version then "1" else "";
+in
+pkgs.runCommand "nixarchy-agent-local-detach" { inherit isEdge; } ''
   set -euo pipefail
   script=${omarchy}/bin/omarchy-agent-local
+  # main's tag ships no omarchy-agent-local (#1752); when it does, drop this branch.
+  if [ -z "$isEdge" ]; then
+    [ ! -e "$script" ] || { echo "the tag now ships $script: drop the pin gate (#1752)" >&2; exit 1; }
+    touch $out
+    exit 0
+  fi
   [ -f "$script" ] || { echo "missing $script" >&2; exit 1; }
   work=$PWD/work
   mkdir -p "$work/stubs" "$work/with-podman"

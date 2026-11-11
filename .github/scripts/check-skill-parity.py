@@ -133,7 +133,7 @@ def ours(directory):
     return "\n".join(text)
 
 
-def problems(manifest, upstream, mine):
+def problems(manifest, upstream, mine, edge=True):
     found = []
 
     for key in sorted(set(upstream) - set(manifest)):
@@ -159,14 +159,15 @@ def problems(manifest, upstream, mine):
         anchor = row.get("anchor")
         reason = row.get("reason")
 
-        pinned = row.get("upstream")
+        # Off edge, a section whose text differs between the pins is read from tag_upstream (#1752).
+        pinned = row.get("upstream") if edge else row.get("tag_upstream", row.get("upstream"))
         current = digest(upstream[key])
         if pinned != current:
             found.append(
                 f"moved: upstream rewrote {key!r}.\n"
                 f"    Pinned {pinned}, upstream is now {current}. Read the new "
                 f"text, decide whether the classification still holds, then "
-                f'set upstream = "{current}".'
+                f'set {"upstream" if edge or "tag_upstream" not in row else "tag_upstream"} = "{current}".'
             )
 
         if klass == "omitted":
@@ -211,6 +212,7 @@ def main():
     parser.add_argument("--skill", required=True, help="our skills/nixarchy dir")
     parser.add_argument("--manifest", required=True, help="data/skill-parity.nix")
     parser.add_argument("--report", action="store_true", help="digests, for a bump")
+    parser.add_argument("--edge", action="store_true", help="the pin is an edge commit")
     args = parser.parse_args()
 
     # Nix, read by regex, and not JSON -- the same call check-bin-ledger.py
@@ -246,7 +248,7 @@ def main():
             print(f'"{key}" -- upstream = "{digest(upstream[key])}"')
         return
 
-    found = problems(manifest, upstream, mine)
+    found = problems(manifest, upstream, mine, args.edge)
     if found:
         print(
             f"data/skill-parity.nix and upstream's SKILL.md disagree, "

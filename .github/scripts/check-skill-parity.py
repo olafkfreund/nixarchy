@@ -162,12 +162,20 @@ def problems(manifest, upstream, mine, edge=True):
         # Off edge, a section whose text differs between the pins is read from tag_upstream (#1752).
         pinned = row.get("upstream") if edge else row.get("tag_upstream", row.get("upstream"))
         current = digest(upstream[key])
-        if pinned != current:
+        if not edge and "tag_upstream" in row and current == row.get("upstream"):
+            found.append(
+                f"{key!r}: the tag's text now matches edge's. Delete its "
+                f"tag_upstream, which no longer says anything."
+            )
+        elif pinned != current:
+            field = "upstream" if edge else "tag_upstream"
             found.append(
                 f"moved: upstream rewrote {key!r}.\n"
                 f"    Pinned {pinned}, upstream is now {current}. Read the new "
                 f"text, decide whether the classification still holds, then "
-                f'set {"upstream" if edge or "tag_upstream" not in row else "tag_upstream"} = "{current}".'
+                f'set {field} = "{current}"'
+                + ("" if edge or "tag_upstream" in row else ", keeping upstream for edge")
+                + "."
             )
 
         if klass == "omitted":

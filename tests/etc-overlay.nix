@@ -60,8 +60,9 @@ let
 in
 if malformed != [ ] then
   throw ''
-    data/etc-overlay.nix: rows with an unknown class, or a reason under 80
-    characters, which is too short to be checkable after a release:
+    data/etc-overlay.nix: rows with an unknown class, a reason under 80
+    characters (too short to be checkable after a release), or an edge
+    marker other than "only" or "absent":
 
       ${lib.concatStringsSep "\n      " malformed}
 

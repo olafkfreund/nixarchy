@@ -8,7 +8,7 @@
 # ## The rule that keeps this file honest
 #
 # A vendored command does NOT get a row, unless it carries a `pacman` or an
-# `allow` field -- see below, and note that neither of those restates the
+# allowance field -- see below, and note that neither of those restates the
 # comparison. Otherwise a row is a CLAIM that the shipped file
 # differs from upstream, and .github/scripts/check-bin-ledger.py fails in BOTH
 # directions: a file that differs with no row is unclassified, and a row whose
@@ -48,9 +48,11 @@
 # allowance fails, and an allowance the script no longer matches fails too, so
 # an upstream cleanup is reported rather than assumed.
 #
-# `allow` is a STRING and not a list because the ledger is read by regex over
-# quoted strings; a list-valued key would be invisible to the parser and the
-# allowance would silently mean nothing.
+# `allow`, `edge_allow` and `tag_allow` are space-separated strings of distinct
+# groups. `edge_allow` applies only to an edge pin; `tag_allow` applies only to
+# a non-edge pin. `edge = "only"` keeps a whole row only on edge, while
+# `edge = "absent"` keeps it only off edge. Every field is checked before a row
+# is filtered; unknown fields and non-string values are errors.
 #
 # The patterns over-match on purpose -- `cp /etc/skel/. ~/` reads /etc and
 # still counts -- because a false positive costs one row saying so, and a false

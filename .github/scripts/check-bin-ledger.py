@@ -147,6 +147,15 @@ def strip_comments(text):
     return "\n".join(re.sub(r"#.*", "", line) for line in text.splitlines())
 
 
+def strip_ledger_comments(text):
+    """Remove Nix comments without cutting a # inside a quoted reason."""
+    return re.sub(
+        r'("(?:\\.|[^"\\])*")|#[^\n]*',
+        lambda match: match.group(1) or "",
+        text,
+    )
+
+
 def scan(shipped_bin, shipped):
     """{name: {group, ...}} for every shipped command that mutates the system.
 
@@ -253,7 +262,13 @@ def derive(upstream_bin, shipped_bin, nix_bin):
     return derived, upstream, shipped
 
 
-def problems(ledger, derived, upstream, shipped, shipped_bin, matched):
+def allowance(row, edge):
+    return set((row.get("allow") or "").split()) | set(
+        (row.get("edge_allow" if edge else "tag_allow") or "").split()
+    )
+
+
+def problems(ledger, derived, upstream, shipped, shipped_bin, matched, edge):
     """Every way the ledger and the trees can disagree."""
     found = []
 
@@ -311,13 +326,13 @@ def problems(ledger, derived, upstream, shipped, shipped_bin, matched):
         if (
             actual == "vendor"
             and not declared.get("pacman")
-            and not declared.get("allow")
+            and not allowance(declared, edge)
         ):
             found.append(
                 f"{name}: a row for a file identical to upstream.\n"
                 "    Vendored commands do not get rows -- the comparison "
                 "already proves it. Delete this, unless it needs a `pacman` "
-                "or an `allow` field -- the two things a vendor row may carry, "
+                "or an allowance field -- the two things a vendor row may carry, "
                 "because neither restates the comparison."
             )
 
@@ -381,7 +396,7 @@ def problems(ledger, derived, upstream, shipped, shipped_bin, matched):
     #    which is how an upstream cleanup gets noticed instead of assumed.
     for name in sorted(set(matched) | set(ledger)):
         actual = matched.get(name, set())
-        declared = set((ledger.get(name, {}).get("allow") or "").split())
+        declared = allowance(ledger.get(name, {}), edge)
 
         for group in sorted(actual - declared):
             found.append(
@@ -429,6 +444,7 @@ def main():
     parser.add_argument("--ledger", required=True, help="data/bin-ledger.nix")
     parser.add_argument("--report", action="store_true", help="one line each")
     parser.add_argument("--seed", action="store_true", help="skeleton rows")
+    parser.add_argument("--edge", action="store_true", help="check the edge pin")
     args = parser.parse_args()
 
     # Nix, read by regex, and not JSON.
@@ -446,30 +462,54 @@ def main():
     # its only purpose -- it died on the empty file with a JSONDecodeError.
     ledger = {}
     if os.path.exists(args.ledger):
-        text = open(args.ledger, encoding="utf-8").read()
-        for name, body in re.findall(
-            r'"([^"]+)"\s*=\s*\{(.*?)\};', text, re.S
+        text = strip_ledger_comments(open(args.ledger, encoding="utf-8").read())
+        for name, row_body in re.findall(
+            r'"([^"]+)"\s*=\s*\{((?:[^"]|"(?:\\.|[^"\\])*")*?)\};', text
         ):
-            row = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', body))
-            if row:
-                if name in ledger:
-                    die(f"{name}: two rows in the ledger; the later one would silently replace the earlier")
-                ledger[name] = row
+            if name in ledger:
+                die(f"{name}: two rows in the ledger; the later one would silently replace the earlier")
+            row = {}
+            field = re.compile(r'\s*(\w+)\s*=\s*"((?:\\.|[^"\\])*)"\s*;')
+            position = 0
+            while position < len(row_body):
+                match = field.match(row_body, position)
+                if not match:
+                    if not row_body[position:].strip():
+                        break
+                    die(f"{name}: invalid field syntax near {row_body[position:].strip()[:60]!r}; fields must be quoted strings")
+                key, value = match.groups()
+                if key not in {"class", "reason", "allow", "pacman", "stub", "edge", "edge_allow", "tag_allow"}:
+                    die(f"{name}: unknown field {key!r}")
+                if key in row:
+                    die(f"{name}: duplicate field {key!r}")
+                row[key] = value
+                position = match.end()
+            ledger[name] = row
     elif not args.seed:
         die(f"no ledger at {args.ledger}")
 
     for name, row in ledger.items():
         if row.get("class") not in CLASSES:
             die(f"{name}: class {row.get('class')!r} is not one of {CLASSES}")
-        # `allow` is a space-separated string, not a list, because the parser
-        # above reads quoted strings only -- a list-valued key would be
-        # invisible to it and the allowance would silently mean nothing.
-        for group in (row.get("allow") or "").split():
-            if group not in PATTERNS:
-                die(
-                    f"{name}: allow names {group!r}, which is not a pattern "
-                    f"group. Known groups: {', '.join(sorted(PATTERNS))}"
-                )
+        if "edge" in row and row["edge"] not in ("only", "absent"):
+            die(f"{name}: edge must be 'only' or 'absent'")
+        groups = set()
+        for key in ("allow", "edge_allow", "tag_allow"):
+            current = set((row.get(key) or "").split())
+            for group in current:
+                if group not in PATTERNS:
+                    die(
+                        f"{name}: {key} names {group!r}, which is not a pattern "
+                        f"group. Known groups: {', '.join(sorted(PATTERNS))}"
+                    )
+                if group in groups:
+                    die(f"{name}: {group!r} appears in more than one allowance")
+            groups.update(current)
+
+    ledger = {
+        name: row for name, row in ledger.items()
+        if row.get("edge") not in (("absent",) if args.edge else ("only",))
+    }
 
     upstream_bin = os.path.join(args.upstream, "bin")
     shipped_bin = os.path.join(args.shipped, "bin")
@@ -482,7 +522,7 @@ def main():
         print("\n".join(rows))
         return 0
 
-    found = problems(ledger, derived, upstream, shipped, shipped_bin, matched)
+    found = problems(ledger, derived, upstream, shipped, shipped_bin, matched, args.edge)
 
     if args.report:
         if not found:

@@ -520,7 +520,7 @@ jobs:
               failed="$failed $name"
             fi
           }
-          try omarchy nix build .#omarchy --print-build-logs --no-link
+          try omarchy nix build .#omarchy --print-build-logs --out-link result
           # Nearly every check depends on the package: past this point a red one only
           # repeats its error, so stop here and name it.
           if [ -n "$failed" ]; then

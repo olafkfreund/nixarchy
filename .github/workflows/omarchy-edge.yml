@@ -140,7 +140,11 @@ jobs:
             esac
           fi
           if [ -n "$CANDIDATE_REF" ]; then
-            git check-ref-format "$CANDIDATE_REF"
+            # --branch: a plain check-ref-format refuses a one-level name like edge-candidate.
+            git check-ref-format --branch "$CANDIDATE_REF" >/dev/null || {
+              echo "::error::candidate_ref '$CANDIDATE_REF' is not a valid branch name"
+              exit 1
+            }
             git fetch origin "$CANDIDATE_REF"
             from_candidate=true
           fi

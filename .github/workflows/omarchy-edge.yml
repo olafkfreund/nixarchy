@@ -517,6 +517,12 @@ jobs:
             fi
           }
           try omarchy nix build .#omarchy --print-build-logs --no-link
+          # Nearly every check depends on the package: past this point a red one only
+          # repeats its error, so stop here and name it.
+          if [ -n "$failed" ]; then
+            echo "::error::main-pin red: the omarchy package does not build under main's pin; the checks that depend on it were not run"
+            exit 1
+          fi
           # Every check that is not a VM test (generated and claimed alike): the VM
           # tier is verify's, on p620. The options shards and toplevels follow.
           # shellcheck disable=SC2016 # ${n} is Nix interpolation, not shell

@@ -2199,14 +2199,57 @@ pkgs.testers.runNixOSTest {
         machine.fail(user % f"command -v {app}")
     # The new apps claim these types (#1612); adding them must not move the handler.
     # Markdown is not asserted: upstream sets no default for it.
-    for mime, want in [("application/pdf", "${omarchyPkg.passthru.pdfDesktop}"),
-                       ("video/mp4", "mpv.desktop"),
-                       ("text/plain", "nvim.desktop")]:
+    mimes = [("application/pdf", "${omarchyPkg.passthru.pdfDesktop}"),
+             ("video/mp4", "mpv.desktop"),
+             ("text/plain", "${omarchyPkg.passthru.editorDesktop}")]
+    if ${if omarchyPkg.passthru.hasFiles then "True" else "False"}:
+        mimes.append(("inode/directory", "folio.desktop"))
+    for mime, want in mimes:
         got = machine.succeed(user % (
             "XDG_CURRENT_DESKTOP=Hyprland "
             "XDG_DATA_DIRS=/run/current-system/sw/share:/etc/profiles/per-user/omarchy/share "
             f"xdg-mime query default {mime}")).strip()
         assert got == want, f"{mime} opens with {got!r}, not {want}"
+    # Files and Plain, through the launchers the bindings use (#1750). A fresh
+    # home has its ported migrations marked done, so 1794341736 writes no
+    # editor state and omarchy-launch-editor resolves upstream's plain.
+    if ${if omarchyPkg.passthru.hasPlain then "True" else "False"}:
+        machine.wait_until_succeeds(
+            "test -e /home/omarchy/.local/state/omarchy/migrations/1794341736.sh", timeout=120)
+        machine.fail("test -e /home/omarchy/.local/state/omarchy/defaults/editor")
+    for flag, launcher, cls in [
+            (${
+              if omarchyPkg.passthru.hasFiles then "True" else "False"
+            }, "omarchy-launch-files", "folio"),
+            (${
+              if omarchyPkg.passthru.hasPlain then "True" else "False"
+            }, "omarchy-launch-editor", "plain")]:
+        if not flag:
+            continue
+        machine.succeed(
+            "cat > /tmp/launch-" + cls + ".sh <<'PROBE_EOF'\n"
+            "export XDG_RUNTIME_DIR=/run/user/1000\n"
+            "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+            f"hyprctl dispatch 'hl.dsp.exec_cmd(\"{launcher} 2>/tmp/launch-{cls}.err\")' "
+            f"> /tmp/launch-{cls}.txt 2>&1 </dev/null\n"
+            "PROBE_EOF")
+        machine.execute(f"su omarchy -c 'bash /tmp/launch-{cls}.sh'")
+        reply = machine.execute(f"cat /tmp/launch-{cls}.txt")[1].strip()
+        assert reply == "ok", f"hyprctl dispatch did not accept {launcher}: {reply!r}"
+        clients = (
+            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+            " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+            f" hyprctl clients -j' > /tmp/clients-{cls}.json")
+        try:
+            machine.wait_until_succeeds(
+                clients + f" && ${pkgs.jq}/bin/jq -e 'any(.[]; .class == \"{cls}\")' /tmp/clients-{cls}.json",
+                timeout=60)
+        except Exception:
+            print(f"{launcher} stderr: " + machine.execute(f"cat /tmp/launch-{cls}.err")[1])
+            raise
+        pid = machine.succeed(
+            f"${pkgs.jq}/bin/jq -r 'first(.[] | select(.class == \"{cls}\") | .pid)' /tmp/clients-{cls}.json").strip()
+        machine.succeed(f"kill {pid}")
     # Qt themes through qtengine on Omarchy builds that ship it (#1736). qtdiag
     # runs inside Hyprland's environment: a plain su shell lacks envs.lua's
     # QT_QPA_PLATFORMTHEME and WAYLAND_DISPLAY and would fail a working session.

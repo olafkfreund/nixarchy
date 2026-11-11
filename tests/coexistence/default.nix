@@ -257,6 +257,11 @@ let
     (agentLocalCheck "xdg-mime-own-pdf" (
       c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
     ))
+    (agentLocalCheck "xdg-mime-own-files-editor" (
+      c:
+      c.xdg.mime.defaultApplications."inode/directory" == "thunar.desktop"
+      && c.xdg.mime.defaultApplications."text/plain" == "org.gnome.TextEditor.desktop"
+    ))
     # #1613. Each reads what nixarchy would add if it touched the thing the
     # person owns; the fixtures' comments say which.
     (agentLocalCheck "superwhisper-own-copy" (

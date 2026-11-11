@@ -92,6 +92,14 @@
     xdg.mime.defaultApplications."application/pdf" = "own.desktop";
   };
 
+  # #1750: a user's own file manager and editor win over Files and Plain.
+  xdg-mime-own-files-editor = {
+    xdg.mime.defaultApplications = {
+      "inode/directory" = "thunar.desktop";
+      "text/plain" = "org.gnome.TextEditor.desktop";
+    };
+  };
+
   # #1613: a person's own portable Superwhisper on PATH, the app off. Nixarchy
   # adds no package, no unit, and no second copy of the name.
   superwhisper-own-copy =

@@ -735,6 +735,86 @@ case_1794165002() {
   [[ -L $HOME/.config/mimeapps.list && ! -e $HOME/nowhere ]] || fail '1794165002: dangling link changed'
   ! grep -F 'left alone' "$work/1794165002-dangling.out" > /dev/null || fail '1794165002: message for a dangling link'
 }
+case_1794330979() {
+  local mime target before
+  case=1794330979
+  setup 1794330979 "$FIXTURE_C"
+  mime=$HOME/.config/mimeapps.list
+  printf '%s\n' '[Default Applications]' 'inode/directory=org.gnome.Nautilus.desktop' 'text/plain=nvim.desktop' > "$mime"
+  run_ids 1794330979 > "$work/1794330979.out"
+  [[ $(<"$mime") == $'[Default Applications]\ninode/directory=folio.desktop\ntext/plain=nvim.desktop' ]] || fail '1794330979: Nautilus handler not moved to Files'
+
+  setup 1794330979-other "$FIXTURE_C"
+  mime=$HOME/.config/mimeapps.list
+  printf '%s\n' '[Default Applications]' 'inode/directory=thunar.desktop' > "$mime"
+  run_ids 1794330979 > "$work/1794330979-other.out"
+  [[ $(<"$mime") == $'[Default Applications]\ninode/directory=thunar.desktop' ]] || fail '1794330979: a non-Nautilus handler was changed'
+
+  setup 1794330979-link "$FIXTURE_C"
+  target=$HOME/dotfiles/mimeapps.list
+  mkdir -p "${target%/*}"
+  printf '%s\n' 'inode/directory=org.gnome.Nautilus.desktop' > "$target"
+  ln -s "$target" "$HOME/.config/mimeapps.list"
+  run_ids 1794330979 > "$work/1794330979-link.out"
+  [[ -L $HOME/.config/mimeapps.list ]] || fail '1794330979: symlink was replaced'
+  [[ $(<"$target") == 'inode/directory=org.gnome.Nautilus.desktop' ]] || fail '1794330979: symlink target was edited'
+  grep -F 'left alone' "$work/1794330979-link.out" > /dev/null || fail '1794330979: link message not printed'
+
+  setup 1794330979-none "$FIXTURE_C"
+  run_ids 1794330979 > "$work/1794330979-none.out"
+  [[ ! -e $HOME/.config/mimeapps.list && ! -L $HOME/.config/mimeapps.list ]] || fail '1794330979: created a mimeapps.list'
+
+  # The dock block is gone: shell.json is written only through the shell (#847).
+  setup 1794330979-dock "$FIXTURE_C"
+  jq '.dockFixture = ["org.gnome.Nautilus"]' "$FIXTURE_C" > "$XDG_CONFIG_HOME/omarchy/shell.json"
+  grep -F '"org.gnome.Nautilus"' "$XDG_CONFIG_HOME/omarchy/shell.json" > /dev/null || fail '1794330979: dock fixture not set up'
+  before=$work/1794330979.shell.json
+  cp "$XDG_CONFIG_HOME/omarchy/shell.json" "$before"
+  run_ids 1794330979 > "$work/1794330979-dock.out"
+  cmp "$before" "$XDG_CONFIG_HOME/omarchy/shell.json" || fail '1794330979: shell.json was modified'
+}
+case_1794341736() {
+  local mime target editor
+  case=1794341736
+  setup 1794341736 "$FIXTURE_C"
+  editor=$XDG_STATE_HOME/omarchy/defaults/editor
+  run_ids 1794341736 > "$work/1794341736.out"
+  [[ $(<"$editor") == nvim ]] || fail '1794341736: existing home without state did not get nvim'
+
+  setup 1794341736-saved "$FIXTURE_C"
+  editor=$XDG_STATE_HOME/omarchy/defaults/editor
+  mkdir -p "${editor%/*}"
+  printf '%s\n' helix > "$editor"
+  run_ids 1794341736 > "$work/1794341736-saved.out"
+  [[ $(<"$editor") == helix ]] || fail '1794341736: a saved editor was replaced'
+
+  setup 1794341736-mime "$FIXTURE_C"
+  mime=$HOME/.config/mimeapps.list
+  printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$mime"
+  run_ids 1794341736 > "$work/1794341736-mime.out"
+  grep -Fx 'text/plain=kate.desktop' "$mime" > /dev/null || fail '1794341736: a set type was changed'
+  ! grep -Fx 'text/plain=nvim.desktop' "$mime" > /dev/null || fail '1794341736: a set type gained nvim'
+  grep -Fx 'text/xml=nvim.desktop' "$mime" > /dev/null || fail '1794341736: an unset type did not gain nvim'
+
+  setup 1794341736-link "$FIXTURE_C"
+  editor=$XDG_STATE_HOME/omarchy/defaults/editor
+  target=$HOME/dotfiles/mimeapps.list
+  mkdir -p "${target%/*}"
+  printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$target"
+  ln -s "$target" "$HOME/.config/mimeapps.list"
+  run_ids 1794341736 > "$work/1794341736-link.out"
+  [[ -L $HOME/.config/mimeapps.list ]] || fail '1794341736: symlink was replaced'
+  [[ $(<"$target") == $'[Default Applications]\ntext/plain=kate.desktop' ]] || fail '1794341736: symlink target was edited'
+  grep -F 'left alone' "$work/1794341736-link.out" > /dev/null || fail '1794341736: link message not printed'
+  [[ $(<"$editor") == nvim ]] || fail '1794341736: state not written beside a link'
+
+  # A fresh home has the marker already (the seed's loop writes it): nothing runs.
+  setup 1794341736-fresh "$FIXTURE_C"
+  mkdir -p "$OMARCHY_MIGRATION_STATE"
+  touch "$OMARCHY_MIGRATION_STATE/1794341736.sh"
+  run_ids 1794341736 > "$work/1794341736-fresh.out"
+  [[ ! -e $XDG_STATE_HOME/omarchy/defaults/editor ]] || fail '1794341736: a fresh home got an editor state'
+}
 case_1792902457() {
   local cfg
   case=1792902457
@@ -850,6 +930,8 @@ case_1681
 case_1671
 case_1672
 case_1794165002
+case_1794330979
+case_1794341736
 case_1792902457
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

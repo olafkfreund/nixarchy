@@ -83,7 +83,7 @@ tail_of() { # names result
   fi
 }
 
-PREPARE=${PREPARE:-} WAIT=${WAIT:-} VERIFY=${VERIFY:-} CANDIDATE=${CANDIDATE:-} SKIP=${SKIP:-}
+PREPARE=${PREPARE:-} MAIN_PIN=${MAIN_PIN:-} WAIT=${WAIT:-} VERIFY=${VERIFY:-} CANDIDATE=${CANDIDATE:-} SKIP=${SKIP:-}
 PROMOTED=${PROMOTED:-} FALLBACK=${FALLBACK:-} NEWEST=${NEWEST:-} BUILD2=${BUILD2:-}
 PREPARE_FAILED=${PREPARE_FAILED:-} HELD_BY=${HELD_BY:-} HELD_SHA=${HELD_SHA:-}
 VERIFY_FAILED=${VERIFY_FAILED:-} PREPARE_DIGEST=${PREPARE_DIGEST:-} VERIFY_DIGEST=${VERIFY_DIGEST:-}
@@ -131,6 +131,8 @@ if [ "$PREPARE" != success ]; then
     sig="prepare: $x"
   fi
   digest=$PREPARE_DIGEST
+elif [ "$MAIN_PIN" != success ] && [ "$SKIP" != true ]; then
+  sig="main-pin: $(tail_of "" "$MAIN_PIN")"
 elif [ "$WAIT" != success ]; then
   sig="wait-idle: $(tail_of "" "$WAIT")"
 elif [ "$VERIFY" != success ]; then

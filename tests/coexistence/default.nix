@@ -494,14 +494,16 @@ let
   qtPluginPaths =
     (configOf fixtures.qt-own-platform-theme)
     .environment.profileRelativeSessionVariables.QT_PLUGIN_PATH;
+  # The user's own entry always counts; the second is nixarchy's, present only when the pin ships qtengine.
+  qtExpected = if pkgs.omarchy.hasQtengine then 2 else 1;
   qtScript =
-    if lib.count (p: p == "/lib/qt-6/plugins") qtPluginPaths == 2 then
+    if lib.count (p: p == "/lib/qt-6/plugins") qtPluginPaths == qtExpected then
       ''
         echo "qt-own-platform-theme: ok"
       ''
     else
       ''
-        echo ${shQuote "qt-own-platform-theme: FAIL /lib/qt-6/plugins is not provided by both modules: ${builtins.toJSON qtPluginPaths}"} >&2
+        echo ${shQuote "qt-own-platform-theme: FAIL /lib/qt-6/plugins should appear exactly ${toString qtExpected} time(s) (hasQtengine = ${lib.boolToString pkgs.omarchy.hasQtengine}): ${builtins.toJSON qtPluginPaths}"} >&2
         fail=1
       '';
 

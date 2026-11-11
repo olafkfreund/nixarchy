@@ -33,7 +33,7 @@ used to be the middle of the README, and moved here unchanged.
 ```
 
 `release` follows the newest tagged release; to pin one exactly,
-use its tag instead, for example `github:olafkfreund/nixarchy/v4.0.6-1`.
+use its tag instead, for example `github:olafkfreund/nixarchy/v4.5.0-1`.
 
 And in Home Manager:
 

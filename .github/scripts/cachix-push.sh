@@ -38,6 +38,7 @@
 # dependencies, so a result that references anything would upload a closure;
 # that is refused (a warning, not a failure) rather than filling the cache.
 set -uo pipefail
+here=$(dirname "$0")
 
 usage() {
   echo "usage: $0 <flake-attr>...   (closures; main, and this repo's nixpkgs bump PRs)" >&2
@@ -170,9 +171,10 @@ trap 'rm -f "$excl"' EXIT
 if [ "$ctx" = bump ]; then
   # Everything that references the flake source or the omarchy tree changes
   # with every commit, so nobody downloads it twice. A bump that cannot compute
-  # the set pushes nothing rather than everything.
+  # the set pushes nothing rather than everything. Determinate Nix lazy trees
+  # leave flake metadata with no path, so use archive (#1738).
   skip_all() { echo "::warning::$1; a nixpkgs bump pushes nothing without the exclusion set" >&2; exit 0; }
-  src=$(nix flake metadata --json . 2>/dev/null | jq -r .path) || skip_all "could not read the flake source path"
+  src=$(nix flake archive --json . 2>/dev/null | jq -r '.path // empty') || skip_all "could not archive the flake source"
   [ -n "$src" ] && [ "$src" != null ] || skip_all "the flake source path is empty"
   tree=$(nix eval --raw .#omarchy.outPath 2>/dev/null) || skip_all "could not resolve .#omarchy"
   roots=("$src")
@@ -184,6 +186,17 @@ if [ "$ctx" = bump ]; then
   # The source is its own referrer, so empty means the query broke; never
   # read it as "exclude nothing".
   grep -q . "$excl" || skip_all "the exclusion set is empty"
+fi
+
+if [ "$ctx" = bump ]; then
+  # A wrong source path leaves the toplevel unexcluded; this is the one check
+  # that can see it (#1738).
+  cs=$("$here/cache-allowlist.sh" commit-specific) || skip_all "could not list commit-specific entries"
+  for attr in "$@"; do
+    grep -qxF -- "$attr" <<<"$cs" || continue
+    o=$(nix path-info "$attr" 2>/dev/null) || skip_all "$attr is not built"
+    grep -qxF -- "$o" "$excl" || skip_all "$attr embeds the commit but is not among the source's referrers"
+  done
 fi
 
 fail=0

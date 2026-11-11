@@ -262,7 +262,7 @@ Then, in order:
    ```
 
    `release` follows the newest tagged release; to pin one exactly,
-   use its tag instead, for example `github:olafkfreund/nixarchy/v4.0.6-1`.
+   use its tag instead, for example `github:olafkfreund/nixarchy/v4.5.0-1`.
 
 2. **Paste what the doctor printed.** On a machine that already runs Hyprland
    behind greetd, that is:
@@ -643,8 +643,6 @@ nixarchy = {
 };
 ```
 
-`main` currently carries Omarchy v4.5.0-rc1 while `release` stays on the last release, so a bare `github:olafkfreund/nixarchy` input tries 4.5 early.
-
 The whole story (dev by hand, trying edge on one machine, going back):
 **[Omarchy channels](https://olafkfreund.github.io/nixarchy/manual/omarchy-channels)**.
 
@@ -690,9 +688,9 @@ inputs.nixarchy = {
 ```
 
 `release` follows the newest tagged release; to pin one exactly,
-use its tag instead, for example `github:olafkfreund/nixarchy/v4.0.6-1`.
+use its tag instead, for example `github:olafkfreund/nixarchy/v4.5.0-1`.
 
-From `v4.0.1-3` on, a tag also publishes the two ISOs and a `SHA256SUMS` to
+A tag also publishes the network ISO and a `SHA256SUMS` to
 the [Releases](https://github.com/olafkfreund/nixarchy/releases) page, so a tag
 is both something to pin and something to install from.
 

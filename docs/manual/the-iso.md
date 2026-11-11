@@ -99,7 +99,7 @@ second password.
 
 **`#iso-net` needs a network.** It fetches the system from binary caches,
 which is why it stops at a Wi-Fi prompt on a machine with no cable.
-The 76 selectable apps are the exception, and are meant to be: they come from the Install
+The 77 selectable apps are the exception, and are meant to be: they come from the Install
 menu after first boot, from your own nixpkgs.
 
 **You can answer the questions ahead of time.** `nixarchy-install --answers

@@ -1265,6 +1265,8 @@
           # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
           # and the lock screen's video feed. Not in nixpkgs. #1153.
           owe = final.callPackage ./pkgs/apps/owe.nix { };
+          folio = final.callPackage ./pkgs/apps/folio.nix { };
+          plain = final.callPackage ./pkgs/apps/plain.nix { };
 
           # The fourth, and the only one that is not a small script or a Qt
           # program: a Wails app, so a Go module set AND an npm tree to pin.
@@ -1372,6 +1374,8 @@
           inherit (final.nixarchy-apps)
             disktree
             ttfx
+            folio
+            plain
             omasnap
             omarchy-speedtest
             omarchy-screensaver
@@ -1610,6 +1614,8 @@
             omacut
             omasnap
             owe
+            folio
+            plain
             aether
             ttfx
             omarchy-speedtest

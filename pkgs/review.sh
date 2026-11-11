@@ -124,6 +124,8 @@ omacalc	pkgs/apps/omacalc.nix	omacom/omacalc
 omacut	pkgs/apps/omacut.nix	omacom/omacut
 omawrite	pkgs/apps/omawrite.nix	omacom/omawrite
 owe	pkgs/apps/owe.nix	omacom/owe
+folio	pkgs/apps/folio.nix	omacom/folio
+plain	pkgs/apps/plain.nix	omacom/plain
 aether	pkgs/apps/aether.nix	omacom/aether
 ttfx	pkgs/apps/ttfx.nix	omacom/ttfx
 omarchy-speedtest	pkgs/apps/omarchy-speedtest.nix	omacom/omarchy-speedtest

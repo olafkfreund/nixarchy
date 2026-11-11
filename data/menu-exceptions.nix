@@ -76,10 +76,13 @@
     "dimmed with a reason (#1320): upstream installs a binary with its own installer under "
     + "/usr/share/hermes-desktop; nixpkgs has no hermes";
   # New in quattro ae64a4b.
-  "install.ai.herdr" =
-    "Herdr's desktop app, which Herdr's own installer puts in ~/.local/share/herdr-app and updates itself; "
-    + "nixpkgs has no herdr-app (its herdr is the terminal multiplexer, carried as nixarchy's herdr plugin). "
-    + "The row runs upstream's installer unchanged, and the app runs through nix-ld (untested).";
+  "install.ai.herdr" = {
+    reason =
+      "Herdr's desktop app, which Herdr's own installer puts in ~/.local/share/herdr-app and updates itself; "
+      + "nixpkgs has no herdr-app (its herdr is the terminal multiplexer, carried as nixarchy's herdr plugin). "
+      + "The row runs upstream's installer unchanged, and the app runs through nix-ld (untested).";
+    edge = "only";
+  };
   "install.ai.perplexity" =
     "dimmed with a reason (#1320): a pacman package nixpkgs does not carry, not a web app";
 }

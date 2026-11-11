@@ -2636,9 +2636,27 @@ let
   # one to the other when it gained a module, and the row went with it. A
   # check that knew only about apps would have called that unmapped and been
   # wrong -- the row is wired, just not by the file it used to be wired by.
+  # A row marked edge = "only"/"absent" exists in one Omarchy pin's menu only (#1752).
+  inactiveEdge =
+    if pkgs.lib.hasPrefix "edge-" (pkgs.extend inputs.self.overlays.default).omarchy.version then
+      "absent"
+    else
+      "only";
+  activeRow =
+    r:
+    let
+      edge = if builtins.isAttrs r then r.edge or null else null;
+    in
+    assert pkgs.lib.assertMsg (builtins.elem edge [
+      null
+      "only"
+      "absent"
+    ]) "a menu row's edge marker must be \"only\" or \"absent\", not ${builtins.toJSON edge}";
+    edge != inactiveEdge;
+
   mappedRows =
     pkgs.lib.mapAttrsToList (_: a: a.menuId) (
-      pkgs.lib.filterAttrs (_: a: a ? menuId) (import ../data/apps.nix)
+      pkgs.lib.filterAttrs (_: a: a ? menuId && activeRow a) (import ../data/apps.nix)
     )
     ++ pkgs.lib.mapAttrsToList (_: s: s.menuId) (pkgs.lib.filterAttrs (_: s: s ? menuId) services);
 
@@ -2680,7 +2698,9 @@ let
   # The reason strings are not used here; this check only needs the set. They
   # are read by a human at review time, and the mapping script refuses an
   # exception that carries none.
-  notApps = builtins.attrNames (import ../data/menu-exceptions.nix);
+  notApps = builtins.attrNames (
+    pkgs.lib.filterAttrs (_: activeRow) (import ../data/menu-exceptions.nix)
+  );
 
   # The built reference machine, for the things that are facts about a system
   # rather than about an option.

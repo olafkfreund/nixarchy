@@ -471,6 +471,10 @@ jobs:
     if: needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 180
+    # The report's signature and digest, as prepare and verify give it (#1752).
+    outputs:
+      failed: ${{ steps.build.outputs.failed }}
+      digest: ${{ steps.digest.outputs.report }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -507,8 +511,11 @@ jobs:
           git add flake.nix flake.lock
           git commit -q --allow-empty -m "Check edge with main's Omarchy pin"
       - name: Build under main's pin
+        id: build
         run: |
           set -uo pipefail
+          # Kept for the Failure digest step (#1384).
+          exec > >(tee -a "${RUNNER_TEMP:-/tmp}/build.log") 2>&1
           failed=""
           try() {
             local name=$1
@@ -518,6 +525,7 @@ jobs:
               echo "::endgroup::"
               echo "::error::$name failed"
               failed="$failed $name"
+              echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
             fi
           }
           try omarchy nix build .#omarchy --print-build-logs --out-link result
@@ -552,7 +560,16 @@ jobs:
           try deadnix nix run --inputs-from . nixpkgs#deadnix -- --fail .
           try nix-fmt nix fmt -- --ci
           try readme-counts .github/scripts/readme-counts.sh --fix
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
           [ -z "$failed" ] || { echo "::error::main-pin red:${failed}"; exit 1; }
+
+      # What failed, last, where a reader of the log ends up (#1384); never
+      # changes this job's status.
+      - name: Failure digest
+        id: digest
+        if: failure()
+        continue-on-error: true
+        run: .github/scripts/failure-digest.sh
 
   # Its own hosted job: three hours of sleeping must not hold a VM runner.
   wait-idle:
@@ -712,6 +729,8 @@ jobs:
           HELD_DIGEST: ${{ needs.prepare.outputs.held_digest }}
           PREPARE_DIGEST: ${{ needs.prepare.outputs.digest }}
           VERIFY_DIGEST: ${{ needs.verify.outputs.digest }}
+          MAIN_PIN_FAILED: ${{ needs.main-pin.outputs.failed }}
+          MAIN_PIN_DIGEST: ${{ needs.main-pin.outputs.digest }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: .github/scripts/edge-report.sh
 

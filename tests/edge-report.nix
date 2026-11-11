@@ -189,6 +189,12 @@ pkgs.runCommand "edge-report"
     ok0 main-pin-timeout
     hasre main-pin-timeout 'edge-sig: main-pin: timed out$'
 
+    go PREPARE=success MAIN_PIN=failure MAIN_PIN_FAILED='skill-parity readme-counts' MAIN_PIN_DIGEST='main-pin digest' PREPARE_DIGEST='prepare digest' WAIT=skipped VERIFY=skipped
+    ok0 main-pin-digest
+    hasre main-pin-digest 'edge-sig: main-pin: skill-parity readme-counts$'
+    has main-pin-digest 'main-pin digest'
+    hasnt main-pin-digest 'prepare digest'
+
     # escalation: once, after 20 h, independent of the signature
     reset; list_held
     view "held-sig: abcdef0: bin-ledger" '[]' 71999

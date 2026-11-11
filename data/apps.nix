@@ -237,6 +237,13 @@
     attr = "lutris";
     arch = "lutris";
   };
+  moonlight = {
+    menuId = "install.gaming.moonlight";
+    label = "Moonlight";
+    category = "Gaming";
+    attr = "moonlight-qt";
+    arch = "moonlight-qt";
+  };
   heroic = {
     menuId = "install.gaming.heroic";
     label = "Heroic (Epic Games)";

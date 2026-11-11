@@ -81,6 +81,9 @@
   "ffmpegthumbnailer" = {
     nix = "ffmpegthumbnailer";
   };
+  "folio" = {
+    nix = "nixarchy-apps.folio";
+  };
   "fontconfig" = {
     nix = "fontconfig";
   };
@@ -174,14 +177,8 @@
   "monologue" = {
     nix = "nixarchy-apps.monologue";
   };
-  "moonlight-qt" = {
-    nix = "moonlight-qt";
-  };
   "mpv" = {
     nix = "mpv";
-  };
-  "nautilus" = {
-    nix = "nautilus";
   };
   "noto-fonts" = {
     nix = "noto-fonts";
@@ -237,6 +234,9 @@
   "pinta" = {
     nix = "pinta";
   };
+  "plain" = {
+    nix = "nixarchy-apps.plain";
+  };
   "qrencode" = {
     nix = "qrencode";
   };
@@ -263,9 +263,6 @@
   };
   "starship" = {
     nix = "starship";
-  };
-  "sushi" = {
-    nix = "sushi";
   };
   "tesseract" = {
     nix = "tesseract";
@@ -311,6 +308,9 @@
   };
   "xdg-terminal-exec" = {
     nix = "xdg-terminal-exec";
+  };
+  "xdg-user-dirs" = {
+    nix = "xdg-user-dirs";
   };
   "yaru-icon-theme" = {
     nix = "yaru-theme";
@@ -486,6 +486,9 @@
   "iptsd" = {
     skip = "Surface touch and pen daemon; a Surface host gets it from nixos-hardware's microsoft-surface modules, not from this port.";
   };
+  "microsoft-surface-laptop-8-support" = {
+    skip = "One Microsoft laptop; not targeted.";
+  };
   "microsoft-surface-pro-11-sensors" = {
     skip = "Surface Pro 11 (Snapdragon) sensors; aarch64 hardware, not targeted.";
   };
@@ -508,6 +511,9 @@
     skip = "Apple Studio Display brightness; not shipped.";
   };
   "asus-proart-p14-audio" = {
+    skip = "One ASUS laptop; not targeted.";
+  };
+  "asus-proart-pz13-audio" = {
     skip = "One ASUS laptop; not targeted.";
   };
   "asus-zenbook-14-ux3480qa-audio" = {
@@ -688,9 +694,6 @@
   };
   "mariadb-libs" = {
     skip = "Library for Arch language bindings.";
-  };
-  "nautilus-python" = {
-    skip = "Nautilus extension host; not shipped.";
   };
   "postgresql-libs" = {
     skip = "Library for Arch language bindings.";

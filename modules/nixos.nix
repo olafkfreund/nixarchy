@@ -969,20 +969,26 @@ in
         let
           # Left with Omarchy 4.5. Still accepted, and do nothing, so a machine that
           # already opted out keeps evaluating.
+          # moonlight-qt and sushi leave with the pin that stops installing them.
+          pin = cfg.package.passthru;
+          hasMoonlight = pin.preinstallsMoonlight;
+          hasSushi = builtins.elem "sushi" pin.basePackages;
           retired = [
             "xournalpp"
             "obs-studio"
             "kdenlive"
-          ];
+          ]
+          ++ lib.optional (!hasMoonlight) "moonlight-qt"
+          ++ lib.optional (!hasSushi) "sushi";
           current = [
             "pinta"
             "libreoffice"
-            "moonlight-qt"
             "gnome-disk-utility"
-            "sushi"
             "cliamp"
             "gliff"
-          ];
+          ]
+          ++ lib.optional hasMoonlight "moonlight-qt"
+          ++ lib.optional hasSushi "sushi";
         in
         {
           # removeAttrs ignores a name that is not there, so a typo would leave
@@ -1559,29 +1565,35 @@ in
             # search.nixos.org, and pname disagrees with it often enough to matter
             # -- pinta's is "Pinta", capitalised.
             lib.attrValues (
-              lib.removeAttrs {
-                # omarchy-install-preinstalls, minus what cannot be here.
-                inherit (pkgs)
-                  pinta
-                  libreoffice
-                  moonlight-qt
-                  ;
+              lib.removeAttrs (
+                {
+                  # omarchy-install-preinstalls, minus what cannot be here.
+                  inherit (pkgs)
+                    pinta
+                    libreoffice
+                    ;
 
-                # install/omarchy-base.packages. The GUIs manual sends people to
-                # Disks for formatting and SMART, and sushi is what makes Space
-                # preview a file in Nautilus without opening it.
-                inherit (pkgs) gnome-disk-utility sushi;
+                  # install/omarchy-base.packages. The GUIs manual sends people to
+                  # Disks for formatting and SMART.
+                  inherit (pkgs) gnome-disk-utility;
 
-                # Omarchy's own music TUI, bound to SUPER + SHIFT + ALT + M. The
-                # text above said it was not in nixpkgs; it arrived after that was
-                # written, so the keybinding had been failing on a package that was
-                # available the whole time.
-                inherit (pkgs) cliamp;
+                  # Omarchy's own music TUI, bound to SUPER + SHIFT + ALT + M. The
+                  # text above said it was not in nixpkgs; it arrived after that was
+                  # written, so the keybinding had been failing on a package that was
+                  # available the whole time.
+                  inherit (pkgs) cliamp;
 
-                # install/omarchy-base.packages names it (omacom/omarchy#14712).
-                # Not in nixpkgs, and this module's pkgs has no overlay of ours.
-                inherit (pkgs.extend inputs.self.overlays.default) gliff;
-              } cfg.preinstallsExclude
+                  # install/omarchy-base.packages names it (omacom/omarchy#14712).
+                  # Not in nixpkgs, and this module's pkgs has no overlay of ours.
+                  inherit (pkgs.extend inputs.self.overlays.default) gliff;
+                }
+                # Only what the pin still installs: moonlight-qt left the preinstalls
+                # and sushi left base.packages when Files replaced Nautilus.
+                // lib.optionalAttrs cfg.package.passthru.preinstallsMoonlight { inherit (pkgs) moonlight-qt; }
+                // lib.optionalAttrs (builtins.elem "sushi" cfg.package.passthru.basePackages) {
+                  inherit (pkgs) sushi;
+                }
+              ) cfg.preinstallsExclude
             )
           )
         );
@@ -2367,16 +2379,21 @@ in
 
     # Without defaults, sorted mimeinfo.cache hands PDFs to the browser.
     # mkDefault per key avoids conflicting strings when a user picks a handler.
-    xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) {
-      "application/pdf" = cfg.package.passthru.pdfDesktop;
-      "video/mp4" = "mpv.desktop";
-      "video/x-matroska" = "mpv.desktop";
-      "video/quicktime" = "mpv.desktop";
-      "video/webm" = "mpv.desktop";
-      "video/x-msvideo" = "mpv.desktop";
-      "video/mpeg" = "mpv.desktop";
-      "text/plain" = "nvim.desktop";
-    };
+    xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) (
+      {
+        "application/pdf" = cfg.package.passthru.pdfDesktop;
+        "video/mp4" = "mpv.desktop";
+        "video/x-matroska" = "mpv.desktop";
+        "video/quicktime" = "mpv.desktop";
+        "video/webm" = "mpv.desktop";
+        "video/x-msvideo" = "mpv.desktop";
+        "video/mpeg" = "mpv.desktop";
+        "text/plain" = cfg.package.passthru.editorDesktop;
+      }
+      // lib.optionalAttrs (cfg.package.passthru.fileManagerDesktop != null) {
+        "inode/directory" = cfg.package.passthru.fileManagerDesktop;
+      }
+    );
 
     xdg.portal = {
       enable = lib.mkDefault true;

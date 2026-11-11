@@ -2162,7 +2162,7 @@ in
                         }; unfree=${lib.boolToString (apps.${row}.unfree or false)} ;;"
                       ) choices
                     }
-                    browser:chromium | editor:nvim)
+                    browser:chromium | editor:nvim | editor:plain)
                       echo "nixarchy: $selection already ships in the session" >&2
                       exit 1
                       ;;

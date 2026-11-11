@@ -1,12 +1,18 @@
 {
+  lib,
   runCommand,
   jq,
   omarchy,
   omarchy-nvim-config,
 }:
 let
+  isEdge = lib.hasPrefix "edge-" omarchy.version;
   ledger = builtins.toFile "nixarchy-user-migrations.json" (
-    builtins.toJSON (import ../../data/user-migrations.nix)
+    builtins.toJSON (
+      lib.filterAttrs (
+        _: r: !(lib.isAttrs r && (r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge))
+      ) (import ../../data/user-migrations.nix)
+    )
   );
   tree = "${omarchy}/share/omarchy";
 in

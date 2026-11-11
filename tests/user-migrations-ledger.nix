@@ -3,6 +3,8 @@
 # data/user-migrations.nix, or is listed there as predating v4.0.6 (#1610).
 # Why: pkgs/AGENTS.md#user-file-migrations-1610
 let
+  # Edge pins carry an `edge-` version; rows may be marked edge = "only" or "absent".
+  isEdge = if pkgs.lib.hasPrefix "edge-" pkgs.omarchy.version then "true" else "false";
   ledger = pkgs.writeText "user-migrations.json" (
     builtins.toJSON (import ../data/user-migrations.nix)
   );
@@ -29,8 +31,20 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
     ids=$(jq -r '(del(.predates) | keys[]), .predates[]' ${ledger}) || exit 1
     printf '%s\n' "$ids" | sort >ledger
     status=0
-    missing=$(comm -23 triage ledger)
-    extra=$(comm -13 triage ledger)
+    # Every row is validated under both pins; only then are inactive ones dropped.
+    bad_edge=$(jq -r 'del(.predates) | to_entries[]
+      | select(.value | has("edge")) | select(.value.edge | IN("only", "absent") | not)
+      | "\(.key): edge=\(.value.edge)"' ${ledger}) || exit 1
+    if [ -n "$bad_edge" ]; then
+      echo "rows whose edge marker is not only or absent:" >&2
+      printf '  %s\n' "$bad_edge" >&2
+      status=1
+    fi
+    active=$(jq -r --argjson edge ${isEdge} '(del(.predates) | to_entries[]
+      | select((.value.edge // "") as $e | ($e == "only" and ($edge | not) or $e == "absent" and $edge) | not) | .key), .predates[]' ${ledger}) || exit 1
+    printf '%s\n' "$active" | sort >active
+    missing=$(comm -23 triage active)
+    extra=$(comm -13 triage active)
     if [ -n "$missing" ]; then
       echo "migrations that touch user files with no row in data/user-migrations.nix:" >&2
       printf '  %s\n' $missing >&2

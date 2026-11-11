@@ -13,15 +13,28 @@
 # because a bash step cannot ask Nix whether an attribute exists.
 let
   inherit (pkgs) lib;
-  ledger = import ../data/omarchy-packages.nix;
+  allRows = import ../data/omarchy-packages.nix;
+  # Inactive rows are dropped only after every row has been validated.
+  ledger = lib.filterAttrs (
+    _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
+  ) allRows;
   # Exactly one key, nix/module/skip, holding a non-empty string: a typo'd extra
   # key or an empty reason is not a decision.
+  # An optional `edge` marker ("only" or "absent") is validated first and is not a decision key.
+  isEdge = lib.hasPrefix "edge-" pkgs.omarchy.version;
   wellFormed =
     r:
     let
-      ks = lib.attrNames r;
+      ks = lib.filter (k: k != "edge") (lib.attrNames r);
     in
-    lib.length ks == 1
+    (
+      !(r ? edge)
+      || lib.elem r.edge [
+        "only"
+        "absent"
+      ]
+    )
+    && lib.length ks == 1
     && lib.elem (lib.head ks) [
       "nix"
       "module"
@@ -29,7 +42,7 @@ let
     ]
     && lib.isString r.${lib.head ks}
     && r.${lib.head ks} != "";
-  malformed = lib.filter (n: !wellFormed ledger.${n}) (lib.attrNames ledger);
+  malformed = lib.filter (n: !wellFormed allRows.${n}) (lib.attrNames allRows);
   # A `nix` row must name a package, not merely an attribute (`lib` exists too).
   resolved = lib.mapAttrs (
     _: r:

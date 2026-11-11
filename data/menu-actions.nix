@@ -4,8 +4,10 @@
 # any other reason must still reach a hazard, or the entry is stale. `pending`
 # is temporary: Part 4 of the series forbids it.
 {
-  "install.ai.herdr" =
-    "unreached: its theme refresh reaches theme-set-hermes, which runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+  "install.ai.herdr" = {
+    reason = "unreached: its theme refresh reaches theme-set-hermes, which runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    edge = "only";
+  };
   "install.preinstalls" =
     "owned: adds missing launchers only, never overwrites; its one rm is its own marker (decision 2, checks.remove-preinstalls)";
   "install.style.font.bitstream" = "session: restarts the user's shell unit";
@@ -99,8 +101,10 @@
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.neovim" =
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
-  "setup.default.editor.plain" =
-    "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
+  "setup.default.editor.plain" = {
+    reason = "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
+    edge = "only";
+  };
   "setup.default.editor.sublime" =
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.vim" =

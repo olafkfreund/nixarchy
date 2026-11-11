@@ -82,6 +82,7 @@
     nix = "ffmpegthumbnailer";
   };
   "folio" = {
+    edge = "only";
     nix = "nixarchy-apps.folio";
   };
   "fontconfig" = {
@@ -208,9 +209,11 @@
     nix = "omarchy-nvim-config";
   };
   "omarchy-local-ai" = {
+    edge = "only";
     nix = "nixarchy-apps.omarchy-local-ai";
   };
   "omarchy-screensaver" = {
+    edge = "only";
     nix = "nixarchy-apps.omarchy-screensaver";
   };
   "omasnap" = {
@@ -223,6 +226,7 @@
     nix = "nixarchy-apps.owe";
   };
   "papers" = {
+    edge = "only";
     nix = "papers";
   };
   "pamixer" = {
@@ -235,12 +239,14 @@
     nix = "pinta";
   };
   "plain" = {
+    edge = "only";
     nix = "nixarchy-apps.plain";
   };
   "qrencode" = {
     nix = "qrencode";
   };
   "qtengine" = {
+    edge = "only";
     nix = "qtengine";
   };
   "quickshell" = {
@@ -310,6 +316,7 @@
     nix = "xdg-terminal-exec";
   };
   "xdg-user-dirs" = {
+    edge = "only";
     nix = "xdg-user-dirs";
   };
   "yaru-icon-theme" = {
@@ -478,21 +485,27 @@
 
   # ── Hardware this port does not target ────────────────────────────────────
   "asus-zenbook-a16-audio" = {
+    edge = "only";
     skip = "ASUS Zenbook A16 speaker quirk from Omarchy's Arch repo; a host with one carries it in its own config or nixos-hardware.";
   };
   "asus-zenbook-a16-firmware" = {
+    edge = "only";
     skip = "ASUS Zenbook A16 firmware from Omarchy's Arch repo; not targeted.";
   };
   "iptsd" = {
+    edge = "only";
     skip = "Surface touch and pen daemon; a Surface host gets it from nixos-hardware's microsoft-surface modules, not from this port.";
   };
   "microsoft-surface-laptop-8-support" = {
+    edge = "only";
     skip = "One Microsoft laptop; not targeted.";
   };
   "microsoft-surface-pro-11-sensors" = {
+    edge = "only";
     skip = "Surface Pro 11 (Snapdragon) sensors; aarch64 hardware, not targeted.";
   };
   "microsoft-surface-pro-11-support" = {
+    edge = "only";
     skip = "Surface Pro 11 (Snapdragon) board support; aarch64 hardware, not targeted.";
   };
   "apple-bcm-firmware-fetcher" = {
@@ -505,18 +518,22 @@
     skip = "Apple Silicon hardware; this port targets x86_64.";
   };
   "ath12k-board-fallback" = {
+    edge = "only";
     skip = "Arch board-data fallback for unlisted Qualcomm Wi-Fi cards; not targeted.";
   };
   "asdcontrol" = {
     skip = "Apple Studio Display brightness; not shipped.";
   };
   "asus-proart-p14-audio" = {
+    edge = "only";
     skip = "One ASUS laptop; not targeted.";
   };
   "asus-proart-pz13-audio" = {
+    edge = "only";
     skip = "One ASUS laptop; not targeted.";
   };
   "asus-zenbook-14-ux3480qa-audio" = {
+    edge = "only";
     skip = "One ASUS laptop; not targeted.";
   };
   "asusctl" = {
@@ -583,6 +600,7 @@
     skip = "As linux-omarchy.";
   };
   "linux-omarchy-nvidia-open" = {
+    edge = "only";
     skip = "Prebuilt NVIDIA modules for linux-omarchy; nixarchy uses the NixOS kernel, and the driver is the user own hardware.nvidia choice.";
   };
   "linux-t2" = {
@@ -789,5 +807,33 @@
   };
   "whois" = {
     skip = "Not installed by default.";
+  };
+  "asus-proart-p14-speaker-firmware" = {
+    skip = "One ASUS laptop; not targeted.";
+    edge = "absent";
+  };
+  "evince" = {
+    nix = "evince";
+    edge = "absent";
+  };
+  "moonlight-qt" = {
+    nix = "moonlight-qt";
+    edge = "absent";
+  };
+  "nautilus" = {
+    nix = "nautilus";
+    edge = "absent";
+  };
+  "nautilus-python" = {
+    skip = "Nautilus extension host; not shipped.";
+    edge = "absent";
+  };
+  "sushi" = {
+    nix = "sushi";
+    edge = "absent";
+  };
+  "xorg-xsetroot" = {
+    skip = "X11 tool; the session is Wayland.";
+    edge = "absent";
   };
 }

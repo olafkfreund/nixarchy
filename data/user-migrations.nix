@@ -188,11 +188,13 @@
     reason = "removes 4.0 notification files and carries Do Not Disturb into quiet state (#1680)";
   };
   "1792902457" = {
+    edge = "only";
     decision = "ported";
     run = "edited";
     reason = "points Qt at qtengine; nixpkgs provides the qtengine package (#1736)";
   };
   "1793179949" = {
+    edge = "only";
     decision = "ported";
     run = "upstream";
     reason = "keeps a user's own touchpad gestures by turning Omarchy's new defaults off in hyprland.lua; grep and sed only, runs as shipped (quattro, #1696)";
@@ -207,6 +209,7 @@
     reason = "retain existing dictation keys and move Superwhisper off Alt+Space (#1677)";
   };
   "1793461630" = {
+    edge = "only";
     decision = "ported";
     run = "upstream";
     reason = "moves the monitor workspace blocks and scaling log under ~/.local/state/omarchy/monitors; mv and cat only, runs as shipped (quattro, #1696)";
@@ -223,29 +226,35 @@
 
   # In v4.0.6 already; every nixarchy seed carries its effect.
   "1787481314" = {
+    edge = "only";
     decision = "not-needed";
     reason = "the package bundles Osaka Jade, so $OMARCHY_PATH/themes/osaka-jade/colors.toml exists and the migration exits 0 before it clones or switches (#1698)";
   };
   "1793650506" = {
+    edge = "only";
     decision = "not-needed";
     reason = "Snapdragon OEM firmware through pacman, sudo and mkinitcpio; aarch64 Qualcomm only, which this port does not target";
   };
   "1794068501" = {
+    edge = "only";
     decision = "ported";
     run = "upstream";
     reason = "reseeds the Herdr desktop app's keybindings through omarchy-refresh-herdr-app, only when ~/.config/herdr-app exists (quattro, #1696)";
   };
   "1794165002" = {
+    edge = "only";
     decision = "ported";
     run = "edited";
     reason = "switches the PDF default from Evince to Papers; nixpkgs provides papers, and the rewrite leaves a symlinked mimeapps.list alone (#1736)";
   };
   "1794330979" = {
+    edge = "only";
     decision = "partial";
     run = "edited";
     reason = "points a Nautilus handler at Files and leaves a symlinked mimeapps.list alone; the dock pin is not moved, because shell.json is written only through the shell (#847, #1750)";
   };
   "1794341736" = {
+    edge = "only";
     decision = "ported";
     run = "edited";
     reason = "keeps Neovim for an existing home without a saved editor; a symlinked mimeapps.list is left alone (#1750)";

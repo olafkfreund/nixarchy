@@ -152,6 +152,7 @@
     allow = "remote-exec";
   };
   "omarchy-agent-local" = {
+    edge = "only";
     class = "patch";
     reason = "Upstream's `use` installs the omarchy-local-ai package with omarchy-pkg-add, which does not exist here. Replaced by a preflight that names programs.nixarchy.services.agent-local when Podman, the unlimited memlock limit, or an NVIDIA CDI spec is missing (#1577).";
     allow = "systemctl-user";
@@ -372,6 +373,7 @@
     allow = "systemctl-user";
   };
   "omarchy-launch-screensaver" = {
+    edge = "only";
     class = "patch";
     reason = "quattro's launcher is one line, `exec /usr/lib/omarchy-screensaver/omarchy-screensaver`, from Arch's omarchy-screensaver package. It execs the store path of pkgs/apps/omarchy-screensaver.nix instead (#1485).";
   };
@@ -494,6 +496,7 @@
     reason = "Two edits: `xdg-settings set default-web-browser chromium.desktop` exits 2 under `set -euo pipefail` and aborted provisioning, and the shipped HEY.desktop is installed prefixed as omarchy-HEY.desktop.";
   };
   "omarchy-realtime-repair" = {
+    edge = "only";
     class = "vendor";
     reason = "Vendored unchanged (#1498, quattro 8478247). Installs rtkit and raises the hard RLIMIT_RTTIME of 0 that processes took from a portal started without it. Its callers are a migration and omarchy-upgrade-to-quattro, and nixarchy runs neither; modules/nixos.nix turns security.rtkit.enable on from boot, so the zero never arises on a fresh boot.";
     pacman = "Installs rtkit with pacman. Unreachable here: no migration runs, and security.rtkit.enable stands in for the install.";
@@ -828,6 +831,7 @@
     allow = "systemctl-user";
   };
   "omarchy-install-dictation-hex" = {
+    edge = "only";
     class = "vendor";
     reason = "Vendored unchanged. Enables hex.service, a user unit the install writes under the user's own tree.";
     allow = "systemctl-user";
@@ -838,6 +842,7 @@
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-hex" = {
+    edge = "only";
     class = "vendor";
     reason = "Vendored unchanged. Disables hex.service, a user unit installed under the user's own tree, and reloads the user manager.";
     allow = "systemctl-user";
@@ -894,6 +899,7 @@
     allow = "initrd-boot";
   };
   "omarchy-keyboard-toprow" = {
+    edge = "only";
     class = "vendor";
     reason = "Vendored unchanged (#1552, quattro a69b19f). Writes /etc/modprobe.d/omarchy-toprow.conf for hid_apple, hid_asus and asus_wmi, sets hid_apple's live fnmode, and reruns limine-mkinitcpio, which NixOS does not have, so a run on a machine with one of those drivers stops at the boot-image rebuild. No menu row calls it; upstream's other caller is install/hardware/fix-fkeys.sh, which nixarchy does not run. The declarative equivalent is boot.extraModprobeConfig.";
     allow = "initrd-boot modprobe";

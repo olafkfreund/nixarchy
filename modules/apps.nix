@@ -1103,27 +1103,36 @@ let
             };
           }
       // lib.listToAttrs (
-        lib.mapAttrsToList (
-          name: app:
-          lib.nameValuePair app.menuId (
-            if app ? unavailable then
-              {
-                disabled = "true";
-                # summon would run upstream's action otherwise (omacom/omarchy#15742)
-                action = "true";
-                description = "Not available on NixOS — ${app.unavailable}";
-              }
-            else
-              {
-                action = "nixarchy-app-enable ${name}";
-                # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
-                disabled =
-                  "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
-                  + " || command -v ${appBinary name app} >/dev/null 2>&1";
-                description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
-              }
+        lib.mapAttrsToList
+          (
+            name: app:
+            lib.nameValuePair app.menuId (
+              if app ? unavailable then
+                {
+                  disabled = "true";
+                  # summon would run upstream's action otherwise (omacom/omarchy#15742)
+                  action = "true";
+                  description = "Not available on NixOS — ${app.unavailable}";
+                }
+              else
+                {
+                  action = "nixarchy-app-enable ${name}";
+                  # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
+                  disabled =
+                    "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
+                    + " || command -v ${appBinary name app} >/dev/null 2>&1";
+                  description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
+                }
+            )
           )
-        ) (lib.filterAttrs (_: a: a ? menuId) apps)
+          (
+            # A row marked edge = "only"/"absent" names a menu row only one pin has (#1752).
+            lib.filterAttrs (
+              _: a:
+              a ? menuId
+              && (a.edge or null) != (if lib.hasPrefix "edge-" cfg.package.version then "absent" else "only")
+            ) apps
+          )
       )
       # Why: modules/AGENTS.md#the-services-catalogue-as-menu-rows
       // lib.listToAttrs (

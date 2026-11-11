@@ -238,6 +238,7 @@
     arch = "lutris";
   };
   moonlight = {
+    edge = "only";
     menuId = "install.gaming.moonlight";
     label = "Moonlight";
     category = "Gaming";

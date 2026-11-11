@@ -77,6 +77,8 @@
   foot,
   chromium,
   nautilus,
+  folio,
+  plain,
   neovim,
   lazygit,
   lazydocker,
@@ -127,8 +129,14 @@
 let
   # Derived from the pinned source, so one line holds under both Omarchy pins
   # (v4.5.0 ships Evince and no qtengine). `src` is a flake input path: no IFD.
-  hasPapers = builtins.elem "papers" (
-    lib.splitString "\n" (builtins.readFile "${src}/install/omarchy-base.packages")
+  basePackages = builtins.filter (l: l != "" && !(lib.hasPrefix "#" l)) (
+    map lib.trim (lib.splitString "\n" (builtins.readFile "${src}/install/omarchy-base.packages"))
+  );
+  hasPapers = builtins.elem "papers" basePackages;
+  hasFiles = builtins.elem "folio" basePackages;
+  hasPlain = builtins.elem "plain" basePackages;
+  preinstallsMoonlight = lib.hasInfix "moonlight-qt" (
+    builtins.readFile "${src}/bin/omarchy-install-preinstalls"
   );
   hasQtengine = builtins.pathExists "${src}/config/qtengine";
 
@@ -277,7 +285,7 @@ let
     uwsm
     foot
     chromium-flags
-    nautilus
+    (if hasFiles then folio else nautilus)
     neovim
     lazygit
     lazydocker
@@ -365,7 +373,8 @@ let
     ttfx
     # quattro's omarchy-launch-screensaver execs this native overlay (#1485).
     omarchy-screensaver
-  ];
+  ]
+  ++ lib.optional hasPlain plain;
   # arch-name<TAB>kind<TAB>attr<TAB>note<TAB>binary, one per line. Apps come from
   # data/apps.nix so the two cannot drift; everything the menu does not select
   # -- fonts, the packages omarchy-install-dev-env adds behind a language --
@@ -1278,7 +1287,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'omarchy-install-browser "$browser" || exit 1' 'exec nixarchy-default-install browser "$browser" "$command"' \
                       --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
-                      --replace-fail "$(cat ${./default-editor-install.upstream.sh})" 'exec nixarchy-default-install editor "$selection" "$editor"' \
+                      --replace-fail "$(cat ${
+                        if hasPlain then
+                          ./default-editor-install-plain.upstream.sh
+                        else
+                          ./default-editor-install.upstream.sh
+                      })" 'exec nixarchy-default-install editor "$selection" "$editor"' \
                       --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
 
                     # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
@@ -2077,7 +2091,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   passthru = {
-    inherit runtimeDeps hasQtengine;
+    inherit
+      runtimeDeps
+      hasQtengine
+      hasFiles
+      hasPlain
+      basePackages
+      preinstallsMoonlight
+      ;
+    fileManagerDesktop = if hasFiles then "folio.desktop" else null;
+    editorDesktop = if hasPlain then "plain.desktop" else "nvim.desktop";
     pdfViewer = if hasPapers then papers else evince;
     pdfDesktop = if hasPapers then "org.gnome.Papers.desktop" else "org.gnome.Evince.desktop";
     userMigrations = callPackage ./user-migrations.nix {

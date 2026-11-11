@@ -135,6 +135,7 @@ let
   hasPapers = builtins.elem "papers" basePackages;
   hasFiles = builtins.elem "folio" basePackages;
   hasPlain = builtins.elem "plain" basePackages;
+  hasScreensaverPackage = builtins.elem "omarchy-screensaver" basePackages;
   preinstallsMoonlight = lib.hasInfix "moonlight-qt" (
     builtins.readFile "${src}/bin/omarchy-install-preinstalls"
   );
@@ -651,9 +652,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace $out/share/omarchy/bin/omarchy-network-speedtest \
                       --replace-fail '/usr/lib/omarchy/speedtest' '${omarchy-speedtest}/bin/omarchy-speedtest'
 
-                    # quattro's launcher execs the native screensaver from /usr/lib; it is packaged here (#1485).
-                    substituteInPlace $out/share/omarchy/bin/omarchy-launch-screensaver \
-                      --replace-fail 'exec /usr/lib/omarchy-screensaver/omarchy-screensaver "$@"' 'exec ${omarchy-screensaver}/lib/omarchy-screensaver/omarchy-screensaver "$@"'
+                    ${lib.optionalString hasScreensaverPackage (
+                      "# quattro's launcher execs the native screensaver from /usr/lib; it is packaged here (#1485).\n"
+                      # The outer string strips 4 columns from source lines, not from this text.
+                      + "                substituteInPlace $out/share/omarchy/bin/omarchy-launch-screensaver \\\n"
+                      + "                  --replace-fail 'exec /usr/lib/omarchy-screensaver/omarchy-screensaver \"$@\"' 'exec ${omarchy-screensaver}/lib/omarchy-screensaver/omarchy-screensaver \"$@\"'"
+                    )}
 
                     # The channel splice goes in front of the FIRST pacman grep, not before the final comparison.
                     # Why: pkgs/AGENTS.md#version-channel-reads-nixos-version

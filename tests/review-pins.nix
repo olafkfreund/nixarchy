@@ -22,6 +22,8 @@ let
     "omacut"
     "omawrite"
     "owe"
+    "folio"
+    "plain"
     "aether"
     "ttfx"
     "omarchy-speedtest"

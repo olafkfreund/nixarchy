@@ -766,6 +766,7 @@ case_1794330979() {
 
   # The dock block is gone: shell.json is written only through the shell (#847).
   setup 1794330979-dock "$FIXTURE_C"
+  chmod u+w "$XDG_CONFIG_HOME/omarchy/shell.json"
   jq '.dockFixture = ["org.gnome.Nautilus"]' "$FIXTURE_C" > "$XDG_CONFIG_HOME/omarchy/shell.json"
   grep -F '"org.gnome.Nautilus"' "$XDG_CONFIG_HOME/omarchy/shell.json" > /dev/null || fail '1794330979: dock fixture not set up'
   before=$work/1794330979.shell.json

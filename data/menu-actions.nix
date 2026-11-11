@@ -21,7 +21,6 @@
   "remove.development.elixir.phoenix" = "hidden: there is nothing to remove (#1625)";
   "remove.gaming.battlenet" =
     "owned: deletes its own prefix; GE-Proton and umu only after a confirm; pkg-drop is inert here (decision 10)";
-  "remove.gaming.moonlight" = "owned: pkg-drop is inert here (decision 10)";
   "remove.security.fido2" = "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";
   "remove.security.sudoless-docker" =
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";

@@ -230,15 +230,25 @@
     decision = "not-needed";
     reason = "Snapdragon OEM firmware through pacman, sudo and mkinitcpio; aarch64 Qualcomm only, which this port does not target";
   };
+  "1794068501" = {
+    decision = "ported";
+    run = "upstream";
+    reason = "reseeds the Herdr desktop app's keybindings through omarchy-refresh-herdr-app, only when ~/.config/herdr-app exists (quattro, #1696)";
+  };
   "1794165002" = {
     decision = "ported";
     run = "edited";
     reason = "switches the PDF default from Evince to Papers; nixpkgs provides papers, and the rewrite leaves a symlinked mimeapps.list alone (#1736)";
   };
-  "1794068501" = {
+  "1794330979" = {
+    decision = "partial";
+    run = "edited";
+    reason = "points a Nautilus handler at Files and leaves a symlinked mimeapps.list alone; the dock pin is not moved, because shell.json is written only through the shell (#847, #1750)";
+  };
+  "1794341736" = {
     decision = "ported";
-    run = "upstream";
-    reason = "reseeds the Herdr desktop app's keybindings through omarchy-refresh-herdr-app, only when ~/.config/herdr-app exists (quattro, #1696)";
+    run = "edited";
+    reason = "keeps Neovim for an existing home without a saved editor; a symlinked mimeapps.list is left alone (#1750)";
   };
   predates = [
     "1780057136"

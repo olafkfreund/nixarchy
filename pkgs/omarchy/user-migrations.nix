@@ -84,6 +84,32 @@ runCommand "nixarchy-user-migrations"
                 sed -i '"'"'s/org\.gnome\.Evince\.desktop/org.gnome.Papers.desktop/g'"'"' "$user_mimeapps"
               fi'
               ;;
+            1794330979)
+              substituteInPlace "$script" \
+                --replace-fail 'omarchy-pkg-add folio' "" \
+                --replace-fail 'omarchy-pkg-drop nautilus nautilus-python nautilus-dropbox sushi' "" \
+                --replace-fail '# A dock that still pins Nautilus pins Files instead.' ""
+              block=$(sed -n '/^if \[\[ -f \$user_mimeapps \]\] && grep -q/,/^fi$/p' "$script")
+              [[ $block == *"sed --follow-symlinks -i 's/org\\.gnome\\.Nautilus\\.desktop/folio.desktop/g' \"\$user_mimeapps\""* ]] || exit 1
+              substituteInPlace "$script" --replace-fail "$block" 'if [[ -L $user_mimeapps ]]; then
+                if [[ -e $user_mimeapps && -r $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Nautilus.desktop* ]]; then
+                  echo "nixarchy: $user_mimeapps is a link, left alone; it still names Nautilus"
+                fi
+              elif [[ -f $user_mimeapps && -w $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Nautilus.desktop* ]]; then
+                sed -i '"'"'s/org\.gnome\.Nautilus\.desktop/folio.desktop/g'"'"' "$user_mimeapps"
+              fi'
+              block=$(sed -n '/^shell_json=/,/^fi$/p' "$script")
+              [[ $block == *"sed --follow-symlinks -i 's/\"org\\.gnome\\.Nautilus\"/\"folio\"/' \"\$shell_json\""* ]] || exit 1
+              substituteInPlace "$script" --replace-fail "$block" ""
+              ;;
+            1794341736)
+              substituteInPlace "$script" --replace-fail 'user_mimeapps="$HOME/.config/mimeapps.list"' 'user_mimeapps="$HOME/.config/mimeapps.list"
+              if [[ -L $user_mimeapps ]]; then
+                echo "nixarchy: $user_mimeapps is a link, left alone"
+                exit 0
+              fi
+              [[ ! -e $user_mimeapps || ( -f $user_mimeapps && -w $user_mimeapps ) ]] || exit 0'
+              ;;
             *) echo "no edit defined for $id" >&2; exit 1 ;;
           esac
           ;;

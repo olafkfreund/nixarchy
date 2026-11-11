@@ -8,6 +8,7 @@ name: omarchy-edge
 # ref, `edge-candidate`; edge-promote.sh is the one thing that moves `edge`.
 #
 #   prepare    merge main, pin quattro, build, brief    (hosted)
+#   main-pin   rebuild with main's Omarchy pin         (hosted)
 #   wait-idle  wait until no install is booting VMs     (hosted)
 #   verify     boot the VM checks, then promote         (self-hosted)
 #   report     one rolling issue labelled omarchy-edge  (hosted)
@@ -25,6 +26,14 @@ on:
         description: "Start from edge-candidate instead of edge (after resolving a merge conflict by hand)"
         type: boolean
         default: false
+      dry_run:
+        description: "Verify on a scratch ref without promoting edge or editing issues"
+        type: boolean
+        default: false
+      candidate_ref:
+        description: "Existing ref carrying commits to verify"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -88,6 +97,7 @@ jobs:
         id: start
         env:
           FROM_CANDIDATE: ${{ inputs.from_candidate }}
+          CANDIDATE_REF: ${{ inputs.candidate_ref }}
         run: |
           set -euo pipefail
           trap 'echo "failed=start" >> "$GITHUB_OUTPUT"' ERR
@@ -105,7 +115,7 @@ jobs:
           # The first publish starts from edge-candidate when there is one: that
           # is where the seeded carry commits live. Otherwise from_candidate is
           # the way back in after a merge conflict was resolved by hand.
-          if [ "$FROM_CANDIDATE" = true ] && [ -z "$have_candidate" ]; then
+          if [ -z "$CANDIDATE_REF" ] && [ "$FROM_CANDIDATE" = true ] && [ -z "$have_candidate" ]; then
             echo "::error::from_candidate was set but there is no edge-candidate branch"
             exit 1
           fi
@@ -113,7 +123,7 @@ jobs:
           # next scheduled run (#1602); a diverged one stops the run. Captured
           # first: a git error must fail the step, not read as "none".
           from_candidate=$FROM_CANDIDATE
-          if [ "$from_candidate" != true ]; then
+          if [ -z "$CANDIDATE_REF" ] && [ "$from_candidate" != true ]; then
             carry=$(bash .github/scripts/edge-carry.sh)
             case "$carry" in
               carry)
@@ -129,9 +139,20 @@ jobs:
                 ;;
             esac
           fi
+          if [ -n "$CANDIDATE_REF" ]; then
+            # --branch: a plain check-ref-format refuses a one-level name like edge-candidate.
+            git check-ref-format --branch "$CANDIDATE_REF" >/dev/null || {
+              echo "::error::candidate_ref '$CANDIDATE_REF' is not a valid branch name"
+              exit 1
+            }
+            git fetch origin "$CANDIDATE_REF"
+            from_candidate=true
+          fi
           if [ "$from_candidate" = true ]; then fc=true; else fc=false; fi
           echo "from_candidate=$fc" >> "$GITHUB_OUTPUT"
-          if [ -n "$have_candidate" ] && { [ "$from_candidate" = true ] || [ "$expected" = none ]; }; then
+          if [ -n "$CANDIDATE_REF" ]; then
+            start=FETCH_HEAD
+          elif [ -n "$have_candidate" ] && { [ "$from_candidate" = true ] || [ "$expected" = none ]; }; then
             start=origin/edge-candidate
           elif [ "$expected" != none ]; then
             start=origin/edge
@@ -209,6 +230,7 @@ jobs:
           START: ${{ steps.start.outputs.start }}
           EXPECTED: ${{ steps.start.outputs.expected }}
           FROM_CANDIDATE: ${{ steps.start.outputs.from_candidate }}
+          CANDIDATE_REF: ${{ inputs.candidate_ref }}
         run: |
           set -euo pipefail
           # Authenticated, and refuses anything but a full SHA: a 403 once made
@@ -233,7 +255,7 @@ jobs:
 
           # Only when edge exists and we started from it: a candidate that was
           # never promoted has not been published, however current it looks.
-          if [ "$START" = origin/edge ] && [ "$EXPECTED" != none ] && [ "$sha" = "$HAVE" ] && [ "$MAIN_IN" = true ]; then
+          if [ -z "$CANDIDATE_REF" ] && [ "$START" = origin/edge ] && [ "$EXPECTED" != none ] && [ "$sha" = "$HAVE" ] && [ "$MAIN_IN" = true ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "edge already has quattro $sha and all of main; nothing to do" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -414,16 +436,17 @@ jobs:
         if: steps.pin.outputs.skip != 'true' && (steps.build.outcome == 'success' || steps.build2.outcome == 'success')
         env:
           SHA: ${{ steps.build2.outcome == 'success' && steps.good.outputs.sha || steps.pin.outputs.sha }}
+          DRY_RUN: ${{ inputs.dry_run == true || github.ref != 'refs/heads/main' }}
         run: |
           set -euo pipefail
           git add -A
           git diff --cached --quiet || git commit -q -m "Edge: Omarchy quattro ${SHA:0:7} on main $(git rev-parse --short=7 origin/main)"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          # --force, and only here: edge-candidate is a scratch ref that nobody
-          # follows, rewritten every run. `edge` itself is never forced.
-          git push --force origin HEAD:refs/heads/edge-candidate || {
+          # Both candidate refs are scratch refs; edge itself is never forced.
+          if [ "$DRY_RUN" = true ]; then ref="edge-dryrun/$GITHUB_RUN_ID"; else ref=edge-candidate; fi
+          git push --force origin "HEAD:refs/heads/$ref" || {
             echo "failed=candidate-push" >> "$GITHUB_OUTPUT"
-            echo "::error::could not push edge-candidate. If main changed a file under .github/workflows,"
+            echo "::error::could not push $ref. If main changed a file under .github/workflows,"
             echo "::error::GITHUB_TOKEN cannot push it: add a token with the workflows scope as NIXARCHY_EDGE_TOKEN"
             exit 1
           }
@@ -436,6 +459,112 @@ jobs:
 
       # What failed, last, where a reader of the log ends up (#1384). Reads the
       # log build-unless-proven.sh keeps; never changes this job's status.
+      - name: Failure digest
+        id: digest
+        if: failure()
+        continue-on-error: true
+        run: .github/scripts/failure-digest.sh
+
+  # Prove the candidate also builds with the pin that main publishes (#1752).
+  main-pin:
+    needs: prepare
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 180
+    # The report's signature and digest, as prepare and verify give it (#1752).
+    outputs:
+      failed: ${{ steps.build.outputs.failed }}
+      digest: ${{ steps.digest.outputs.report }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.candidate }}
+          fetch-depth: 0
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+      - uses: ./.github/actions/setup-nix
+      - uses: cachix/cachix-action@v17
+        continue-on-error: true
+        with:
+          skipPush: true
+          skipAddingSubstituter: true
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Restore main's Omarchy pin
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          main=$(git show origin/main:flake.nix)
+          url=$(sed -nE 's|.*github:basecamp/omarchy/([^\"]*)".*|\1|p' <<<"$main" | head -1)
+          ver=$(sed -nE 's|.*omarchyVersion = "([^\"]*)".*|\1|p' <<<"$main" | head -1)
+          [ -n "$url" ] && [ -n "$ver" ] || { echo "::error::could not read both pin copies from main"; exit 1; }
+          sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/$url|" flake.nix
+          sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$ver\"|" flake.nix
+          [ "$(sed -nE 's|.*github:basecamp/omarchy/([^\"]*)".*|\1|p' flake.nix | head -1)" = "$url" ]
+          [ "$(sed -nE 's|.*omarchyVersion = "([^\"]*)".*|\1|p' flake.nix | head -1)" = "$ver" ]
+          nix flake update omarchy
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add flake.nix flake.lock
+          git commit -q --allow-empty -m "Check edge with main's Omarchy pin"
+      - name: Build under main's pin
+        id: build
+        run: |
+          set -uo pipefail
+          # Kept for the Failure digest step (#1384).
+          exec > >(tee -a "${RUNNER_TEMP:-/tmp}/build.log") 2>&1
+          failed=""
+          try() {
+            local name=$1
+            shift
+            echo "::group::$name"
+            if "$@"; then echo "::endgroup::"; else
+              echo "::endgroup::"
+              echo "::error::$name failed"
+              failed="$failed $name"
+              echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+            fi
+          }
+          try omarchy nix build .#omarchy --print-build-logs --out-link result
+          # Nearly every check depends on the package: past this point a red one only
+          # repeats its error, so stop here and name it.
+          if [ -n "$failed" ]; then
+            echo "::error::main-pin red: the omarchy package does not build under main's pin; the checks that depend on it were not run"
+            exit 1
+          fi
+          # Every check that is not a VM test (generated and claimed alike): the VM
+          # tier is verify's, on p620. The options shards and toplevels follow.
+          # shellcheck disable=SC2016 # ${n} is Nix interpolation, not shell
+          cheap=$(nix eval .#checks.x86_64-linux --raw --apply \
+            'c: builtins.concatStringsSep " " (builtins.filter (n: !(c.${n} ? driverInteractive) && builtins.substring 0 8 n != "options-" && n != "vm-toplevel" && n != "reference-toplevel") (builtins.attrNames c))') || {
+            echo "::error::could not list the non-VM checks"
+            failed="$failed check-list"; cheap=""; }
+          [ -n "$cheap" ] || failed="$failed empty-check-list"
+          for c in $cheap; do
+            try "$c" nix build ".#checks.x86_64-linux.$c" --print-build-logs --no-link
+          done
+          try vm-toplevel nix build .#checks.x86_64-linux.vm-toplevel --print-build-logs --no-link
+          try reference-toplevel nix build .#checks.x86_64-linux.reference-toplevel --print-build-logs --no-link
+          opts=$(nix eval .#checks.x86_64-linux --raw --apply \
+            'c: builtins.concatStringsSep " " (builtins.filter (n: builtins.substring 0 8 n == "options-") (builtins.attrNames c))') || {
+            echo "::error::could not list the options-* checks"
+            failed="$failed options-list"; opts=""; }
+          [ -n "$opts" ] || failed="$failed empty-options-list"
+          for c in $opts; do
+            try "$c" nix build ".#checks.x86_64-linux.$c" --print-build-logs --no-link
+          done
+          try statix nix run --inputs-from . nixpkgs#statix -- check .
+          try deadnix nix run --inputs-from . nixpkgs#deadnix -- --fail .
+          try nix-fmt nix fmt -- --ci
+          try readme-counts .github/scripts/readme-counts.sh --fix
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+          [ -z "$failed" ] || { echo "::error::main-pin red:${failed}"; exit 1; }
+
+      # What failed, last, where a reader of the log ends up (#1384); never
+      # changes this job's status.
       - name: Failure digest
         id: digest
         if: failure()
@@ -474,8 +603,8 @@ jobs:
           done
 
   verify:
-    needs: [prepare, wait-idle]
-    if: needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true'
+    needs: [prepare, main-pin, wait-idle]
+    if: needs.prepare.result == 'success' && needs.main-pin.result == 'success' && needs.wait-idle.result == 'success' && needs.prepare.outputs.skip != 'true'
     # The VM runners, labels as install-check.yml's `runner` output gives them.
     runs-on: [self-hosted, nixos, kvm, big]
     # Three VM builds, each ~10-20 minutes warm; the wait is in wait-idle.
@@ -545,6 +674,7 @@ jobs:
 
       - name: Promote the candidate to edge
         id: promote
+        if: needs.main-pin.result == 'success' && inputs.dry_run != true && github.ref == 'refs/heads/main'
         env:
           CANDIDATE: ${{ needs.prepare.outputs.candidate }}
           EXPECTED: ${{ needs.prepare.outputs.expected }}
@@ -566,7 +696,7 @@ jobs:
   # read or write the issue it must fail the run, or a broken edge fails
   # nightly in silence (CLAUDE.md section 4).
   report:
-    needs: [prepare, wait-idle, verify]
+    needs: [prepare, main-pin, wait-idle, verify]
     # Not always(): that would also run after a cancel, and a superseded run
     # would file a failure. A job that TIMED OUT still reports cancelled as its
     # result, and !cancelled() runs for it, so it is treated as a failure below.
@@ -578,10 +708,12 @@ jobs:
         with:
           sparse-checkout: .github/scripts
       - name: Update the omarchy-edge issues
+        if: inputs.dry_run != true && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PREPARE: ${{ needs.prepare.result }}
+          MAIN_PIN: ${{ needs.main-pin.result }}
           WAIT: ${{ needs.wait-idle.result }}
           VERIFY: ${{ needs.verify.result }}
           CANDIDATE: ${{ needs.prepare.outputs.candidate }}
@@ -597,5 +729,27 @@ jobs:
           HELD_DIGEST: ${{ needs.prepare.outputs.held_digest }}
           PREPARE_DIGEST: ${{ needs.prepare.outputs.digest }}
           VERIFY_DIGEST: ${{ needs.verify.outputs.digest }}
+          MAIN_PIN_FAILED: ${{ needs.main-pin.outputs.failed }}
+          MAIN_PIN_DIGEST: ${{ needs.main-pin.outputs.digest }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: .github/scripts/edge-report.sh
+
+  cleanup-dry-run:
+    needs: [prepare, main-pin, wait-idle, verify, report]
+    if: ${{ always() && (inputs.dry_run == true || github.ref != 'refs/heads/main') }}
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Delete this run's scratch ref
+        env:
+          GH_TOKEN: ${{ secrets.NIXARCHY_EDGE_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ref="repos/$GH_REPO/git/refs/heads/edge-dryrun/$GITHUB_RUN_ID"
+          if ! result=$(gh api "$ref" 2>&1); then
+            case "$result" in
+              *'HTTP 404'*) exit 0 ;;
+              *) echo "$result" >&2; exit 1 ;;
+            esac
+          fi
+          gh api -X DELETE "$ref"

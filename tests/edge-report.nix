@@ -60,7 +60,7 @@ pkgs.runCommand "edge-report"
     go() {
       : > fix/calls
       set +e
-      env -i PATH="$PWD/bin:$PATH" FIX="$PWD/fix" GH_REPO=o/r RUN_URL=https://x/run/1 \
+      env -i PATH="$PWD/bin:$PATH" FIX="$PWD/fix" GH_REPO=o/r RUN_URL=https://x/run/1 MAIN_PIN=success \
         EDGE_REPORT_NOW="$NOW" "$@" bash "$report" > out 2> err
       rc=$?
       set -e
@@ -180,6 +180,20 @@ pkgs.runCommand "edge-report"
     hasre digest-verify 'edge-sig: verify: options-system$'
     has digest-verify 'verify digest'
     hasnt digest-verify 'prepare digest'
+    reset
+    go PREPARE=success MAIN_PIN=failure WAIT=skipped VERIFY=skipped
+    ok0 main-pin
+    hasre main-pin 'edge-sig: main-pin: failure$'
+    reset
+    go PREPARE=success MAIN_PIN=cancelled WAIT=skipped VERIFY=skipped
+    ok0 main-pin-timeout
+    hasre main-pin-timeout 'edge-sig: main-pin: timed out$'
+
+    go PREPARE=success MAIN_PIN=failure MAIN_PIN_FAILED='skill-parity readme-counts' MAIN_PIN_DIGEST='main-pin digest' PREPARE_DIGEST='prepare digest' WAIT=skipped VERIFY=skipped
+    ok0 main-pin-digest
+    hasre main-pin-digest 'edge-sig: main-pin: skill-parity readme-counts$'
+    has main-pin-digest 'main-pin digest'
+    hasnt main-pin-digest 'prepare digest'
 
     # escalation: once, after 20 h, independent of the signature
     reset; list_held

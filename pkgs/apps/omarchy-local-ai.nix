@@ -3,18 +3,19 @@
   stdenv,
   fetchFromGitHub,
   python3,
+  iproute2,
   nix-update,
   writeShellApplication,
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omarchy-local-ai";
-  version = "0.5.0";
+  version = "0.6.0";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omarchy-local-ai";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-QBLMO2X4u+xiSGAzhG4xGsZtPDD23Zuh7h6PkBWD41o=";
+    hash = "sha256-VZLEo0rTepPdZCJfZk+bHATpWTs5SyvSFvVK4RS9wQY=";
   };
 
   nativeBuildInputs = [ python3 ];
@@ -41,6 +42,8 @@ stdenv.mkDerivation (finalAttrs: {
   '';
 
   doInstallCheck = true;
+  # 0.6.0's pair tests read the fabric interface with ip; at runtime the system's own is used.
+  nativeInstallCheckInputs = [ iproute2 ];
   # The Quadlet-generator part of engine-test.sh skips itself where podman's
   # generator is absent, as in the sandbox. tests/ and tools/bench are needed
   # by the test, so it runs against the source tree; validate runs on the install.

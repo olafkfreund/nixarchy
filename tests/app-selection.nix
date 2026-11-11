@@ -227,7 +227,7 @@ pkgs.runCommand "nixarchy-app-selection"
     }
     def_refused() {
       case "$1:$2" in
-        browser:brave | browser:brave-origin | browser:chromium | editor:sublime_text | editor:nvim) return 0 ;;
+        browser:brave | browser:brave-origin | browser:chromium | editor:sublime_text | editor:nvim | editor:plain) return 0 ;;
         *) return 1 ;;
       esac
     }

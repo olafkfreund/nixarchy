@@ -2201,7 +2201,10 @@ pkgs.testers.runNixOSTest {
     # Markdown is not asserted: upstream sets no default for it.
     mimes = [("application/pdf", "${omarchyPkg.passthru.pdfDesktop}"),
              ("video/mp4", "mpv.desktop"),
-             ("text/plain", "${omarchyPkg.passthru.editorDesktop}")]
+             # From hasPlain, not editorDesktop: the probe must not share the value it tests.
+             ("text/plain", "${
+               if omarchyPkg.passthru.hasPlain then "plain.desktop" else "nvim.desktop"
+             }")]
     if ${if omarchyPkg.passthru.hasFiles then "True" else "False"}:
         mimes.append(("inode/directory", "folio.desktop"))
     for mime, want in mimes:

@@ -26,20 +26,21 @@ pkgs.runCommand "nixarchy-webapp-browser"
     export PATH=$root/bin:$PATH
     printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Chromium' 'Exec=chromium %U' > "$root/data/applications/chromium-browser.desktop"
     printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Firefox' 'Exec=firefox %u' > "$root/data/applications/firefox.desktop"
+    printf '%s\n' '[MIME Cache]' 'x-scheme-handler/http=firefox.desktop;chromium-browser.desktop;' > "$root/data/applications/mimeinfo.cache"
 
-    printf '%s\n' '#!/bin/sh' 'cat "$BROWSER_DEFAULT"' > "$root/bin/omarchy-cmd-default-browser"
-    printf '%s\n' '#!/bin/sh' 'exit 1' > "$root/bin/omarchy-cmd-browser-handoff"
-    printf '%s\n' '#!/bin/sh' 'exit 1' > "$root/bin/omarchy-cmd-missing"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'cat "$BROWSER_DEFAULT"' > "$root/bin/omarchy-cmd-default-browser"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 1' > "$root/bin/omarchy-cmd-browser-handoff"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 1' > "$root/bin/omarchy-cmd-missing"
     # xdg-settings refuses an entry whose Exec= binary is not on PATH.
     for command in chromium firefox; do
-      printf '%s\n' '#!/bin/sh' 'exit 0' > "$root/bin/$command"
+      printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$root/bin/$command"
     done
     for command in omarchy-notification-send omarchy-i18n; do
-      printf '%s\n' '#!/bin/sh' 'exit 0' > "$root/bin/$command"
+      printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$root/bin/$command"
     done
-    printf '%s\n' '#!/bin/sh' 'exec "$@"' > "$root/bin/setsid"
-    printf '%s\n' '#!/bin/sh' 'printf "%s\\n" "$@" > "$LAUNCH_LOG"' > "$root/bin/uwsm-app"
-    printf '%s\n' '#!/bin/sh' 'echo "sudo was called" >> "$SUDO_LOG"; exit 1' > "$root/bin/sudo"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exec "$@"' > "$root/bin/setsid"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "%s\\n" "$@" > "$LAUNCH_LOG"' > "$root/bin/uwsm-app"
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo "sudo was called" >> "$SUDO_LOG"; exit 1' > "$root/bin/sudo"
     chmod +x "$root/bin/"*
 
     launcher=$package/bin/omarchy-launch-webapp
@@ -68,8 +69,11 @@ pkgs.runCommand "nixarchy-webapp-browser"
           provision=$package/bin/omarchy-provision-user
           awk '/^\. .*nixarchy-store-owned\.sh$/ { copying=1 } copying { print; if (/^[[:space:]]*xdg-mime default omarchy-HEY.desktop/) mailto=1; else if (mailto && /^[[:space:]]*fi$/) exit }' "$provision" > "$root/provision-block"
           grep -q 'xdg-mime default omarchy-HEY.desktop' "$root/provision-block" || { echo 'FAILED provisioning: patched block missing' >&2; exit 1; }
-          export XDG_CONFIG_HOME=$root/config XDG_CURRENT_DESKTOP= BROWSER=
-          mkdir -p "$XDG_CONFIG_HOME"
+          export XDG_CONFIG_HOME=$root/config XDG_CONFIG_DIRS=$root/system-config XDG_CURRENT_DESKTOP= BROWSER=
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_CONFIG_DIRS"
+          [[ $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser) == firefox.desktop ]] || {
+            echo 'FAILED provisioning: MIME cache did not select Firefox' >&2; exit 1;
+          }
 
           source "$root/provision-block"
           [[ $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser) == chromium-browser.desktop ]] || {
@@ -83,14 +87,23 @@ pkgs.runCommand "nixarchy-webapp-browser"
           }
 
           rm "$XDG_CONFIG_HOME/mimeapps.list"
+          printf '%s\n' '[Default Applications]' 'x-scheme-handler/http = firefox.desktop' > "$XDG_CONFIG_DIRS/mimeapps.list"
+          source "$root/provision-block"
+          [[ $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser) == firefox.desktop ]] || {
+            echo 'FAILED provisioning: system Firefox default changed' >&2; exit 1;
+          }
+          if [[ -f $XDG_CONFIG_HOME/mimeapps.list ]] && grep -Eq '^[[:space:]]*x-scheme-handler/http[[:space:]]*=' "$XDG_CONFIG_HOME/mimeapps.list"; then
+            echo 'FAILED provisioning: system Firefox default gained user HTTP line' >&2; exit 1;
+          fi
+
+          rm "$XDG_CONFIG_DIRS/mimeapps.list"
+          # The /etc case leaves a user list holding only the HEY mailto default.
+          rm -f "$XDG_CONFIG_HOME/mimeapps.list"
           ln -s ${pkgs.writeText "nixarchy-webapp-store-mimeapps" "[Default Applications]\n"} "$XDG_CONFIG_HOME/mimeapps.list"
           target=$(readlink "$XDG_CONFIG_HOME/mimeapps.list")
           source "$root/provision-block"
           [[ -L $XDG_CONFIG_HOME/mimeapps.list && $(readlink "$XDG_CONFIG_HOME/mimeapps.list") == "$target" ]] || {
             echo 'FAILED provisioning: store link changed' >&2; exit 1;
-          }
-          [[ -z $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser) ]] || {
-            echo 'FAILED provisioning: store-owned browser default changed' >&2; exit 1;
           }
         ''
       else

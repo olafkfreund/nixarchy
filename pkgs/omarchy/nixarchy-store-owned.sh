@@ -8,6 +8,6 @@ store_owned() {
   while [[ ! -e $path && ! -L $path ]]; do
     path=$(dirname -- "$path")
   done
-  resolved=$(readlink -f -- "$path") || return 1
+  resolved=$(readlink -f -- "$path") || return 0
   [[ $resolved == /nix/store/* ]]
 }

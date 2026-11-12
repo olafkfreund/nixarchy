@@ -4,8 +4,25 @@
 substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
   --replace-fail 'env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser google-chrome.desktop' \
     '. '"$out"'/share/omarchy/lib/nixarchy-store-owned.sh
-if ! store_owned "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" \
-  && [[ -z $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser 2>/dev/null || true) ]]; then
+browser_chosen() {
+  local file dir
+  local -a config_dirs files
+  IFS=: read -ra config_dirs <<< "${XDG_CONFIG_DIRS:-/etc/xdg}"
+  files=("${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list"
+    "${XDG_CONFIG_HOME:-$HOME/.config}/hyprland-mimeapps.list")
+  for dir in "${config_dirs[@]}"; do
+    files+=("$dir/mimeapps.list" "$dir/hyprland-mimeapps.list")
+  done
+  files+=("${XDG_DATA_HOME:-$HOME/.local/share}/applications/mimeapps.list")
+  for file in "${files[@]}"; do
+    [[ -f $file ]] || continue
+    if awk "/^[[:space:]]*\\[/ { section = /^[[:space:]]*\\[Default Applications\\][[:space:]]*\$/ } section && /^[[:space:]]*x-scheme-handler\\/http[[:space:]]*=/ { found=1; exit } END { exit !found }" "$file"; then
+      return 0
+    fi
+  done
+  return 1
+}
+if ! store_owned "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" && ! browser_chosen; then
   env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser chromium-browser.desktop
 fi' \
   --replace-fail 'xdg-mime default omarchy-HEY.desktop x-scheme-handler/mailto' \
@@ -18,7 +35,11 @@ substituteInPlace $out/share/omarchy/bin/omarchy-agent-instructions \
     'canonical="$HOME/.agents/AGENTS.md"
 . '"$out"'/share/omarchy/lib/nixarchy-store-owned.sh
 shared_linked=false
-if [[ -L $canonical ]] || store_owned "$canonical"; then shared_linked=true; fi' \
+if [[ -L $canonical ]] || store_owned "$canonical"; then shared_linked=true; fi
+if [[ $shared_linked == true && ! -e $canonical && $edit != true ]]; then
+  echo "~/.agents/AGENTS.md is managed elsewhere and does not exist; no harness was linked" >&2
+  exit 0
+fi' \
   --replace-fail 'blank() {' \
     'blank() {
 [[ $shared_linked == false ]] || return 1' \

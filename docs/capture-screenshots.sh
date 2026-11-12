@@ -79,7 +79,10 @@ shot 14-system system
 shot 19-trigger trigger
 shot 20-ask trigger.ask
 agent_menu=setup.default.agent
-grep -q '"agent.harness"' "$OMARCHY_PATH/default/omarchy/omarchy-menu.jsonc" && agent_menu=agent.harness
+if [[ -n ${OMARCHY_PATH:-} && -r ${OMARCHY_PATH:-}/default/omarchy/omarchy-menu.jsonc ]] &&
+  grep -q '"agent.harness"' "${OMARCHY_PATH:-}/default/omarchy/omarchy-menu.jsonc"; then
+  agent_menu=agent.harness
+fi
 shot 21-setup-agent "$agent_menu"
 menu_open && close || true
 

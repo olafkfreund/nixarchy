@@ -57,8 +57,7 @@ if (($# == 0)); then
 
   # Silent when unset rather than defaulting: Omarchy picks no agent for you, so
   # the menu leaves every entry unchecked until one is chosen.
-  # A recorded agent whose command is gone must not tick in the menu.
-  [[ -n ${agent:-} ]] && PATH=$(omarchy-agent-real-path) command -v "$agent" &>/dev/null && echo "$agent"
+  [[ -n ${agent:-} ]] && echo "$agent"
   exit 0
 fi
 

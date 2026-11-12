@@ -87,12 +87,10 @@ pkgs.runCommand "nixarchy-agent-instructions"
           reset_home
           mkdir -p "$HOME/.config/omarchy/defaults"
           echo codex > "$HOME/.config/omarchy/defaults/agent"
-          [[ -z $(bash "$default_agent") ]] || fail 'default agent absent command'
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$root/bin/codex"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo "instructions $*" >> "$LOG"' > "$root/bin/omarchy-agent-instructions"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo agent >> "$LOG"' > "$root/bin/omarchy-agent"
           chmod +x "$root/bin/codex" "$root/bin/omarchy-agent-instructions" "$root/bin/omarchy-agent"
-          [[ $(bash "$default_agent") == codex ]] || fail 'default agent present command'
           rm -f "$LOG"
           bash "$default_agent" codex >out 2>err || fail 'default agent setter status'
           grep -qxF 'instructions codex' "$LOG" || fail 'default agent instructions call'

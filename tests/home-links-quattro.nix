@@ -8,6 +8,7 @@ let
 
   claudeDir = pkgs.writeTextDir "CLAUDE.md" "${header}\n";
   agentsDir = pkgs.writeTextDir "AGENTS.md" "${header}\n";
+  emptyAgentsDir = pkgs.runCommand "nixarchy-empty-agents-dir" { } "mkdir -p $out";
   hyprDir = pkgs.writeTextDir "bindings.lua" "  o.bind(\"SUPER + CTRL + X\", \"Toggle dictation\", \"omarchy-dictation toggle\")\n";
   qtengineDir = pkgs.writeTextDir "config.json" ''{"theme":{"iconTheme":"Yaru-blue"}}'';
   configDir = pkgs.writeTextDir "mimeapps.list" "[Default Applications]\ntext/plain=kate.desktop\n";
@@ -52,6 +53,7 @@ pkgs.runCommand "nixarchy-home-links-quattro"
 
         printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Chromium' 'Exec=chromium %U' > "$XDG_DATA_DIRS/applications/chromium-browser.desktop"
         printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Firefox' 'Exec=firefox %u' > "$XDG_DATA_DIRS/applications/firefox.desktop"
+        printf '%s\n' '[MIME Cache]' 'x-scheme-handler/http=firefox.desktop;chromium-browser.desktop;' > "$XDG_DATA_DIRS/applications/mimeinfo.cache"
         cp --no-preserve=mode "${shipped}/share/applications/omarchy-HEY.desktop" "$XDG_DATA_DIRS/applications/omarchy-HEY.desktop"
 
         for command in omarchy-notification-send omarchy-launch-config-editor chromium firefox; do
@@ -118,6 +120,13 @@ pkgs.runCommand "nixarchy-home-links-quattro"
         [[ -L $HOME/.agents && $(readlink "$HOME/.agents") == "${agentsDir}" ]] || fail "agents-dir" "~/.agents link changed"
         [[ -L $HOME/.codex/AGENTS.md && $(readlink "$HOME/.codex/AGENTS.md") == "$HOME/.agents/AGENTS.md" ]] || fail "agents-dir" "~/.codex/AGENTS.md not linked"
         [[ -f $HOME/.codex/AGENTS.md.bak && $(<"$HOME/.codex/AGENTS.md.bak") == "my rules" ]] || fail "agents-dir" "~/.codex/AGENTS.md.bak wrong or missing"
+
+        reset_home
+        ln -s ${emptyAgentsDir} "$HOME/.agents"
+        mkdir -p "$HOME/.codex"
+        printf 'my rules\n' > "$HOME/.codex/AGENTS.md"
+        run_unchanged "agents-dir-missing-shared" bash "$OMARCHY_PATH/bin/omarchy-agent-instructions" codex
+        grep -qxF '~/.agents/AGENTS.md is managed elsewhere and does not exist; no harness was linked' "$TMPDIR/agents-dir-missing-shared.err" || fail "agents-dir-missing-shared" "missing explanation"
 
         # 3. XDG_CONFIG_HOME/hypr a link to a store dir holding bindings.lua with the legacy line.
         reset_home

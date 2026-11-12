@@ -1544,7 +1544,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # blank tile. This is the drift guard: an upstream release that adds a
                     # desktop file, or renames an icon, fails here rather than shipping.
                     for desktop in $out/share/applications/*.desktop; do
-                      grep -qx 'NoDisplay=true' "$desktop" && continue
+                      ${lib.optionalString isEdge "grep -qx 'NoDisplay=true' \"$desktop\" && continue"}
                       icon=$(sed -n 's/^Icon=//p' "$desktop")
                       [ -n "$icon" ] || continue
                       if [ ! -e "$out/share/icons/hicolor/256x256/apps/$icon.png" ]; then

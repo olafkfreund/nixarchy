@@ -73,7 +73,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   [ "''${#rows[@]}" -ge 20 ] || fail "menu yielded fewer than 20 agent rows"
   [ "''${#rows[@]}" -eq 24 ] || fail "expected 24 menu rows, got ''${#rows[@]}"
 
-  # The getter needs a real row; with none read, the counts above already failed.
+  # Account-add must still see a recorded choice when its command is absent.
   if [ -n "''${rows[0]:-}" ]; then
     prior=''${rows[0]}
     export HOME=$TMPDIR/home XDG_DATA_HOME=$TMPDIR/home/data
@@ -86,15 +86,8 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
     export PATH=$TMPDIR/stubs:$tools
     rc=0
     ${pkgs.bash}/bin/bash "$script" > "$out_file" 2>&1 </dev/null || rc=$?
-    [ "$rc" -eq 0 ] || fail "$prior getter without command: exited $rc"
-    [ ! -s "$out_file" ] || fail "$prior getter without command: printed $(cat "$out_file")"
-
-    make_agent "$TMPDIR/getter-bin" "$prior"
-    export PATH=$TMPDIR/getter-bin:$TMPDIR/stubs:$tools
-    rc=0
-    ${pkgs.bash}/bin/bash "$script" > "$out_file" 2>&1 </dev/null || rc=$?
-    [ "$rc" -eq 0 ] || fail "$prior getter with command: exited $rc"
-    [ "$(cat "$out_file")" = "$prior" ] || fail "$prior getter with command: printed $(cat "$out_file")"
+    [ "$rc" -eq 0 ] || fail "$prior recorded getter: exited $rc"
+    [ "$(cat "$out_file")" = "$prior" ] || fail "$prior recorded getter: printed $(cat "$out_file")"
   fi
 
   for id in "''${rows[@]}"; do

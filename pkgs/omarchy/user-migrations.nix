@@ -93,7 +93,19 @@ runCommand "nixarchy-user-migrations"
             1794330979)
               substituteInPlace "$script" \
                 --replace-fail 'omarchy-pkg-add folio' "" \
-                --replace-fail 'omarchy-pkg-drop nautilus nautilus-python nautilus-dropbox sushi' "" \
+                --replace-fail ${
+                  if isEdge then
+                    ''
+                      'nautilus_packages=()
+                      for package_name in nautilus nautilus-python nautilus-dropbox sushi; do
+                        pacman -Qq "$package_name" &>/dev/null && nautilus_packages+=("$package_name")
+                      done
+                      if ((''${#nautilus_packages[@]})); then
+                        sudo pacman -Rn --noconfirm "''${nautilus_packages[@]}"
+                      fi' ''
+                  else
+                    "'omarchy-pkg-drop nautilus nautilus-python nautilus-dropbox sushi' "
+                }"" \
                 --replace-fail '# A dock that still pins Nautilus pins Files instead.' ""
               block=$(sed -n '/^if \[\[ -f \$user_mimeapps \]\] && grep -q/,/^fi$/p' "$script")
               [[ $block == *"sed --follow-symlinks -i 's/org\\.gnome\\.Nautilus\\.desktop/folio.desktop/g' \"\$user_mimeapps\""* ]] || exit 1

@@ -1,5 +1,7 @@
 { pkgs, omarchy }:
-
+let
+  isEdge = pkgs.lib.hasPrefix "edge-" omarchy.version;
+in
 pkgs.runCommand "nixarchy-stale-scripts"
   {
     nativeBuildInputs = [
@@ -18,7 +20,9 @@ pkgs.runCommand "nixarchy-stale-scripts"
     chmod +x stub/*
     export PATH="$PWD/stub:$PATH"
 
-    for entry in 'service-spotify spotify' 'service-signal signal-desktop' 'ai-chatgpt chatgpt'; do
+    for entry in ${
+      pkgs.lib.optionalString (!isEdge) "'service-spotify spotify' "
+    }'service-signal signal-desktop' 'ai-chatgpt chatgpt'; do
       read -r script binary <<< "$entry"
       rm -f launch.log
       export STUB_LOG="$PWD/launch.log"

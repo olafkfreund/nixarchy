@@ -127,6 +127,7 @@
   symlinkJoin,
 }:
 let
+  isEdge = lib.hasPrefix "edge-" version;
   # Derived from the pinned source, so one line holds under both Omarchy pins
   # (v4.5.0 ships Evince and no qtengine). `src` is a flake input path: no IFD.
   basePackages = builtins.filter (l: l != "" && !(lib.hasPrefix "#" l)) (
@@ -593,10 +594,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     }
 
                     # Why: pkgs/AGENTS.md#every-web-app-failed-with
-                    substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-                      --replace-fail \
-                        'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;' \
-                        'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium* | chromium*) ;;'
+                    ${lib.optionalString (!isEdge) ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
+                        --replace-fail \
+                          'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;' \
+                          'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium* | chromium*) ;;'
+                    ''}
 
                     # No $BROWSER edit: quattro's omarchy-cmd-default-browser runs
                     # xdg-settings under `env -u BROWSER` itself.
@@ -898,27 +901,63 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 # which is in the runtime list above, so neither needs a patch.
 
                 # Why: pkgs/AGENTS.md#onepassword-extension-dir
-                substituteInPlace $out/share/omarchy/bin/omarchy-install-service-1password \
-                  --replace-fail 'sudo mkdir -p "$EXTENSION_DIR"' \
-                  'echo "Chromium extensions are declared on NixOS, not dropped into a directory." >&2
-                  echo "" >&2
-                  echo "  Add the extension to your configuration:" >&2
-                  echo "" >&2
-                  echo "    programs.chromium.enable = true;" >&2
-                  echo "    programs.chromium.extensions = [ \"$EXTENSION_ID\" ];" >&2
-                  echo "" >&2
-                  echo "  then rebuild. 1Password itself is handled above." >&2
-                  return' \
-                  --replace-fail 'printf '"'"'{ "external_update_url": "%s" }\n'"'"' "$WEBSTORE_UPDATE_URL" | sudo tee "$EXTENSION_FILE" >/dev/null' \
-                  ':' \
-                  --replace-fail 'sudo chmod 644 "$EXTENSION_FILE"' ':' \
-              --replace-fail 'EXTENSION_DIR="/usr/share/chromium/extensions"' \
-              'EXTENSION_DIR=""  # declared, not written -- see the message below'
+                ${
+                  if isEdge then
+                    ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-install-service-1password \
+                        --replace-fail '  local dir
+
+                        for dir in /usr/share/google-chrome/extensions /usr/share/chromium/extensions; do
+                          sudo mkdir -p "$dir"
+                          printf '"'"'{ "external_update_url": "%s" }\n'"'"' "$WEBSTORE_UPDATE_URL" | sudo tee "$dir/$EXTENSION_ID.json" >/dev/null
+                          sudo chmod 644 "$dir/$EXTENSION_ID.json"
+                        done' \
+                        '  echo "Chromium extensions are declared on NixOS, not dropped into a directory." >&2
+                        echo "" >&2
+                        echo "  Add the extension to your configuration:" >&2
+                        echo "" >&2
+                        echo "    programs.chromium.enable = true;" >&2
+                        echo "    programs.chromium.extensions = [ \"$EXTENSION_ID\" ];" >&2
+                        echo "" >&2
+                        echo "  then rebuild. 1Password itself is handled above." >&2
+                        return'
+                    ''
+                  else
+                    ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-install-service-1password \
+                        --replace-fail 'sudo mkdir -p "$EXTENSION_DIR"' \
+                        'echo "Chromium extensions are declared on NixOS, not dropped into a directory." >&2
+                        echo "" >&2
+                        echo "  Add the extension to your configuration:" >&2
+                        echo "" >&2
+                        echo "    programs.chromium.enable = true;" >&2
+                        echo "    programs.chromium.extensions = [ \"$EXTENSION_ID\" ];" >&2
+                        echo "" >&2
+                        echo "  then rebuild. 1Password itself is handled above." >&2
+                        return' \
+                        --replace-fail 'printf '"'"'{ "external_update_url": "%s" }\n'"'"' "$WEBSTORE_UPDATE_URL" | sudo tee "$EXTENSION_FILE" >/dev/null' \
+                        ':' \
+                        --replace-fail 'sudo chmod 644 "$EXTENSION_FILE"' ':' \
+                        --replace-fail 'EXTENSION_DIR="/usr/share/chromium/extensions"' \
+                        'EXTENSION_DIR=""  # declared, not written -- see the message below'
+                    ''
+                }
 
                 # Why: pkgs/AGENTS.md#every-web-app-failed-with
-            substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-              --replace-fail '*) browser="chromium.desktop" ;;' \
-              '*) browser="chromium-browser.desktop" ;;'
+            ${
+              if isEdge then
+                ''
+                  substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
+                    --replace-fail '*) browsers=(google-chrome.desktop chromium.desktop) ;;' \
+                    '*) browsers=(chromium-browser.desktop google-chrome.desktop) ;;'
+                ''
+              else
+                ''
+                  substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
+                    --replace-fail '*) browser="chromium.desktop" ;;' \
+                    '*) browser="chromium-browser.desktop" ;;'
+                ''
+            }
 
             substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
               --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
@@ -990,7 +1029,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     "uwsm-app -- $binary"
                 done
 
-                for entry in 'service-spotify spotify' 'service-signal signal-desktop' 'ai-chatgpt chatgpt'; do
+                for entry in ${
+                  lib.optionalString (!isEdge) "'service-spotify spotify' "
+                }'service-signal signal-desktop' 'ai-chatgpt chatgpt'; do
                   read -r script binary <<< "$entry"
                   substituteInPlace "$out/share/omarchy/bin/omarchy-install-$script" \
                     --replace-fail "uwsm-app -- /usr/bin/$binary" "uwsm-app -- $binary"
@@ -1123,7 +1164,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     chmod +x $skills/ai-mirror/mirror-vm
 
                     # Why: pkgs/AGENTS.md#the-agent-skills-upstream-writes-for-arch (#1406)
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1406-omarchy-app-nix.patch}
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
+                      if isEdge then ./1406-omarchy-app-nix-edge.patch else ./1406-omarchy-app-nix.patch
+                    }
 
                     # The boundary between our devenv skill and nix-skills'
                     # devenv-project (#888): ours is devenv ON a nixarchy machine,
@@ -1241,7 +1284,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       # omarchy-browser.desktop keeps its name: no package ships an entry
                       # with Omarchy's own name, and mimeapps lists name it unprefixed.
                       case "$base" in
-                        omarchy-browser.desktop) install -m644 "$desktop" "$out/share/applications/$base" ;;
+                        omarchy-browser.desktop | omarchy-launch-editor.desktop) install -m644 "$desktop" "$out/share/applications/$base" ;;
                         *) install -m644 "$desktop" "$out/share/applications/omarchy-$base" ;;
                       esac
                     done
@@ -1269,7 +1312,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                         ': # nixarchy: not ~/.codex/skills; Codex reads ~/.agents/skills'
 
                     # Why: pkgs/AGENTS.md#chromium-browserdesktop-is-renamed-on-three-more-paths-that-name-it
-                    for f in omarchy-provision-user omarchy-default-browser omarchy-remove-browser; do
+                    for f in ${
+                      lib.optionalString (!isEdge) "omarchy-provision-user "
+                    }omarchy-default-browser omarchy-remove-browser; do
                       substituteInPlace $out/share/omarchy/bin/$f \
                         --replace-fail 'chromium.desktop' 'chromium-browser.desktop'
                     done
@@ -1489,6 +1534,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # blank tile. This is the drift guard: an upstream release that adds a
                     # desktop file, or renames an icon, fails here rather than shipping.
                     for desktop in $out/share/applications/*.desktop; do
+                      grep -qx 'NoDisplay=true' "$desktop" && continue
                       icon=$(sed -n 's/^Icon=//p' "$desktop")
                       [ -n "$icon" ] || continue
                       if [ ! -e "$out/share/icons/hicolor/256x256/apps/$icon.png" ]; then

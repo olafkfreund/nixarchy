@@ -49,6 +49,7 @@
     nix = "btrfs-progs";
   };
   "chromium" = {
+    edge = "absent";
     nix = "chromium";
   };
   "cliamp" = {
@@ -320,6 +321,7 @@
     nix = "xdg-user-dirs";
   };
   "yaru-icon-theme" = {
+    edge = "absent";
     nix = "yaru-theme";
   };
   "yt-dlp" = {
@@ -484,6 +486,10 @@
   };
 
   # ── Hardware this port does not target ────────────────────────────────────
+  "acer-aspire-16-ai-audio" = {
+    skip = "an Arch package fixing one Acer laptop's speaker topology; not checked against nixos-hardware";
+    edge = "only";
+  };
   "asus-zenbook-a16-audio" = {
     edge = "only";
     skip = "ASUS Zenbook A16 speaker quirk from Omarchy's Arch repo; a host with one carries it in its own config or nixos-hardware.";
@@ -748,6 +754,10 @@
   };
 
   # ── nixpkgs has it; this port does not install it by default ──────────────
+  "cmake" = {
+    skip = "the omarchy-app skill builds through its own Nix flake, which brings CMake";
+    edge = "only";
+  };
   "docker-buildx" = {
     skip = "nixpkgs docker bundles it.";
   };
@@ -756,6 +766,10 @@
   };
   "exfatprogs" = {
     skip = "Not installed by default.";
+  };
+  "google-chrome" = {
+    skip = "unfree; Chromium stays nixarchy's default browser, and Install > Browser offers Chrome";
+    edge = "only";
   };
   "herdr" = {
     skip = "Carried as nixarchy's own herdr plugin (nixarchy-plugin nixarchy.herdr, SUPER+ALT+H), not as this package.";

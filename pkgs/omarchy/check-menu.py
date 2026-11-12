@@ -7,10 +7,29 @@ t = re.sub(r"^\s*//.*$", "", t, flags=re.M)
 # this check did -- to a file it had not touched.
 t = re.sub(r",(\s*[}\]])", r"\1", t)
 d = json.loads(t)
-agents = [k for k in d if k.startswith("setup.default.agent.") and k.count(".") == 3]
+harness = [k for k in d if k.startswith("agent.harness.") and k.count(".") == 2]
+legacy = [k for k in d if k.startswith("setup.default.agent.") and k.count(".") == 3]
+if bool(harness) == bool(legacy):
+    sys.exit(
+        "expected agent rows under exactly one of agent.harness.* or "
+        "setup.default.agent.* (got %d and %d)" % (len(harness), len(legacy))
+    )
+prefix = "agent.harness." if harness else "setup.default.agent."
+agents = harness if harness else legacy
 blind = [k for k in agents if "command -v" not in d[k].get("checked", "")]
 if blind:
     sys.exit("agent rows that tick without checking the command: " + repr(blind))
+if harness:
+    bad_checked = [
+        k for k in agents
+        if "omarchy-default-agent" not in d[k].get("checked", "")
+        or ('== "%s"' % k.rsplit(".", 1)[-1]) not in d[k].get("checked", "")
+    ]
+    if bad_checked:
+        sys.exit(
+            "agent.harness rows whose checked does not compare "
+            "omarchy-default-agent to the row id: " + repr(bad_checked)
+        )
 # #949: the menu named 14 ids and the script accepted 10, so
 # four rows printed a usage line and exited 1 -- into a
 # detached terminal nobody sees. The `blind` check above is
@@ -45,7 +64,7 @@ if unknown:
         "menu rows name agents omarchy-default-agent rejects: %s\n"
         "  it accepts: %s" % (unknown, sorted(accepted))
     )
-if "setup.default.agent.agy" not in agents:
+if prefix + "agy" not in agents:
     sys.exit("the Antigravity (agy) row did not survive")
 ask = [k for k in d if k.startswith("trigger.ask")]
 if len(ask) < 10:

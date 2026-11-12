@@ -9,7 +9,11 @@ import re
 import sys
 from pathlib import Path
 
-src, out, name = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
+args = sys.argv[1:]
+edge = "--edge" in args
+if edge:
+    args.remove("--edge")
+src, out, name = args[0], Path(args[1]), args[2]
 text = Path(src).read_text()
 # The catalogues the template's resources.qrc lists.
 expand = {"src/i18n/<code>.json": ["src/i18n/en.json", "src/i18n/da.json"]}
@@ -37,8 +41,12 @@ for section in re.split(r"(?m)^## ", text)[1:]:
             )
             written.append(q)
 
-need = {f"{name}.pro", "package.nix", f"dist/{name}.desktop", f"dist/{name}.svg",
-        "src/main.cpp", "src/resources.qrc", "src/Main.qml"}
+if edge:
+    need = {"CMakeLists.txt", "package.nix", f"pkgbuild/{name}.desktop", f"pkgbuild/{name}.svg",
+            "src/main.cpp", "src/resources.qrc", "src/Main.qml"}
+else:
+    need = {f"{name}.pro", "package.nix", f"dist/{name}.desktop", f"dist/{name}.svg",
+            "src/main.cpp", "src/resources.qrc", "src/Main.qml"}
 missing = need - set(written)
 if missing:
     sys.exit(f"templates.md no longer yields: {sorted(missing)}")

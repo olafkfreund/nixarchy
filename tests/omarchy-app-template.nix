@@ -15,6 +15,7 @@
   pkgs,
   omarchy,
   patch,
+  isEdge,
 }:
 let
   name = "tally";
@@ -43,7 +44,7 @@ let
         nativeBuildInputs = [ pkgs.python3 ];
       }
       ''
-        python3 -I ${./omarchy-app-template.py} \
+        python3 -I ${./omarchy-app-template.py} ${lib.optionalString isEdge "--edge"} \
           ${omarchy}/share/omarchy/default/agents/skills/omarchy-app/templates.md $out ${name}
       '';
 

@@ -166,6 +166,7 @@
     reason = "The install command launches /usr/bin/signal-desktop, which is absent on NixOS; launch the installed command from PATH.";
   };
   "omarchy-install-service-spotify" = {
+    edge = "absent";
     class = "patch";
     reason = "The install command launches /usr/bin/spotify, which is absent on NixOS; launch the installed command from PATH.";
   };

@@ -79,7 +79,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/ceb30ed19ab1926713a7832dd4de5868c90d7b94";
+      url = "github:basecamp/omarchy/36b70f1bce6c9b94b800a322d1fa317c7b4f139a";
       flake = false;
     };
 
@@ -433,7 +433,7 @@
         ) boxImagePins
       );
 
-      omarchyVersion = "edge-20261112-ceb30ed";
+      omarchyVersion = "edge-20261112-36b70f1";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).
@@ -2592,11 +2592,20 @@
 
           # The omarchy-app skill's templates build as written (#1406). See
           # tests/omarchy-app-template.nix.
-          omarchy-app-template = import ./tests/omarchy-app-template.nix {
-            pkgs = pkgsFor.${system};
-            omarchy = self.packages.${system}.omarchy;
-            patch = ./pkgs/omarchy/1406-omarchy-app-nix.patch;
-          };
+          omarchy-app-template =
+            let
+              isEdge = lib.hasPrefix "edge-" self.packages.${system}.omarchy.version;
+            in
+            import ./tests/omarchy-app-template.nix {
+              pkgs = pkgsFor.${system};
+              omarchy = self.packages.${system}.omarchy;
+              inherit isEdge;
+              patch =
+                if isEdge then
+                  ./pkgs/omarchy/1406-omarchy-app-nix-edge.patch
+                else
+                  ./pkgs/omarchy/1406-omarchy-app-nix.patch;
+            };
 
           # The nightly's cache step: probe every allowlist entry, rebuild and
           # push what the cache dropped, and still fail when a push delivers

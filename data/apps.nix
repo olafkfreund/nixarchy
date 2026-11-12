@@ -194,6 +194,7 @@
     arch = "signal-desktop";
   };
   spotify = {
+    edge = "absent";
     menuId = "install.service.spotify";
     label = "Spotify";
     category = "Service";

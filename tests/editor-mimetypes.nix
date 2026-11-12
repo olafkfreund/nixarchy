@@ -77,11 +77,31 @@ pkgs.runCommand "nixarchy-editor-mimetypes"
         rm "$XDG_CONFIG_DIRS/mimeapps.list" "$root/xdg2/mimeapps.list"
 
         reset_config
+        printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$XDG_CONFIG_DIRS/hyprland-mimeapps.list"
+        XDG_CURRENT_DESKTOP=Hyprland bash "$script" --unless-chosen || fail system-desktop-choice-exit
+        if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail system-desktop-choice-kept; fi
+        reset_config
+        XDG_CONFIG_DIRS=:$XDG_CONFIG_DIRS XDG_CURRENT_DESKTOP=Hyprland bash "$script" --unless-chosen || fail empty-system-dir-exit
+        if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail empty-system-dir-skipped; fi
+        rm "$XDG_CONFIG_DIRS/hyprland-mimeapps.list"
+
+        reset_config
+        printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$desktop"
+        XDG_CURRENT_DESKTOP=Hyprland bash "$script" --unless-chosen || fail user-desktop-choice-exit
+        if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail user-desktop-choice-kept; fi
+
+        reset_config
         mkdir -p "$XDG_DATA_HOME/applications"
         printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$XDG_DATA_HOME/applications/mimeapps.list"
         bash "$script" --unless-chosen || fail older-user-choice-exit
         if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail older-user-choice-wins; fi
         rm "$XDG_DATA_HOME/applications/mimeapps.list"
+
+        reset_config
+        mkdir -p "$root/data-dir/applications"
+        printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$root/data-dir/applications/mimeapps.list"
+        XDG_DATA_DIRS=$root/data-dir bash "$script" --unless-chosen || fail system-data-choice-exit
+        if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail system-data-choice-kept; fi
 
         reset_config
         printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$list"

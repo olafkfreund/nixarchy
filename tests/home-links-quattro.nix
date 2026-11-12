@@ -46,7 +46,6 @@ pkgs.runCommand "nixarchy-home-links-quattro"
         export XDG_CONFIG_DIRS=$TMPDIR/xdg-config
         export XDG_DATA_DIRS=$TMPDIR/xdg-data
         export OMARCHY_PATH=${shipped}/share/omarchy
-        export GSETTINGS_STATE=$TMPDIR/gsettings-state
 
         mkdir -p "$TMPDIR/bin" "$XDG_CONFIG_DIRS" "$XDG_DATA_DIRS/applications"
         export PATH=$TMPDIR/bin:$PATH
@@ -61,12 +60,6 @@ pkgs.runCommand "nixarchy-home-links-quattro"
         done
         printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo backed-up' > "$TMPDIR/bin/omarchy-i18n"
         printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo dark' > "$TMPDIR/bin/omarchy-theme-color"
-        printf '%s\n' '#!${pkgs.bash}/bin/bash' \
-          'case ''${1:-} in' \
-          '  get) [[ ''${3:-} == icon-theme && -f $GSETTINGS_STATE ]] && cat "$GSETTINGS_STATE" || true ;;' \
-          '  set) [[ ''${3:-} == icon-theme ]] && printf "\047%s\047\n" "$4" > "$GSETTINGS_STATE"; exit 0 ;;' \
-          '  *) exit 0 ;;' \
-          'esac' > "$TMPDIR/bin/gsettings"
         chmod +x "$TMPDIR/bin/"*
 
         fails=()
@@ -140,7 +133,6 @@ pkgs.runCommand "nixarchy-home-links-quattro"
 
         reset_home
         ln -s ${qtengineDir} "$XDG_CONFIG_HOME/qtengine"
-        printf "'Yaru-blue'\n" > "$GSETTINGS_STATE"
         run_unchanged "qtengine-dir-1794397144" env DBUS_SESSION_BUS_ADDRESS=stub bash "${migrations}/scripts/1794397144.sh"
 
         # 5. XDG_CONFIG_HOME itself a link to a store dir holding mimeapps.list (text/plain line).

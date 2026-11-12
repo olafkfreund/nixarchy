@@ -11,12 +11,13 @@ browser_chosen() {
   files=("${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list"
     "${XDG_CONFIG_HOME:-$HOME/.config}/hyprland-mimeapps.list")
   for dir in "${config_dirs[@]}"; do
+    [[ $dir == /* ]] || continue
     files+=("$dir/mimeapps.list" "$dir/hyprland-mimeapps.list")
   done
   files+=("${XDG_DATA_HOME:-$HOME/.local/share}/applications/mimeapps.list")
   for file in "${files[@]}"; do
     [[ -f $file ]] || continue
-    if awk "/^[[:space:]]*\\[/ { section = /^[[:space:]]*\\[Default Applications\\][[:space:]]*\$/ } section && /^[[:space:]]*x-scheme-handler\\/http[[:space:]]*=/ { found=1; exit } END { exit !found }" "$file"; then
+    if awk "/^[[:space:]]*\\[/ { section = /^[[:space:]]*\\[Default Applications\\][[:space:]]*\$/ } section && /^[[:space:]]*x-scheme-handler\\/http[[:space:]]*=[[:space:]]*[^[:space:];]/ { found=1; exit } END { exit !found }" "$file"; then
       return 0
     fi
   done
@@ -102,21 +103,38 @@ fi' \
 cleanup_older() { rm -f "$older_tmp"; }
 trap cleanup_older EXIT
 older=/dev/null
-# Lowest precedence first: the awk keeps the last line per type. The XDG order is
-# the deprecated user data list below the system config dirs, the first dir highest.
+# Lowest precedence first: the awk keeps the last line per type.
 add_older() {
   [[ -f $1 ]] || return 0
   cat "$1" >>"$older_tmp"
   printf "\n" >>"$older_tmp"
   older=$older_tmp
 }
-add_older "${XDG_DATA_HOME:-$HOME/.local/share}/applications/mimeapps.list"
+current_desktop=${XDG_CURRENT_DESKTOP:-}
+IFS=: read -ra desktops <<< "${current_desktop,,}"
+add_dir() {
+  [[ $1 == /* ]] || return 0
+  add_older "$1/mimeapps.list"
+  for ((j = ${#desktops[@]} - 1; j >= 0; j--)); do
+    desktop=${desktops[j]}
+    if [[ -n $desktop ]]; then add_older "$1/$desktop-mimeapps.list"; fi
+  done
+}
+IFS=: read -ra data_dirs <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+for ((i = ${#data_dirs[@]} - 1; i >= 0; i--)); do
+  if [[ ${data_dirs[i]} == /* ]]; then add_dir "${data_dirs[i]}/applications"; fi
+done
+add_dir "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 IFS=: read -ra config_dirs <<< "${XDG_CONFIG_DIRS:-/etc/xdg}"
 for ((i = ${#config_dirs[@]} - 1; i >= 0; i--)); do
-  add_older "${config_dirs[i]}/mimeapps.list"
+  add_dir "${config_dirs[i]}"
+done
+for ((j = ${#desktops[@]} - 1; j >= 0; j--)); do
+  desktop=${desktops[j]}
+  if [[ -n $desktop ]]; then add_older "${XDG_CONFIG_HOME:-$HOME/.config}/$desktop-mimeapps.list"; fi
 done' \
   --replace-fail 'aliases=/usr/share/mime/aliases' "aliases=$sharedMimeInfo/share/mime/aliases" \
-  --replace-fail "# The older ~/.local/share list counts too, for a type ~/.config doesn't set:" '# System config lists and the older user data list count too:' \
+  --replace-fail "# The older ~/.local/share list counts too, for a type ~/.config doesn't set:" '# Desktop, system config, and data-dir lists count too:' \
   --replace-fail 'if [[ $unless_chosen == false && -f $desktop_list && ! $desktop_list -ef $list ]]; then' 'if [[ $unless_chosen == false && -f $desktop_list && ! $desktop_list -ef $list ]]; then
   if store_owned "$desktop_list"; then
     echo "nixarchy: $desktop_list is managed by Home Manager; it is left alone" >&2

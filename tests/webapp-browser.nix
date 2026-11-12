@@ -80,6 +80,12 @@ pkgs.runCommand "nixarchy-webapp-browser"
             echo 'FAILED provisioning: empty config did not select Chromium' >&2; exit 1;
           }
 
+          printf '%s\n' '[Default Applications]' 'x-scheme-handler/http=' > "$XDG_CONFIG_HOME/mimeapps.list"
+          source "$root/provision-block"
+          [[ $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser) == chromium-browser.desktop ]] || {
+            echo 'FAILED provisioning: empty HTTP value did not select Chromium' >&2; exit 1;
+          }
+
           printf '%s\n' '[Default Applications]' 'x-scheme-handler/http=firefox.desktop' 'x-scheme-handler/https=firefox.desktop' > "$XDG_CONFIG_HOME/mimeapps.list"
           source "$root/provision-block"
           [[ $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser) == firefox.desktop ]] || {

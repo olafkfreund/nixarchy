@@ -74,19 +74,19 @@ fi' \
 cleanup_older() { rm -f "$older_tmp"; }
 trap cleanup_older EXIT
 older=/dev/null
-IFS=: read -ra config_dirs <<< "${XDG_CONFIG_DIRS:-/etc/xdg}"
-for dir in "${config_dirs[@]}"; do
-  if [[ -f $dir/mimeapps.list ]]; then
-    cat "$dir/mimeapps.list" >>"$older_tmp"
-    printf "\n" >>"$older_tmp"
-    older=$older_tmp
-  fi
-done
-if [[ -f ${XDG_DATA_HOME:-$HOME/.local/share}/applications/mimeapps.list ]]; then
-  cat "${XDG_DATA_HOME:-$HOME/.local/share}/applications/mimeapps.list" >>"$older_tmp"
+# Lowest precedence first: the awk keeps the last line per type. The XDG order is
+# the deprecated user data list below the system config dirs, the first dir highest.
+add_older() {
+  [[ -f $1 ]] || return 0
+  cat "$1" >>"$older_tmp"
   printf "\n" >>"$older_tmp"
   older=$older_tmp
-fi' \
+}
+add_older "${XDG_DATA_HOME:-$HOME/.local/share}/applications/mimeapps.list"
+IFS=: read -ra config_dirs <<< "${XDG_CONFIG_DIRS:-/etc/xdg}"
+for ((i = ${#config_dirs[@]} - 1; i >= 0; i--)); do
+  add_older "${config_dirs[i]}/mimeapps.list"
+done' \
   --replace-fail 'aliases=/usr/share/mime/aliases' "aliases=$sharedMimeInfo/share/mime/aliases" \
   --replace-fail "# The older ~/.local/share list counts too, for a type ~/.config doesn't set:" '# System config lists and the older user data list count too:' \
   --replace-fail 'if [[ $unless_chosen == false && -f $desktop_list && ! $desktop_list -ef $list ]]; then' 'if [[ $unless_chosen == false && -f $desktop_list && ! $desktop_list -ef $list ]]; then

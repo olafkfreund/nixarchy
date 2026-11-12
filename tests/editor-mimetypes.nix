@@ -67,6 +67,15 @@ pkgs.runCommand "nixarchy-editor-mimetypes"
         bash "$script" --unless-chosen || fail system-own-default-exit
         grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list" || fail system-own-default-replaced
 
+        # Two system dirs disagree: the first in XDG_CONFIG_DIRS wins, as GLib reads them.
+        reset_config
+        mkdir -p "$root/xdg2"
+        printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$XDG_CONFIG_DIRS/mimeapps.list"
+        printf '%s\n' '[Default Applications]' 'text/plain=nvim.desktop' > "$root/xdg2/mimeapps.list"
+        XDG_CONFIG_DIRS=$XDG_CONFIG_DIRS:$root/xdg2 bash "$script" --unless-chosen || fail system-order-exit
+        if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail system-order-first-dir-wins; fi
+        rm "$XDG_CONFIG_DIRS/mimeapps.list" "$root/xdg2/mimeapps.list"
+
         reset_config
         mkdir -p "$XDG_DATA_HOME/applications"
         printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$XDG_DATA_HOME/applications/mimeapps.list"

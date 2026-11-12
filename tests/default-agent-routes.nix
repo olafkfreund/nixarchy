@@ -73,26 +73,29 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   [ "''${#rows[@]}" -ge 20 ] || fail "menu yielded fewer than 20 agent rows"
   [ "''${#rows[@]}" -eq 24 ] || fail "expected 24 menu rows, got ''${#rows[@]}"
 
-  prior=''${rows[0]}
-  export HOME=$TMPDIR/home XDG_DATA_HOME=$TMPDIR/home/data
-  export XDG_STATE_HOME=$TMPDIR/home/state XDG_CONFIG_HOME=$TMPDIR/home/config
-  export XDG_CACHE_HOME=$TMPDIR/home/cache
-  agent_file=$HOME/.config/omarchy/defaults/agent
-  rm -rf "$HOME"
-  mkdir -p "$(dirname "$agent_file")" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
-  printf '%s\n' "$prior" > "$agent_file"
-  export PATH=$TMPDIR/stubs:$tools
-  rc=0
-  ${pkgs.bash}/bin/bash "$script" > "$out_file" 2>&1 </dev/null || rc=$?
-  [ "$rc" -eq 0 ] || fail "$prior getter without command: exited $rc"
-  [ ! -s "$out_file" ] || fail "$prior getter without command: printed $(cat "$out_file")"
+  # The getter needs a real row; with none read, the counts above already failed.
+  if [ -n "''${rows[0]:-}" ]; then
+    prior=''${rows[0]}
+    export HOME=$TMPDIR/home XDG_DATA_HOME=$TMPDIR/home/data
+    export XDG_STATE_HOME=$TMPDIR/home/state XDG_CONFIG_HOME=$TMPDIR/home/config
+    export XDG_CACHE_HOME=$TMPDIR/home/cache
+    agent_file=$HOME/.config/omarchy/defaults/agent
+    rm -rf "$HOME"
+    mkdir -p "$(dirname "$agent_file")" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+    printf '%s\n' "$prior" > "$agent_file"
+    export PATH=$TMPDIR/stubs:$tools
+    rc=0
+    ${pkgs.bash}/bin/bash "$script" > "$out_file" 2>&1 </dev/null || rc=$?
+    [ "$rc" -eq 0 ] || fail "$prior getter without command: exited $rc"
+    [ ! -s "$out_file" ] || fail "$prior getter without command: printed $(cat "$out_file")"
 
-  make_agent "$TMPDIR/getter-bin" "$prior"
-  export PATH=$TMPDIR/getter-bin:$TMPDIR/stubs:$tools
-  rc=0
-  ${pkgs.bash}/bin/bash "$script" > "$out_file" 2>&1 </dev/null || rc=$?
-  [ "$rc" -eq 0 ] || fail "$prior getter with command: exited $rc"
-  [ "$(cat "$out_file")" = "$prior" ] || fail "$prior getter with command: printed $(cat "$out_file")"
+    make_agent "$TMPDIR/getter-bin" "$prior"
+    export PATH=$TMPDIR/getter-bin:$TMPDIR/stubs:$tools
+    rc=0
+    ${pkgs.bash}/bin/bash "$script" > "$out_file" 2>&1 </dev/null || rc=$?
+    [ "$rc" -eq 0 ] || fail "$prior getter with command: exited $rc"
+    [ "$(cat "$out_file")" = "$prior" ] || fail "$prior getter with command: printed $(cat "$out_file")"
+  fi
 
   for id in "''${rows[@]}"; do
     if PATH=$tools command -v "$id" >/dev/null 2>&1; then fail "$id: present on fixture PATH"; fi

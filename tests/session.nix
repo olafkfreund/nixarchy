@@ -2479,7 +2479,12 @@ pkgs.testers.runNixOSTest {
                # so nothing reaches install-service-slack, the setup that
                # writes the launcher override, or the launcher it points at.
                "omarchy-install-service-slack", "omarchy-setup-slack",
-               "omarchy-launch-slack"]
+               "omarchy-launch-slack",
+               # quattro 36b70f1 (#1760): a hidden maintainer tool that repacks
+               # Omarchy's own Chrome CRXs with keys from Omarchy's 1Password
+               # vault. No menu row or user path reaches it; Chrome's extras
+               # are a follow-up to #1760.
+               "omarchy-dev-pack-chrome-extensions"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

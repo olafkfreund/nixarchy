@@ -2016,6 +2016,8 @@
             "user-unit-links"
             "verify-boxes"
             "verify-sections"
+            # The shipped browser fallback and guarded provisioning on the edge pin (#1760).
+            "webapp-browser"
           ];
         in
         {

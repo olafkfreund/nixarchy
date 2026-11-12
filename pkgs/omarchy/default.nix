@@ -1303,6 +1303,20 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'xdg-mime default HEY.desktop' \
                         'xdg-mime default omarchy-HEY.desktop'
 
+                    ${lib.optionalString isEdge ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+                        --replace-fail 'env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser google-chrome.desktop' \
+                          '. ${placeholder "out"}/share/omarchy/lib/nixarchy-store-owned.sh
+                      if ! store_owned "''${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" \
+                        && [[ -z $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser 2>/dev/null || true) ]]; then
+                        env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser chromium-browser.desktop
+                      fi' \
+                        --replace-fail 'xdg-mime default omarchy-HEY.desktop x-scheme-handler/mailto' \
+                          'if ! store_owned "''${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list"; then
+                        xdg-mime default omarchy-HEY.desktop x-scheme-handler/mailto
+                      fi'
+                    ''}
+
                     # No skill links into ~/.codex/skills: Codex reads ~/.agents/skills
                     # too and does not merge same-named skills, so upstream's list made it
                     # show every skill twice. Matches the relink loop in modules/home.nix;

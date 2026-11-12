@@ -57,7 +57,8 @@ if (($# == 0)); then
 
   # Silent when unset rather than defaulting: Omarchy picks no agent for you, so
   # the menu leaves every entry unchecked until one is chosen.
-  [[ -n ${agent:-} ]] && echo "$agent"
+  # A recorded agent whose command is gone must not tick in the menu.
+  [[ -n ${agent:-} ]] && PATH=$(omarchy-agent-real-path) command -v "$agent" &>/dev/null && echo "$agent"
   exit 0
 fi
 
@@ -102,6 +103,8 @@ esac
 record() {
   mkdir -p "$(dirname "$agent_file")"
   printf '%s\n' "$agent" >"$agent_file"
+  # #1760: the harness reads shared instructions from its first session; v4.5.0 has no such command.
+  if command -v omarchy-agent-instructions >/dev/null 2>&1; then omarchy-agent-instructions "$agent" >/dev/null || true; fi
 }
 
 # gum confirm has three answers, not two: 0 is yes, 1 is no, 130 is a quit --

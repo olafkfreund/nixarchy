@@ -259,6 +259,18 @@
     run = "edited";
     reason = "keeps Neovim for an existing home without a saved editor; a symlinked mimeapps.list is left alone (#1750)";
   };
+  "1794344676" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    reason = "links the shared AGENTS.md into added Grok accounts; omarchy-agent-account-state link creates a link only where nothing exists (#1760)";
+  };
+  "1794387387" = {
+    decision = "ported";
+    run = "edited";
+    edge = "only";
+    reason = "rebinds the exact legacy Super + Ctrl + X dictation line 1793477875 wrote so the agents panel keeps the key; a store-owned bindings.lua is left alone (#1760)";
+  };
   "1794397144" = {
     decision = "partial";
     run = "port";

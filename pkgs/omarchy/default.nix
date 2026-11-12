@@ -453,6 +453,27 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     install -Dm644 ${./nixarchy-store-owned.sh} $out/share/omarchy/lib/nixarchy-store-owned.sh
 
                     ${lib.optionalString isEdge ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-instructions \
+                        --replace-fail 'canonical="$HOME/.agents/AGENTS.md"' \
+                          'canonical="$HOME/.agents/AGENTS.md"
+                      . ${placeholder "out"}/share/omarchy/lib/nixarchy-store-owned.sh
+                      shared_linked=false
+                      if [[ -L $canonical ]] || store_owned "$canonical"; then shared_linked=true; fi' \
+                        --replace-fail 'blank() {' \
+                          'blank() {
+                      [[ $shared_linked == false ]] || return 1' \
+                        --replace-fail '  [[ $target -ef $canonical ]] && return' \
+                          '  [[ $target -ef $canonical ]] && return
+                      if [[ -L $target ]] || store_owned "$target"; then
+                        echo "Skipping $target: a link you manage" >&2
+                        return 0
+                      fi' \
+                        --replace-fail '  exec omarchy-launch-config-editor "$canonical"' \
+                          '  if store_owned "$canonical"; then
+                        echo "~/.agents/AGENTS.md is managed by Home Manager; edit it in your configuration (home.file.\".agents/AGENTS.md\")" >&2
+                        exit 0
+                      fi
+                      exec omarchy-launch-config-editor "$canonical"'
                       substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-gnome \
                         --replace-fail 'gsettings set org.gnome.desktop.interface icon-theme "Adwaita"' \
                           '# A theme the user chose stays; gsettings quotes its value, so strip the quotes (\\047).

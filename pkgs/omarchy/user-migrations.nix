@@ -137,6 +137,13 @@ runCommand "nixarchy-user-migrations"
               fi
               [[ ! -e $user_mimeapps || ( -f $user_mimeapps && -w $user_mimeapps ) ]] || exit 0'
               ;;
+            1794387387)
+              substituteInPlace "$script" \
+                --replace-fail 'if [[ -f $bindings ]] && grep -qxF "$legacy" "$bindings"; then' \
+                  '. @helper@
+              if [[ -f $bindings ]] && ! store_owned "$bindings" && grep -qxF "$legacy" "$bindings"; then' \
+                --replace-fail '@helper@' '${tree}/lib/nixarchy-store-owned.sh'
+              ;;
             *) echo "no edit defined for $id" >&2; exit 1 ;;
           esac
           ;;

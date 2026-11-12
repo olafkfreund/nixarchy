@@ -221,6 +221,11 @@
     reason = "Vendored unchanged. Reads `systemctl --user status omarchy-sleep-lock.service` for a diagnostic dump; nothing is started, stopped or enabled.";
     allow = "systemctl-user";
   };
+  "omarchy-agent-instructions" = {
+    class = "patch";
+    edge = "only";
+    reason = "Never writes through or moves onto linked shared AGENTS.md, skips harness links and store-linked directories, and names Home Manager for a store-owned shared file on --edit (#1760).";
+  };
   "omarchy-default-agent" = {
     class = "replace";
     reason = "Upstream installs the agent with `mise use -g`: imperative, its shims only reach an interactive shell (the menu launches through `bash -c`), and its npm backend needs a node that is not in this closure.";

@@ -1820,6 +1820,8 @@
           # here counts as registered; one that needs other arguments stays
           # an explicit entry below.
           uniformChecks = [
+            # Shared agent instructions respect Home Manager links, and default-agent records a usable choice (#1760).
+            "agent-instructions"
             "agent-local-memlock"
             "app-selection"
             "apply-detach-interface"

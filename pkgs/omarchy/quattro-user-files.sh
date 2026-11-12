@@ -1,6 +1,11 @@
 # Edge-only edits to quattro's user-file scripts (#1760), kept out of default.nix's
 # installPhase, which has a size budget (tests/install-phase-budget.nix).
 # Sourced from installPhase with $out and $sharedMimeInfo set.
+substituteInPlace $out/share/omarchy/default/chromium/policies/chrome-extensions.json \
+  --replace-fail 'file:///usr/share/omarchy/' 'file://'"$out"'/share/omarchy/'
+substituteInPlace $out/share/omarchy/default/chromium/crx/updates.xml \
+  --replace-fail 'file:///usr/share/omarchy/' 'file://'"$out"'/share/omarchy/'
+
 substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
   --replace-fail 'env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser google-chrome.desktop' \
     '. '"$out"'/share/omarchy/lib/nixarchy-store-owned.sh

@@ -9,6 +9,18 @@ inputs:
 let
   cfg = config.programs.nixarchy;
 
+  filteredBrowserPolicy =
+    name: source:
+    pkgs.runCommand name
+      {
+        nativeBuildInputs = [ pkgs.jq ];
+        inherit source;
+        policyNames = builtins.toJSON (builtins.attrNames config.programs.chromium.extraOpts);
+      }
+      ''
+        jq --argjson names "$policyNames" 'reduce $names[] as $name (. ; del(.[$name]))' "$source" > "$out"
+      '';
+
   # Omarchy's language registry (#1289). Absent on v4.0.4, so the option's enum
   # is empty there and `language` can only be null.
   registryFile = "${inputs.omarchy}/default/i18n/locales.json";
@@ -1717,11 +1729,10 @@ in
       {
         "omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
 
-        # Omarchy's managed Chromium policy (#1491). A file, not programs.chromium,
-        # so a user's own programs.chromium (extra.json, default.json) merges beside it
-        # rather than colliding; the dir's tmpfiles rule stays for the theme script.
+        # Omarchy's managed Chromium policy (#1491). Drop names set by the user
+        # through programs.chromium.extraOpts, whose extra.json lives beside it.
         "chromium/policies/managed/omarchy.json".source =
-          "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
+          filteredBrowserPolicy "nixarchy-chromium-policy.json" "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
 
         # The flake nixarchy-apply rebuilds, for the tools and plugins that
         # cannot ask the module system and cannot rely on the session
@@ -1754,6 +1765,12 @@ in
             nixarchy ${cfg.package.version}
           '';
         };
+      }
+      // lib.optionalAttrs (cfg.package.passthru.chromeExtensionsPolicy or false) {
+        "opt/chrome/policies/managed/omarchy.json".source =
+          filteredBrowserPolicy "nixarchy-chrome-policy.json" "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
+        "opt/chrome/policies/managed/omarchy-extensions.json".source =
+          filteredBrowserPolicy "nixarchy-chrome-extensions-policy.json" "${cfg.package}/share/omarchy/default/chromium/policies/chrome-extensions.json";
       }
       # Upstream's /etc overlay, the rows data/etc-overlay.nix classes
       # `installed`: the file itself, at the path Omarchy's Arch package puts

@@ -2151,6 +2151,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   passthru = {
+    chromeExtensionsPolicy = isEdge;
     inherit
       runtimeDeps
       hasQtengine

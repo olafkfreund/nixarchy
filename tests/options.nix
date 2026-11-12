@@ -3788,6 +3788,14 @@ let
 
   shardSystem =
     assert pkgs.lib.assertMsg (
+      let
+        etc = defaultMachine.environment.etc;
+        edge = pkgs.lib.hasPrefix "edge-" defaultMachine.programs.nixarchy.package.version;
+      in
+      (etc ? "opt/chrome/policies/managed/omarchy.json") == edge
+      && (etc ? "opt/chrome/policies/managed/omarchy-extensions.json") == edge
+    ) "Chrome policy entries must exist on edge and be absent on v4.5.0";
+    assert pkgs.lib.assertMsg (
       pkgs.lib.hasInfix (pkgs.lib.escapeShellArg unitLinkNormalHome) unitLinkActivation
       && !(pkgs.lib.hasInfix unitLinkSystemHome unitLinkActivation)
       && builtins.elem "graphical-session.target" defaultMachine.systemd.user.services.omarchy-sleep-lock.wantedBy

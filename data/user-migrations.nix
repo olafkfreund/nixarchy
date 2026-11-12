@@ -259,6 +259,12 @@
     run = "edited";
     reason = "keeps Neovim for an existing home without a saved editor; a symlinked mimeapps.list is left alone (#1750)";
   };
+  "1794397144" = {
+    decision = "partial";
+    run = "port";
+    edge = "only";
+    reason = "the GTK and Qt settings that named Yaru move to Adwaita; there is no pacman and the store is read-only, so the package removal and the /usr/share/icons/Yaru cleanup do not apply (#1760)";
+  };
   predates = [
     "1780057136"
     "1780294774"

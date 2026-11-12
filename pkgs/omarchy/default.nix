@@ -452,6 +452,28 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # Shared ownership guard for scripts that edit user files (#1304).
                     install -Dm644 ${./nixarchy-store-owned.sh} $out/share/omarchy/lib/nixarchy-store-owned.sh
 
+                    ${lib.optionalString isEdge ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-gnome \
+                        --replace-fail 'gsettings set org.gnome.desktop.interface icon-theme "Adwaita"' \
+                          '# A theme the user chose stays; gsettings quotes its value, so strip the quotes (\\047).
+                      current=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d \\047 || true)
+                      case $current in
+                        Yaru* | Adwaita | hicolor | "") gsettings set org.gnome.desktop.interface icon-theme "Adwaita" ;;
+                      esac'
+                      substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-qt \
+                        --replace-fail '[[ -f $CONFIG ]] || exit 0' \
+                          '[[ -f $CONFIG ]] || exit 0
+                      . ${placeholder "out"}/share/omarchy/lib/nixarchy-store-owned.sh
+                      store_owned "$CONFIG" && exit 0' \
+                        --replace-fail "if [[ \$(jq -r '.theme.iconTheme // empty' \"\$CONFIG\") == \"\$icon_theme\" ]]; then" \
+                          "current=\$(jq -r '.theme.iconTheme // empty' \"\$CONFIG\")
+                      case \$current in
+                        \"\" | Adwaita | hicolor | Yaru*) ;;
+                        *) exit 0 ;;
+                      esac
+                      if [[ \$current == \"\$icon_theme\" ]]; then"
+                    ''}
+
                     # Why: pkgs/AGENTS.md#osaka-jade-is-bundled-again-1698
                     theme_dir=$out/share/omarchy/themes/osaka-jade
                     if [ -e "$theme_dir" ] || [ -L "$theme_dir" ]; then

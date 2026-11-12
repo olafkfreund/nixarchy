@@ -696,6 +696,11 @@
     class = "patch";
     reason = "Three edits: `cp -r` from $OMARCHY_THEMES_PATH preserves the store's read-only directory modes, so the next switch cannot clean up; omarchy-theme-set-zed is appended, which upstream has no equivalent of; and the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429) adds is_video_path and the staged-background lookups it needs, carried as a patch and deleted by the quattro bump with the rest of it.";
   };
+  "omarchy-theme-set-gnome" = {
+    class = "patch";
+    edge = "only";
+    reason = "Keeps a user-chosen GTK icon theme while moving Yaru to Adwaita (#1760).";
+  };
   "omarchy-theme-set-herdr-machines" = {
     class = "vendor";
     reason = "Vendored unchanged. Runs `bash -l -s` on each herdr machine from the far end's PATH, so no fixed path is involved and the far end may be any OS (#1616).";
@@ -704,6 +709,11 @@
   "omarchy-theme-set-browser-policy" = {
     class = "patch";
     reason = "New in 4.0.2, it escalates with sudo or pkexec, pins PATH to FHS directories and installs color.json as root under an /etc/sudoers.d rule naming /usr/bin. The escalation goes; the write is the user's.";
+  };
+  "omarchy-theme-set-qt" = {
+    class = "patch";
+    edge = "only";
+    reason = "Keeps a user-chosen Qt icon theme and leaves store-owned qtengine config alone (#1760).";
   };
   "omarchy-theme-set-vscode" = {
     class = "patch";

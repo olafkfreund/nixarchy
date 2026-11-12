@@ -1883,6 +1883,8 @@
             "hardware-modules"
             # The Hibernate row's logind answer, in a VM with resume configured (#1303). Needs KVM.
             "hibernate-resume"
+            # Edge icon setters and the Yaru migration keep user choices and store-owned Qt config (#1760).
+            "icon-theme"
             # The profile a user with their own interpreter actually gets, built
             # rather than inspected: #809's collision only exists once something
             # calls buildEnv. See tests/home-profile.nix.

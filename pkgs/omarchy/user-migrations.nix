@@ -2,6 +2,7 @@
   lib,
   runCommand,
   jq,
+  glib,
   omarchy,
   omarchy-nvim-config,
 }:
@@ -41,6 +42,14 @@ runCommand "nixarchy-user-migrations"
             1787481315)
               script=$out/scripts/$id.sh
               cp ${./user-migrations/1787481315.sh} "$script"
+              ;;
+            1794397144)
+              script=$out/scripts/$id.sh
+              cp ${./user-migrations/1794397144.sh} "$script"
+              substituteInPlace "$script" \
+                --replace-fail '@gsettings@' '${glib}/bin/gsettings' \
+                --replace-fail '@jq@' '${jq}/bin/jq' \
+                --replace-fail '@helper@' '${tree}/lib/nixarchy-store-owned.sh'
               ;;
             *) echo "no port defined for $id" >&2; exit 1 ;;
           esac

@@ -41,17 +41,27 @@ joins the triage. The check also fails on:
 `1794390043`. That row stays, now listed because `omarchy-cmd-editor-mimetypes`
 is `follow = true`.
 
-**Rows.** The new triage lists 23 more migrations on quattro `36b70f1`
-(19 on v4.5.0). Eleven already exist in v4.0.6's source, so they join
-`predates`. The other twelve get decided rows. Omarchy's migrations do not
-run here (`omarchy-migrate` refuses), so each decision records what nixarchy
-does instead: mostly `not-needed`, with the reason (for example, the
-module or activation step that already does it).
+**The grep also matches `~/`.** Migration `1786098807` writes
+`~/.agents`, `~/.claude`, `~/.codex` and `~/.pi` through a tilde and matches
+neither the old grep nor a command, so the pattern used for migrations and
+for commands becomes `HOME|XDG_CONFIG|\.config|shell\.json|~/`. On quattro
+that lists 8 more migrations directly, some of them only through a comment
+(a safe-side row).
 
-Measured on 2026-11-12, the scan finds 22 commands on quattro: `omarchy-state`
-(22 migrations), `omarchy-migrate` (17),
-`omarchy-install-chromium-copy-url` (4), `omarchy-install-chromium-ytdlp` (3),
-`omarchy-audio-tuning` (3), and 17 others with one or two callers each.
+**Rows.** The step-1 check computes, per pin, which migrations newly need a
+row; this spec does not prescribe a count. An id that is in v4.0.6's
+`migrations/` and is triaged on **both** pins joins `predates`. Otherwise it
+gets a decided row, marked `edge = "only"` when only quattro needs it.
+Omarchy's migrations do not run here (`omarchy-migrate` refuses), so each
+decision records what nixarchy does instead: mostly `not-needed`, with the
+reason. Measured by hand on 2026-11-12, there are about 23 command-triaged
+migrations on quattro and 19 on v4.5.0.
+
+**A command row's `edge` marker says on which pin the row is needed**, not
+where the script exists. `omarchy-update-keyring` matches only on quattro,
+and only because `GNUPGHOME` contains `HOME` (a temporary keyring), so it is
+`follow = false, edge = "only"`, and its caller `1787589206` is not
+triaged on either pin.
 
 **Docs:** `pkgs/AGENTS.md` "User-file migrations (#1610)" says that a bump
 may also name a command, which gets a `data/user-migration-commands.nix` row,
@@ -75,8 +85,11 @@ data files say the same.
 - A word match can name a command the migration only mentions in a comment or
   echo. The cost is one extra command row, never a missed migration; that is
   the safe side.
-- Under the v4.5.0 pin the edge-only commands are absent, and their rows need
-  `edge = "only"`. The check is built on both pins.
+- A row needed on one pin only needs its `edge` marker, and a `predates` id
+  must be triaged on both pins; the check is built on both.
+- Still not seen: writes through a sourced helper, through `$OMARCHY_PATH`
+  scripts that are not `omarchy-*` commands, or more than one call deep.
+  Named in `pkgs/AGENTS.md` as the remaining holes.
 - CI only; nothing that ships changes.
 
 ## Verification

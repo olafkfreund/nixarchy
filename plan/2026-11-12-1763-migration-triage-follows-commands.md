@@ -30,13 +30,18 @@ Approved decisions, from the spec:
   when the scan found commands.
 - The edge block that hard-codes `omarchy-cmd-editor-mimetypes`, the `via`
   validation and the `via` field on `1794390043` are removed.
-- Of the 23 migrations the new triage lists on quattro, the 11 already in
-  v4.0.6 join `predates`. The other 12 get decided rows. Omarchy's migrations
-  do not run here, so most are `not-needed`, with the reason.
+- The grep, for migrations and commands, also matches `~/`.
+- The check computes the new rows per pin; an id in v4.0.6's `migrations/`
+  and triaged on both pins joins `predates`; others get decided rows, with
+  `edge = "only"` when only quattro needs them. Most are `not-needed`.
+- A command row's `edge` marker says on which pin it is needed:
+  `omarchy-update-keyring` is `follow = false, edge = "only"` (`GNUPGHOME`
+  is a temporary keyring).
 
 ## Steps
 
-1. `tests/user-migrations-ledger.nix`: add the command step and remove the
+1. `tests/user-migrations-ledger.nix`: widen the grep with `~/`, add the
+   command step, and remove the
    `isEdge` indirect block (lines 31-39) and the `via` handling (lines 56-78).
    Read the commands ledger as JSON beside the migration ledger, apply the
    edge filter to it the same way, and validate rows before filtering.
@@ -53,13 +58,13 @@ Approved decisions, from the spec:
    Traps: the decision is about whether the command writes the user's files,
    not whether it reads them; state markers and `omarchy-migrate` are
    `follow = false`.
-3. `data/user-migrations.nix`: the 11 ids in v4.0.6's `migrations/` go into
-   `predates`; the 12 others get rows with `decision` and `reason` (and `run`
+3. `data/user-migrations.nix`: each id the check names that is in v4.0.6's
+   `migrations/` and named on both pins goes into `predates`; the others get rows with `decision` and `reason` (and `run`
    only for `ported`/`partial`, which none is expected to be). Drop `via` from
    `1794390043`, and mark rows for quattro-only ids `edge = "only"`.
    → verify: `checks.user-migrations-ledger` is green on both pins.
-   Traps: `predates` is checked against both pins; an id only on quattro
-   cannot predate v4.0.6.
+   Traps: `predates` is checked against both pins, so an id triaged on one
+   pin only is a row with an `edge` marker, never a `predates` entry.
 4. `pkgs/AGENTS.md` "User-file migrations (#1610)": add the command rule to
    the bump instructions and note the one-level hole. Update both data files'
    header comments to match.

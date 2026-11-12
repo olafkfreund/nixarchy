@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1763
 spec: spec/2026-11-12-1763-migration-triage-follows-commands.md
 coders:

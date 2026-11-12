@@ -1538,3 +1538,19 @@ upstream's fix for `codex` (NixOS/nixpkgs@16b463698a) and `omp`
   fixtures, and **revert the four consumer sites** (the fourth is nixi's
   `package` default in `modules/home.nix`) — or every machine fails
   to evaluate on the missing file.
+
+## Shell moved out of a Nix string keeps its quoting, not its interpolation (#1760)
+
+Two traps from moving quattro's user-file edits (#1760) out of `installPhase`
+into a sourced `quattro-user-files.sh`, which the phase's size budget forced
+(`tests/install-phase-budget.nix`):
+
+- **`${placeholder "out"}` inside a single-quoted replacement was expanded by
+  Nix.** Written as plain shell, `'. $out/share/...'` ships the literal text
+  `$out`, and the patched script sources a path that does not exist. Close the
+  quote around it (`'. '"$out"'/share/...'`) and check the built script names
+  the store path.
+- **A single quote ends a single-quoted `--replace-fail` argument**, Nix string
+  or not. A GVariant compare (`"'Yaru"*`) written inside one broke the whole
+  build with `syntax error near unexpected token '('`. Strip the quotes from
+  the value first (`tr -d \\047`) rather than matching them.

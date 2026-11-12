@@ -36,7 +36,14 @@ substituteInPlace $out/share/omarchy/bin/omarchy-agent-instructions \
 . '"$out"'/share/omarchy/lib/nixarchy-store-owned.sh
 shared_linked=false
 if [[ -L $canonical ]] || store_owned "$canonical"; then shared_linked=true; fi
-if [[ $shared_linked == true && ! -e $canonical && $edit != true ]]; then
+if [[ $shared_linked == true && ! -e $canonical ]]; then
+  if [[ $edit == true ]]; then
+    if store_owned "$canonical"; then
+      echo "~/.agents/AGENTS.md is managed by Home Manager; edit it in your configuration (home.file.\".agents/AGENTS.md\")" >&2
+      exit 0
+    fi
+    exec omarchy-launch-config-editor "$canonical"
+  fi
   echo "~/.agents/AGENTS.md is managed elsewhere and does not exist; no harness was linked" >&2
   exit 0
 fi' \

@@ -33,7 +33,7 @@ pkgs.runCommand "nixarchy-agent-instructions"
           default_agent=$package/bin/omarchy-default-agent
           fail() { echo "FAILED $1" >&2; exit 1; }
           reset_home() { rm -rf "$HOME"; mkdir -p "$HOME/.agents" "$XDG_CONFIG_HOME"; }
-          printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo editor >> "$LOG"' > "$root/bin/omarchy-launch-config-editor"
+          printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "editor %s\n" "$1" >> "$LOG"' > "$root/bin/omarchy-launch-config-editor"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$root/bin/omarchy-notification-send"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo backed-up' > "$root/bin/omarchy-i18n"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo "$PATH"' > "$root/bin/omarchy-agent-real-path"
@@ -78,6 +78,29 @@ pkgs.runCommand "nixarchy-agent-instructions"
           bash "$instructions" --edit >out 2>err || fail 'HM edit status'
           [[ ! -e $LOG ]] || fail 'HM edit called editor'
           grep -qF 'Home Manager' err || fail 'HM edit message'
+
+          reset_home
+          rm -rf "$HOME/.agents"
+          ln -s ${storeDir} "$HOME/.agents"
+          mkdir -p "$HOME/.codex"
+          printf 'my rules\n' > "$HOME/.codex/AGENTS.md"
+          rm -f "$LOG"
+          bash "$instructions" --edit >out 2>err || fail 'HM missing edit status'
+          [[ $(cat "$HOME/.codex/AGENTS.md") == 'my rules' ]] || fail 'HM missing edit Codex content'
+          [[ ! -e $HOME/.codex/AGENTS.md.bak && ! -L $HOME/.codex/AGENTS.md.bak ]] || fail 'HM missing edit Codex backup'
+          [[ ! -e $LOG ]] || fail 'HM missing edit called editor'
+          grep -qF 'Home Manager' err || fail 'HM missing edit message'
+
+          reset_home
+          mkdir -p "$TMPDIR/dotfiles"
+          ln -s "$TMPDIR/dotfiles/AGENTS.md" "$HOME/.agents/AGENTS.md"
+          mkdir -p "$HOME/.codex"
+          printf 'my rules\n' > "$HOME/.codex/AGENTS.md"
+          rm -f "$LOG"
+          bash "$instructions" --edit >out 2>err || fail 'dangling dotfiles edit status'
+          grep -qxF "editor $HOME/.agents/AGENTS.md" "$LOG" || fail 'dangling dotfiles editor path'
+          [[ $(cat "$HOME/.codex/AGENTS.md") == 'my rules' ]] || fail 'dangling dotfiles Codex content'
+          [[ ! -e $HOME/.codex/AGENTS.md.bak && ! -L $HOME/.codex/AGENTS.md.bak ]] || fail 'dangling dotfiles Codex backup'
 
           reset_home
           bash "$instructions" claude >out 2>err || fail 'regular home status'

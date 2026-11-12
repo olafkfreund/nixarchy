@@ -81,9 +81,11 @@ pkgs.runCommand "nixarchy-editor-mimetypes"
         XDG_CURRENT_DESKTOP=Hyprland bash "$script" --unless-chosen || fail system-desktop-choice-exit
         if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail system-desktop-choice-kept; fi
         reset_config
-        XDG_CONFIG_DIRS=:$XDG_CONFIG_DIRS XDG_CURRENT_DESKTOP=Hyprland bash "$script" --unless-chosen || fail empty-system-dir-exit
-        if grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list"; then fail empty-system-dir-skipped; fi
         rm "$XDG_CONFIG_DIRS/hyprland-mimeapps.list"
+        mkdir -p "$root/relcwd/rel"
+        printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$root/relcwd/rel/mimeapps.list"
+        ( cd "$root/relcwd" && XDG_CONFIG_DIRS=rel:$XDG_CONFIG_DIRS bash "$script" --unless-chosen ) || fail relative-system-dir-exit
+        grep -qxF 'text/plain=omarchy-launch-editor.desktop' "$list" || fail relative-system-dir-ignored
 
         reset_config
         printf '%s\n' '[Default Applications]' 'text/plain=kate.desktop' > "$desktop"

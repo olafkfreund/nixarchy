@@ -152,19 +152,65 @@ let
     ))
   ];
 
-  chromiumEtc = (configOf fixtures.chromium-own-policy).environment.etc;
+  chromiumConfig = configOf fixtures.chromium-own-policy;
+  chromiumEtc = chromiumConfig.environment.etc;
+  chromePolicyOnEdge =
+    chromiumConfig.programs.nixarchy.package.passthru.chromeExtensionsPolicy or false;
+  chromeManagedFiles = [
+    "opt/chrome/policies/managed/default.json"
+    "opt/chrome/policies/managed/extra.json"
+    "opt/chrome/policies/managed/omarchy.json"
+    "opt/chrome/policies/managed/omarchy-extensions.json"
+  ];
   chromiumScript =
     if
-      chromiumEtc ? "chromium/policies/managed/extra.json"
-      && chromiumEtc ? "chromium/policies/managed/omarchy.json"
+      !(
+        chromiumEtc ? "chromium/policies/managed/extra.json"
+        && chromiumEtc ? "chromium/policies/managed/omarchy.json"
+      )
     then
-      ''
-        echo "chromium-own-policy: ok"
-      ''
-    else
       ''
         echo "chromium-own-policy: FAIL extra.json and omarchy.json are not both in etc" >&2
         fail=1
+      ''
+    else if chromePolicyOnEdge && !lib.all (f: chromiumEtc ? ${f}) chromeManagedFiles then
+      ''
+        echo "chromium-own-policy: FAIL not all four opt/chrome/policies/managed/*.json files are in etc" >&2
+        fail=1
+      ''
+    else if
+      !chromePolicyOnEdge
+      && (
+        chromiumEtc ? "opt/chrome/policies/managed/omarchy.json"
+        || chromiumEtc ? "opt/chrome/policies/managed/omarchy-extensions.json"
+      )
+    then
+      ''
+        echo "chromium-own-policy: FAIL Chrome omarchy policy files exist on non-edge" >&2
+        fail=1
+      ''
+    else
+      ''
+        chromium_ok=1
+        if ! ${pkgs.jq}/bin/jq -e 'has("DefaultBrowserSettingEnabled") | not' ${
+          shQuote chromiumEtc."chromium/policies/managed/omarchy.json".source
+        } >/dev/null; then
+          echo "chromium-own-policy: FAIL chromium omarchy.json still has DefaultBrowserSettingEnabled" >&2
+          chromium_ok=0
+          fail=1
+        fi
+        ${lib.optionalString chromePolicyOnEdge ''
+          if ! ${pkgs.jq}/bin/jq -e 'has("DefaultBrowserSettingEnabled") | not' ${
+            shQuote chromiumEtc."opt/chrome/policies/managed/omarchy.json".source
+          } >/dev/null; then
+            echo "chromium-own-policy: FAIL chrome omarchy.json still has DefaultBrowserSettingEnabled" >&2
+            chromium_ok=0
+            fail=1
+          fi
+        ''}
+        if [ "$chromium_ok" = 1 ]; then
+          echo "chromium-own-policy: ok"
+        fi
       '';
 
   # agent-local (#1577): their podman and their toolkit choice stand, and no

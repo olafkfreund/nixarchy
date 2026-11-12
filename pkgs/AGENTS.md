@@ -1570,3 +1570,35 @@ into a sourced `quattro-user-files.sh`, which the phase's size budget forced
   or not. A GVariant compare (`"'Yaru"*`) written inside one broke the whole
   build with `syntax error near unexpected token '('`. Strip the quotes from
   the value first (`tr -d \\047`) rather than matching them.
+
+<a id="chrome-s-policy-on-edge-1764"></a>
+## Chrome's policy on edge (#1764)
+
+On edge (`quattro-user-files.sh`, `passthru.chromeExtensionsPolicy`), the
+package rewrites `file:///usr/share/omarchy/` to `file://$out/share/omarchy/`
+in `default/chromium/policies/chrome-extensions.json` and
+`default/chromium/crx/updates.xml`, and `modules/nixos.nix` installs
+`opt/chrome/policies/managed/{omarchy,omarchy-extensions}.json` from the
+package.
+
+Each of our policy files — Chromium's `omarchy.json` included — is filtered
+with `jq` to drop every policy name the user sets in
+`programs.chromium.extraOpts`, because Chrome and Chromium treat a policy set
+to different values across two managed policy files as undefined.
+
+**Not shipped, and why:**
+
+- `chrome-flags.conf`: nixpkgs' `google-chrome` wrapper never reads it, adds
+  its own Ozone flags, and Chrome ignores `--load-extension`.
+- Migration `1794391847` (1Password): nixarchy's 1Password installer names
+  `programs.chromium.extensions` instead.
+- `omarchy-dev-pack-chrome-extensions`: a maintainer tool for packing the CRXs
+  upstream.
+
+**`update_url` serves the first install only.** Upstream ships
+`chrome-extensions.json` without `override_update_url`, so once Chrome installs
+a bundled CRX from the store, a newer CRX in a later release does not reach
+that installed copy. That is an upstream candidate and is not patched here.
+
+Chrome itself is unfree, so no check builds or runs it; `checks.chrome-policy`
+and `checks.coexistence` verify the packaged files, CRXs and `/etc` entries.

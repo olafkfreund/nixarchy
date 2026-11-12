@@ -167,12 +167,17 @@
     };
   };
 
-  # A user's own programs.chromium writes policies/managed/extra.json;
-  # nixarchy's policy is omarchy.json beside it, not the same file (#1491).
+  # A user's own programs.chromium writes policies/managed/{default,extra}.json;
+  # nixarchy's policy files sit beside them and drop every policy name the user
+  # sets in extraOpts (#1491, #1764).
   chromium-own-policy = {
     programs.chromium = {
       enable = true;
-      extraOpts.BookmarkBarEnabled = true;
+      extensions = [ "aeblfdkhhhdcdjpifhhbdiojplfjncoa" ];
+      extraOpts = {
+        BookmarkBarEnabled = true;
+        DefaultBrowserSettingEnabled = true;
+      };
     };
   };
 

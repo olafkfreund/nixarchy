@@ -272,6 +272,11 @@ becomes `ExtensionInstallForcelist`, it force-installs the extension so the
 browser will not let you remove it; installing from the Web Store is the
 removable route.
 
+On edge, if you install Chrome, Omarchy's three extensions (`copy-url`,
+`yt-dlp` and `whatsapp-slim`) and its browser policy are installed by managed
+policy too, beside any `programs.chromium.extensions` you declare, and any
+policy you set in `programs.chromium.extraOpts` wins over ours.
+
 Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.

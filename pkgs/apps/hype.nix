@@ -4,7 +4,9 @@
   fetchFromGitHub,
   qt6,
   ffmpeg,
-  source-highlight,
+  # nixos-26.05 only has the old name; unstable warns on it (checks.stable-eval).
+  source-highlight ? sourceHighlight,
+  sourceHighlight ? null,
   zlib,
   libwebp,
   nix-update,

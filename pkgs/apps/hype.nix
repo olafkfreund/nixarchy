@@ -4,7 +4,7 @@
   fetchFromGitHub,
   qt6,
   ffmpeg,
-  sourceHighlight,
+  source-highlight,
   zlib,
   libwebp,
   nix-update,
@@ -42,7 +42,7 @@ stdenv.mkDerivation (finalAttrs: {
     "--prefix PATH : ${
       lib.makeBinPath [
         ffmpeg
-        sourceHighlight
+        source-highlight
       ]
     }"
   ];

@@ -275,7 +275,6 @@
     decision = "ported";
     run = "upstream";
     edge = "only";
-    via = "omarchy-cmd-editor-mimetypes";
     reason = "points text types at the editor handler unless the user chose an app; a Home Manager mimeapps.list is left alone, and NixOS's /etc/xdg list counts as a choice (#1760)";
   };
   "1794397144" = {

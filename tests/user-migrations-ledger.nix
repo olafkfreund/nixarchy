@@ -8,6 +8,9 @@ let
   ledger = pkgs.writeText "user-migrations.json" (
     builtins.toJSON (import ../data/user-migrations.nix)
   );
+  commandsLedger = pkgs.writeText "user-migration-commands.json" (
+    builtins.toJSON (import ../data/user-migration-commands.nix)
+  );
 in
 pkgs.runCommand "nixarchy-user-migrations-ledger"
   {
@@ -18,7 +21,7 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
   }
   ''
     set -euo pipefail
-    hits=$(grep -lE 'HOME|XDG_CONFIG|\.config|shell\.json' ${omarchySrc}/migrations/*.sh) || {
+    hits=$(grep -lE 'HOME|XDG_CONFIG|\.config|shell\.json|~/' ${omarchySrc}/migrations/*.sh) || {
       echo "no migration in ${omarchySrc}/migrations matched the triage grep" >&2
       exit 1
     }
@@ -28,15 +31,27 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
       f=''${f##*/}
       printf '%s\n' "''${f%.sh}"
     done | sort >triage
-    if [ ${isEdge} = true ]; then
-      # This migration delegates every user write, so direct triage cannot see a deleted row.
-      indirect=$(grep -lF 'omarchy-cmd-editor-mimetypes' ${omarchySrc}/migrations/*.sh || true)
-      for f in $indirect; do
-        f=''${f##*/}
-        printf '%s\n' "''${f%.sh}" >>triage
+    : >command-callers
+    for f in ${omarchySrc}/migrations/*.sh; do
+      id=''${f##*/}
+      id=''${id%.sh}
+      if grep -qxF "$id" triage; then continue; fi
+      words=$(grep -oE 'omarchy-[a-z0-9-]+' "$f") || {
+        [ "$?" = 1 ] || exit 1
+        continue
+      }
+      for command in $words; do
+        bin=${omarchySrc}/bin/$command
+        if [ -f "$bin" ] && grep -qE 'HOME|XDG_CONFIG|\.config|shell\.json|~/' "$bin"; then
+          printf '%s\t%s\n' "$command" "$id" >>command-callers
+        fi
       done
-      sort -u triage -o triage
-    fi
+    done
+    cut -f1 command-callers | sort -u >needed-commands
+    [ ! -s command-callers ] || [ -s needed-commands ] || {
+      echo "the command scan found callers but no commands" >&2
+      exit 1
+    }
     ids=$(jq -r '(del(.predates) | keys[]), .predates[]' ${ledger}) || exit 1
     printf '%s\n' "$ids" | sort >ledger
     status=0
@@ -53,29 +68,50 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
       select((.value.edge // "") as $e | ($e == "only" and ($edge | not) or $e == "absent" and $edge) | not))' ${ledger} >active-ledger
     active=$(jq -r 'keys[]' active-ledger && jq -r '.predates[]' ${ledger}) || exit 1
     printf '%s\n' "$active" | sort >active
-    bad_via=$(jq -r 'to_entries[] | select(.value | has("via"))
-      | select(.value.via | type != "string" or length == 0)
-      | "\(.key): via must be a non-empty string"' active-ledger) || exit 1
-    via_rows=$(jq -r 'to_entries[] | select(.value.via? | type == "string" and length > 0)
-      | [.key, .value.via] | @tsv' active-ledger) || exit 1
-    if [ -n "$via_rows" ]; then
-      while IFS=$'\t' read -r id command; do
-        script=${omarchySrc}/migrations/$id.sh
-        bin=${omarchySrc}/bin/$command
-        if [ ! -f "$script" ] || ! grep -qwF -- "$command" "$script" \
-          || [ ! -f "$bin" ] || ! grep -qE 'HOME|XDG_CONFIG|\.config|shell\.json' "$bin"; then
-          bad_via="$bad_via''${bad_via:+$'\n'}$id: via=$command"
-        else
-          printf '%s\n' "$id" >>triage
-        fi
-      done <<< "$via_rows"
-      sort -u triage -o triage
-    fi
-    if [ -n "$bad_via" ]; then
-      echo "rows whose via does not hold:" >&2
-      printf '  %s\n' "$bad_via" >&2
+    old_via=$(jq -r 'del(.predates) | to_entries[] | select(.value | has("via")) | .key' ${ledger}) || exit 1
+    if [ -n "$old_via" ]; then
+      echo "rows with an obsolete via field:" >&2
+      printf '  %s\n' $old_via >&2
       status=1
     fi
+    bad_command_edge=$(jq -r 'to_entries[]
+      | select(.value | has("edge")) | select(.value.edge | IN("only", "absent") | not)
+      | "\(.key): edge=\(.value.edge)"' ${commandsLedger}) || exit 1
+    if [ -n "$bad_command_edge" ]; then
+      echo "command rows whose edge marker is not only or absent:" >&2
+      printf '  %s\n' "$bad_command_edge" >&2
+      status=1
+    fi
+    bad_command=$(jq -r 'to_entries[]
+      | select((.value.follow | type) != "boolean" or (.value.reason | type) != "string" or .value.reason == "")
+      | "\(.key): follow must be boolean and reason non-empty"' ${commandsLedger}) || exit 1
+    if [ -n "$bad_command" ]; then
+      echo "malformed rows in data/user-migration-commands.nix:" >&2
+      printf '  %s\n' "$bad_command" >&2
+      status=1
+    fi
+    jq --argjson edge ${isEdge} 'with_entries(
+      select((.value.edge // "") as $e | ($e == "only" and ($edge | not) or $e == "absent" and $edge) | not))' ${commandsLedger} >active-commands
+    jq -r 'keys[]' active-commands >active-command-names
+    missing_commands=$(comm -23 needed-commands active-command-names)
+    extra_commands=$(comm -13 needed-commands active-command-names)
+    if [ -n "$missing_commands" ]; then
+      echo "commands a migration runs with no row in data/user-migration-commands.nix:" >&2
+      printf '  %s\n' $missing_commands >&2
+      status=1
+    fi
+    if [ -n "$extra_commands" ]; then
+      echo "rows in data/user-migration-commands.nix that the pinned source does not need:" >&2
+      printf '  %s\n' $extra_commands >&2
+      status=1
+    fi
+    while IFS=$'\t' read -r command id; do
+      [ -n "$command" ] || continue
+      if [ "$(jq -r --arg command "$command" '.[$command].follow' active-commands)" = true ]; then
+        printf '%s\n' "$id" >>triage
+      fi
+    done <command-callers
+    sort -u triage -o triage
     missing=$(comm -23 triage active)
     extra=$(comm -13 triage active)
     if [ -n "$missing" ]; then

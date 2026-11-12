@@ -3438,6 +3438,38 @@ pkgs.testers.runNixOSTest {
         "restart (counts above) -- panelEntryModel should have kept its Loader:\n"
         + journal)
 
+    # ---- agents panel with Tailscale stopped (#1760) ------------------------
+    if ${if pkgs.lib.hasPrefix "edge-" omarchyPkg.version then "True" else "False"}:
+        tailscale_status, tailscale_output = machine.execute("systemctl is-active tailscaled")
+        assert tailscale_status != 0, (
+            "#1760: tailscaled is active; this does not test the stopped fallback: "
+            + tailscale_output)
+        print("#1760: tailscaled is inactive (" + tailscale_output.strip() + ")")
+
+        # This layer is mapped by KeyboardPanel only when the panel is visible.
+        agents_layer = (on_desktop("hyprctl layers -j")
+            + " | ${pkgs.jq}/bin/jq -e '[.. | objects | select(.namespace? == \"omarchy-keyboard-panel\")] | length > 0'")
+        machine.fail(agents_layer)
+        agents_since = machine.succeed(as_user("date +%s")).strip()
+        agents_marker = "nixarchy-1760-marker-" + agents_since
+        machine.succeed(as_user("logger -t omarchy-shell " + agents_marker))
+        machine.succeed(on_desktop("hyprctl dispatch global omarchy:panel.omarchy.agents"))
+        machine.wait_until_succeeds(agents_layer, timeout=30)
+        machine.sleep(2)  # Let the Tailscale fallback's asynchronous work log errors.
+        agents_journal = machine.succeed(as_user(
+            "journalctl --since=@" + agents_since
+            + " -t omarchy-shell --no-pager -o cat"))
+        assert agents_marker in agents_journal, (
+            "#1760: the agents journal window missed its marker:\n" + agents_journal)
+        agents_errors = [line for line in agents_journal.splitlines()
+            if ("/agents/" in line or "/panels/tailscale/" in line)
+            and re.search(r"qml:|TypeError|ReferenceError|is not defined|Cannot", line)]
+        assert not agents_errors, (
+            "#1760: agents or Tailscale QML errors:\n" + "\n".join(agents_errors))
+        machine.succeed(on_desktop("hyprctl dispatch global omarchy:panel.omarchy.agents"))
+        machine.wait_until_fails(agents_layer, timeout=30)
+        print("#1760: agents panel draws and closes with Tailscale stopped")
+
     # ---- live input methods, through compositor keys (#1614) -------------
     # export, not a prefix: a prefix reaches neither $(...), nor && and |, nor
     # the command's own $OMARCHY_PATH.

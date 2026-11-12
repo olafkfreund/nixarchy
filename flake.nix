@@ -1887,6 +1887,8 @@
             "hardware-modules"
             # The Hibernate row's logind answer, in a VM with resume configured (#1303). Needs KVM.
             "hibernate-resume"
+            # Home Manager directory links survive quattro's user-file scripts (#1304, #1760).
+            "home-links-quattro"
             # Edge icon setters and the Yaru migration keep user choices and store-owned Qt config (#1760).
             "icon-theme"
             # The profile a user with their own interpreter actually gets, built

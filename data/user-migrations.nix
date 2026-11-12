@@ -1,4 +1,5 @@
-# Every Omarchy migration that touches a user's files (`grep -lE 'HOME|XDG_CONFIG|\.config|shell\.json' migrations/*.sh`)
+# Every Omarchy migration that touches a user's files (`grep -lE 'HOME|XDG_CONFIG|\.config|shell\.json|~/' migrations/*.sh`,
+# or through a `follow = true` command in `data/user-migration-commands.nix`)
 # has a row here or is in `predates`; `checks.user-migrations-ledger` (tests/user-migrations-ledger.nix)
 # compares this file with the pinned source, and a bump adds a row for each new hit it names.
 # See pkgs/AGENTS.md#user-file-migrations-1610.
@@ -48,6 +49,10 @@
     run = "upstream";
     reason = "refresh active themes with packaged intro videos (#1674)";
   };
+  "1788595060" = {
+    decision = "not-needed";
+    reason = "modules/home.nix (nixarchyChromiumHosts) runs omarchy-install-chromium-copy-url and omarchy-install-chromium-ytdlp on every activation (#1491), and Brave Origin is unavailable here (data/apps.nix, #1676)";
+  };
   "1788941927" = {
     decision = "not-needed";
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
@@ -81,9 +86,17 @@
     decision = "not-needed";
     reason = "gated on omarchy-pkg-*, pacman or /var/lib; apps and system state come from the flake";
   };
+  "1790702606" = {
+    decision = "not-needed";
+    reason = "modules/home.nix runs nixarchy-skills-relink (pkgs/skills-relink.nix) on every activation (#888), and 1786719479 already links agent skills (#1681)";
+  };
   "1790863209" = {
     decision = "not-needed";
     reason = "no mise here; omarchy-mise-install refuses (#1625)";
+  };
+  "1790973240" = {
+    decision = "not-needed";
+    reason = "gated on ASUS ProArt P14 NVIDIA N1x ARM hardware and omarchy-pkg-add; this port targets x86_64-linux and speaker tuning is patched in pkgs/omarchy/default.nix";
   };
   "1791123731" = {
     decision = "declined";
@@ -111,6 +124,10 @@
     decision = "ported";
     run = "port";
     reason = "switch an unused Superwhisper default to installed Voxtype (#1677)";
+  };
+  "1791640449" = {
+    decision = "declined";
+    reason = "a v4.0.x seed keeps the keyboard-layout widget in the centre, where it still works; newer seeds already put it on the right, and omarchy-migrate-user ports only the three bar moves #1610 names (#1763)";
   };
   "1791676907" = {
     decision = "ported";
@@ -165,10 +182,22 @@
     run = "bar";
     reason = "ported in omarchy-migrate-user (#1610)";
   };
+  "1792020559" = {
+    decision = "not-needed";
+    reason = "omarchy-theme-set runs omarchy-theme-set-fcitx5 on theme switches, and modules/home.nix repairs existing fcitx5 themes via post-boot.d/fcitx5-glyphs (#1624, #1688)";
+  };
+  "1792202836" = {
+    decision = "not-needed";
+    reason = "omarchy-install-video-decode is gated on omarchy-hw-aarch64-qualcomm (Snapdragon aarch64), which this port does not target";
+  };
   "1792259038" = {
     decision = "ported";
     run = "upstream";
     reason = "repair saved selections of renumbered bundled backgrounds (#1674)";
+  };
+  "1792343099" = {
+    decision = "not-needed";
+    reason = "no mise here; omarchy-mise-default-tools refuses (#1625)";
   };
   "1792343225" = {
     decision = "not-needed";
@@ -181,6 +210,10 @@
   "1792474908" = {
     decision = "declined";
     reason = "Brave Origin is unavailable on nixarchy (data/apps.nix) (#1676)";
+  };
+  "1792504295" = {
+    decision = "not-needed";
+    reason = "no mise here; omarchy-mise-default-tools refuses (#1625)";
   };
   "1792648436" = {
     decision = "ported";
@@ -199,6 +232,11 @@
     run = "upstream";
     reason = "keeps a user's own touchpad gestures by turning Omarchy's new defaults off in hyprland.lua; grep and sed only, runs as shipped (quattro, #1696)";
   };
+  "1793301931" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "gated on omarchy-hw-aarch64-qualcomm (Snapdragon aarch64) and omarchy-pkg-add, which this port does not target";
+  };
   "1793315076" = {
     decision = "not-needed";
     reason = "Apple Silicon ~/.bashrc; bash setup comes from /etc/bashrc (modules/nixos.nix)";
@@ -213,6 +251,11 @@
     decision = "ported";
     run = "upstream";
     reason = "moves the monitor workspace blocks and scaling log under ~/.local/state/omarchy/monitors; mv and cat only, runs as shipped (quattro, #1696)";
+  };
+  "1793467369" = {
+    edge = "only";
+    decision = "declined";
+    reason = "default/hypr/monitors.lua and default/hypr/toggles.lua already apply the monitor defaults and panel settings, while omarchy-hyprland-monitor-config-upgrade writes through readlink -f and leaves a .bak file beside monitors.lua (#1304)";
   };
   "1793565796" = {
     decision = "ported";
@@ -246,6 +289,11 @@
     decision = "ported";
     run = "edited";
     reason = "switches the PDF default from Evince to Papers; nixpkgs provides papers, and the rewrite leaves a symlinked mimeapps.list alone (#1736)";
+  };
+  "1794210626" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "modules/home.nix (nixarchyChromiumHosts) runs omarchy-install-chromium-copy-url and omarchy-install-chromium-ytdlp on every activation (#1491), and Chrome policy is managed in modules/nixos.nix";
   };
   "1794330979" = {
     edge = "only";
@@ -298,11 +346,15 @@
     "1784479832"
     "1784508556"
     "1784510887"
+    "1784763917"
     "1784767406"
     "1784909971"
+    "1784960000"
     "1784989000"
     "1785002349"
     "1785095882"
+    "1785101000"
+    "1785166747"
     "1785167800"
     "1785189600"
     "1785344985"
@@ -312,28 +364,38 @@
     "1785617047"
     "1785633225"
     "1785846769"
+    "1786098807"
     "1786099804"
     "1786181929"
+    "1786183928"
     "1786273938"
+    "1786278735"
+    "1786279107"
     "1786451567"
     "1786517850"
     "1786539345"
+    "1786549201"
     "1786643346"
     "1786782461"
     "1787580187"
     "1787618700"
     "1787843905"
+    "1788025225"
     "1788102906"
     "1788124236"
     "1788577553"
+    "1788619462"
     "1788724825"
     "1788745941"
     "1788848726"
     "1788996284"
     "1789095456"
     "1789130779"
+    "1790017600"
     "1790114905"
+    "1790397381"
     "1791934674"
     "1791935188"
+    "1792334754"
   ];
 }

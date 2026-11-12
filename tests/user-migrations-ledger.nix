@@ -28,6 +28,15 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
       f=''${f##*/}
       printf '%s\n' "''${f%.sh}"
     done | sort >triage
+    if [ ${isEdge} = true ]; then
+      # This migration delegates every user write, so direct triage cannot see a deleted row.
+      indirect=$(grep -lF 'omarchy-cmd-editor-mimetypes' ${omarchySrc}/migrations/*.sh || true)
+      for f in $indirect; do
+        f=''${f##*/}
+        printf '%s\n' "''${f%.sh}" >>triage
+      done
+      sort -u triage -o triage
+    fi
     ids=$(jq -r '(del(.predates) | keys[]), .predates[]' ${ledger}) || exit 1
     printf '%s\n' "$ids" | sort >ledger
     status=0
@@ -40,9 +49,33 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
       printf '  %s\n' "$bad_edge" >&2
       status=1
     fi
-    active=$(jq -r --argjson edge ${isEdge} '(del(.predates) | to_entries[]
-      | select((.value.edge // "") as $e | ($e == "only" and ($edge | not) or $e == "absent" and $edge) | not) | .key), .predates[]' ${ledger}) || exit 1
+    jq --argjson edge ${isEdge} 'del(.predates) | with_entries(
+      select((.value.edge // "") as $e | ($e == "only" and ($edge | not) or $e == "absent" and $edge) | not))' ${ledger} >active-ledger
+    active=$(jq -r 'keys[]' active-ledger && jq -r '.predates[]' ${ledger}) || exit 1
     printf '%s\n' "$active" | sort >active
+    bad_via=$(jq -r 'to_entries[] | select(.value | has("via"))
+      | select(.value.via | type != "string" or length == 0)
+      | "\(.key): via must be a non-empty string"' active-ledger) || exit 1
+    via_rows=$(jq -r 'to_entries[] | select(.value.via? | type == "string" and length > 0)
+      | [.key, .value.via] | @tsv' active-ledger) || exit 1
+    if [ -n "$via_rows" ]; then
+      while IFS=$'\t' read -r id command; do
+        script=${omarchySrc}/migrations/$id.sh
+        bin=${omarchySrc}/bin/$command
+        if [ ! -f "$script" ] || ! grep -qwF -- "$command" "$script" \
+          || [ ! -f "$bin" ] || ! grep -qE 'HOME|XDG_CONFIG|\.config|shell\.json' "$bin"; then
+          bad_via="$bad_via''${bad_via:+$'\n'}$id: via=$command"
+        else
+          printf '%s\n' "$id" >>triage
+        fi
+      done <<< "$via_rows"
+      sort -u triage -o triage
+    fi
+    if [ -n "$bad_via" ]; then
+      echo "rows whose via does not hold:" >&2
+      printf '  %s\n' "$bad_via" >&2
+      status=1
+    fi
     missing=$(comm -23 triage active)
     extra=$(comm -13 triage active)
     if [ -n "$missing" ]; then

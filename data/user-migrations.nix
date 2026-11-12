@@ -271,6 +271,13 @@
     edge = "only";
     reason = "rebinds the exact legacy Super + Ctrl + X dictation line 1793477875 wrote so the agents panel keeps the key; a store-owned bindings.lua is left alone (#1760)";
   };
+  "1794390043" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    via = "omarchy-cmd-editor-mimetypes";
+    reason = "points text types at the editor handler unless the user chose an app; a Home Manager mimeapps.list is left alone, and NixOS's /etc/xdg list counts as a choice (#1760)";
+  };
   "1794397144" = {
     decision = "partial";
     run = "port";

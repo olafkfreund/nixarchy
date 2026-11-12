@@ -207,6 +207,11 @@
     class = "patch";
     reason = "Upstream switches channels with pacman and mirrors. The body is replaced by a delegation to `nixarchy-channel omarchy`, which edits the machine's flake.nix (stable, edge, or a checkout of your own; rc is refused). The shebang and `# omarchy:` header lines are kept, minus requires-sudo.";
   };
+  "omarchy-cmd-editor-mimetypes" = {
+    class = "patch";
+    edge = "only";
+    reason = "Leaves Home Manager mimeapps and desktop lists alone, counts NixOS's /etc/xdg list as a choice, reads aliases from shared-mime-info, and does not copy the handler into ~/.local/share (#1760).";
+  };
   "omarchy-cursor-set" = {
     class = "new";
     reason = "Not in upstream, which sets a cursor size but never a theme, because on Arch one arrives with the desktop packages. Picks Bibata Ice or Classic from the mode in the theme's colors.toml.";

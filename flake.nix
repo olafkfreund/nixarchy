@@ -1867,6 +1867,8 @@
             "edge-carry"
             "edge-report"
             "edge-promote"
+            # Editor MIME defaults respect Home Manager links and NixOS's system list (#1760).
+            "editor-mimetypes"
             # Proves btrfs subvolume and directory exchanges before the reset uses them (#1621).
             "factory-reset"
             "firmware-guard"

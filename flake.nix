@@ -2008,6 +2008,8 @@
             "sshd-enable"
             # A real ssh login against the menu's sshd, and the plain line as control (#1611). Needs KVM.
             "sshd-login"
+            # Store ownership follows Home Manager file and directory links (#1304).
+            "store-owned"
             "swap-guard"
             "switch-indicator"
             "update-available"

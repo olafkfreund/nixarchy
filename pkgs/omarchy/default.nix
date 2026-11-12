@@ -449,6 +449,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     mkdir -p $out/share/omarchy
                     cp -r . $out/share/omarchy/
                     rm -rf $out/share/omarchy/{.git,.github,docs,manual,test,plans,agents}
+                    # Shared ownership guard for scripts that edit user files (#1304).
+                    install -Dm644 ${./nixarchy-store-owned.sh} $out/share/omarchy/lib/nixarchy-store-owned.sh
 
                     # Why: pkgs/AGENTS.md#osaka-jade-is-bundled-again-1698
                     theme_dir=$out/share/omarchy/themes/osaka-jade

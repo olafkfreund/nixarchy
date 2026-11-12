@@ -2361,3 +2361,19 @@ So a stubbed check's `failed` writes to a descriptor the calls under test
 cannot redirect: `exec 3>&1` once, then `echo "FAILED $1" >&3`. Any check whose
 stubs can fail while a caller's output is captured needs the same, and a break
 proof that goes red with no `FAILED` line is the sign it does not have it.
+
+## A missing-file fixture one level deep cannot vary an ancestor walk (#1760)
+
+`readlink -f` resolves a path whose last component is missing, so long as
+everything above it exists. `store_owned` walks a missing path up to its
+deepest existing ancestor, and its first fixture, a missing `b.json` directly
+under a store-linked directory, stayed green with the walk cut to a single
+`dirname`: one `dirname` reached the link, and `readlink -f` did the rest. Only
+a file two missing levels below the link (`link/a/b/c.json`) separates a walk
+from no walk. A fixture for a path-walking guard has to sit deeper than the one
+step the tool forgives.
+
+Stub scripts inside a check start with `#!${pkgs.bash}/bin/bash`, not
+`#!/bin/bash`: the build sandbox has no `/bin/bash`, and the failure is
+`bad interpreter`, from inside the script under test, which reads as the
+script being broken.

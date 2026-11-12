@@ -3455,10 +3455,11 @@ pkgs.testers.runNixOSTest {
         agents_layer = (on_desktop("hyprctl layers -j")
             + " | ${pkgs.jq}/bin/jq -e '[.. | objects | select(.namespace? == \"omarchy-keyboard-panel\")] | length > 0'")
         machine.fail(agents_layer)
+        # What Super + Ctrl + X runs: default/hypr/helpers.lua turns { panel = ... } into this.
         agents_since = machine.succeed(as_user("date +%s")).strip()
         agents_marker = "nixarchy-1760-marker-" + agents_since
         machine.succeed(as_user("logger -t omarchy-shell " + agents_marker))
-        machine.succeed(on_desktop("hyprctl dispatch global omarchy:panel.omarchy.agents"))
+        machine.succeed(as_user("omarchy-shell shell toggle omarchy.agents"))
         machine.wait_until_succeeds(agents_layer, timeout=30)
         machine.sleep(2)  # Let the Tailscale fallback's asynchronous work log errors.
         agents_journal = machine.succeed(as_user(
@@ -3471,7 +3472,7 @@ pkgs.testers.runNixOSTest {
             and re.search(r"qml:|TypeError|ReferenceError|is not defined|Cannot", line)]
         assert not agents_errors, (
             "#1760: agents or Tailscale QML errors:\n" + "\n".join(agents_errors))
-        machine.succeed(on_desktop("hyprctl dispatch global omarchy:panel.omarchy.agents"))
+        machine.succeed(as_user("omarchy-shell shell toggle omarchy.agents"))
         machine.wait_until_fails(agents_layer, timeout=30)
         print("#1760: agents panel draws and closes with Tailscale stopped")
 

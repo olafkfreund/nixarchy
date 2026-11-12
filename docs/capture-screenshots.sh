@@ -18,7 +18,7 @@ pid=$(pgrep -f "quickshell -n" | head -1) || {
 }
 # Driving the menu needs the session's handles, which an ssh login lacks.
 eval "$(tr '\0' '\n' <"/proc/$pid/environ" |
-  grep -E '^(WAYLAND_DISPLAY|XDG_RUNTIME_DIR|HYPRLAND_INSTANCE_SIGNATURE)=' |
+  grep -E '^(WAYLAND_DISPLAY|XDG_RUNTIME_DIR|HYPRLAND_INSTANCE_SIGNATURE|OMARCHY_PATH)=' |
   sed 's/^/export /')"
 
 # nixarchy-menu is installed but off by default since #1283; these shots are of it.
@@ -78,7 +78,9 @@ shot 14-system system
 # wrong screen, so an empty 20-ask.png means no agent was set on the VM.
 shot 19-trigger trigger
 shot 20-ask trigger.ask
-shot 21-setup-agent setup.default.agent
+agent_menu=setup.default.agent
+grep -q '"agent.harness"' "$OMARCHY_PATH/default/omarchy/omarchy-menu.jsonc" && agent_menu=agent.harness
+shot 21-setup-agent "$agent_menu"
 menu_open && close || true
 
 echo

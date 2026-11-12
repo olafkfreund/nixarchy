@@ -728,3 +728,18 @@ Two are not, because they are not nixarchy's to resolve:
 The two sessions do share `~/.config/hypr/{monitors,input,bindings,looknfeel,
 autostart}.lua`, because Omarchy's bootstrap builds Hyprland's Lua module path
 from `$HOME/.config` and nothing else. Only the entry point differs.
+
+### Icon themes and default editors on edge
+
+On edge, a theme change sets the Adwaita icons only when the current icon theme
+is Yaru (Omarchy's old default), Adwaita, hicolor or unset. An icon theme you
+picked yourself (Papirus, say) stays. A Yaru variant you picked yourself cannot
+be told apart from Omarchy's, so it moves to Adwaita once.
+
+Text files on edge open in the editor chosen under **Setup ▸ Default ▸ Editor**,
+from every app. An app you picked for a type yourself in
+`~/.config/mimeapps.list`, or a NixOS `xdg.mime.defaultApplications` entry, is
+kept; a Home Manager `xdg.mimeApps` list is left as Home Manager writes it. One
+limit, as upstream wrote it: `nvim.desktop` and `plain.desktop` count as
+Omarchy's own past defaults, so a type you set to `plain.desktop` by hand while
+Neovim is the default editor opens in Neovim.

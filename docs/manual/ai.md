@@ -276,6 +276,15 @@ Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.
 
+On edge, the picker moved from **Setup ▸ Default ▸ Agent** to **Agent ▸
+Harness** (a root **Agent** menu beside **Make something**, with **Harness**
+and **Instructions**), and `Super + Ctrl + X` opens the agents panel. Picking a
+default agent on edge also runs `omarchy agent instructions` to link that
+harness's global instructions file to the shared `~/.agents/AGENTS.md`. A file
+Home Manager manages, a harness file that is already a symlink, and a file
+inside a Home Manager-linked directory are left alone; a regular file with
+different rules is kept as `<file>.bak`.
+
 ## Nixi, on SUPER + H
 
 `SUPER + H` (or the ✨ in the bar) opens **Nixi** (as does Menu ▸ Nixarchy ▸ Nixi), the nixarchy guide: a card

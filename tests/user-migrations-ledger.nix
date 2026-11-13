@@ -1,6 +1,7 @@
 { pkgs, omarchySrc }:
 # Every Omarchy migration that touches a user's files has a decision in
-# data/user-migrations.nix, or is listed there as predating v4.0.6 (#1610).
+# data/user-migrations.nix, or is listed there as predating v4.0.6 (#1610),
+# including migrations calling a `follow = true` command in data/user-migration-commands.nix (#1763).
 # Why: pkgs/AGENTS.md#user-file-migrations-1610
 let
   # Edge pins carry an `edge-` version; rows may be marked edge = "only" or "absent".

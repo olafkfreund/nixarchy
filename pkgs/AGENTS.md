@@ -1421,8 +1421,15 @@ the file because nothing in 4.5 reads it.
   had two), so `1791968925` is `partial` in the ledger.
 
 Every migration that touches a user's files has a decision in
-`data/user-migrations.nix`. **A bump that brings new migrations:** run
-`checks.user-migrations-ledger` and add a row for each id it names.
+`data/user-migrations.nix`: the triage lists a migration whose text matches
+`HOME|XDG_CONFIG|\.config|shell\.json|~/`, or that names an `omarchy-*` command
+whose row in `data/user-migration-commands.nix` has `follow = true` (one level
+of calls; #1763). **A bump that brings new migrations or commands:** run
+`checks.user-migrations-ledger` and add a row for each id or command it names;
+a command row says whether the command writes a user's own files (`follow`),
+and its `edge` marker says on which pin the row is needed. It still cannot see
+writes through a sourced helper, through `$OMARCHY_PATH` scripts that are not
+`omarchy-*` commands, and calls more than one level deep.
 `checks.user-migrations` compares the port with upstream's own scripts run on
 the same fixtures, through a stub of the shell's IPC; `checks.plugin` runs it
 against the real shell.

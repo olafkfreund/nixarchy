@@ -125,7 +125,7 @@
 
     # Why: docs/internals/flake.md#gliff-from-a-non-flake-input-pinned-to-a-tag
     gliff = {
-      url = "github:omacom/gliff/v0.4.2";
+      url = "github:omacom/gliff/v0.4.3";
       flake = false;
     };
 
@@ -322,7 +322,7 @@
     # (`git ls-remote --tags` is empty), which is the situation sops-nix is
     # already in. Bump it deliberately; never track the branch.
     mcp-servers-nix = {
-      url = "github:natsukium/mcp-servers-nix/094e3ba3ee36c5c0bb2bfc4e97ad30d84041ff89";
+      url = "github:natsukium/mcp-servers-nix/47945d9392b28359ff15abc4837f669306afbdca";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -370,7 +370,7 @@
 
     # Why: docs/internals/flake.md#221-222
     microvm = {
-      url = "github:microvm-nix/microvm.nix/b7bd556974fa8a171b5b639200e81d52244dfde4";
+      url = "github:microvm-nix/microvm.nix/194a254693f49af939a2b53d04982bd4b276fdb3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

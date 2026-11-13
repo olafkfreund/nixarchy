@@ -1636,6 +1636,7 @@
               runtimeInputs = with pkgsFor.${system}; [
                 git
                 gnugrep
+                nix
               ];
               # A failed updater can leave half a bump that still builds, so
               # whatever it changed goes back to HEAD (#1537).
@@ -1644,6 +1645,9 @@
                 run() {
                   local before after f
                   before=$(git diff --name-only) || return 1
+                  # nix-update's nix (2.35) evaluates the tree at a store path it never
+                  # copies, so copy it first: every landed bump makes a new one (#1758).
+                  nix flake archive . >/dev/null || return 1
                   "$1" && return 0
                   after=$(git diff --name-only) || return 1
                   while IFS= read -r f; do

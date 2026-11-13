@@ -15,7 +15,12 @@ let
       {
         nativeBuildInputs = [ pkgs.jq ];
         inherit source;
-        policyNames = builtins.toJSON (builtins.attrNames config.programs.chromium.extraOpts);
+        policyNames = builtins.toJSON (
+          if config.programs.chromium.enable then
+            builtins.attrNames config.programs.chromium.extraOpts
+          else
+            [ ]
+        );
       }
       ''
         jq --argjson names "$policyNames" 'reduce $names[] as $name (. ; del(.[$name]))' "$source" > "$out"

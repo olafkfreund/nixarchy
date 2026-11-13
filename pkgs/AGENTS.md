@@ -1585,6 +1585,9 @@ Each of our policy files — Chromium's `omarchy.json` included — is filtered
 with `jq` to drop every policy name the user sets in
 `programs.chromium.extraOpts`, because Chrome and Chromium treat a policy set
 to different values across two managed policy files as undefined.
+The filter applies only when `programs.chromium.enable` is true; a user's own
+`ExtensionSettings` in `extraOpts` replaces ours wholesale, removing Omarchy's
+three extensions, because two managed files cannot both set a dictionary policy.
 
 **Not shipped, and why:**
 

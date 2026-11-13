@@ -7,6 +7,7 @@ pkgs.runCommand "nixarchy-chrome-policy"
     nativeBuildInputs = [ pkgs.python3 ];
     package = "${shipped}/share/omarchy";
     policy = builtins.toJSON (shipped.passthru.chromeExtensionsPolicy or null);
+    nixpkgsChromium = "${pkgs.path}/nixos/modules/programs/chromium.nix";
   }
   ''
         case "$policy" in
@@ -14,8 +15,9 @@ pkgs.runCommand "nixarchy-chrome-policy"
             echo 'not edge: nothing to check'
             ;;
           true)
-            python3 -I - "$package" <<'PY' || exit 1
+            python3 -I - "$package" "$nixpkgsChromium" <<'PY' || exit 1
     import json
+    import re
     import sys
     import xml.etree.ElementTree as ET
     from pathlib import Path
@@ -31,9 +33,15 @@ pkgs.runCommand "nixarchy-chrome-policy"
         policy = root / "policies/omarchy.json"
         extensions = root / "policies/chrome-extensions.json"
         updates = root / "crx/updates.xml"
+        profile = re.search(r"defaultProfile\s*=\s*lib\.filterAttrs[^{}]*\{([^{}]*)\};", Path(sys.argv[2]).read_text())
+        require(profile is not None, "cannot read nixpkgs programs.chromium defaultProfile")
+        typed = set(re.findall(r"^\s*([A-Za-z]\w*)\s*=", profile.group(1), re.MULTILINE))
+        require(typed, "nixpkgs programs.chromium defaultProfile has no policy names")
         for path in (policy, extensions, updates):
             require("/usr/share" not in path.read_text(), f"{path.name} contains /usr/share")
-        json.loads(policy.read_text())
+        for path in (policy, extensions):
+            for name in sorted(typed & json.loads(path.read_text()).keys()):
+                require(False, f"{path.name} sets {name}, which programs.chromium's typed options also write")
         settings = json.loads(extensions.read_text()).get("ExtensionSettings")
         require(isinstance(settings, dict) and settings, "ExtensionSettings is empty or invalid")
         apps = ET.parse(updates).getroot().findall(".//{*}app")

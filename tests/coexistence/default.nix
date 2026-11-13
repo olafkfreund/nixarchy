@@ -192,18 +192,25 @@ let
     else
       ''
         chromium_ok=1
-        if ! ${pkgs.jq}/bin/jq -e 'has("DefaultBrowserSettingEnabled") | not' ${
+        if ! ${pkgs.jq}/bin/jq -e 'has("MetricsReportingEnabled") and (has("DefaultBrowserSettingEnabled") | not)' ${
           shQuote chromiumEtc."chromium/policies/managed/omarchy.json".source
         } >/dev/null; then
-          echo "chromium-own-policy: FAIL chromium omarchy.json still has DefaultBrowserSettingEnabled" >&2
+          echo "chromium-own-policy: FAIL chromium omarchy.json lost MetricsReportingEnabled or kept DefaultBrowserSettingEnabled" >&2
           chromium_ok=0
           fail=1
         fi
         ${lib.optionalString chromePolicyOnEdge ''
-          if ! ${pkgs.jq}/bin/jq -e 'has("DefaultBrowserSettingEnabled") | not' ${
+          if ! ${pkgs.jq}/bin/jq -e 'has("MetricsReportingEnabled") and (has("DefaultBrowserSettingEnabled") | not)' ${
             shQuote chromiumEtc."opt/chrome/policies/managed/omarchy.json".source
           } >/dev/null; then
-            echo "chromium-own-policy: FAIL chrome omarchy.json still has DefaultBrowserSettingEnabled" >&2
+            echo "chromium-own-policy: FAIL chrome omarchy.json lost MetricsReportingEnabled or kept DefaultBrowserSettingEnabled" >&2
+            chromium_ok=0
+            fail=1
+          fi
+          if ! ${pkgs.jq}/bin/jq -e '.ExtensionSettings | type == "object" and length > 0' ${
+            shQuote chromiumEtc."opt/chrome/policies/managed/omarchy-extensions.json".source
+          } >/dev/null; then
+            echo "chromium-own-policy: FAIL chrome omarchy-extensions.json has no ExtensionSettings" >&2
             chromium_ok=0
             fail=1
           fi

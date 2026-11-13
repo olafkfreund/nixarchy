@@ -3790,7 +3790,7 @@ let
     assert pkgs.lib.assertMsg (
       let
         etc = defaultMachine.environment.etc;
-        edge = pkgs.lib.hasPrefix "edge-" defaultMachine.programs.nixarchy.package.version;
+        edge = defaultMachine.programs.nixarchy.package.passthru.chromeExtensionsPolicy or false;
       in
       (etc ? "opt/chrome/policies/managed/omarchy.json") == edge
       && (etc ? "opt/chrome/policies/managed/omarchy-extensions.json") == edge

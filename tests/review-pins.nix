@@ -390,6 +390,24 @@ pkgs.runCommand "nixarchy-review-pins"
     carryrow "| cargo carry: codex | - | - | **carry status unread** |" ""
     carryrow "| cargo carry: codex | garbage | - | **carry status unread** |" garbage
 
+    carryrows() { # exact output, then status JSON
+      local want=$1 got rc=0
+      # The packaged review runs under errexit, nounset and pipefail.
+      got=$(bash -o errexit -o nounset -o pipefail ${../pkgs/review.sh} --carry-rows "$2" 2>&1) || rc=$?
+      [ "$got|$rc" = "$want|0" ] || {
+        echo "review: carry rows for '$2' were: $got (exit $rc)" >&2
+        echo "  expected exactly: $want" >&2
+        fail=1
+      }
+    }
+    unread='| cargo carry | - | - | **carry status unread** |'
+    carryrows "" '{}'
+    carryrows "$unread" ""
+    carryrows "$unread" '[]'
+    carryrows "$unread" garbage
+    carryrows $'| cargo carry: codex | dead | - | **nixpkgs carries the fix -- drop codex from pkgs/cargo-system-libs.nix** |\n| cargo carry: omp | needed | still needed | ok |' \
+      '{"codex":"dead","omp":"needed"}'
+
     [ "$fail" -eq 0 ] || exit 1
 
     echo "all $want pins are readable, and every version looks like one"

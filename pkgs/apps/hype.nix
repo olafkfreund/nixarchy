@@ -2,6 +2,8 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  cmake,
+  pkg-config,
   qt6,
   ffmpeg,
   # nixos-26.05 only has the old name; unstable warns on it (checks.stable-eval).
@@ -14,18 +16,21 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "hype";
-  version = "0.6.0";
+  version = "0.7.1";
 
   src = fetchFromGitHub {
+    # CMakeLists reads HYPE_VERSION from a hype-<version> source dir, else git describe, else dev.
+    name = "hype-${finalAttrs.version}";
     owner = "omacom";
     repo = "hype";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-lDrDfo0LqGbWD8X7rejOYf9nKqyNNZh6wMlL9wRRJoU=";
+    hash = "sha256-LeON8trdFa2xlLkSnBDXkuXs2pL9wKzh/FQFay47+Rw=";
   };
 
   # Omarchy 4.5 default app, on through omarchyApps.enable, built like pkgs/apps/omawrite.nix.
   nativeBuildInputs = [
-    qt6.qmake
+    cmake
+    pkg-config
     qt6.wrapQtAppsHook
   ];
 

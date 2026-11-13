@@ -8,6 +8,18 @@
 let
   inherit (pkgs) lib;
   carry = import ../pkgs/cargo-system-libs.nix;
+  fixtureNeeds = {
+    codex = [
+      "aws-lc"
+      "oniguruma"
+      "sqlite"
+      "zstd"
+    ]; # NixOS/nixpkgs@16b463698a
+    omp = [
+      "oniguruma"
+      "zstd"
+    ]; # NixOS/nixpkgs@43c51fe5d9
+  };
 
   stand =
     pname: version: buildInputs:
@@ -49,7 +61,14 @@ let
     in
     {
       inherit prev;
-      inherit (carry { inherit lib prev; }) packages status;
+      inherit
+        (carry {
+          inherit lib prev;
+          needs = fixtureNeeds;
+        })
+        packages
+        status
+        ;
     };
 
   # Sorted, duplicates kept: a second zstd must be visible.
@@ -75,6 +94,12 @@ let
   f = run {
     hook = withHook;
     withOmp = false;
+  };
+  h = carry {
+    inherit lib;
+    prev = pkgs // {
+      path = withHook;
+    };
   };
 
   results = [
@@ -111,6 +136,8 @@ let
     (lib.assertMsg (
       !(f.packages ? omp) && !(f.status ? omp)
     ) "case F: no omp in prev, none in the carry")
+    (lib.assertMsg (h.status == { }) "case H: the shipped carry status must be empty")
+    (lib.assertMsg (h.packages == { }) "case H: the shipped carry packages must be empty")
   ];
 in
 pkgs.runCommand "nixarchy-cargo-system-libs"

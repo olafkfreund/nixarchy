@@ -2024,9 +2024,8 @@ let
           builtins.compareVersions vmCfg.nix.package.version "2.35" >= 0
           && vmCfg.nix.settings.min-free == 3 * GiB
           && vmCfg.nix.settings.max-free == 8 * GiB;
-        off =
-          (adopter.config.nix.settings ? max-free)
-          || builtins.compareVersions adopter.config.nix.package.version "2.35" >= 0;
+        # nixpkgs' own nix reached 2.35, so only max-free tells the policy apart.
+        off = adopter.config.nix.settings ? max-free;
       };
 
     # #1131: periodic hard-linking is the installer's disk policy. The two

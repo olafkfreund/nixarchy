@@ -1,22 +1,14 @@
-{ lib, prev }:
+{
+  lib,
+  prev,
+  needs ? { },
+}:
 let
   hookFile = prev.path + "/pkgs/build-support/rust/hooks/cargo-setup-hook.sh";
   hasHook =
     builtins.pathExists hookFile && lib.hasInfix "cargoUseSystemLibs" (builtins.readFile hookFile);
   # Why: pkgs/AGENTS.md#cargo-system-libs-1722
-  # The libraries upstream added; drop a row when nixpkgs carries the fix.
-  needs = {
-    codex = [
-      "aws-lc"
-      "oniguruma"
-      "sqlite"
-      "zstd"
-    ]; # NixOS/nixpkgs@16b463698a
-    omp = [
-      "oniguruma"
-      "zstd"
-    ]; # NixOS/nixpkgs@43c51fe5d9
-  };
+  # A row is <pname> = [ libs ]; # NixOS/nixpkgs@<upstream-commit>.
   present = lib.filterAttrs (n: _: prev ? ${n}) needs;
   missing =
     n: libs:

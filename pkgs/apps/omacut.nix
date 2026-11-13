@@ -2,6 +2,7 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  cmake,
   qt6,
   ffmpeg,
   nix-update,
@@ -9,25 +10,25 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omacut";
-  version = "0.7.3";
+  version = "0.8.3";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omacut";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-TIDvbxfPbi1G7d6vu8z0LsvV/kRLom0Oiy203ylU/DE=";
+    hash = "sha256-koyV60EFls7RW1/mUGhs8HMhj5wFKe3BSHssl0EP/uw=";
   };
 
   # Third of the four applications Omarchy writes itself; see
   # pkgs/apps/omawrite.nix for why they are packaged here. They come through
   # omarchyApps.enable.
   nativeBuildInputs = [
-    qt6.qmake
+    cmake
     qt6.wrapQtAppsHook
   ];
 
-  # One module more than its siblings: omacut.pro asks for multimedia, for the
-  # video preview it trims against.
+  # One module more than its siblings: CMakeLists.txt asks for Multimedia, for
+  # the video preview it trims against.
   buildInputs = [
     qt6.qtbase
     qt6.qtdeclarative

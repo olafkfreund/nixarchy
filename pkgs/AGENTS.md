@@ -1429,7 +1429,9 @@ of calls; #1763). **A bump that brings new migrations or commands:** run
 a command row says whether the command writes a user's own files (`follow`),
 and its `edge` marker says on which pin the row is needed. It still cannot see
 writes through a sourced helper, through `$OMARCHY_PATH` scripts that are not
-`omarchy-*` commands, and calls more than one level deep.
+`omarchy-*` commands, through tools such as `xdg-settings`, `xdg-mime`,
+`gsettings`, or `systemctl --user` without naming a home path, and calls more
+than one level deep.
 `checks.user-migrations` compares the port with upstream's own scripts run on
 the same fixtures, through a stub of the shell's IPC; `checks.plugin` runs it
 against the real shell.

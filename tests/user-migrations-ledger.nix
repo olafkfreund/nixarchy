@@ -32,6 +32,19 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
       f=''${f##*/}
       printf '%s\n' "''${f%.sh}"
     done | sort >triage
+    : >truncated-commands
+    for bin in ${omarchySrc}/bin/omarchy-*; do
+      [ -f "$bin" ] || continue
+      command=''${bin##*/}
+      case "$command" in
+        *[!a-z0-9-]*) printf '  %s\n' "$command" >>truncated-commands ;;
+      esac
+    done
+    if [ -s truncated-commands ]; then
+      echo "omarchy-* commands whose names the scan would truncate:" >&2
+      cat truncated-commands >&2
+      exit 1
+    fi
     : >command-callers
     for f in ${omarchySrc}/migrations/*.sh; do
       id=''${f##*/}

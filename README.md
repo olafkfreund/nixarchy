@@ -13,7 +13,7 @@ menus rewired to Nix instead of pacman.
 **[Roadmap](#roadmap)** ·
 **[Discussions](https://github.com/olafkfreund/nixarchy/discussions)**
 
-Omarchy 4.x is not a dotfiles repo, it's an application: **564 shell commands**,
+Omarchy 4.x is not a dotfiles repo, it's an application: **596 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
@@ -21,7 +21,7 @@ the parts that assume Arch, rather than reimplementing it in Nix.
 Tracking an upstream release is a source bump, not a re-port.
 
 What that buys you: the Install menu writes to a Nix config instead of running
-pacman, **76 applications** are selectable that way, **every other package and
+pacman, **77 applications** are selectable that way, **every other package and
 NixOS option is one `Install ▸ Search` away**, plugins and themes still install
 from a git URL at runtime the way upstream intends, and every command that
 assumed `/usr` either points at what NixOS uses or says why it cannot.
@@ -135,7 +135,7 @@ The notification is clickable and runs the rebuild.
 
 ### Anything the menu does not offer
 
-The 76 apps in the selection are the ones Omarchy's own menu lists, and a few
+The 77 apps in the selection are the ones Omarchy's own menu lists, and a few
 it does not. Everything else in nixpkgs —
 and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
 from a terminal:
@@ -160,7 +160,7 @@ from a terminal:
 ```
 
 **About 137,000 rows on a default install: some 25,000 NixOS options, 112,000
-packages, and 70 of the 76 apps** (the six with no nixpkgs equivalent cannot be
+packages, and 71 of the 77 apps** (the six with no nixpkgs equivalent cannot be
 indexed). The exact count is each machine's own, because the index is built from
 that system's options and package set. Three kinds,
 one picker, because you should not have to know which kind you want before you
@@ -405,7 +405,7 @@ package.path = home.."/.local/state/?.lua;"..home.."/.config/?.lua;"
 ```
 
 Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
-the Lua defaults all follow. Only **41 of 560 scripts** actually run
+the Lua defaults all follow. Only **42 of 592 scripts** actually run
 `pacman`/`yay` — that's the entire distro-coupling surface.
 
 Nine of those are replaced outright, in `pkgs/omarchy/nix-bin/`: package
@@ -434,7 +434,7 @@ nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
 work and the exit status, terminal and signals stay the command's own.
 
-**Upstream's 564 commands keep upstream's name, deliberately.** `omarchy theme
+**Upstream's 596 commands keep upstream's name, deliberately.** `omarchy theme
 set` is the same script here as on Arch — a bug in it is a bug to report there,
 and renaming it would say otherwise. It would also cost the property this repo
 is built on: tracking a release is a source bump because nixarchy replaces 19
@@ -471,7 +471,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 564 subcommands, `omarchy commands --check` green |
+| `omarchy` CLI | all 596 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **Install ▸ Packages** | the same catalogue in a panel ([nixarchy-pkg](https://github.com/olafkfreund/nixarchy-pkg)): search, add, draft and apply without a terminal. **On by default**, Super+Alt+N on a new install; `programs.nixarchy.defaultPlugins.pkg = false` removes it |
@@ -486,10 +486,10 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Runtime themes** | the active palette across supported apps without a rebuild ([omatheme](https://github.com/olafkfreund/nixarchy-omatheme)). **On by default** |
 | **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **On by default**, and it asks a human before it takes control, and it can work in a window you are not using without moving your cursor — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
 | **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
-| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 564 |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 596 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
-| 76 apps in the selection | 50 from nixpkgs, 7 as NixOS modules, 13 built here, 6 with no equivalent |
+| 77 apps in the selection | 51 from nixpkgs, 7 as NixOS modules, 13 built here, 6 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
@@ -559,7 +559,7 @@ behind the split, and the measurements behind refusing a CPU-only model, are in
 
 Almost nothing here waits on a maintainer.
 
-**57 of the 76 apps never touch this repo.** Chrome, VSCode, Signal and the rest
+**58 of the 77 apps never touch this repo.** Chrome, VSCode, Signal and the rest
 are installed as `pkgs.<name>` from **your** nixpkgs, and the five
 module-backed ones (Steam, 1Password, Tailscale, Firefox, Xbox controllers)
 come from there too — the module is NixOS', not this repo's. Your own
@@ -652,7 +652,7 @@ Most of it is not our job, and should not be:
 
 | where the app comes from | who updates it |
 |---|---|
-| nixpkgs (57 of 76 apps) | **nobody** — your own `nix flake update` |
+| nixpkgs (58 of 77 apps) | **nobody** — your own `nix flake update` |
 | pinned in this repo (2) | a nightly bot, opening a PR |
 | `zen` | upstream's own flake |
 | `retroarch` | nixpkgs, via this flake's own pin — it is a rebuild with cores |

@@ -22,6 +22,7 @@
 #   nix run .#review -- --report  and sync the rolling issue
 #   nix run .#review -- --list-pins   what we pin, no network (checks.review-pins)
 #   nix run .#review -- --carry-row NAME STATUS   one cargo carry's row
+#   nix run .#review -- --carry-rows JSON   all cargo carry rows
 #
 # Exit status is 0 whether or not there are findings. Findings are the output,
 # not an error -- the same rule verify.sh states in its own header. Only being
@@ -44,10 +45,11 @@ case "${1-}" in
   --rev-row) mode=revrow ;;
   --blocked-row) mode=blockedrow ;;
   --carry-row) mode=carryrow ;;
+  --carry-rows) mode=carryrows ;;
   --compare-tsv) mode=comparetsv ;;
   "") ;;
   *)
-    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW|--rev-row ...|--blocked-row ...|--carry-row NAME STATUS|--compare-tsv PIN_ISO]" >&2
+    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW|--rev-row ...|--blocked-row ...|--carry-row NAME STATUS|--carry-rows JSON|--compare-tsv PIN_ISO]" >&2
     exit 2
     ;;
 esac
@@ -308,6 +310,23 @@ carry_row() {
   esac
 }
 
+carry_rows() {
+  local names n st
+  if [ -z "$1" ]; then
+    finding "cargo carry" "-" "-" "carry status unread"
+    return
+  fi
+  names=$(jq -r 'if type == "object" then keys[] else error("not an object") end' <<<"$1" 2>/dev/null) || {
+    finding "cargo carry" "-" "-" "carry status unread"
+    return
+  }
+  [ -n "$names" ] || return 0
+  while IFS= read -r n; do
+    st=$(jq -r --arg n "$n" '.[$n] // ""' <<<"$1" 2>/dev/null) || st=""
+    carry_row "$n" "$st"
+  done <<<"$names"
+}
+
 if [ "$mode" = revrow ]; then
   rev_row "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11-}"
   printf '%s' "$rows"
@@ -324,6 +343,7 @@ if [ "$mode" = blockedrow ]; then
   exit 0
 fi
 if [ "$mode" = carryrow ]; then carry_row "$2" "${3-}"; printf '%s' "$rows"; exit 0; fi
+if [ "$mode" = carryrows ]; then carry_rows "${2-}"; printf '%s' "$rows"; exit 0; fi
 
 if [ "$mode" = cirow ]; then
   ci_row "$2" "$3" "$4" "$(cat)" "$5"
@@ -517,10 +537,7 @@ fi
 # Why: pkgs/AGENTS.md#cargo-system-libs-1722
 if [ -f pkgs/cargo-system-libs.nix ]; then
   carry=$(nix eval --impure --json --expr "let p = (builtins.getFlake \"git+file://$PWD\").inputs.nixpkgs.legacyPackages.x86_64-linux; in (import $PWD/pkgs/cargo-system-libs.nix { inherit (p) lib; prev = p; }).status" 2>/dev/null) || carry=""
-  for n in codex omp; do
-    st=$(jq -r --arg n "$n" '.[$n] // ""' <<<"$carry" 2>/dev/null) || st=""
-    carry_row "$n" "$st"
-  done
+  carry_rows "$carry"
 fi
 
 # ------------------------------------------------------------------ inputs --

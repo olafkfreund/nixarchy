@@ -189,8 +189,8 @@
 
     # Nix 2.35 for its fix to NixOS/nix#15614: 2.34's automatic collection thread
     # outlived the store that started it and segfaulted during
-    # `nixos-rebuild switch` (#701, #708). nixpkgs still defaults to 2.34.8; drop
-    # this line once `pkgs.nix` is 2.35 or later.
+    # `nixos-rebuild switch` (#701, #708). Unstable's nix is 2.35 now, stable's still 2.34.8;
+    # drop this line once both channels' `pkgs.nix` are 2.35 or later.
     package = pkgs.nixVersions.nix_2_35;
   };
 

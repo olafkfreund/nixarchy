@@ -47,20 +47,22 @@ pkgs.testers.runNixOSTest {
       client.wait_for_unit("multi-user.target")
       client.succeed("install -D -m600 ${keys.snakeOilEd25519PrivateKey} /root/.ssh/id_ed25519")
 
-      opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+      # The test driver's stdin is its command tty; do not forward it over ssh.
+      opts = "-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
       def with_password(host, method):
-          return (f"sshpass -p secret ssh {opts} -o PubkeyAuthentication=no "
+          return (f"timeout 60 sshpass -p secret ssh {opts} -o PubkeyAuthentication=no "
                   f"-o PreferredAuthentications={method} -o NumberOfPasswordPrompts=1 alice@{host} true 2>&1")
 
       # Without these two, a broken client makes every refusal below read as a pass.
       client.succeed(with_password("plain", "password"))
       client.succeed(with_password("plain", "keyboard-interactive"))
 
-      client.succeed(f"ssh {opts} -o BatchMode=yes alice@hardened true")
+      client.succeed(f"timeout 60 ssh {opts} -o BatchMode=yes alice@hardened true")
 
       # The method list is the assertion: a network failure also makes `fail` pass.
       for method in ("password", "keyboard-interactive"):
-          out = client.fail(with_password("hardened", method))
+          status, out = client.execute(with_password("hardened", method))
+          assert status not in (0, 124), (status, out)
           assert "Permission denied (publickey)" in out, out
 
       t = hardened.succeed("${nodes.hardened.services.openssh.package}/bin/sshd -T").lower()

@@ -44,7 +44,11 @@
   "install.tui" = "installs a TUI app by name, like install.package.";
   "install.webapp" = "installs a web app as a chromium PWA. Nothing to package.";
   "install.windows" = "a Windows VM helper needing rooted Docker; dimmed with a reason (#1320).";
-  "install.service.chromium-account" = "adds a browser profile. Not a package.";
+  # quattro 36b70f1 removed the row (#1760).
+  "install.service.chromium-account" = {
+    reason = "adds a browser profile. Not a package.";
+    edge = "absent";
+  };
 
   # Fonts go through omarchy-install-font and the Arch-name map.
   "install.style.font.bitstream" = "font, installed by omarchy-install-font.";

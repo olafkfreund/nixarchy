@@ -154,6 +154,8 @@ let
 
   chromiumConfig = configOf fixtures.chromium-own-policy;
   chromiumEtc = chromiumConfig.environment.etc;
+  # Every key but the one the user sets must survive; the file differs per pin (#1764).
+  upstreamBrowserPolicy = "${chromiumConfig.programs.nixarchy.package}/share/omarchy/default/chromium/policies/omarchy.json";
   chromePolicyOnEdge =
     chromiumConfig.programs.nixarchy.package.passthru.chromeExtensionsPolicy or false;
   chromeManagedFiles = [
@@ -192,18 +194,18 @@ let
     else
       ''
         chromium_ok=1
-        if ! ${pkgs.jq}/bin/jq -e 'has("MetricsReportingEnabled") and (has("DefaultBrowserSettingEnabled") | not)' ${
+        if ! ${pkgs.jq}/bin/jq -e --slurpfile want ${shQuote upstreamBrowserPolicy} '. == ($want[0] | del(.DefaultBrowserSettingEnabled))' ${
           shQuote chromiumEtc."chromium/policies/managed/omarchy.json".source
         } >/dev/null; then
-          echo "chromium-own-policy: FAIL chromium omarchy.json lost MetricsReportingEnabled or kept DefaultBrowserSettingEnabled" >&2
+          echo "chromium-own-policy: FAIL chromium omarchy.json is not upstream's policy minus the user's DefaultBrowserSettingEnabled" >&2
           chromium_ok=0
           fail=1
         fi
         ${lib.optionalString chromePolicyOnEdge ''
-          if ! ${pkgs.jq}/bin/jq -e 'has("MetricsReportingEnabled") and (has("DefaultBrowserSettingEnabled") | not)' ${
+          if ! ${pkgs.jq}/bin/jq -e --slurpfile want ${shQuote upstreamBrowserPolicy} '. == ($want[0] | del(.DefaultBrowserSettingEnabled))' ${
             shQuote chromiumEtc."opt/chrome/policies/managed/omarchy.json".source
           } >/dev/null; then
-            echo "chromium-own-policy: FAIL chrome omarchy.json lost MetricsReportingEnabled or kept DefaultBrowserSettingEnabled" >&2
+            echo "chromium-own-policy: FAIL chrome omarchy.json is not upstream's policy minus the user's DefaultBrowserSettingEnabled" >&2
             chromium_ok=0
             fail=1
           fi

@@ -120,7 +120,7 @@ add_dir() {
     if [[ -n $desktop ]]; then add_older "$1/$desktop-mimeapps.list"; fi
   done
 }
-IFS=: read -ra data_dirs <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+IFS=: read -ra data_dirs <<< "${XDG_DATA_DIRS:-}"
 for ((i = ${#data_dirs[@]} - 1; i >= 0; i--)); do
   if [[ ${data_dirs[i]} == /* ]]; then add_dir "${data_dirs[i]}/applications"; fi
 done

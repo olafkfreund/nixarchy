@@ -285,7 +285,7 @@ this rev's override starts throwing. Never track a branch here.
 
 ```nix
 gliff = {
-  url = "github:omacom/gliff/v0.4.2";
+  url = "github:omacom/gliff/v0.4.3";
   flake = false;
 };
 ```

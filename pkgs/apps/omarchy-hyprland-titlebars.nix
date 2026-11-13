@@ -8,13 +8,13 @@
 }:
 mkHyprlandPlugin (finalAttrs: {
   pluginName = "omarchy-hyprland-titlebars";
-  version = "0.3.0";
+  version = "0.4.0";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omarchy-hyprland-titlebars";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-9IvWEwzormNICqCI2V1ss64hes6FNOWFsKc2GcM+6V4=";
+    hash = "sha256-Y1fZCyhTxCb3x7xJ2TSmVN5bKZY+u+ObjYe76/yoj5k=";
   };
 
   nativeBuildInputs = [ cmake ];

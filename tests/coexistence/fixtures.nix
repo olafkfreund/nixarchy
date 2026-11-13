@@ -181,6 +181,13 @@
     };
   };
 
+  chromium-policy-disabled = {
+    programs.chromium = {
+      enable = false;
+      extraOpts.DefaultBrowserSettingEnabled = true;
+    };
+  };
+
   # Omarchy's local model runner on a machine whose owner already runs podman
   # their way (#1577). agent-local only mkDefaults podman on, so their
   # dockerCompat must stand and nothing may assert.

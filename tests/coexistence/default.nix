@@ -220,6 +220,30 @@ let
         fi
       '';
 
+  chromiumDisabledEtc = (configOf fixtures.chromium-policy-disabled).environment.etc;
+  chromiumDisabledScript =
+    if !(chromiumDisabledEtc ? "chromium/policies/managed/omarchy.json") then
+      ''
+        echo "chromium-policy-disabled: FAIL omarchy.json is absent from etc" >&2
+        fail=1
+      ''
+    else if chromiumDisabledEtc ? "chromium/policies/managed/extra.json" then
+      ''
+        echo "chromium-policy-disabled: FAIL extra.json exists in etc" >&2
+        fail=1
+      ''
+    else
+      ''
+        if ${pkgs.jq}/bin/jq -e 'has("DefaultBrowserSettingEnabled")' ${
+          shQuote chromiumDisabledEtc."chromium/policies/managed/omarchy.json".source
+        } >/dev/null; then
+          echo "chromium-policy-disabled: ok"
+        else
+          echo "chromium-policy-disabled: FAIL omarchy.json lost DefaultBrowserSettingEnabled" >&2
+          fail=1
+        fi
+      '';
+
   # agent-local (#1577): their podman and their toolkit choice stand, and no
   # nixarchy assertion fires on either machine.
   agentLocalCheck =
@@ -592,6 +616,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${qtScript}
     ${hyprlandScript}
     ${chromiumScript}
+    ${chromiumDisabledScript}
     ${lib.concatStrings agentLocalScripts}
     if [ "${
       if

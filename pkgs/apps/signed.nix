@@ -2,6 +2,7 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  cmake,
   qt6,
   pkg-config,
   kdePackages,
@@ -12,18 +13,18 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "signed";
-  version = "0.3.1";
+  version = "0.3.2";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "signed";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-fH5jXdO0uNsRblramzU0lcP3Dvv7pMZjf41FdE3lKjY=";
+    hash = "sha256-gTaHcPbmHrXbg8qWuWrSgprEyy34imRrQUFPK4uBh0A=";
   };
 
   # Omarchy 4.5 default app, on through omarchyApps.enable, built like pkgs/apps/omawrite.nix.
   nativeBuildInputs = [
-    qt6.qmake
+    cmake
     qt6.wrapQtAppsHook
     pkg-config
   ];

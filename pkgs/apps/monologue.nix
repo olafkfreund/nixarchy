@@ -2,27 +2,29 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  cmake,
   qt6,
   pkg-config,
   ffmpeg,
+  libjpeg_turbo,
   libpulseaudio,
   nix-update,
   writeShellApplication,
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "monologue";
-  version = "0.3.1";
+  version = "0.4.0";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "monologue";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-sQm/n0kHl13JQ3iOcOM5rZcP9xqrPpw6EKTVBLWha/I=";
+    hash = "sha256-ItL5WqPYJo7gr6uSd9FHVFbvtnJE51tUR4EXVCFeLk4=";
   };
 
   # Omarchy 4.5 default app, on through omarchyApps.enable, built like pkgs/apps/omawrite.nix.
   nativeBuildInputs = [
-    qt6.qmake
+    cmake
     qt6.wrapQtAppsHook
     pkg-config
   ];
@@ -31,6 +33,7 @@ stdenv.mkDerivation (finalAttrs: {
     qt6.qtbase
     qt6.qtdeclarative
     qt6.qtmultimedia
+    libjpeg_turbo
     libpulseaudio
   ];
 

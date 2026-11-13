@@ -2,42 +2,42 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  cmake,
   qt6,
   nix-update,
   writeShellApplication,
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omawrite";
-  version = "0.7.2";
+  version = "0.7.5";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omawrite";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-kjbiI5Wo/vX9Fs3XnN1K3PWPOtOIX85ZLFOL1HBl6t0=";
+    hash = "sha256-3Hul/8fOALM/Visswnr1BVjsKzv9R6mDbmHKUHIYXnE=";
   };
 
   # One of the four applications Omarchy writes itself and installs by default.
   # nixpkgs carries none of them, so nixarchy builds them. They come through
   # omarchyApps.enable.
   nativeBuildInputs = [
-    qt6.qmake
+    cmake
     qt6.wrapQtAppsHook
   ];
 
-  # QT += ... in omawrite.pro: core gui widgets printsupport dbus come from
-  # qtbase; qml quick quickcontrols2 quickdialogs2 from qtdeclarative.
+  # CMakeLists.txt pulls Core, Gui, Widgets, PrintSupport and DBus from qtbase,
+  # and Qml, Quick, QuickControls2 and QuickDialogs2 from qtdeclarative.
   buildInputs = [
     qt6.qtbase
     qt6.qtdeclarative
   ];
 
-  # Upstream's bin/build is qmake + make with no arguments, which is what the
-  # qmake hook already does. Running their script instead would need a writable
-  # $ROOT/build and buy nothing.
+  # Upstream's bin/build is cmake -B build && cmake --build build, which is
+  # what the cmake hook already does.
   #
   # Fonts are compiled in through src/resources.qrc, so nothing has to be
-  # installed beside the binary for them -- the PKGBUILD copies fonts/OFL.txt
+  # installed beside the binary for them -- upstream ships fonts/OFL.txt
   # only as a licence.
   installPhase = ''
     runHook preInstall

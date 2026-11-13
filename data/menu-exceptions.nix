@@ -83,6 +83,13 @@
       + "The row runs upstream's installer unchanged, and the app runs through nix-ld (untested).";
     edge = "only";
   };
+  # New in quattro 36b70f1 (#1760), once Chrome became upstream's default.
+  "install.browser.chromium" = {
+    reason =
+      "Chromium is nixarchy's default browser and ships inside the omarchy package (its chromium-flags wrapper), "
+      + "so every machine already has it; there is nothing to install or map.";
+    edge = "only";
+  };
   "install.ai.perplexity" =
     "dimmed with a reason (#1320): a pacman package nixpkgs does not carry, not a web app";
 }

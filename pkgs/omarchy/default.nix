@@ -1213,10 +1213,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       #
                       # Only the filename changes; Name= still reads "Zoom", so the launcher
                       # shows what upstream shows.
-                      # omarchy-browser.desktop keeps its name: no package ships an entry
-                      # with Omarchy's own name, and mimeapps lists name it unprefixed.
+                      # Entries named omarchy-* keep their name: no package ships one, and
+                      # mimeapps lists and the dock's pins name them unprefixed.
                       case "$base" in
-                        omarchy-browser.desktop) install -m644 "$desktop" "$out/share/applications/$base" ;;
+                        omarchy-*.desktop) install -m644 "$desktop" "$out/share/applications/$base" ;;
                         *) install -m644 "$desktop" "$out/share/applications/omarchy-$base" ;;
                       esac
                     done
@@ -1226,6 +1226,25 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       for id in $(sed -n 's/^[^#=]*=//p' "$list" | tr ';' ' '); do
                         [ -e "$out/share/applications/$id" ] || { echo "$list names $id, which is not installed" >&2; exit 1; }
                       done
+                    done
+
+                    # The dock drops a pin with no entry of that id, silently, so a pinned
+                    # web app (X, YouTube) follows its entry to the prefixed name (#1777).
+                    shell_json=$out/share/omarchy/config/omarchy/shell.json
+                    pins=$(${jq}/bin/jq -r '.dock.pinned[]?' "$shell_json") || exit 1
+                    for pin in $pins; do
+                      if [ ! -e "$out/share/applications/$pin.desktop" ] && [ -e "$out/share/applications/omarchy-$pin.desktop" ]; then
+                        ${jq}/bin/jq --arg p "$pin" '.dock.pinned |= map(if . == $p then "omarchy-" + $p else . end)' \
+                          "$shell_json" > shell.json.tmp && mv shell.json.tmp "$shell_json"
+                      fi
+                    done
+                    pins=$(${jq}/bin/jq -r '.dock.pinned[]?' "$shell_json") || exit 1
+                    for pin in $pins; do
+                      app=$out/share/applications
+                      if [ ! -e "$app/$pin.desktop" ] && { [ -e "$app/omarchy-$pin.desktop" ] || [[ $pin == omarchy-* ]]; }; then
+                        echo "the dock pins $pin, which is not installed under that id" >&2
+                        exit 1
+                      fi
                     done
 
                     # The one place a shipped entry is named rather than merely launched.

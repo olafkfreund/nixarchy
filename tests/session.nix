@@ -2460,6 +2460,9 @@ pkgs.testers.runNixOSTest {
                # quattro 1381fa0 (#1447): the launchers read XDG_DATA_DIRS the
                # same way, with the same /usr default.
                "omarchy-launch-browser", "omarchy-launch-webapp",
+               # quattro 723072a (#1776): the app grid's version list reads
+               # XDG_DATA_DIRS with the same default; its pacman -Qo fails here.
+               "omarchy-launch-versions",
                # Arch installers for apps that are mapped, excepted or absent
                # here: Claude Desktop (data/menu-exceptions.nix), its Chromium
                # extension, and the hermes/openclaw CLIs: omarchy-default-agent

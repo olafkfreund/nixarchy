@@ -2343,7 +2343,13 @@ in
         # default-plugin owner installs this manifest exactly once.
         omatheme = {
           id = "io.github.nobledoodle.omarchroma";
-          src = inputs.nixarchy-omatheme.packages.${pkgs.stdenv.hostPlatform.system}.omarchroma-plugin;
+          src =
+            inputs.nixarchy-omatheme.packages.${pkgs.stdenv.hostPlatform.system}.omarchroma-plugin.override
+              {
+                engine =
+                  osConfig.programs.nixarchyThemeEngine.package
+                    or (import ../pkgs/theme-engine.nix { inherit inputs pkgs; });
+              };
         };
         # The ai-mirror widget, on every machine (#773): it shows when an agent
         # is watching or driving, draws the confirm dialog, and a click stops a

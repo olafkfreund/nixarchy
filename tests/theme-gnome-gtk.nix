@@ -4,7 +4,7 @@
 # ExecStartPost, and the asserts run when the derivation is instantiated.
 let
   inherit (pkgs.stdenv.hostPlatform) system;
-  post =
+  machine =
     extra:
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
@@ -36,12 +36,25 @@ let
           system.stateVersion = "25.05";
         }
       ];
-    }).config.home-manager.users.someone.systemd.user.services.omarchy-theme-gnome.Service.ExecStartPost
-      or [ ];
-  on = post { };
-  gtkOff = post { programs.nixarchyThemeEngine.targets.gtk = false; };
-  engineOff = post { programs.nixarchyThemeEngine.enable = false; };
+    }).config;
+  post =
+    c:
+    c.home-manager.users.someone.systemd.user.services.omarchy-theme-gnome.Service.ExecStartPost or [ ];
+  enabled = machine { };
+  gtkDisabled = machine { programs.nixarchyThemeEngine.targets.gtk = false; };
+  engineDisabled = machine { programs.nixarchyThemeEngine.enable = false; };
+  custom = pkgs.runCommand "custom-theme-engine" { } "touch $out";
+  on = post enabled;
+  gtkOff = post gtkDisabled;
+  engineOff = post engineDisabled;
 in
+assert pkgs.lib.assertMsg (builtins.elem pkgs.adw-gtk3 enabled.environment.systemPackages)
+  "GTK runtime theming has no adw-gtk3 base theme";
+assert !(builtins.elem pkgs.adw-gtk3 gtkDisabled.environment.systemPackages);
+assert !(builtins.elem pkgs.adw-gtk3 engineDisabled.environment.systemPackages);
+assert
+  (machine { programs.nixarchyThemeEngine.package = custom; }).programs.nixarchyThemeEngine.package
+  == custom;
 assert pkgs.lib.assertMsg
   (builtins.length on == 1 && pkgs.lib.hasInfix "hyprchroma --target=gtk" (builtins.head on))
   "default case: omarchy-theme-gnome has no hyprchroma --target=gtk ExecStartPost: ${builtins.toJSON on}";
@@ -51,4 +64,17 @@ assert pkgs.lib.assertMsg (
 assert pkgs.lib.assertMsg (
   engineOff == [ ]
 ) "engine disabled: omarchy-theme-gnome still has an ExecStartPost: ${builtins.toJSON engineOff}";
-pkgs.runCommand "nixarchy-theme-gnome-gtk" { } "touch $out"
+pkgs.runCommand "nixarchy-theme-gnome-gtk"
+  {
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnused
+      pkgs.jq
+      pkgs.procps
+    ];
+  }
+  ''
+    bash ${./theme-application.sh} ${enabled.programs.nixarchy.package} ${enabled.programs.nixarchyThemeEngine.package}
+    touch $out
+  ''

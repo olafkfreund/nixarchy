@@ -1112,6 +1112,7 @@ in
     programs = {
       nixarchyThemeEngine = {
         enable = lib.mkDefault (cfg.user != null);
+        package = lib.mkDefault (import ../pkgs/theme-engine.nix { inherit inputs pkgs; });
         user = lib.mkDefault (if cfg.user != null then cfg.user else "omarchy");
         managePlugin = false;
       };
@@ -1463,6 +1464,9 @@ in
             adwaita-icon-theme
           ]
         )
+        ++ lib.optionals (
+          config.programs.nixarchyThemeEngine.enable && config.programs.nixarchyThemeEngine.targets.gtk
+        ) [ pkgs.adw-gtk3 ]
         ++ map lib.lowPrio (
           # Why: modules/AGENTS.md#config-hypr-xdph-conf-which-the-package-seeds-into
           #

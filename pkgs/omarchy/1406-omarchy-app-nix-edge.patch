@@ -1,99 +1,148 @@
 --- a/default/agents/skills/omarchy-app/SKILL.md
 +++ b/default/agents/skills/omarchy-app/SKILL.md
-@@ -4,10 +4,10 @@
-   Build a new desktop app for Omarchy the way Omarchy's own apps are built
-   (Hype, Monologue, Omacut): C++ and Qt Quick, compiled with CMake into a
-   single binary, following the Omarchy theme live, and installed as an
--  Arch package so it shows up in the app launcher. Use when asked to make,
-+  Nix flake so it runs with `nix run` and shows up in the app launcher. Use when asked to make,
-   build, or scaffold an app, tool, utility, or GUI program for the desktop.
-   Triggers: new app, make me an app, desktop app, GUI, Qt, QML, Qt Quick, C++
--  app, CMake, app launcher entry, PKGBUILD for my app.
-+  app, CMake, app launcher entry, flake.nix for my app.
+@@ -1,7 +1,7 @@
+ ---
+ name: omarchy-app
+ description: >
+-  Build a new desktop app for Omarchy the way Omarchy's own apps are built (Omacut, Monologue, Hype, Signed, Folio, Plain, Omawrite, Omacalc): C++ and Qt Quick, built with CMake into a single binary, following the Omarchy theme and language live, tested offscreen on every push, and packaged in omarchy-pkgs so it shows up in the app launcher. Use when asked to make, build, or scaffold an app, tool, utility, or GUI program for the desktop. Triggers: new app, make me an app, desktop app, GUI, Qt, QML, Qt Quick, C++ app, CMake, app launcher entry, PKGBUILD for my app.
++  Build a new desktop app for Omarchy the way Omarchy's own apps are built (Omacut, Monologue, Hype, Signed, Folio, Plain, Omawrite, Omacalc): C++ and Qt Quick, built with CMake into a single binary, following the Omarchy theme and language live, tested offscreen on every push, and installed as a Nix flake so it runs with `nix run` and shows up in the app launcher. Use when asked to make, build, or scaffold an app, tool, utility, or GUI program for the desktop. Triggers: new app, make me an app, desktop app, GUI, Qt, QML, Qt Quick, C++ app, CMake, app launcher entry, flake.nix for my app.
  ---
  
  # Building an Omarchy App
-@@ -30,9 +30,10 @@
- project in `~/Work/<name>` unless the user says otherwise, and `git init` it.
+@@ -22,7 +22,7 @@ Omarchy's own apps are dead simple on purpose: one window, one job, driven from
  
- Everything an app needs is part of Omarchy: `cmake`, `make`, a C++ compiler,
--Qt's base, declarative, multimedia, SVG, and Wayland modules, and `ffmpeg`. If
--`cmake` is missing, install the set with `omarchy-pkg-add base-devel cmake
--qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland ffmpeg`.
-+Qt's base, declarative, multimedia, SVG, and Wayland modules, and `ffmpeg`,
-+all of it available through the project's own dev shell. Enter it with `nix
-+develop` (`templates.md` has the `flake.nix`); nothing is installed
-+system-wide.
+ Ask what the app should do if it isn't clear, and settle the one job it does. Pick a short lowercase name (`tally`, `pomo`); it is the binary, the package, the `.desktop` file, the icon, and the Wayland app id all at once. Create the project in `~/Work/<name>` unless the user says otherwise, and `git init` it.
+ 
+-Everything an app needs is part of Omarchy: `cmake`, `make`, a C++ compiler, Qt's base, declarative, multimedia, SVG, and Wayland modules, and `ffmpeg`. If `cmake` is missing, install the set with `omarchy-pkg-add base-devel cmake qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland ffmpeg`.
++Everything an app needs is available through its own dev shell: `cmake`, `make`, a C++ compiler, Qt's base, declarative, multimedia, SVG, and Wayland modules, and `ffmpeg` when the app uses it. Enter the shell with `nix develop` (`templates.md` has the `flake.nix`); nothing is installed system-wide.
  
  ## Shape
  
-@@ -40,14 +41,14 @@
- CMakeLists.txt          Qt modules; src/ as a library, the app, the tests
- bin/build               cmake into build/<name>
- bin/test                builds and runs the Qt Test binary offscreen
--bin/install             makepkg -fsi, so the app lands in the launcher
-+flake.nix  package.nix  dev shell, and the package that lands in the launcher
- src/main.cpp            app setup; hands C++ objects to QML
- src/backend.{h,cpp}     the app's state and work, as a QObject
- src/theme.{h,cpp}       follows the Omarchy accent and Hyprland's rounding
- src/Main.qml            the window: layout, keys, nothing else
- src/resources.qrc       compiles the QML into the binary
- tests/<name>_tests.cpp
--pkgbuild/PKGBUILD  pkgbuild/<name>.desktop  pkgbuild/<name>.svg
-+pkgbuild/<name>.desktop  pkgbuild/<name>.svg
+@@ -30,7 +30,8 @@ Everything an app needs is part of Omarchy: `cmake`, `make`, a C++ compiler, Qt'
+ CMakeLists.txt               src/ as a library, the app, the tests, warnings, install rules
+ bin/build                    shared: cmake into build/
+ bin/test                     shared: builds, then runs ctest offscreen
+-.github/workflows/test.yml   shared: builds and tests on Arch on every push
++.github/workflows/test.yml   builds and tests with Nix on every push
++flake.nix  package.nix       dev shell, and the package that lands in the launcher
+ src/main.cpp                 app setup; hands C++ objects to QML
+ src/backend.{h,cpp}          the app's state and work, as a QObject
+ src/theme.{h,cpp}            the Omarchy palette, light or dark, and Hyprland's rounding
+@@ -43,7 +44,7 @@ share/<name>.desktop  share/<name>.svg
  README.md  LICENSE  .gitignore
  ```
  
-@@ -144,10 +145,10 @@
-    `window->grabWindow()` shows what the user would see without touching
-    their desktop. Set `QT_FORCE_STDERR_LOGGING=1`, or QML warnings go to the
-    journal instead of the terminal.
--5. `bin/install` builds the package with `makepkg -fsi`, which installs the
--   binary, the `.desktop` entry, and the icon. The app then appears in the
--   Omarchy app launcher (`Super + Space`). Run it again after every change
--   the user should see there.
-+5. `nix run` builds the package and runs it. To see it in the Omarchy app
-+   launcher (`Super + Space`), add the flake to the system configuration and
-+   rebuild, which installs the binary, the `.desktop` entry, and the icon.
-+   Rebuild again after every change the user should see there.
+-`src/` stays flat, and a new file there needs no change to `CMakeLists.txt`. No build directories checked in, no generated files committed. No `PKGBUILD` and no `bin/install` in the app's repository: the package lives in `omacom/omarchy-pkgs` (see *README and release*), and `cmake --install` covers trying the app in the launcher before then.
++`src/` stays flat, and a new file there needs no change to `CMakeLists.txt`. No build directories checked in, no generated files committed. The package lives in `package.nix` in the app's own repository (see *README and release*); there is no `bin/install`.
+ 
+ ## How the pieces split
+ 
+@@ -79,7 +80,7 @@ README.md  LICENSE  .gitignore
+ - **The catalogs.** `en.json` lists exactly the strings the sources translate, and every other catalog translates only what `en.json` has, with the same placeholders and an `other` plural form. They catch the string someone added without a catalog entry.
+ - **The real window.** Load `qrc:/Main.qml` with the real `Theme`, `Translator`, and `Backend` (or a QML fake backend, as Monologue's `tests/ui_tests.cpp` does once the backend needs devices), drive it with `QTest` keys and clicks, and fail on any QML warning the engine reports. Give it a `Translator` reading a temp language file, or a desktop set to Danish fails the English assertions.
+ 
+-A test binary that isn't registered with `add_test` never runs, and `ctest` with nothing to run passes, so register each one. A test that needs a tool CI may lack fails without it rather than skipping, or a green run proves nothing. Whatever a test needs beyond the app's own dependencies (a font, a codec, a tool) is a `checkdepends` in the app's recipe in omarchy-pkgs, which is where CI reads it from: the CI container has no fonts at all until one is listed.
++A test binary that isn't registered with `add_test` never runs, and `ctest` with nothing to run passes, so register each one. A test that needs a tool CI may lack fails without it rather than skipping, or a green run proves nothing. Whatever a test needs beyond the app's own dependencies (a font, a codec, a tool) goes into `nativeCheckInputs` in `package.nix`; the dev shell takes its inputs from the package with `inputsFrom`, so `package.nix` is the one list and CI reads it from there.
+ 
+ ## Loop
+ 
+@@ -87,7 +88,7 @@ A test binary that isn't registered with `add_test` never runs, and `ctest` with
+ 2. `bin/test` after each change. Its arguments go to `ctest`, so `bin/test -V` shows every Qt test function as it runs. Warnings are on for the whole project; keep the build free of them.
+ 3. Look at it. Take a screenshot with `omarchy capture screenshot fullscreen save` and check the window against the theme, on a light theme as well as a dark one, before calling it done. Switch the language once (`omarchy language da`) and look again: longer words must not clip, and nothing should still be in English. Try a right-to-left language too, and open every dialog and popup, not only the window.
+ 4. Drive the real QML offscreen when a change is about interaction. A small harness in the scratchpad that loads `qrc:/Main.qml` with `QT_QPA_PLATFORM=offscreen`, sends mouse and key events, and saves `window->grabWindow()` shows what the user would see without touching their desktop. Set `QT_FORCE_STDERR_LOGGING=1`, or QML warnings go to the journal instead of the terminal. What it proves worth keeping moves into the tests.
+-5. `cmake --install build --prefix ~/.local` installs the binary, the `.desktop` entry, and the icon for this user, so the app appears in the Omarchy app launcher (`Super + Space`) before it is packaged. Run it again after every change the user should see there. Once the package is installed, remove the local copy with `xargs rm < build/install_manifest.txt`, or its `.desktop` entry keeps shadowing the package's.
++5. `nix run` builds the package and runs it. To see it in the Omarchy app launcher (`Super + Space`), add the flake to the system configuration and rebuild, which installs the binary, the `.desktop` entry, and the icon. Rebuild again after every change the user should see there.
  
  ## Qt Quick traps
  
-@@ -173,10 +174,7 @@
-   the offscreen harness, with the default accent so it doesn't depend on the
-   current theme, and with made-up content: never the user's name, signature,
-   files, or other personal data.
--- To ship: tag `v<version>` and make a GitHub release, then add the package to
--  `omacom/omarchy-pkgs` under `pkgbuilds/<name>/` building from the release
--  tarball, with `.omarchy/package.json` set to `"source": "local"`,
--  `"auto_merge": true`, and an `upstream.watch` on the GitHub repo so later
--  releases sync on their own. Only once that package is published can
--  Omarchy install it: `install/omarchy-base.packages`, the preinstall
--  scripts, and a migration for existing machines.
-+- To ship: tag `v<version>` and make a GitHub release. Anyone then adds the
-+  repository to their configuration as a flake input and installs
-+  `inputs.<name>.packages.${system}.default`; there is no package list to
-+  join.
+@@ -113,6 +114,4 @@ A test binary that isn't registered with `add_test` never runs, and `ctest` with
+ ## README and release
+ 
+ - The README opens with a screenshot of the app doing its job. Grab it from the offscreen harness, with the default accent so it doesn't depend on the current theme, and with made-up content: never the user's name, signature, files, or other personal data.
+-- The package lives in `omacom/omarchy-pkgs`, never in the app's repository. To ship: tag `v<version>` and make a GitHub release, then add the recipe under `pkgbuilds/<name>/` as `templates.md` shows, building from the release tarball, with `.omarchy/package.json` set to `"source": "local"`, `"auto_merge": true`, and an `upstream.watch` on the GitHub repo so later releases sync on their own. omarchy-pkgs merges a collaborator's package pull request by itself once its build is green, so open one as a draft when it isn't meant to land yet.
+-- That recipe is the app's one list of dependencies: the app's CI reads `depends`, `makedepends`, and `checkdepends` from it rather than keeping a copy. Until the recipe has landed, CI fails at installing them and `bin/test` is the check. A new dependency, a test-only one included, goes into the recipe along with the code that needs it.
+-- Only once that package is published can Omarchy install it: `install/omarchy-base.packages`, the preinstall scripts, and a migration for existing machines.
++- To ship, tag `v<version>` and make a GitHub release. Anyone then adds the repository to their configuration as a flake input and installs `inputs.<name>.packages.${system}.default`; there is no package list to join.
 --- a/default/agents/skills/omarchy-app/templates.md
 +++ b/default/agents/skills/omarchy-app/templates.md
-@@ -66,16 +66,42 @@
- QT_QPA_PLATFORM=offscreen ./<name>_tests
- ```
+@@ -2,11 +2,11 @@
  
--## `bin/install`
-+## `flake.nix`
+ Read this when starting an app from the omarchy-app skill. Replace `<name>` with the app's name and `<Name>` with its display name. These come from Omacut, Monologue, and the other Omarchy apps (MIT, David Heinemeier Hansson); keep that attribution in the LICENSE of any app that copies them.
  
--```sh
--#!/bin/sh
--set -eu
+-The files marked **shared** are identical in every Omarchy app, byte for byte: copy them as they are, with nothing to replace, and put what is particular to the app in `CMakeLists.txt` and its recipe in omarchy-pkgs instead. A fix to one goes here first, then to every app.
++The files marked **shared** are identical in every Omarchy app, byte for byte: copy them as they are, with nothing to replace, and put what is particular to the app in `CMakeLists.txt` and `package.nix` instead. A fix to one goes here first, then to every app.
+ 
+ ## `CMakeLists.txt`
+ 
+-Add `Multimedia`, `Concurrent`, `Svg`, or other modules only when the app uses them, in both `find_package` and `target_link_libraries`. An app with several test binaries adds an `add_executable`, `add_test`, and `set_tests_properties` for each; the offscreen property is what lets a bare `ctest` (the package's `check()`, an IDE) run them without `bin/test`. The install rules are what `cmake --install` and the package both use.
++Add `Multimedia`, `Concurrent`, `Svg`, or other modules only when the app uses them, in both `find_package` and `target_link_libraries`. An app with several test binaries adds an `add_executable`, `add_test`, and `set_tests_properties` for each; the offscreen property is what lets a bare `ctest` (the package's check phase, an IDE) run them without `bin/test`. The install rules are what `cmake --install` and the package both use.
+ 
+ ```cmake
+ cmake_minimum_required(VERSION 3.21)
+@@ -42,8 +42,7 @@ target_link_libraries(<name>_tests PRIVATE <name>_core Qt6::Test)
+ add_test(NAME <name>_tests COMMAND <name>_tests)
+ set_tests_properties(<name>_tests PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)
+ 
+-# `cmake --install build --prefix ~/.local` puts the app in the launcher
+-# before it is packaged; a package installs the same files under /usr.
++# The package installs these files in the Nix store for the launcher.
+ include(GNUInstallDirs)
+ install(TARGETS <name> RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+ install(FILES share/<name>.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+@@ -80,7 +79,7 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir "$root/build" --output-on-failure --n
+ 
+ ## `.github/workflows/test.yml`
+ 
+-Shared. It builds and tests on Arch, as an ordinary user with a desktop's locale, installing what the app's recipe in omarchy-pkgs lists, so it goes green once that recipe has landed.
++The package's check phase runs the tests, so CI and a local `nix build` agree.
+ 
+ ```yaml
+ name: Test
+@@ -97,40 +96,38 @@ jobs:
+   test:
+     name: Build and test
+     runs-on: ubuntu-latest
+-    # The app ships as an Arch package built against Arch's Qt, so it's tested there.
+-    container: archlinux:latest
+-    defaults:
+-      run:
+-        shell: bash
+     steps:
+-      - name: Install git for the checkout
+-        run: pacman -Syu --noconfirm --needed git
 -
--ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
--"$ROOT/bin/build"
--cd "$ROOT/pkgbuild"
--exec makepkg -fsi "$@"
-+The dev shell is for `nix develop`, then `bin/build` and `bin/test`. The
-+package is what `nix run` builds and what a configuration installs.
+       - uses: actions/checkout@v4
++      - uses: cachix/install-nix-action@v31
++      - run: nix build -L
++```
 +
++## `flake.nix`
++
++The dev shell is for `nix develop`, then `bin/build` and `bin/test`. The package is what `nix run` builds and what a configuration installs.
+ 
+-      - name: Install the package's dependencies
+-        # The package lives in omarchy-pkgs, so its PKGBUILD is the one list of what the app needs and CI reads it rather than keeping a copy.
+-        run: |
+-          curl -fsSL "https://raw.githubusercontent.com/omacom/omarchy-pkgs/master/pkgbuilds/${{ github.event.repository.name }}/PKGBUILD" -o "$RUNNER_TEMP/PKGBUILD"
+-          source "$RUNNER_TEMP/PKGBUILD"
+-          deps=("${depends[@]}" "${makedepends[@]}" "${checkdepends[@]}")
+-          pacman -S --noconfirm --needed base-devel cmake dbus "${deps[@]%%[<>=]*}"
+-
+-      - name: Set up a user and a locale like a desktop's
+-        # Root can read any file, so tests about unreadable ones need an ordinary user, with a second group for tests that change a file's group; and the container generates no locale.
+-        run: |
+-          useradd -m tester
+-          groupadd other
+-          usermod -aG other tester
+-          chown -R tester .
+-          sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+-          locale-gen
+-
+-      - name: Build
+-        run: su tester -c bin/build
+-
+-      - name: Test
+-        run: su tester -c 'LANG=en_US.UTF-8 dbus-run-session -- bin/test'
 +```nix
 +{
 +  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -111,16 +160,7 @@
 +        let pkgs = nixpkgs.legacyPackages.${system}; in
 +        {
 +          default = pkgs.mkShell {
-+            packages = [
-+              pkgs.cmake
-+              pkgs.gnumake
-+              pkgs.ffmpeg
-+              pkgs.qt6.qtbase
-+              pkgs.qt6.qtdeclarative
-+              pkgs.qt6.qtmultimedia
-+              pkgs.qt6.qtsvg
-+              pkgs.qt6.qtwayland
-+            ];
++            inputsFrom = [ self.packages.${system}.default ];
 +          };
 +        });
 +    };
@@ -128,39 +168,15 @@
  ```
  
  ## `src/main.cpp`
-@@ -710,38 +736,54 @@
+@@ -1303,6 +1300,55 @@ QTEST_MAIN(<Name>Tests)
  #include "<name>_tests.moc"
  ```
  
--## `pkgbuild/PKGBUILD`
 +## `package.nix`
 +
 +```nix
 +{ lib, stdenv, cmake, qt6 }:
- 
--```sh
--pkgname=<name>
--pkgver=0.1.0
--pkgrel=1
--pkgdesc='One line on what it does'
--arch=('x86_64' 'aarch64')
--license=('MIT')
--depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'xdg-desktop-portal')
--makedepends=('cmake' 'gcc' 'make')
--source=()
--sha256sums=()
--
--build() {
--  cd "$startdir/.."
--  ./bin/build
--}
--
--package() {
--  cd "$startdir/.."
--  install -Dm755 build/<name> "$pkgdir/usr/bin/<name>"
--  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
--  install -Dm644 "$startdir/<name>.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/<name>.svg"
--  install -Dm644 "$startdir/<name>.desktop" "$pkgdir/usr/share/applications/<name>.desktop"
++
 +stdenv.mkDerivation {
 +  pname = "<name>";
 +  version = "0.1.0";
@@ -174,21 +190,24 @@
 +    qt6.qtsvg
 +    qt6.qtwayland
 +  ];
++  nativeCheckInputs = [ ];
 +
-+  # CMake writes build/<name>, the path bin/build uses too.
 +  dontUseCmakeConfigure = true;
 +  buildPhase = ''
 +    runHook preBuild
-+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-+    cmake --build build --target <name> -j"$NIX_BUILD_CORES"
++    # The sandbox has no /bin/bash, so the shared script runs through bash.
++    bash bin/build
 +    runHook postBuild
 +  '';
-+
++  doCheck = true;
++  checkPhase = ''
++    runHook preCheck
++    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure --no-tests=error
++    runHook postCheck
++  '';
 +  installPhase = ''
 +    runHook preInstall
-+    install -Dm755 build/<name> $out/bin/<name>
-+    install -Dm644 pkgbuild/<name>.desktop $out/share/applications/<name>.desktop
-+    install -Dm644 pkgbuild/<name>.svg $out/share/icons/hicolor/scalable/apps/<name>.svg
++    cmake --install build --prefix $out
 +    runHook postInstall
 +  '';
 +
@@ -197,26 +216,71 @@
 +    license = lib.licenses.mit;
 +    mainProgram = "<name>";
 +  };
- }
- ```
++}
++```
++
++If the app shells out to `ffmpeg`, add `ffmpeg` to the arguments and `buildInputs`, and `qtWrapperArgs = [ "--prefix PATH : ${lib.makeBinPath [ ffmpeg ]}" ];` so the dev shell and installed binary find it. The repo should still carry a LICENSE (the MIT text with the user's name and year).
++
+ ## `share/<name>.desktop`
  
--Add `ffmpeg`, `qt6-multimedia`, or `qt6-svg` to `depends` when the app uses
--them. Omarchy installs all three, but the package should still say what it
--needs. `package()` also installs `LICENSE` from the project root (the MIT text
--with the user's name and year) and the icon below, so both must exist.
-+If the app shells out to `ffmpeg`, add `ffmpeg` to the arguments and
-+`qtWrapperArgs = [ "--prefix PATH : ${lib.makeBinPath [ ffmpeg ]}" ];` so the
-+installed binary finds it. The repo should still carry a LICENSE (the MIT
-+text with the user's name and year).
- 
- ## `pkgbuild/<name>.desktop`
- 
-@@ -776,7 +818,5 @@
+ ```ini
+@@ -1333,58 +1379,9 @@ The icon is a single square SVG. Start from a rounded square in the accent and d
  
  ```text
  /build/
--/pkgbuild/pkg/
--/pkgbuild/src/
--*.pkg.tar.*
 +/result
  ```
+ 
+ ## `LICENSE`
+ 
+ The MIT license, with the user's name and the year, keeping the attribution above for the files that came from here. The install rules ship it, so it must exist.
+-
+-## The recipe in omarchy-pkgs: `pkgbuilds/<name>/PKGBUILD`
+-
+-This lives in `omacom/omarchy-pkgs`, not in the app, and is added once the app has a release (the skill's *README and release*). It builds from the release tarball, runs the tests, and installs through the same rules as `cmake --install`. Add `ffmpeg`, `qt6-multimedia`, or other packages to `depends` when the app uses them, and whatever only the tests need (fonts, codecs, tools) to `checkdepends`. Run `updpkgsums` to fill the checksum.
+-
+-```bash
+-pkgname=<name>
+-pkgver=0.1.0
+-pkgrel=1
+-pkgdesc='One line on what it does'
+-arch=('x86_64' 'aarch64')
+-url='https://github.com/<owner>/<name>'
+-license=('MIT')
+-options=('!debug')
+-depends=('hicolor-icon-theme' 'qt6-base' 'qt6-declarative' 'qt6-svg' 'qt6-wayland' 'xdg-desktop-portal')
+-makedepends=('cmake' 'gcc' 'make')
+-checkdepends=()
+-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+-sha256sums=()
+-
+-build() {
+-  cd "$srcdir/$pkgname-$pkgver"
+-  ./bin/build
+-}
+-
+-check() {
+-  cd "$srcdir/$pkgname-$pkgver"
+-  ctest --test-dir build --output-on-failure
+-}
+-
+-package() {
+-  cd "$srcdir/$pkgname-$pkgver"
+-  DESTDIR="$pkgdir" cmake --install build --prefix /usr
+-}
+-```
+-
+-And `pkgbuilds/<name>/.omarchy/package.json`, so each new release becomes a package update on its own:
+-
+-```json
+-{
+-  "source": "local",
+-  "auto_merge": true,
+-  "upstream": {
+-    "watch": {
+-      "github": "<owner>/<name>",
+-      "pattern": "v(?P<version>[0-9]+(?:\\.[0-9]+)*)"
+-    }
+-  }
+-}
+-```

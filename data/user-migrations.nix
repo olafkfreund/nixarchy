@@ -331,6 +331,17 @@
     edge = "only";
     reason = "the GTK and Qt settings that named Yaru move to Adwaita; there is no pacman and the store is read-only, so the package removal and the /usr/share/icons/Yaru cleanup do not apply (#1760)";
   };
+  "1794484010" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    reason = "redraws Omarchy's app icons in the current theme through omarchy-theme-refresh; activation themes only a first run, so an existing home would wait for its next theme switch (#1776)";
+  };
+  "1794495065" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "the package installs omarchy-terminal.desktop and omarchy-browser.desktop into share/applications (pkgs/omarchy/default.nix), and a copy in ~/.local/share/applications would shadow every later package version (#1776)";
+  };
   predates = [
     "1780057136"
     "1780294774"

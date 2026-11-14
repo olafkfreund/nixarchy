@@ -221,6 +221,12 @@
     reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
     pacman = "Reads pacman state for display only; nothing is installed or removed.";
   };
+  "omarchy-launch-versions" = {
+    class = "vendor";
+    edge = "only";
+    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
+    pacman = "Asks pacman -Qo which package owns each launcher entry, for display only; the shim fails, its stderr goes to /dev/null, and the app grid shows no version (#1776).";
+  };
   "omarchy-debug-idle" = {
     class = "vendor";
     reason = "Vendored unchanged. Reads `systemctl --user status omarchy-sleep-lock.service` for a diagnostic dump; nothing is started, stopped or enabled.";

@@ -31,6 +31,7 @@
   hyprlock,
   quickshell,
   wl-clipboard,
+  xrandr,
   wtype,
   grim,
   slurp,
@@ -226,6 +227,8 @@ let
     dbus
     xdg-utils
     libnotify
+    # omarchy-tray-context-menu places an XWayland tray menu by xrandr's geometry
+    xrandr
     hyprland
     hyprpicker
     hyprsunset

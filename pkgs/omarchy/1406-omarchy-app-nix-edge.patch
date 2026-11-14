@@ -98,7 +98,7 @@
  
  ```yaml
  name: Test
-@@ -97,40 +96,38 @@ jobs:
+@@ -97,40 +96,39 @@ jobs:
    test:
      name: Build and test
      runs-on: ubuntu-latest
@@ -161,6 +161,7 @@
 +        {
 +          default = pkgs.mkShell {
 +            inputsFrom = [ self.packages.${system}.default ];
++            inherit (self.packages.${system}.default) QML_IMPORT_PATH;
 +          };
 +        });
 +    };
@@ -168,7 +169,16 @@
  ```
  
  ## `src/main.cpp`
-@@ -1303,6 +1300,55 @@ QTEST_MAIN(<Name>Tests)
+@@ -933,7 +931,7 @@ int lines(const QString &path) {
+ // A hyprctl that answers with response.json beside it and counts its calls.
+ QString fakeHyprctl(const QString &directory) {
+     const QString command = directory + "/hyprctl";
+-    write(command, "#!/bin/bash\necho >> '" + directory.toUtf8() + "/calls'\ncat '" + directory.toUtf8()
++    write(command, "#!/bin/sh\necho >> '" + directory.toUtf8() + "/calls'\ncat '" + directory.toUtf8()
+                        + "/response.json'\n");
+     QFile::setPermissions(command, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+     return command;
+@@ -1303,6 +1301,62 @@ QTEST_MAIN(<Name>Tests)
  #include "<name>_tests.moc"
  ```
  
@@ -191,6 +201,13 @@
 +    qt6.qtwayland
 +  ];
 +  nativeCheckInputs = [ ];
++
++  # The tests, and a build run from the dev shell, are not wrapped, so they find
++  # Qt's QML modules by this path.
++  QML_IMPORT_PATH = lib.concatMapStringsSep ":" (p: "${p}/${qt6.qtbase.qtQmlPrefix}") [
++    qt6.qtdeclarative
++    qt6.qtmultimedia
++  ];
 +
 +  dontUseCmakeConfigure = true;
 +  buildPhase = ''
@@ -224,7 +241,7 @@
  ## `share/<name>.desktop`
  
  ```ini
-@@ -1333,58 +1379,9 @@ The icon is a single square SVG. Start from a rounded square in the accent and d
+@@ -1333,58 +1387,9 @@ The icon is a single square SVG. Start from a rounded square in the accent and d
  
  ```text
  /build/

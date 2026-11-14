@@ -230,6 +230,10 @@
     edge = "only";
     nix = "papers";
   };
+  "xorg-xrandr" = {
+    edge = "only";
+    nix = "xrandr";
+  };
   "pamixer" = {
     nix = "pamixer";
   };
@@ -845,6 +849,10 @@
   "sushi" = {
     nix = "sushi";
     edge = "absent";
+  };
+  "terminus-font" = {
+    skip = "console font for upstream's Arch first-boot screens (install/provisioning/console-font.sh); the console here is configured by the flake.";
+    edge = "only";
   };
   "xorg-xsetroot" = {
     skip = "X11 tool; the session is Wayland.";

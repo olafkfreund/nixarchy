@@ -2,7 +2,9 @@
 # nixarchy pkg new <url> -- draft a derivation for software in no repository.
 #
 # Spliced into a writeShellApplication in modules/apps.nix; @nixpkgs@ becomes
-# the generation's own nixpkgs, the same tree nixarchy-pkg-add parses against.
+# the generation's own nixpkgs, the same tree nixarchy-pkg-add parses against,
+# and the shared lock helper (#1789) is spliced in at its own token below. The draft is built in the
+# state directory and written to packages/ once, under the lock.
 # nix-init does the drafting, headless. Its authors call the output a draft,
 # and so does everything this prints: the builder, the dependencies and the
 # licence are guesses for a person to review, not a package.
@@ -13,6 +15,8 @@
 set -euo pipefail
 
 nixpkgs='@nixpkgs@'
+
+@writerLock@
 
 usage() {
   echo "usage: nixarchy pkg new <url> [--rev REV] [--name NAME] [--update]"
@@ -95,44 +99,46 @@ if [ -e "$draft" ] && [ "$update" != true ]; then
   echo "Edit it, or redraft over it with: nixarchy pkg new --update $url" >&2
   exit 1
 fi
-mkdir -p "$pkgdir"
+# Drafted and built in the state directory; the real draft is untouched until
+# the commit below, so a failed --update never trades an edited draft for nothing.
+work="$nx_state/pkg-new/$name.nix"
+mkdir -p "$nx_state/pkg-new"
+rm -f "$work"
 
-# Under --update the old draft is held aside, so a failed redraft gives it
-# back instead of trading an edited draft for nothing.
-old=""
-if [ -e "$draft" ]; then
-  old=$(mktemp)
-  cp "$draft" "$old"
-  rm -f "$draft"
-fi
+# Globals, so the EXIT trap still sees them (CLAUDE.md §5).
+log=""
+trap 'nx_unlock; rm -f "$log"' EXIT
+
+# Under the lock: refuse if a draft appeared while this was drafting, then
+# write ours. nx_put keeps a symlinked or edited draft's file.
+commit_draft() {
+  nx_lock
+  if [ -e "$draft" ] && [ "$update" != true ]; then
+    nx_refuse "$draft appeared while this was drafting; nothing was written. Redraft over it with --update."
+  fi
+  mkdir -p "$pkgdir"
+  nx_put "$work" "$draft"
+}
 
 echo "drafting  $draft"
 initargs=(--headless --url "$url" -n "$nixpkgs")
 if [ -n "$rev" ]; then
   initargs+=(--rev "$rev")
 fi
-if ! nix-init "${initargs[@]}" "$draft" || [ ! -s "$draft" ]; then
+if ! nix-init "${initargs[@]}" "$work" || [ ! -s "$work" ]; then
   echo
   echo "nix-init could not draft anything from $url." >&2
   echo "It understands release URLs and repositories on GitHub, GitLab," >&2
   echo "Codeberg, SourceHut, crates.io and PyPI." >&2
-  # A failed nix-init can leave an empty file behind; an empty draft is not
-  # a starting point, it is a landmine for the next run's already-exists check.
-  rm -f "$draft"
-  if [ -n "$old" ]; then
-    cp "$old" "$draft"
-    rm -f "$old"
-    echo "Your existing draft at $draft was left as it was." >&2
-  fi
+  rm -f "$work"
+  [ ! -e "$draft" ] || echo "Your existing draft at $draft was left as it was." >&2
   exit 1
 fi
-[ -z "$old" ] || rm -f "$old"
 
 log=$(mktemp)
-trap 'rm -f "$log"' EXIT
 try_build() {
   nix build --no-link --impure \
-    --expr "(import $nixpkgs { }).callPackage $draft { }" >"$log" 2>&1
+    --expr "(import $nixpkgs { }).callPackage $work { }" >"$log" 2>&1
 }
 
 printf 'building  %s ... ' "$name"
@@ -147,8 +153,8 @@ for _ in 1 2 3; do
   fi
   spec=$(sed -n 's/.*specified:[[:space:]]*\(sha256-[A-Za-z0-9+/=]*\).*/\1/p' "$log" | head -1)
   got=$(sed -n 's/.*got:[[:space:]]*\(sha256-[A-Za-z0-9+/=]*\).*/\1/p' "$log" | head -1)
-  if [ -n "$spec" ] && [ -n "$got" ] && grep -qF "$spec" "$draft"; then
-    sed -i "s|$spec|$got|" "$draft"
+  if [ -n "$spec" ] && [ -n "$got" ] && grep -qF "$spec" "$work"; then
+    sed -i "s|$spec|$got|" "$work"
   else
     break
   fi
@@ -159,17 +165,29 @@ if [ "$built" != true ]; then
   echo
   tail -n 15 "$log" | sed 's/^/  | /'
   echo
-  echo "The draft did NOT build. It is kept at"
-  echo "  $draft"
+  # A new draft is committed so it is where this says it is; an --update
+  # leaves the real draft alone and keeps the redraft in the state directory.
+  if [ "$update" = true ] && [ -e "$draft" ]; then
+    kept=$work
+    echo "The redraft did NOT build. Your existing draft at $draft was left as it was;"
+    echo "the redraft is kept at"
+  else
+    commit_draft
+    nx_unlock
+    kept=$draft
+    echo "The draft did NOT build. It is kept at"
+  fi
+  echo "  $kept"
   echo "because a failed draft is still a better starting point than a blank"
   echo "file. Edit it, then rebuild with:"
-  echo "  nix build --impure --expr '(import $nixpkgs { }).callPackage $draft { }'"
+  echo "  nix build --impure --expr '(import $nixpkgs { }).callPackage $kept { }'"
   exit 1
 fi
 echo "ok"
 
 appsfile="${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
 entry="(callPackage ./packages/$name.nix { })"
+commit_draft
 # Consent rule (nixarchy-unfreeze's, via nixarchy-channel): only lines this
 # project wrote get rewritten. The #@pkgs-end marker is nixarchy-pkg-add's own
 # block, so inserting there -- commented out -- is within it; a file without
@@ -179,16 +197,18 @@ if [ -f "$appsfile" ] && grep -qF "packages/$name.nix" "$appsfile"; then
   # line is already in the user's hands, so there is nothing to write.
   :
 elif [ -f "$appsfile" ] && grep -q '#@pkgs-end' "$appsfile"; then
-  tmp=$(mktemp)
+  tmp=$(mktemp -p "$nx_state")
   awk -v line="    # $entry  #@draft $name" '
     /#@pkgs-end/ && !done { print line; done = 1 }
     { print }
-  ' "$appsfile" >"$tmp" && mv "$tmp" "$appsfile"
+  ' "$appsfile" >"$tmp"
+  nx_put "$tmp" "$appsfile"
   echo "added     $name to $appsfile (commented out)"
 else
   echo "add it to your configuration yourself, e.g. in $appsfile:"
   echo "  environment.systemPackages = [ (pkgs.callPackage ./packages/$name.nix { }) ];"
 fi
+nx_unlock
 echo
 echo "This is a DRAFT: nix-init guessed the builder, the dependencies and the"
 echo "licence. It builds, which is not the same as being right. Review it,"

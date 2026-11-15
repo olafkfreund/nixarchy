@@ -3509,8 +3509,12 @@ in
                   # "cannot draft this", not "git is missing".
                   pkgs.git
                   config.nix.package
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
-                text = lib.replaceStrings [ "@nixpkgs@" ] [ "${pkgs.path}" ] (builtins.readFile ../pkgs/pkg-new.sh);
+                text = lib.replaceStrings [ "@nixpkgs@" "@writerLock@" ] [ "${pkgs.path}" writerLock ] (
+                  builtins.readFile ../pkgs/pkg-new.sh
+                );
               })
 
               # Why: modules/AGENTS.md#search-everything-this-machine-could-install-and-r

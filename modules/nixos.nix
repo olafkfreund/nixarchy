@@ -1579,7 +1579,17 @@ in
                 # text above said it was not in nixpkgs; it arrived after that was
                 # written, so the keybinding had been failing on a package that was
                 # available the whole time.
-                inherit (pkgs) cliamp;
+                # nixpkgs installs no desktop entry; upstream's repo ships one, and the
+                # dock drops a pin with no entry of that id (#1777).
+                cliamp = pkgs.symlinkJoin {
+                  name = "cliamp-${pkgs.cliamp.version}";
+                  paths = [ pkgs.cliamp ];
+                  postBuild = ''
+                    install -Dm644 ${pkgs.cliamp.src}/cliamp.desktop $out/share/applications/cliamp.desktop
+                    install -Dm644 ${pkgs.cliamp.src}/Cliamp.svg $out/share/icons/hicolor/scalable/apps/cliamp.svg
+                  '';
+                  inherit (pkgs.cliamp) meta;
+                };
 
                 # install/omarchy-base.packages names it (omacom/omarchy#14712).
                 # Not in nixpkgs, and this module's pkgs has no overlay of ours.

@@ -1238,6 +1238,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # The dock drops a pin with no entry of that id, silently, so a pinned
                     # web app (X, YouTube) follows its entry to the prefixed name (#1777).
                     shell_json=$out/share/omarchy/config/omarchy/shell.json
+                    # nixpkgs names Chromium's entry chromium-browser.desktop, Arch's chromium (#1777).
+                    ${jq}/bin/jq '.dock.pinned |= map(if . == "chromium" then "chromium-browser" else . end)' \
+                      "$shell_json" > shell.json.tmp && mv shell.json.tmp "$shell_json"
                     pins=$(${jq}/bin/jq -r '.dock.pinned[]?' "$shell_json") || exit 1
                     for pin in $pins; do
                       if [ ! -e "$out/share/applications/$pin.desktop" ] && [ -e "$out/share/applications/omarchy-$pin.desktop" ]; then

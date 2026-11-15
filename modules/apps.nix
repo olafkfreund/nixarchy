@@ -1863,8 +1863,10 @@ in
                   pkgs.jq
                   pkgs.gawk
                   cfg.package
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
 
                   # Callers (nixarchy-microvm) read this to learn that a missing
@@ -1894,6 +1896,9 @@ in
                   [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
                   live_row="^[[:space:]]*[^#[:space:]].*#@ $id([[:space:]]|\$)"
+                  tmp=""
+                  gate_ran=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
 
                   # No terminal, a cancel and a refused prompt are all a non-zero gum, so all refuse.
                   refuse() {
@@ -1992,15 +1997,23 @@ in
 
                   if [ "$id" = openssh ] && ! grep -qE "$live_row" "$file"; then
                     openssh_gate
+                    gate_ran=1
+                  fi
+
+                  nx_lock
+                  if [ "$id" = openssh ] && [ -z "$gate_ran" ] && ! grep -qE "$live_row" "$file"; then
+                    nx_refuse "services.nix changed while service-enable was running; run it again"
                   fi
 
                   # A services.nix written before this row existed does not have
                   # it; nothing regenerates the file, so add just that row from
                   # the template, where catalogue-diff puts rows (#843).
                   if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                    if nixarchy-catalogue-diff --add-one services "$id" >/dev/null; then
+                    if nixarchy-catalogue-diff --add-one services "$id" 9>&- >/dev/null; then
                       echo "added the $id row from the template"
                     else
+                      status=$?
+                      [ "$status" -ne 75 ] || exit 75
                       echo "nixarchy: no service '$id' in $file" >&2
                       echo "  The full list is /etc/nixarchy/services-template.nix." >&2
                       exit 1
@@ -2030,17 +2043,16 @@ in
                     tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/services-template.nix"
                     # Must not fall through: the plain line would turn sshd on with passwords.
                     row=$(grep -m1 -E "#@ openssh([[:space:]]|\$)" "$tpl") || refuse "no openssh row in $tpl"
-                    tmp=""
-                    trap 'rm -f "$tmp"' EXIT
-                    tmp=$(mktemp "$file.XXXXXX")
+                    mkdir -p "$nx_state"
+                    tmp=$(mktemp -p "$nx_state")
                     awk -v old="$old" -v row="$row" '$0 ~ old { print row; next } { print }' "$file" >"$tmp"
-                    chmod --reference="$file" "$tmp"
-                    mv "$tmp" "$file"
+                    nx_put "$tmp" "$file"
                   fi
 
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
+                  nx_sed "$file" -E -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/"
 
                   queued=$(grep -cE "^[[:space:]]*[^#[:space:]].*#@ " "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "$id queued -- not enabled yet" \

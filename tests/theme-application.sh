@@ -42,8 +42,14 @@ omarchy() { printf '%s\n' "$work/theme"; }
 for helper in sync-gtk-theme sync-qt-kde-theme; do
   # Exercise each shipped lookup with a temporary system profile, so the
   # host's installed Yaru and GTK themes cannot make a broken lookup pass.
+  # Unset first: an extraction that matches nothing must not test the last helper.
+  unset -f omarchy_icon_theme
   source <(sed -n '/^omarchy_icon_theme() {/,/^}/p' "$engine/lib/hyprchroma/$helper" |
     sed "s|/run/current-system/sw|$work/profile|g")
+  declare -F omarchy_icon_theme > /dev/null || {
+    echo "FAIL: no omarchy_icon_theme extracted from $helper" >&2
+    exit 1
+  }
   if [[ $(omarchy_icon_theme "$helper") != Yaru-blue ]]; then
     echo "FAIL: $helper misses the system-profile icon theme" >&2
     exit 1
@@ -51,6 +57,10 @@ for helper in sync-gtk-theme sync-qt-kde-theme; do
 done
 source <(sed -n '/^gtk_theme_installed() {/,/^}/p' "$engine/lib/hyprchroma/sync-gtk-theme" |
   sed "s|/run/current-system/sw|$work/profile|g")
+declare -F gtk_theme_installed > /dev/null || {
+  echo 'FAIL: no gtk_theme_installed extracted from sync-gtk-theme' >&2
+  exit 1
+}
 if ! gtk_theme_installed adw-gtk3; then
   echo 'FAIL: GTK misses the system-profile base theme' >&2
   exit 1

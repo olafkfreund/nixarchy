@@ -49,14 +49,13 @@ pkgs.runCommand "nixarchy-app-selection"
     apply=${apply}/bin/nixarchy-apply
     definstall=${defaultInstall}/bin/nixarchy-default-install
 
-    # A missing row is inserted, and the file keeps its mode. (Whether that
-    # write was a rename is not visible here: enable's own sed -i replaces the
-    # inode straight after. The catalogue-diff case below shows the rename.)
+    # A missing row is inserted, and the file keeps its mode and its inode: the
+    # writers rewrite in place (#1789), so a symlinked config survives.
     sed -i '/#@ firefox/d' "$file"
     inode=$(stat -c %i "$file")
     "$enable" firefox >/dev/null || bad 'enable firefox failed'
     grep -q 'firefox.enable = true' "$file" || bad 'enable did not insert the missing row'
-    test "$(stat -c %a "$file")" = 640 && test "$(stat -c %i "$file")" != "$inode" || bad 'enable did not rename a same-directory temp with the original mode'
+    test "$(stat -c %a "$file")" = 640 && test "$(stat -c %i "$file")" = "$inode" || bad 'enable did not keep the original inode and mode'
 
     # A live false is a selection to turn on, not an already-enabled result.
     sed -i 's/firefox.enable = true/firefox.enable = false/' "$file"
@@ -68,12 +67,12 @@ pkgs.runCommand "nixarchy-app-selection"
     "$disable" firefox >/dev/null || bad 'disable firefox failed'
     grep -q '# firefox.enable' "$file" || bad 'disable did not comment the row'
 
-    # catalogue-diff must report a refusal, and a successful --add also renames.
+    # catalogue-diff must report a refusal, and a successful --add keeps the inode.
     printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '  };' '}' > "$file"
     inode=$(stat -c %i "$file")
     "$diff" --add >/dev/null || bad 'catalogue-diff --add failed'
-    grep -q '#@ firefox' "$file" && test "$(stat -c %i "$file")" != "$inode" &&
-      test "$(stat -c %a "$file")" = 640 || bad 'catalogue-diff did not rename with the original mode'
+    grep -q '#@ firefox' "$file" && test "$(stat -c %i "$file")" = "$inode" &&
+      test "$(stat -c %a "$file")" = 640 || bad 'catalogue-diff did not keep the original inode and mode'
     # --add writes rows as programs.nixarchy.apps.<id>; enable and disable
     # must both recognise that form (#1276 review).
     "$enable" firefox >/dev/null 2>&1 || bad 'enable failed on a full-path row'

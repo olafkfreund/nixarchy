@@ -27,6 +27,7 @@ pkgs.runCommand "nixarchy-sshd-enable"
     fails=0
     export HOME=$PWD/home
     export XDG_CONFIG_HOME=$PWD/config
+    export XDG_STATE_HOME=$PWD/state
     export NIXARCHY_TEMPLATES=$PWD/templates
     export PATH=${catalogueDiff}/bin:$PATH
     mkdir -p "$HOME" "$XDG_CONFIG_HOME/nixarchy" "$NIXARCHY_TEMPLATES"

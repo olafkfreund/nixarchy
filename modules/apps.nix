@@ -163,6 +163,9 @@ let
     "    # ${name}.enable = ${if on then "false" else "true"};  #@ ${name}${suffix}\n"
     + lib.optionalString (app ? option) "    #   ${name}.settings = { };  #@ ${name}.settings\n";
 
+  # The lock and keep-the-file helpers every config writer splices in (#1789).
+  writerLock = builtins.readFile ../pkgs/writer-lock.sh;
+
   insertMissingAppRow = ''
     # apps.nix is seeded once, so an app added to the catalogue later
     # has no row in it. Take the row from the current template and
@@ -172,11 +175,11 @@ let
       [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
       grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
         fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
-      tmp=$(mktemp "$file.XXXXXX")
+      mkdir -p "$nx_state"
+      tmp=$(mktemp -p "$nx_state")
       awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
         "$file" >"$tmp"
-      chmod --reference="$file" "$tmp"
-      mv "$tmp" "$file"
+      nx_put "$tmp" "$file"
       echo "added $id's row from the current catalogue to $file"
     fi
   '';
@@ -1695,8 +1698,11 @@ in
                   pkgs.gnugrep
                   pkgs.gnused
                   pkgs.coreutils
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   add=false
                   # --add-one <part> <id>: just that row (#843). What
                   # nixarchy-service-enable calls when a file predates a row.
@@ -1719,6 +1725,11 @@ in
                     *) usage ;;
                   esac
                   refused=false
+
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  [ "$add" = true ] && nx_lock
 
                   dir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
                   total=0
@@ -1806,7 +1817,8 @@ in
                         refused=true
                         continue
                       fi
-                      tmp=$(mktemp "$user.XXXXXX")
+                      mkdir -p "$nx_state"
+                      tmp=$(mktemp -p "$nx_state")
                       head -n "$((close - 1))" "$user" >"$tmp"
                       {
                         echo ""
@@ -1814,8 +1826,7 @@ in
                         printf '%s' "$rows"
                       } >>"$tmp"
                       tail -n "+$close" "$user" >>"$tmp"
-                      chmod --reference="$user" "$tmp"
-                      mv "$tmp" "$user"
+                      nx_put "$tmp" "$user"
                       echo "  appended to $user"
                     fi
                   done
@@ -2192,8 +2203,11 @@ in
                   pkgs.gnugrep
                   pkgs.coreutils
                   pkgs.jq
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
                   # Test seam: the baked registry is empty on Omarchy v4.0.4.
                   registry="''${NIXARCHY_LANGUAGE_REGISTRY:-${languageRegistry}}"
@@ -2216,6 +2230,11 @@ in
                     exit 2
                   fi
 
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  nx_lock
+
                   [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
                   # A commented-out line does not count as live.
@@ -2234,17 +2253,14 @@ in
                     exit 1
                   fi
 
-                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
-                  tmp=""
-                  trap 'rm -f "$tmp"' EXIT
-                  tmp=$(mktemp "$file.XXXXXX")
+                  mkdir -p "$nx_state"
+                  tmp=$(mktemp -p "$nx_state")
                   awk -v live="$live" -v clear="$clear" -v at="$close" -v new="  programs.nixarchy.language = \"$code\";  #@ language" '
                     $0 ~ live { if (!clear && !done) print new; done = 1; next }
                     !clear && !done && NR == at { print new; done = 1 }
                     { print }
                   ' "$file" >"$tmp"
-                  chmod --reference="$file" "$tmp"
-                  mv "$tmp" "$file"
+                  nx_put "$tmp" "$file"
 
                   if [ "$clear" = 1 ]; then
                     echo "cleared the language in $file; run 'nixarchy-apply' to build it"
@@ -2261,8 +2277,11 @@ in
                   pkgs.gnused
                   pkgs.gnugrep
                   pkgs.coreutils
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
                   id="''${1:?usage: nixarchy-service-disable <service-id>}"
 
@@ -2272,6 +2291,9 @@ in
                       exit 2
                       ;;
                   esac
+
+                  trap nx_unlock EXIT
+                  nx_lock
 
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2284,7 +2306,7 @@ in
                   # the same as uninstalling it: the daemon stops, and whatever it
                   # wrote -- a Syncthing database, an authorised key -- stays where
                   # it is. Removing that is the user's call and not this script's.
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                  nx_sed "$file" -E -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/"
                   echo "disabled $id in $file"
                   echo "run 'nixarchy-apply' to rebuild without it"
                 '';
@@ -2298,8 +2320,10 @@ in
                   pkgs.gawk
                   pkgs.coreutils
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                   id="''${1:?usage: nixarchy-app-enable <app-id>}"
@@ -2307,6 +2331,7 @@ in
                   # A menu pick has no terminal, so an error only on stderr is a
                   # pick that silently did nothing. Say it on the desktop too.
                   fail() {
+                    nx_unlock
                     echo "nixarchy: $1" >&2
                     if command -v omarchy-notification-send >/dev/null 2>&1; then
                       omarchy-notification-send -u critical "Could not select $id" "$1" || true
@@ -2318,6 +2343,11 @@ in
                     *[!a-z0-9_-]* | "") fail "'$id' is not an app id" ;;
                   esac
 
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  nx_lock
+
                   [ -f "$file" ] || fail "no $file -- log in again to have it created"
 
                   ${insertMissingAppRow}
@@ -2328,14 +2358,16 @@ in
                   fi
 
                   # Strip one leading '# ' from the marked line, nothing else.
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)false/\1true/" "$file"
+                  nx_sed "$file" -E \
+                    -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" \
+                    -e "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)false/\1true/"
 
                   # A menu pick runs with no terminal attached, so stdout goes
                   # nowhere and the pick looks like it did nothing at all. Say so
                   # on the desktop instead. -r keeps repeated picks replacing one
                   # notification rather than stacking a wall of them.
                   queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     # --exec makes the notification clickable: nothing is built
                     # until a rebuild runs, so the notification that says so is
@@ -2362,13 +2394,16 @@ in
                   pkgs.gawk
                   pkgs.coreutils
                   cfg.package
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                   id="''${1:?usage: nixarchy-app-disable <app-id>}"
 
                   fail() {
+                    nx_unlock
                     echo "nixarchy: $1" >&2
                     exit 1
                   }
@@ -2379,6 +2414,11 @@ in
                       exit 2
                       ;;
                   esac
+
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  nx_lock
 
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2391,8 +2431,9 @@ in
                         echo "$id is already off"
                         exit 0
                       fi
-                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
-                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)true/\1false/" "$file"
+                      nx_sed "$file" -E \
+                        -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" \
+                        -e "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)true/\1false/"
                       ;;
                     *)
                       if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
@@ -2406,11 +2447,12 @@ in
                       fi
 
                       # Comment the line back out, preserving its indentation.
-                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                      nx_sed "$file" -E -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/"
                       ;;
                   esac
 
                   queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "$id removed from your selection" \

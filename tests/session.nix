@@ -2777,7 +2777,16 @@ pkgs.testers.runNixOSTest {
     # Lua-era Hyprland reports an o.bind's dispatcher as `HL.Dispatcher(exec_cmd)`
     # with an index for `arg`, never the command text -- so the bind is found by
     # what it does expose: its description, key and modifiers (Super 64 + Shift 1).
-    kill = [b for b in json.loads(aim("hyprctl binds -j"))
+    raw = aim("hyprctl binds -j")
+    try:
+        binds = json.loads(raw)
+    except json.JSONDecodeError as e:
+        # A reply once arrived cut off at 79872 bytes on a hosted runner (#1785).
+        again = aim("hyprctl binds -j | wc -c").strip()
+        raise AssertionError(
+            f"hyprctl binds -j is not JSON ({e}): {len(raw)} chars, ending "
+            f"{raw[-200:]!r}; a second read of the same boot gave {again} bytes")
+    kill = [b for b in binds
             if b.get("description") == "ai-mirror: stop agent control"
             and b.get("key", "").upper() == "ESCAPE" and b.get("modmask") == 65]
     assert kill, (

@@ -47,11 +47,12 @@ let
   on = post enabled;
   gtkOff = post gtkDisabled;
   engineOff = post engineDisabled;
+  # lowPrio (#1167) changes the derivation, so match by name.
+  hasAdw = c: builtins.any (p: (p.pname or "") == "adw-gtk3") c.environment.systemPackages;
 in
-assert pkgs.lib.assertMsg (builtins.elem pkgs.adw-gtk3 enabled.environment.systemPackages)
-  "GTK runtime theming has no adw-gtk3 base theme";
-assert !(builtins.elem pkgs.adw-gtk3 gtkDisabled.environment.systemPackages);
-assert !(builtins.elem pkgs.adw-gtk3 engineDisabled.environment.systemPackages);
+assert pkgs.lib.assertMsg (hasAdw enabled) "GTK runtime theming has no adw-gtk3 base theme";
+assert !(hasAdw gtkDisabled);
+assert !(hasAdw engineDisabled);
 assert
   (machine { programs.nixarchyThemeEngine.package = custom; }).programs.nixarchyThemeEngine.package
   == custom;

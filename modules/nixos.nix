@@ -1466,7 +1466,7 @@ in
         )
         ++ lib.optionals (
           config.programs.nixarchyThemeEngine.enable && config.programs.nixarchyThemeEngine.targets.gtk
-        ) [ pkgs.adw-gtk3 ]
+        ) [ (lib.lowPrio pkgs.adw-gtk3) ]
         ++ map lib.lowPrio (
           # Why: modules/AGENTS.md#config-hypr-xdph-conf-which-the-package-seeds-into
           #

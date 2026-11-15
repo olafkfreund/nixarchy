@@ -2377,3 +2377,21 @@ Stub scripts inside a check start with `#!${pkgs.bash}/bin/bash`, not
 `#!/bin/bash`: the build sandbox has no `/bin/bash`, and the failure is
 `bad interpreter`, from inside the script under test, which reads as the
 script being broken.
+
+## hyprctl can print half a reply and exit 0 (#1785)
+
+`checks.session` failed once on a hosted runner parsing `hyprctl binds -j`:
+79,872 bytes of a 120,772-byte reply, with exit status 0. Hyprland 0.57's
+`CUnixPeer::flush()` (`src/ipc/s1/Unix.cpp`) re-arms on `EAGAIN`, but any
+other `write()` errno (ENOBUFS or ENOMEM under memory pressure) drops the
+peer without a log line. hyprctl then drains what was already queued, reads
+EOF, prints the prefix and exits 0. Hyprland stayed up and answered the next
+calls, and 300 reads in a row on an idle p620 were all whole. Codex and agy,
+reading the same source independently, both ranked this path first.
+
+Only a reply larger than the socket buffer waits on `EAGAIN`, and `binds -j`
+is the one this repo reads. So a check that parses a large `hyprctl` reply
+has to treat a parse failure as a possible short read, not as Hyprland's
+answer: the session probe re-reads up to three times and logs every bad read
+(`hyprctl binds -j was cut short`). A run that needed a retry is visible in
+the log. One that never gets whole JSON still fails.

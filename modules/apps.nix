@@ -2568,8 +2568,10 @@ in
                   pkgs.fzf
                   config.nix.package
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2589,10 +2591,17 @@ in
 
                   # Reverted as a unit if anything goes wrong, exactly as the
                   # writer's edits are: the file is the user's own NixOS module.
-                  backup=$(mktemp)
+                  # The picker above is unlocked; the file is read again under the lock.
+                  backup=""
+                  trap 'nx_unlock; rm -f "$backup"' EXIT
+                  nx_lock
+                  mkdir -p "$nx_state"
+                  backup=$(mktemp -p "$nx_state")
                   cp "$file" "$backup"
-                  trap 'rm -f "$backup"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  restore() {
+                    local t
+                    t=$(mktemp -p "$nx_state") && cp "$backup" "$t" && nx_put "$t" "$file"
+                  }
 
                   removed=()
                   for attr in "$@"; do
@@ -2616,7 +2625,7 @@ in
                     fi
                     # Exactly the marked line nixarchy-pkg-add wrote, wherever the
                     # user has moved it to.
-                    sed -i -E "\|$re|d" "$file"
+                    nx_sed "$file" -E -e "\|$re|d"
                     removed+=("$attr")
                   done
 
@@ -2629,6 +2638,7 @@ in
                   fi
 
                   count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "''${removed[*]} removed from your selection" \
@@ -2660,8 +2670,10 @@ in
                   pkgs.fzf
                   config.nix.package
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2688,10 +2700,17 @@ in
                   # Reverted as a unit if anything goes wrong, exactly as
                   # nixarchy-pkg-remove's edits are: the file is the user's own
                   # NixOS module.
-                  backup=$(mktemp)
+                  # The picker above is unlocked; the file is read again under the lock.
+                  backup=""
+                  trap 'nx_unlock; rm -f "$backup"' EXIT
+                  nx_lock
+                  mkdir -p "$nx_state"
+                  backup=$(mktemp -p "$nx_state")
                   cp "$file" "$backup"
-                  trap 'rm -f "$backup"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  restore() {
+                    local t
+                    t=$(mktemp -p "$nx_state") && cp "$backup" "$t" && nx_put "$t" "$file"
+                  }
 
                   removed=()
                   for name in "$@"; do
@@ -2714,7 +2733,7 @@ in
                     fi
                     # The marked line wherever the user moved it, commented or
                     # uncommented. Dots escaped: the name lands in a sed address.
-                    sed -i "/#@draft ''${name//./\\.}\$/d" "$file"
+                    nx_sed "$file" -e "/#@draft ''${name//./\\.}\$/d"
                     removed+=("$name")
                   done
 
@@ -2726,6 +2745,7 @@ in
                     exit 1
                   fi
 
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "''${removed[*]} removed from your selection" \
@@ -2772,8 +2792,11 @@ in
                   pkgs.gawk
                   pkgs.fzf
                   config.nix.package
+                  cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2793,17 +2816,24 @@ in
                     set -- "''${picked[@]}"
                   fi
 
-                  backup=$(mktemp)
+                  # The picker above is unlocked; the file is read again under the lock.
+                  backup=""
+                  trap 'nx_unlock; rm -f "$backup"' EXIT
+                  nx_lock
+                  mkdir -p "$nx_state"
+                  backup=$(mktemp -p "$nx_state")
                   cp "$file" "$backup"
-                  trap 'rm -f "$backup"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  restore() {
+                    local t
+                    t=$(mktemp -p "$nx_state") && cp "$backup" "$t" && nx_put "$t" "$file"
+                  }
 
                   # String comparison throughout, never a regex: option paths
                   # carry dots, quotes and <name> placeholders, and a path read
                   # as a pattern would delete the wrong line quietly.
                   remove_one() {
                     path=$1
-                    tmp=$(mktemp)
+                    tmp=$(mktemp -p "$nx_state")
                     # `if !` rather than checking $? after: this script runs under
                     # set -e, and a bare failing awk would abort before the caller
                     # could restore the backup.
@@ -2837,7 +2867,7 @@ in
                       rm -f "$tmp"
                       return 1
                     fi
-                    mv "$tmp" "$file"
+                    nx_put "$tmp" "$file"
                   }
 
                   removed=()

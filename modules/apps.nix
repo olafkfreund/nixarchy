@@ -3529,8 +3529,11 @@ in
                   pkgs.fzf
                   pkgs.curl
                   config.nix.package
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   cache="''${XDG_CACHE_HOME:-$HOME/.cache}/nixarchy"
                   index="$cache/index.tsv"
@@ -3786,24 +3789,54 @@ in
 
                   [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
-                  backup=$(mktemp)
-                  cp "$file" "$backup"
-                  trap 'rm -f "$backup" "$selected" "$applied" "$shown"' EXIT
+                  # Each insert takes the lock itself and is checked and written alone;
+                  # nothing is held between them, and the writers called below take
+                  # their own.
+                  trap 'nx_unlock; rm -f "$selected" "$applied" "$shown"' EXIT
 
                   changed=0
+                  refused=0
                   scaffolded=0
                   written=0
 
                   # Options are written at the module's top level, before its closing brace.
                   # Nothing here parses Nix: the brace is found textually and the result is
-                  # checked with nix-instantiate before anything is kept.
+                  # checked with nix-instantiate before anything is kept. Under the lock,
+                  # one insert at a time: 0 written, 1 would not parse (file untouched),
+                  # 2 the option is already there.
                   insert_line() {
-                    tmp=$(mktemp)
-                    awk -v payload="$1" '
+                    local payload=$1 opt=$2 tmp
+                    nx_lock
+                    if grep -q "#@opt $opt\$" "$file"; then
+                      nx_unlock
+                      return 2
+                    fi
+                    mkdir -p "$nx_state"
+                    tmp=$(mktemp -p "$nx_state")
+                    awk -v payload="$payload" '
                       !ins && /^}[[:space:]]*$/ { printf "%s", payload; ins = 1 }
                       { print }
                     ' "$file" > "$tmp"
-                    mv "$tmp" "$file"
+                    if ! nix-instantiate --parse "$tmp" >/dev/null 2>&1; then
+                      rm -f "$tmp"
+                      nx_unlock
+                      return 1
+                    fi
+                    nx_put "$tmp" "$file"
+                    nx_unlock
+                  }
+
+                  # Says what insert_line's status means; returns 0 only when it wrote.
+                  inserted() {
+                    case "$1" in
+                      0) return 0 ;;
+                      2) echo "$2 is already in $file" ;;
+                      *)
+                        refused=1
+                        echo "nixarchy: that would have left $file unparseable. Nothing was changed for $2." >&2
+                        ;;
+                    esac
+                    return 1
                   }
 
                   # One option's default or example, structured, straight out of
@@ -3872,10 +3905,13 @@ in
                     esac
 
                     if [ -n "$value" ]; then
-                      insert_line "\n  $path = $value;  #@opt $path\n"
-                      echo "set $path = $value"
-                      changed=1
-                      written=$((written + 1))
+                      status=0
+                      insert_line "\n  $path = $value;  #@opt $path\n" "$path" || status=$?
+                      if inserted "$status" "$path"; then
+                        echo "set $path = $value"
+                        changed=1
+                        written=$((written + 1))
+                      fi
                       return 0
                     fi
 
@@ -3909,13 +3945,16 @@ in
                       fi
                       printf '  # %s = ;  #@opt %s\n' "$path" "$path"
                     } > "$cache/scaffold.$$"
+                    status=0
                     insert_line "$(cat "$cache/scaffold.$$")
-                  "
+                  " "$path" || status=$?
                     rm -f "$cache/scaffold.$$"
-                    echo "scaffolded $path (commented out -- set the value and uncomment it)"
-                    changed=1
-                    written=$((written + 1))
-                    scaffolded=$((scaffolded + 1))
+                    if inserted "$status" "$path"; then
+                      echo "scaffolded $path (commented out -- set the value and uncomment it)"
+                      changed=1
+                      written=$((written + 1))
+                      scaffolded=$((scaffolded + 1))
+                    fi
                   }
 
                   # Why: modules/AGENTS.md#ask-flathub-org-directly
@@ -4020,13 +4059,7 @@ in
                     [ "$pre" = "$(cksum < "$file")" ] || changed=1
                   fi
 
-                  [ "$changed" = 1 ] || exit 0
-
-                  if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
-                    cp "$backup" "$file"
-                    echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
-                    exit 1
-                  fi
+                  [ "$changed" = 1 ] || exit "$refused"
 
                   if [ "$scaffolded" -gt 0 ]; then
                     echo
@@ -4041,6 +4074,7 @@ in
                     echo
                     echo "run 'nixarchy-apply' when you have picked everything you want"
                   fi
+                  [ "$refused" = 0 ]
                 '';
               })
 

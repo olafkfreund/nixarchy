@@ -1,7 +1,11 @@
-{ pkgs, ... }:
+{ inputs, pkgs }:
 # pkgs/writer-lock.sh, the helper every config writer takes apply's lock and
 # its file-keeping write from (#1789). Each case sources the real file in a
 # subshell, because nx_refuse exits. Every case runs and failures are counted.
+let
+  testLib = import ./lib.nix { inherit inputs; };
+  search = testLib.vmPackage "nixarchy-search";
+in
 pkgs.runCommand "nixarchy-writer-lock"
   {
     nativeBuildInputs = with pkgs; [
@@ -9,6 +13,9 @@ pkgs.runCommand "nixarchy-writer-lock"
       coreutils
       diffutils
       gnused
+      gnugrep
+      gawk
+      nix
       util-linux
     ];
   }
@@ -121,6 +128,51 @@ pkgs.runCommand "nixarchy-writer-lock"
     printf '%s\n' A > "$w/snap9"; printf '%s\n' B > "$w/t9"; printf '%s\n' C > "$w/work9"
     ( . "$lib"; nx_commit "$w/snap9" "$w/work9" "$w/t9" test ) 2>/dev/null; rc=$?
     if [ "$rc" = 75 ] && [ "$(cat "$w/t9")" = B ]; then pass '9 commit refusal'; else fail '9 commit refusal' "rc=$rc content=$(cat "$w/t9")"; fi
+
+    # 10-13. search's insert_line, taken from the built script. Parsing needs a
+    # private nix state directory.
+    export NIX_STATE_DIR=$PWD/nix-state NIX_LOG_DIR=$PWD/nix-state
+    mkdir -p nix-state
+    sed -n '/^insert_line() {/,/^}/p' ${search}/bin/nixarchy-search > "$w/insert_line.sh"
+    [ -s "$w/insert_line.sh" ] || { echo "insert_line is not in nixarchy-search any more" >&2; exit 1; }
+    mkins() { printf '%s\n' '{ ... }:' '{' "$@" '}' > "$w/apps.nix"; chmod 640 "$w/apps.nix"; }
+    # Literal backslash-n, as add_option passes it: awk -v turns it into newlines.
+    row='\n  a.b = 1;  #@opt a.b\n'
+    ins() { ( . "$lib"; . "$w/insert_line.sh"; file=$1; insert_line "$2" "$3" ); }
+
+    # 10. Refused while somebody holds the lock; the file is untouched.
+    mkins
+    cp "$w/apps.nix" "$w/apps.before"
+    ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+    holder=$!
+    sleep 1
+    ins "$w/apps.nix" "$row" a.b 2>/dev/null; rc=$?
+    kill "$holder"; wait "$holder" 2>/dev/null || :
+    if [ "$rc" = 75 ] && cmp -s "$w/apps.nix" "$w/apps.before"; then pass '10 insert_line refused under a held lock'; else fail '10 insert_line refused under a held lock' "rc=$rc"; fi
+
+    # 11. A duplicate marker is not written twice.
+    mkins '  a.b = 1;  #@opt a.b'
+    cp "$w/apps.nix" "$w/apps.before"
+    ins "$w/apps.nix" "$row" a.b; rc=$?
+    if [ "$rc" = 2 ] && cmp -s "$w/apps.nix" "$w/apps.before"; then pass '11 insert_line returns 2 on a duplicate'; else fail '11 insert_line returns 2 on a duplicate' "rc=$rc"; fi
+
+    # 12. A symlinked target keeps its link and inode.
+    mkins
+    mv "$w/apps.nix" "$w/real-apps.nix"; ln -s real-apps.nix "$w/apps.nix"
+    ino=$(stat -L -c %i "$w/apps.nix")
+    ins "$w/apps.nix" "$row" a.b; rc=$?
+    if [ "$rc" = 0 ] && [ -L "$w/apps.nix" ] && [ "$(stat -L -c %i "$w/apps.nix")" = "$ino" ] && grep -q '#@opt a.b$' "$w/real-apps.nix"; then
+      pass '12 insert_line keeps a symlinked target'
+    else
+      fail '12 insert_line keeps a symlinked target' "rc=$rc ino=$(stat -L -c %i "$w/apps.nix")/$ino"
+    fi
+    rm -f "$w/apps.nix" "$w/real-apps.nix"
+
+    # 13. A line that would not parse is refused with status 1, file untouched.
+    mkins
+    cp "$w/apps.nix" "$w/apps.before"
+    ins "$w/apps.nix" '\n  a.b = ((;  #@opt a.b\n' a.b 2>/dev/null; rc=$?
+    if [ "$rc" = 1 ] && cmp -s "$w/apps.nix" "$w/apps.before"; then pass '13 insert_line refuses an unparseable result'; else fail '13 insert_line refuses an unparseable result' "rc=$rc"; fi
 
     if [ "$fails" -ne 0 ]; then echo "$fails case(s) failed"; exit 1; fi
     touch $out

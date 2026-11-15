@@ -2919,8 +2919,10 @@ in
                   pkgs.diffutils
                   config.nix.package
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   table=${appAttrTable}
                   nixpkgs=${pkgs.path}
@@ -2955,7 +2957,7 @@ in
                       sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgsOther, ... }:/' "$file"
                     fi
                     if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther'; then
-                      echo "nixarchy: could not add 'pkgsOther' to the first line of $file." >&2
+                      echo "nixarchy: could not add 'pkgsOther' to the first line of $target." >&2
                       echo "Change it by hand to:  { pkgs, pkgsOther, ... }:" >&2
                       restore
                       exit 1
@@ -2974,7 +2976,7 @@ in
                   want_channel=""
                   # --dry-run answers #495: show the diff before touching the
                   # user's file. It costs nothing extra -- everything below
-                  # already edits $file with $backup as the pre-edit copy, so
+                  # already edits $file with $snapshot as the pre-edit copy, so
                   # dry-run's whole job is to diff those two and put $file back.
                   dry_run=false
                   while [ $# -gt 0 ]; do
@@ -3038,6 +3040,7 @@ in
                     # No arguments is not a mistake to scold, it is "show me what
                     # there is" -- which is exactly what the picker answers (#492).
                     if can_pick; then
+                      nx_unlock
                       exec nixarchy-search
                     fi
                     echo "usage: nixarchy-pkg-add [--stable|--unstable] [--dry-run] <nixpkgs-attribute>..." >&2
@@ -3057,10 +3060,24 @@ in
                   # Every edit below is reverted as a unit if the result will not parse. The
                   # file is the user's own NixOS module; leaving it broken would take the whole
                   # system's evaluation down with it, not just this feature.
-                  backup=$(mktemp)
-                  cp "$file" "$backup"
-                  trap 'rm -f "$backup" "$backup.err"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  #
+                  # The edits run on $work, a copy in the state directory; $file is that copy
+                  # from here on and $target is the real file. The real file is written once,
+                  # under the lock, and only if it is still what $snapshot copied.
+                  mkdir -p "$nx_state"
+                  target=$file
+                  snapshot=""
+                  work=""
+                  # Global, so the EXIT trap still sees them (CLAUDE.md §5). exec skips the
+                  # trap, so cleanup also runs before each exec below.
+                  cleanup() { nx_unlock; rm -f "$snapshot" "$work" "$snapshot.err"; }
+                  trap cleanup EXIT
+                  snapshot=$(mktemp -p "$nx_state")
+                  work=$(mktemp -p "$nx_state")
+                  cp "$target" "$snapshot"
+                  cp "$target" "$work"
+                  file=$work
+                  restore() { cp "$snapshot" "$file"; }
 
                   # The list this appends to does not exist in a freshly generated file: the
                   # template is all curated apps and nothing else. Create it once, in place,
@@ -3092,7 +3109,7 @@ in
                     mv "$tmp" "$file"
 
                     if ! grep -q '#@pkgs-end' "$file"; then
-                      echo "nixarchy: could not find the closing '}' of $file." >&2
+                      echo "nixarchy: could not find the closing '}' of $target." >&2
                       echo "Add this to it by hand, then run this again:" >&2
                       echo >&2
                       echo "  environment.systemPackages = with pkgs; [  #@pkgs-begin" >&2
@@ -3102,7 +3119,7 @@ in
                     fi
 
                     if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
-                      echo "nixarchy: $file does not take a 'pkgs' argument, so the list just" >&2
+                      echo "nixarchy: $target does not take a 'pkgs' argument, so the list just" >&2
                       echo "added cannot refer to it. Change its first line to:  { pkgs, ... }:" >&2
                     fi
                   }
@@ -3138,7 +3155,7 @@ in
                     fi
 
                     if grep -qE "#@pkg(-other)? ''${attr//./\\.}\$" "$file"; then
-                      report+=("$attr"$'\t'"present"$'\t'"already in $file")
+                      report+=("$attr"$'\t'"present"$'\t'"already in $target")
                       continue
                     fi
 
@@ -3189,12 +3206,12 @@ in
                           in if r.success then r.value else { ok = false; };
                       in builtins.listToAttrs
                         (map (a: { name = a; value = probe a; }) (builtins.fromJSON attrsJson))" \
-                      2>"$backup.err") || {
+                      2>"$snapshot.err") || {
                       # Not "no match" for every name: an evaluation that failed
                       # outright is a different answer, and the reason matters.
                       restore
                       echo "nixarchy: could not evaluate nixpkgs to check these names:" >&2
-                      tail -5 "$backup.err" >&2
+                      tail -5 "$snapshot.err" >&2
                       exit 1
                     }
                     for attr in "''${to_eval[@]}"; do
@@ -3227,7 +3244,7 @@ in
                       sed -i "/#@pkgs-end/i\\    pkgsOther.$attr  #@pkg-other $attr" "$file"
                       if ! grep -q "#@pkg-other $attr\$" "$file"; then
                         restore
-                        echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
+                        echo "nixarchy: failed to write $attr into $target. Nothing was changed." >&2
                         exit 1
                       fi
                       other_added=true
@@ -3242,7 +3259,7 @@ in
                     # this reporting a package it never wrote. Check the line is really there.
                     if ! grep -q "#@pkg $attr\$" "$file"; then
                       restore
-                      echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
+                      echo "nixarchy: failed to write $attr into $target. Nothing was changed." >&2
                       exit 1
                     fi
                     added+=("$attr")
@@ -3301,6 +3318,7 @@ in
                     # lacks a name, so the way onward is named now (#581).
                     echo "  (if nothing there matches either, nixpkgs may not have it --"
                     echo "   'nixarchy pkg new <url>' drafts a package from its source)"
+                    cleanup
                     exec nixarchy-search "''${missed[@]}"
                   }
 
@@ -3327,7 +3345,7 @@ in
                         grep -q "\"$pn\"" "$file" ||
                           sed -i "/#@unfree-allow/s/ \];/ \"$pn\" ];/" "$file"
                         if ! grep -q "\"$pn\"" "$file"; then
-                          echo "  add \"$pn\" to the allowUnfreePredicate list already in $file"
+                          echo "  add \"$pn\" to the allowUnfreePredicate list already in $target"
                         fi
                       done
                       return 0
@@ -3335,7 +3353,7 @@ in
 
                     if [ -t 0 ]; then
                       printf 'Scaffold a commented allowUnfreePredicate for %s into %s? [Y/n] ' \
-                        "''${unfree_hits[*]}" "$file"
+                        "''${unfree_hits[*]}" "$target"
                       read -r reply || reply=n
                       case "$reply" in
                         [nN]*)
@@ -3366,7 +3384,7 @@ in
                     mv "$tmp" "$file"
 
                     if grep -q '#@unfree-allow' "$file"; then
-                      echo "  scaffolded a commented allowUnfreePredicate in $file -- uncomment it to allow just ''${unfree_hits[*]}"
+                      echo "  scaffolded a commented allowUnfreePredicate in $target -- uncomment it to allow just ''${unfree_hits[*]}"
                     else
                       restore
                       echo "nixarchy: failed to write the allowUnfreePredicate scaffold. Nothing was changed." >&2
@@ -3377,11 +3395,11 @@ in
 
                   if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
                     restore
-                    echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                    echo "nixarchy: that would have left $target unparseable. Nothing was changed." >&2
                     exit 1
                   fi
 
-                  # $file has been edited in place all along, with $backup as
+                  # $file has been a work copy edited in place all along, with $snapshot as
                   # the pre-edit copy every restore above already relies on --
                   # so the diff nobody has seen yet is just the two of them,
                   # compared now that the result is known to parse.
@@ -3396,19 +3414,19 @@ in
                   }
 
                   if [ "$dry_run" = true ] || interactive; then
-                    echo "-- $file --"
-                    diff -u --label "$file (before)" --label "$file (after)" "$backup" "$file" || true
+                    echo "-- $target --"
+                    diff -u --label "$target (before)" --label "$target (after)" "$snapshot" "$file" || true
                     echo
                   fi
 
                   if [ "$dry_run" = true ]; then
                     restore
-                    echo "dry run: nothing written to $file"
+                    echo "dry run: nothing written to $target"
                     exit 0
                   fi
 
                   if interactive; then
-                    printf 'Write this to %s? [Y/n] ' "$file"
+                    printf 'Write this to %s? [Y/n] ' "$target"
                     read -r reply || reply=n
                     case "$reply" in
                       [nN]*)
@@ -3419,7 +3437,13 @@ in
                     esac
                   fi
 
-                  count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
+                  # The one write to the real file. nx_put consumes $work, so nothing
+                  # below reads $file.
+                  nx_lock
+                  nx_commit "$snapshot" "$file" "$target" pkg-add
+
+                  count=$(grep -cE '#@pkg(-other)? ' "$target" || true)
+                  nx_unlock
 
                   # A menu pick runs with no terminal attached, so stdout goes nowhere. Say it
                   # on the desktop instead, clickable, because a rebuild is what is still owed.

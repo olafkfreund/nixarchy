@@ -101,13 +101,15 @@ if [ -e "$draft" ] && [ "$update" != true ]; then
 fi
 # Drafted and built in the state directory; the real draft is untouched until
 # the commit below, so a failed --update never trades an edited draft for nothing.
-work="$nx_state/pkg-new/$name.nix"
+# One directory per run: two drafts of the same name must not share a work file.
 mkdir -p "$nx_state/pkg-new"
-rm -f "$work"
+workdir=$(mktemp -d -p "$nx_state/pkg-new")
+work="$workdir/$name.nix"
 
-# Globals, so the EXIT trap still sees them (CLAUDE.md §5).
+# Globals, so the EXIT trap still sees them (CLAUDE.md §5). rmdir keeps a
+# directory that still holds a failed --update's draft.
 log=""
-trap 'nx_unlock; rm -f "$log"' EXIT
+trap 'nx_unlock; rm -f "$log"; rmdir "$workdir" 2>/dev/null || :' EXIT
 
 # Under the lock: refuse if a draft appeared while this was drafting, then
 # write ours. nx_put keeps a symlinked or edited draft's file.

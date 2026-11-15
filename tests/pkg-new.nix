@@ -187,6 +187,18 @@ pkgs.runCommand "nixarchy-pkg-new"
         || ok "apps.nix is untouched by a failed draft"
     fi
 
+    # -- two failed --update runs keep two drafts, not one shared file -----
+    # Each run drafts in its own directory, so a second run of the same name
+    # cannot overwrite the first's work (or have it committed in its place).
+    rm -rf "$cfg" "$XDG_STATE_HOME/nixarchy/pkg-new"; mkapps
+    mkdir -p "$(dirname "$draft")"; printf '%s\n' '{ }' > "$draft"
+    STUB_NIX_FAIL=1 bash pkg-new.sh --update https://example.org/x/tool > /dev/null 2>&1 || :
+    STUB_NIX_FAIL=1 bash pkg-new.sh --update https://example.org/x/tool > /dev/null 2>&1 || :
+    kept=$(find "$XDG_STATE_HOME/nixarchy/pkg-new" -name tool.nix | wc -l)
+    [ "$kept" = 2 ] \
+      && ok "two failed --update runs each kept their own draft" \
+      || fail "two failed --update runs kept $kept draft(s), not 2: they shared a work file"
+
     # -- a reshaped apps.nix is not edited ---------------------------------
     rm -rf "$cfg"; mkdir -p "$cfg"
     echo '{ ... }: { }' > "$cfg/apps.nix"

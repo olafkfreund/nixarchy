@@ -5,6 +5,7 @@
 let
   testLib = import ./lib.nix { inherit inputs; };
   search = testLib.vmPackage "nixarchy-search";
+  bin = name: "${testLib.vmPackage "nixarchy-${name}"}/bin/nixarchy-${name}";
 in
 pkgs.runCommand "nixarchy-writer-lock"
   {
@@ -173,6 +174,76 @@ pkgs.runCommand "nixarchy-writer-lock"
     cp "$w/apps.nix" "$w/apps.before"
     ins "$w/apps.nix" '\n  a.b = ((;  #@opt a.b\n' a.b 2>/dev/null; rc=$?
     if [ "$rc" = 1 ] && cmp -s "$w/apps.nix" "$w/apps.before"; then pass '13 insert_line refuses an unparseable result'; else fail '13 insert_line refuses an unparseable result' "rc=$rc"; fi
+
+    # The writer matrix: every writer, three ways. (a) refused with exit 75 and the
+    # target untouched while somebody holds the lock; (b) succeeds under the
+    # handshake with that holder still running; (c) keeps a symlinked target's
+    # link and inode. Rows run one after another, each from a freshly written target.
+    export XDG_CONFIG_HOME=$TMPDIR/config
+    export NIXARCHY_TEMPLATES=$TMPDIR/templates
+    cfg=$XDG_CONFIG_HOME/nixarchy
+    real=$TMPDIR/real
+    mkdir -p "$cfg" "$NIXARCHY_TEMPLATES" "$real"
+    printf '%s\n' '{"da":{}}' > "$w/registry.json"
+    export NIXARCHY_LANGUAGE_REGISTRY=$w/registry.json
+    g_apps_off() { printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    # firefox.enable = true;  #@ firefox' '  };' '}'; }
+    g_apps_on() { printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    firefox.enable = true;  #@ firefox' '  };' '}'; }
+    g_svc_none() { printf '%s\n' '{ ... }:' '{' '}'; }
+    g_svc_off() { printf '%s\n' '{ ... }:' '{' '  # services.foo.enable = true;  #@ foo' '}'; }
+    g_svc_on() { printf '%s\n' '{ ... }:' '{' '  services.foo.enable = true;  #@ foo' '}'; }
+    g_pkg() { printf '%s\n' '{ pkgs, ... }:' '{' '  environment.systemPackages = with pkgs; [  #@pkgs-begin' '    ripgrep  #@pkg ripgrep' '  ];  #@pkgs-end' '}'; }
+    g_draft() { printf '%s\n' '{ pkgs, ... }:' '{' '  environment.systemPackages = [' '    # (callPackage ./packages/tool.nix { })  #@draft tool' '  ];' '}'; }
+    g_opt() { printf '%s\n' '{ ... }:' '{' "" '  a.b = 1;  #@opt a.b' '}'; }
+    g_bare() { printf '%s\n' '{ pkgs, ... }:' '{' '}'; }
+    g_apps_off > "$NIXARCHY_TEMPLATES/apps-template.nix"
+    g_svc_off > "$NIXARCHY_TEMPLATES/services-template.nix"
+
+    hold() { ( exec 8>>"$lock"; flock 8; exec sleep 30 ) & holder=$!; sleep 0.5; }
+    unhold() { kill "$holder"; wait "$holder" 2>/dev/null; }
+
+    # row NAME FILE GENERATOR COMMAND...
+    row() {
+      local name=$1 base=$2 gen=$3 t r rc ino
+      shift 3
+      t=$cfg/$base
+      r=$real/$base
+      rm -f "$t" "$r"
+
+      "$gen" > "$t"; chmod 640 "$t"; cp "$t" "$w/m.before"; ino=$(stat -c %i "$t")
+      hold; "$@" > "$w/m.out" 2>&1; rc=$?; unhold
+      if [ "$rc" = 75 ] && cmp -s "$t" "$w/m.before" && [ "$(stat -c %i "$t")" = "$ino" ]; then
+        pass "$name (a) refused under a held lock"
+      else
+        fail "$name (a) refused under a held lock" "rc=$rc same=$(cmp -s "$t" "$w/m.before" && echo yes || echo no) out=$(tail -3 "$w/m.out")"
+      fi
+
+      rm -f "$t"; "$gen" > "$t"
+      hold; NIXARCHY_LOCK_HELD=1 "$@" > "$w/m.out" 2>&1; rc=$?; unhold
+      if [ "$rc" = 0 ] && ! cmp -s "$t" "$w/m.before"; then
+        pass "$name (b) succeeds under the handshake"
+      else
+        fail "$name (b) succeeds under the handshake" "rc=$rc out=$(tail -3 "$w/m.out")"
+      fi
+
+      rm -f "$t"; "$gen" > "$r"; chmod 640 "$r"; ln -s "$r" "$t"; ino=$(stat -c %i "$r")
+      "$@" > "$w/m.out" 2>&1; rc=$?
+      if [ "$rc" = 0 ] && [ -L "$t" ] && [ "$(stat -c %i "$r")" = "$ino" ] && ! cmp -s "$r" "$w/m.before"; then
+        pass "$name (c) keeps a symlinked target"
+      else
+        fail "$name (c) keeps a symlinked target" "rc=$rc link=$([ -L "$t" ] && echo kept || echo lost) ino=$(stat -c %i "$r")/$ino out=$(tail -3 "$w/m.out")"
+      fi
+    }
+
+    row catalogue-diff services.nix g_svc_none ${bin "catalogue-diff"} --add-one services foo
+    row service-enable services.nix g_svc_off ${bin "service-enable"} foo
+    row service-disable services.nix g_svc_on ${bin "service-disable"} foo
+    row language-select services.nix g_svc_none ${bin "language-select"} da
+    row app-enable apps.nix g_apps_off ${bin "app-enable"} firefox
+    row app-disable apps.nix g_apps_on ${bin "app-disable"} firefox
+    row pkg-remove apps.nix g_pkg ${bin "pkg-remove"} ripgrep
+    row pkg-undraft apps.nix g_draft ${bin "pkg-undraft"} tool
+    row opt-remove apps.nix g_opt ${bin "opt-remove"} a.b
+    row pkg-add apps.nix g_bare ${bin "pkg-add"} kdePackages.kdenlive
 
     if [ "$fails" -ne 0 ]; then echo "$fails case(s) failed"; exit 1; fi
     touch $out

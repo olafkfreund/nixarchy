@@ -1826,6 +1826,7 @@
             "home-activation-writes"
             "language-locale"
             "language-select"
+            "writer-lock"
             # The notification history keeps text for the newest rows only (#1663).
             "notification-store"
             # data/bin-ledger.nix, held to its own claim. Also the home of the

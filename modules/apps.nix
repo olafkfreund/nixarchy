@@ -2547,18 +2547,31 @@ in
                   pkgsel=()
                   optsel=()
                   draftsel=()
+                  # A writer refused with 75 because another write holds the lock:
+                  # say which steps already went through, then stop with 75.
+                  ran=()
+                  run_step() {
+                    local rc=0
+                    "$@" || rc=$?
+                    if [ "$rc" -eq 75 ]; then
+                      echo "nixarchy-app-remove: $1 was refused; removed so far: ''${ran[*]:-nothing}" >&2
+                      exit 75
+                    fi
+                    [ "$rc" -eq 0 ] || exit "$rc"
+                    ran+=("$*")
+                  }
                   while IFS=$'\t' read -r kind name; do
                     [ -n "$name" ] || continue
                     case "$kind" in
-                      app) nixarchy-app-disable "$name" ;;
+                      app) run_step nixarchy-app-disable "$name" ;;
                       pkg) pkgsel+=("$name") ;;
                       opt) optsel+=("$name") ;;
                       draft) draftsel+=("$name") ;;
                     esac
                   done <<< "$chosen"
-                  [ ''${#pkgsel[@]} -eq 0 ] || nixarchy-pkg-remove "''${pkgsel[@]}"
-                  [ ''${#optsel[@]} -eq 0 ] || nixarchy-opt-remove "''${optsel[@]}"
-                  [ ''${#draftsel[@]} -eq 0 ] || nixarchy-pkg-undraft "''${draftsel[@]}"
+                  [ ''${#pkgsel[@]} -eq 0 ] || run_step nixarchy-pkg-remove "''${pkgsel[@]}"
+                  [ ''${#optsel[@]} -eq 0 ] || run_step nixarchy-opt-remove "''${optsel[@]}"
+                  [ ''${#draftsel[@]} -eq 0 ] || run_step nixarchy-pkg-undraft "''${draftsel[@]}"
 
                   echo
                   echo "Run 'nixarchy-apply' to rebuild without them."
@@ -4575,10 +4588,10 @@ in
                   # sitting at "Build and switch now?" with nobody there (#1276).
                   if ! flock -n 9; then
                     if [ -n "$yes" ]; then
-                      echo "nixarchy-apply: another apply is running (it may be waiting at a prompt); try again when it finishes" >&2
+                      echo "nixarchy-apply: a write or another apply is running (it may be waiting at a prompt); try again when it finishes" >&2
                       exit 1
                     fi
-                    echo "nixarchy-apply: another apply is running; waiting for it to finish..." >&2
+                    echo "nixarchy-apply: waiting for a write or another apply to finish..." >&2
                     flock 9
                   fi
 

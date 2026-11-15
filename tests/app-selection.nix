@@ -236,8 +236,34 @@ pkgs.runCommand "nixarchy-app-selection"
     sleep 1
     rc=0; NIXARCHY_FLAKE=$PWD/flake timeout 10 "$apply" --yes --no-preview > lock.out 2>&1 || rc=$?
     kill "$holder" 2>/dev/null || true
-    test "$rc" -eq 1 && grep -q 'another apply is running' lock.out ||
+    test "$rc" -eq 1 && grep -q 'a write or another apply is running (it may be waiting at a prompt)' lock.out ||
       bad "a --yes apply waited on (or ignored) a held lock: rc=$rc $(cat lock.out)"
+
+    # Without --yes it waits, and says so. Bounded, so a bug cannot hang the build.
+    lock=$XDG_STATE_HOME/nixarchy/applied/lock
+    ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+    holder=$!
+    sleep 1
+    NIXARCHY_FLAKE=$PWD/flake timeout 60 "$apply" --no-preview < /dev/null > wait.out 2>&1 &
+    waiter=$!
+    sleep 2
+    grep -q 'waiting for a write or another apply to finish' wait.out ||
+      bad "an interactive apply did not say it was waiting: $(cat wait.out)"
+    kill "$holder"; wait "$holder" 2>/dev/null || true
+    wait "$waiter" || true
+
+    # app-remove stops with 75 when a writer is refused, and says what it did.
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    firefox.enable = true;  #@ firefox' '  };' '}' > "$file"
+    cp "$file" remove.before
+    ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+    holder=$!
+    sleep 1
+    rc=0
+    FZF_DEFAULT_OPTS=--filter=firefox PATH=${appDisable}/bin:$PATH timeout 60 "$remove" > remove.out 2>&1 || rc=$?
+    kill "$holder"; wait "$holder" 2>/dev/null || true
+    test "$rc" -eq 75 && grep -q 'nixarchy-app-disable was refused; removed so far: nothing' remove.out &&
+      cmp -s "$file" remove.before ||
+      bad "app-remove did not stop with 75 and report: rc=$rc $(cat remove.out)"
 
     # ---- nixarchy-default-install (#1623) ---------------------------------
     defbin=$PWD/defbin

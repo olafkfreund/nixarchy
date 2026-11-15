@@ -682,7 +682,11 @@
   };
   "omarchy-theme-set-browser-policy" = {
     class = "patch";
-    reason = "New in 4.0.2, it escalates with sudo or pkexec, pins PATH to FHS directories and installs color.json as root under an /etc/sudoers.d rule naming /usr/bin. The escalation goes; the write is the user's.";
+    reason = "New in 4.0.2, it escalates with sudo or pkexec, pins PATH to FHS directories and installs color.json as root under an /etc/sudoers.d rule naming /usr/bin. The escalation goes; the write is the user's and skips non-writable policy roots when browserThemeUser is unset.";
+  };
+  "omarchy-theme-set-browser" = {
+    class = "patch";
+    reason = "Browser accent policy is opt-in through browserThemeUser. Skip root-owned policy directories created by other NixOS browser modules, and recognize canonical user-owned files so repeat theme switches do not rewrite them.";
   };
   "omarchy-theme-set-vscode" = {
     class = "patch";

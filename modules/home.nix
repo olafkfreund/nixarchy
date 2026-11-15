@@ -2549,6 +2549,56 @@ in
         '';
       };
 
+      # A home seeded before #1777 pins ids installed here under another name, and
+      # the dock drops those silently. Repaired through the dock's own writer.
+      "omarchy/hooks/post-boot.d/dock-pins" = {
+        enable = osConfig.programs.nixarchy.enable or false;
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export PATH=${
+            lib.makeBinPath [
+              cfg.package
+              pkgs.jq
+              pkgs.coreutils
+            ]
+          }:$PATH
+          has_entry() {
+            local d
+            IFS=: read -ra dirs <<<"''${XDG_DATA_HOME:-$HOME/.local/share}:''${XDG_DATA_DIRS:-}"
+            for d in "''${dirs[@]}"; do
+              [[ -n $d && -e $d/applications/$1.desktop ]] && return 0
+            done
+            return 1
+          }
+          [[ -s ''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json ]] || exit 0
+          current=$(omarchy-dock pinned) || exit 0
+          pins=() changed=
+          while IFS= read -r pin; do
+            [[ -n $pin ]] || continue
+            if ! has_entry "$pin"; then
+              for other in "omarchy-$pin" "''${pin}-browser"; do
+                if has_entry "$other"; then
+                  pin=$other changed=1
+                  break
+                fi
+              done
+            fi
+            pins+=("$pin")
+          done <<<"$current"
+          [[ -n $changed ]] || exit 0
+          export OMARCHY_SHELL_IPC_TIMEOUT=''${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
+          for _ in $(seq 1 30); do
+            omarchy-shell shell ping >/dev/null 2>&1 && break
+            sleep 1
+          done
+          omarchy-dock pinned "''${pins[@]}" >/dev/null || exit 0
+          # Its write lands under the running shell, which leaves IPC targets
+          # dead until a restart (#847); this runs once, when a pin changed.
+          omarchy-restart-shell >/dev/null 2>&1
+        '';
+      };
+
       "omarchy/hooks/post-boot.d/theme-fallback" = {
         enable = osConfig.programs.nixarchy.enable or false;
         executable = true;

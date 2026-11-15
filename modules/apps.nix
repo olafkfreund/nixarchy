@@ -163,6 +163,9 @@ let
     "    # ${name}.enable = ${if on then "false" else "true"};  #@ ${name}${suffix}\n"
     + lib.optionalString (app ? option) "    #   ${name}.settings = { };  #@ ${name}.settings\n";
 
+  # The lock and keep-the-file helpers every config writer splices in (#1789).
+  writerLock = builtins.readFile ../pkgs/writer-lock.sh;
+
   insertMissingAppRow = ''
     # apps.nix is seeded once, so an app added to the catalogue later
     # has no row in it. Take the row from the current template and
@@ -172,11 +175,11 @@ let
       [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
       grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
         fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
-      tmp=$(mktemp "$file.XXXXXX")
+      mkdir -p "$nx_state"
+      tmp=$(mktemp -p "$nx_state")
       awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
         "$file" >"$tmp"
-      chmod --reference="$file" "$tmp"
-      mv "$tmp" "$file"
+      nx_put "$tmp" "$file"
       echo "added $id's row from the current catalogue to $file"
     fi
   '';
@@ -1695,8 +1698,11 @@ in
                   pkgs.gnugrep
                   pkgs.gnused
                   pkgs.coreutils
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   add=false
                   # --add-one <part> <id>: just that row (#843). What
                   # nixarchy-service-enable calls when a file predates a row.
@@ -1719,6 +1725,11 @@ in
                     *) usage ;;
                   esac
                   refused=false
+
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  [ "$add" = true ] && nx_lock
 
                   dir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
                   total=0
@@ -1806,7 +1817,8 @@ in
                         refused=true
                         continue
                       fi
-                      tmp=$(mktemp "$user.XXXXXX")
+                      mkdir -p "$nx_state"
+                      tmp=$(mktemp -p "$nx_state")
                       head -n "$((close - 1))" "$user" >"$tmp"
                       {
                         echo ""
@@ -1814,8 +1826,7 @@ in
                         printf '%s' "$rows"
                       } >>"$tmp"
                       tail -n "+$close" "$user" >>"$tmp"
-                      chmod --reference="$user" "$tmp"
-                      mv "$tmp" "$user"
+                      nx_put "$tmp" "$user"
                       echo "  appended to $user"
                     fi
                   done
@@ -1852,8 +1863,10 @@ in
                   pkgs.jq
                   pkgs.gawk
                   cfg.package
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
 
                   # Callers (nixarchy-microvm) read this to learn that a missing
@@ -1883,6 +1896,9 @@ in
                   [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
                   live_row="^[[:space:]]*[^#[:space:]].*#@ $id([[:space:]]|\$)"
+                  tmp=""
+                  gate_ran=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
 
                   # No terminal, a cancel and a refused prompt are all a non-zero gum, so all refuse.
                   refuse() {
@@ -1981,15 +1997,23 @@ in
 
                   if [ "$id" = openssh ] && ! grep -qE "$live_row" "$file"; then
                     openssh_gate
+                    gate_ran=1
+                  fi
+
+                  nx_lock
+                  if [ "$id" = openssh ] && [ -z "$gate_ran" ] && ! grep -qE "$live_row" "$file"; then
+                    nx_refuse "services.nix changed while service-enable was running; run it again"
                   fi
 
                   # A services.nix written before this row existed does not have
                   # it; nothing regenerates the file, so add just that row from
                   # the template, where catalogue-diff puts rows (#843).
                   if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                    if nixarchy-catalogue-diff --add-one services "$id" >/dev/null; then
+                    if nixarchy-catalogue-diff --add-one services "$id" 9>&- >/dev/null; then
                       echo "added the $id row from the template"
                     else
+                      status=$?
+                      [ "$status" -ne 75 ] || exit 75
                       echo "nixarchy: no service '$id' in $file" >&2
                       echo "  The full list is /etc/nixarchy/services-template.nix." >&2
                       exit 1
@@ -2019,17 +2043,16 @@ in
                     tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/services-template.nix"
                     # Must not fall through: the plain line would turn sshd on with passwords.
                     row=$(grep -m1 -E "#@ openssh([[:space:]]|\$)" "$tpl") || refuse "no openssh row in $tpl"
-                    tmp=""
-                    trap 'rm -f "$tmp"' EXIT
-                    tmp=$(mktemp "$file.XXXXXX")
+                    mkdir -p "$nx_state"
+                    tmp=$(mktemp -p "$nx_state")
                     awk -v old="$old" -v row="$row" '$0 ~ old { print row; next } { print }' "$file" >"$tmp"
-                    chmod --reference="$file" "$tmp"
-                    mv "$tmp" "$file"
+                    nx_put "$tmp" "$file"
                   fi
 
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
+                  nx_sed "$file" -E -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/"
 
                   queued=$(grep -cE "^[[:space:]]*[^#[:space:]].*#@ " "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "$id queued -- not enabled yet" \
@@ -2192,8 +2215,11 @@ in
                   pkgs.gnugrep
                   pkgs.coreutils
                   pkgs.jq
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
                   # Test seam: the baked registry is empty on Omarchy v4.0.4.
                   registry="''${NIXARCHY_LANGUAGE_REGISTRY:-${languageRegistry}}"
@@ -2216,6 +2242,11 @@ in
                     exit 2
                   fi
 
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  nx_lock
+
                   [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
                   # A commented-out line does not count as live.
@@ -2234,17 +2265,14 @@ in
                     exit 1
                   fi
 
-                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
-                  tmp=""
-                  trap 'rm -f "$tmp"' EXIT
-                  tmp=$(mktemp "$file.XXXXXX")
+                  mkdir -p "$nx_state"
+                  tmp=$(mktemp -p "$nx_state")
                   awk -v live="$live" -v clear="$clear" -v at="$close" -v new="  programs.nixarchy.language = \"$code\";  #@ language" '
                     $0 ~ live { if (!clear && !done) print new; done = 1; next }
                     !clear && !done && NR == at { print new; done = 1 }
                     { print }
                   ' "$file" >"$tmp"
-                  chmod --reference="$file" "$tmp"
-                  mv "$tmp" "$file"
+                  nx_put "$tmp" "$file"
 
                   if [ "$clear" = 1 ]; then
                     echo "cleared the language in $file; run 'nixarchy-apply' to build it"
@@ -2261,8 +2289,11 @@ in
                   pkgs.gnused
                   pkgs.gnugrep
                   pkgs.coreutils
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
                   id="''${1:?usage: nixarchy-service-disable <service-id>}"
 
@@ -2272,6 +2303,9 @@ in
                       exit 2
                       ;;
                   esac
+
+                  trap nx_unlock EXIT
+                  nx_lock
 
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2284,7 +2318,7 @@ in
                   # the same as uninstalling it: the daemon stops, and whatever it
                   # wrote -- a Syncthing database, an authorised key -- stays where
                   # it is. Removing that is the user's call and not this script's.
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                  nx_sed "$file" -E -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/"
                   echo "disabled $id in $file"
                   echo "run 'nixarchy-apply' to rebuild without it"
                 '';
@@ -2298,8 +2332,10 @@ in
                   pkgs.gawk
                   pkgs.coreutils
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                   id="''${1:?usage: nixarchy-app-enable <app-id>}"
@@ -2307,6 +2343,7 @@ in
                   # A menu pick has no terminal, so an error only on stderr is a
                   # pick that silently did nothing. Say it on the desktop too.
                   fail() {
+                    nx_unlock
                     echo "nixarchy: $1" >&2
                     if command -v omarchy-notification-send >/dev/null 2>&1; then
                       omarchy-notification-send -u critical "Could not select $id" "$1" || true
@@ -2318,6 +2355,11 @@ in
                     *[!a-z0-9_-]* | "") fail "'$id' is not an app id" ;;
                   esac
 
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  nx_lock
+
                   [ -f "$file" ] || fail "no $file -- log in again to have it created"
 
                   ${insertMissingAppRow}
@@ -2328,14 +2370,16 @@ in
                   fi
 
                   # Strip one leading '# ' from the marked line, nothing else.
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
-                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)false/\1true/" "$file"
+                  nx_sed "$file" -E \
+                    -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" \
+                    -e "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)false/\1true/"
 
                   # A menu pick runs with no terminal attached, so stdout goes
                   # nowhere and the pick looks like it did nothing at all. Say so
                   # on the desktop instead. -r keeps repeated picks replacing one
                   # notification rather than stacking a wall of them.
                   queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     # --exec makes the notification clickable: nothing is built
                     # until a rebuild runs, so the notification that says so is
@@ -2362,13 +2406,16 @@ in
                   pkgs.gawk
                   pkgs.coreutils
                   cfg.package
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                   id="''${1:?usage: nixarchy-app-disable <app-id>}"
 
                   fail() {
+                    nx_unlock
                     echo "nixarchy: $1" >&2
                     exit 1
                   }
@@ -2379,6 +2426,11 @@ in
                       exit 2
                       ;;
                   esac
+
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'nx_unlock; rm -f "$tmp"' EXIT
+                  nx_lock
 
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2391,8 +2443,9 @@ in
                         echo "$id is already off"
                         exit 0
                       fi
-                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
-                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)true/\1false/" "$file"
+                      nx_sed "$file" -E \
+                        -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" \
+                        -e "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)true/\1false/"
                       ;;
                     *)
                       if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
@@ -2406,11 +2459,12 @@ in
                       fi
 
                       # Comment the line back out, preserving its indentation.
-                      sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                      nx_sed "$file" -E -e "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/"
                       ;;
                   esac
 
                   queued=$(grep -cE "^[[:space:]]*(programs\.nixarchy\.apps\.)?[a-z0-9_-]+\.enable[[:space:]]*=[[:space:]]*true" "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "$id removed from your selection" \
@@ -2493,18 +2547,31 @@ in
                   pkgsel=()
                   optsel=()
                   draftsel=()
+                  # A writer refused with 75 because another write holds the lock:
+                  # say which steps already went through, then stop with 75.
+                  ran=()
+                  run_step() {
+                    local rc=0
+                    "$@" || rc=$?
+                    if [ "$rc" -eq 75 ]; then
+                      echo "nixarchy-app-remove: $1 was refused; removed so far: ''${ran[*]:-nothing}" >&2
+                      exit 75
+                    fi
+                    [ "$rc" -eq 0 ] || exit "$rc"
+                    ran+=("$*")
+                  }
                   while IFS=$'\t' read -r kind name; do
                     [ -n "$name" ] || continue
                     case "$kind" in
-                      app) nixarchy-app-disable "$name" ;;
+                      app) run_step nixarchy-app-disable "$name" ;;
                       pkg) pkgsel+=("$name") ;;
                       opt) optsel+=("$name") ;;
                       draft) draftsel+=("$name") ;;
                     esac
                   done <<< "$chosen"
-                  [ ''${#pkgsel[@]} -eq 0 ] || nixarchy-pkg-remove "''${pkgsel[@]}"
-                  [ ''${#optsel[@]} -eq 0 ] || nixarchy-opt-remove "''${optsel[@]}"
-                  [ ''${#draftsel[@]} -eq 0 ] || nixarchy-pkg-undraft "''${draftsel[@]}"
+                  [ ''${#pkgsel[@]} -eq 0 ] || run_step nixarchy-pkg-remove "''${pkgsel[@]}"
+                  [ ''${#optsel[@]} -eq 0 ] || run_step nixarchy-opt-remove "''${optsel[@]}"
+                  [ ''${#draftsel[@]} -eq 0 ] || run_step nixarchy-pkg-undraft "''${draftsel[@]}"
 
                   echo
                   echo "Run 'nixarchy-apply' to rebuild without them."
@@ -2526,8 +2593,10 @@ in
                   pkgs.fzf
                   config.nix.package
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2547,10 +2616,17 @@ in
 
                   # Reverted as a unit if anything goes wrong, exactly as the
                   # writer's edits are: the file is the user's own NixOS module.
-                  backup=$(mktemp)
+                  # The picker above is unlocked; the file is read again under the lock.
+                  backup=""
+                  trap 'nx_unlock; rm -f "$backup"' EXIT
+                  nx_lock
+                  mkdir -p "$nx_state"
+                  backup=$(mktemp -p "$nx_state")
                   cp "$file" "$backup"
-                  trap 'rm -f "$backup"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  restore() {
+                    local t
+                    t=$(mktemp -p "$nx_state") && cp "$backup" "$t" && nx_put "$t" "$file"
+                  }
 
                   removed=()
                   for attr in "$@"; do
@@ -2574,7 +2650,7 @@ in
                     fi
                     # Exactly the marked line nixarchy-pkg-add wrote, wherever the
                     # user has moved it to.
-                    sed -i -E "\|$re|d" "$file"
+                    nx_sed "$file" -E -e "\|$re|d"
                     removed+=("$attr")
                   done
 
@@ -2587,6 +2663,7 @@ in
                   fi
 
                   count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "''${removed[*]} removed from your selection" \
@@ -2618,8 +2695,10 @@ in
                   pkgs.fzf
                   config.nix.package
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2646,10 +2725,17 @@ in
                   # Reverted as a unit if anything goes wrong, exactly as
                   # nixarchy-pkg-remove's edits are: the file is the user's own
                   # NixOS module.
-                  backup=$(mktemp)
+                  # The picker above is unlocked; the file is read again under the lock.
+                  backup=""
+                  trap 'nx_unlock; rm -f "$backup"' EXIT
+                  nx_lock
+                  mkdir -p "$nx_state"
+                  backup=$(mktemp -p "$nx_state")
                   cp "$file" "$backup"
-                  trap 'rm -f "$backup"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  restore() {
+                    local t
+                    t=$(mktemp -p "$nx_state") && cp "$backup" "$t" && nx_put "$t" "$file"
+                  }
 
                   removed=()
                   for name in "$@"; do
@@ -2672,7 +2758,7 @@ in
                     fi
                     # The marked line wherever the user moved it, commented or
                     # uncommented. Dots escaped: the name lands in a sed address.
-                    sed -i "/#@draft ''${name//./\\.}\$/d" "$file"
+                    nx_sed "$file" -e "/#@draft ''${name//./\\.}\$/d"
                     removed+=("$name")
                   done
 
@@ -2684,6 +2770,7 @@ in
                     exit 1
                   fi
 
+                  nx_unlock
                   if command -v omarchy-notification-send >/dev/null 2>&1; then
                     omarchy-notification-send -r 8471 -t 8000 -u normal \
                       "''${removed[*]} removed from your selection" \
@@ -2730,8 +2817,11 @@ in
                   pkgs.gawk
                   pkgs.fzf
                   config.nix.package
+                  cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
@@ -2751,17 +2841,24 @@ in
                     set -- "''${picked[@]}"
                   fi
 
-                  backup=$(mktemp)
+                  # The picker above is unlocked; the file is read again under the lock.
+                  backup=""
+                  trap 'nx_unlock; rm -f "$backup"' EXIT
+                  nx_lock
+                  mkdir -p "$nx_state"
+                  backup=$(mktemp -p "$nx_state")
                   cp "$file" "$backup"
-                  trap 'rm -f "$backup"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  restore() {
+                    local t
+                    t=$(mktemp -p "$nx_state") && cp "$backup" "$t" && nx_put "$t" "$file"
+                  }
 
                   # String comparison throughout, never a regex: option paths
                   # carry dots, quotes and <name> placeholders, and a path read
                   # as a pattern would delete the wrong line quietly.
                   remove_one() {
                     path=$1
-                    tmp=$(mktemp)
+                    tmp=$(mktemp -p "$nx_state")
                     # `if !` rather than checking $? after: this script runs under
                     # set -e, and a bare failing awk would abort before the caller
                     # could restore the backup.
@@ -2795,7 +2892,7 @@ in
                       rm -f "$tmp"
                       return 1
                     fi
-                    mv "$tmp" "$file"
+                    nx_put "$tmp" "$file"
                   }
 
                   removed=()
@@ -2835,8 +2932,10 @@ in
                   pkgs.diffutils
                   config.nix.package
                   cfg.package # omarchy-notification-send
+                  pkgs.util-linux # flock
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   table=${appAttrTable}
                   nixpkgs=${pkgs.path}
@@ -2871,7 +2970,7 @@ in
                       sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgsOther, ... }:/' "$file"
                     fi
                     if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther'; then
-                      echo "nixarchy: could not add 'pkgsOther' to the first line of $file." >&2
+                      echo "nixarchy: could not add 'pkgsOther' to the first line of $target." >&2
                       echo "Change it by hand to:  { pkgs, pkgsOther, ... }:" >&2
                       restore
                       exit 1
@@ -2890,7 +2989,7 @@ in
                   want_channel=""
                   # --dry-run answers #495: show the diff before touching the
                   # user's file. It costs nothing extra -- everything below
-                  # already edits $file with $backup as the pre-edit copy, so
+                  # already edits $file with $snapshot as the pre-edit copy, so
                   # dry-run's whole job is to diff those two and put $file back.
                   dry_run=false
                   while [ $# -gt 0 ]; do
@@ -2954,6 +3053,7 @@ in
                     # No arguments is not a mistake to scold, it is "show me what
                     # there is" -- which is exactly what the picker answers (#492).
                     if can_pick; then
+                      nx_unlock
                       exec nixarchy-search
                     fi
                     echo "usage: nixarchy-pkg-add [--stable|--unstable] [--dry-run] <nixpkgs-attribute>..." >&2
@@ -2973,10 +3073,24 @@ in
                   # Every edit below is reverted as a unit if the result will not parse. The
                   # file is the user's own NixOS module; leaving it broken would take the whole
                   # system's evaluation down with it, not just this feature.
-                  backup=$(mktemp)
-                  cp "$file" "$backup"
-                  trap 'rm -f "$backup" "$backup.err"' EXIT
-                  restore() { cp "$backup" "$file"; }
+                  #
+                  # The edits run on $work, a copy in the state directory; $file is that copy
+                  # from here on and $target is the real file. The real file is written once,
+                  # under the lock, and only if it is still what $snapshot copied.
+                  mkdir -p "$nx_state"
+                  target=$file
+                  snapshot=""
+                  work=""
+                  # Global, so the EXIT trap still sees them (CLAUDE.md §5). exec skips the
+                  # trap, so cleanup also runs before each exec below.
+                  cleanup() { nx_unlock; rm -f "$snapshot" "$work" "$snapshot.err"; }
+                  trap cleanup EXIT
+                  snapshot=$(mktemp -p "$nx_state")
+                  work=$(mktemp -p "$nx_state")
+                  cp "$target" "$snapshot"
+                  cp "$target" "$work"
+                  file=$work
+                  restore() { cp "$snapshot" "$file"; }
 
                   # The list this appends to does not exist in a freshly generated file: the
                   # template is all curated apps and nothing else. Create it once, in place,
@@ -3008,7 +3122,7 @@ in
                     mv "$tmp" "$file"
 
                     if ! grep -q '#@pkgs-end' "$file"; then
-                      echo "nixarchy: could not find the closing '}' of $file." >&2
+                      echo "nixarchy: could not find the closing '}' of $target." >&2
                       echo "Add this to it by hand, then run this again:" >&2
                       echo >&2
                       echo "  environment.systemPackages = with pkgs; [  #@pkgs-begin" >&2
@@ -3018,7 +3132,7 @@ in
                     fi
 
                     if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
-                      echo "nixarchy: $file does not take a 'pkgs' argument, so the list just" >&2
+                      echo "nixarchy: $target does not take a 'pkgs' argument, so the list just" >&2
                       echo "added cannot refer to it. Change its first line to:  { pkgs, ... }:" >&2
                     fi
                   }
@@ -3054,7 +3168,7 @@ in
                     fi
 
                     if grep -qE "#@pkg(-other)? ''${attr//./\\.}\$" "$file"; then
-                      report+=("$attr"$'\t'"present"$'\t'"already in $file")
+                      report+=("$attr"$'\t'"present"$'\t'"already in $target")
                       continue
                     fi
 
@@ -3105,12 +3219,12 @@ in
                           in if r.success then r.value else { ok = false; };
                       in builtins.listToAttrs
                         (map (a: { name = a; value = probe a; }) (builtins.fromJSON attrsJson))" \
-                      2>"$backup.err") || {
+                      2>"$snapshot.err") || {
                       # Not "no match" for every name: an evaluation that failed
                       # outright is a different answer, and the reason matters.
                       restore
                       echo "nixarchy: could not evaluate nixpkgs to check these names:" >&2
-                      tail -5 "$backup.err" >&2
+                      tail -5 "$snapshot.err" >&2
                       exit 1
                     }
                     for attr in "''${to_eval[@]}"; do
@@ -3143,7 +3257,7 @@ in
                       sed -i "/#@pkgs-end/i\\    pkgsOther.$attr  #@pkg-other $attr" "$file"
                       if ! grep -q "#@pkg-other $attr\$" "$file"; then
                         restore
-                        echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
+                        echo "nixarchy: failed to write $attr into $target. Nothing was changed." >&2
                         exit 1
                       fi
                       other_added=true
@@ -3158,7 +3272,7 @@ in
                     # this reporting a package it never wrote. Check the line is really there.
                     if ! grep -q "#@pkg $attr\$" "$file"; then
                       restore
-                      echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
+                      echo "nixarchy: failed to write $attr into $target. Nothing was changed." >&2
                       exit 1
                     fi
                     added+=("$attr")
@@ -3217,6 +3331,7 @@ in
                     # lacks a name, so the way onward is named now (#581).
                     echo "  (if nothing there matches either, nixpkgs may not have it --"
                     echo "   'nixarchy pkg new <url>' drafts a package from its source)"
+                    cleanup
                     exec nixarchy-search "''${missed[@]}"
                   }
 
@@ -3243,7 +3358,7 @@ in
                         grep -q "\"$pn\"" "$file" ||
                           sed -i "/#@unfree-allow/s/ \];/ \"$pn\" ];/" "$file"
                         if ! grep -q "\"$pn\"" "$file"; then
-                          echo "  add \"$pn\" to the allowUnfreePredicate list already in $file"
+                          echo "  add \"$pn\" to the allowUnfreePredicate list already in $target"
                         fi
                       done
                       return 0
@@ -3251,7 +3366,7 @@ in
 
                     if [ -t 0 ]; then
                       printf 'Scaffold a commented allowUnfreePredicate for %s into %s? [Y/n] ' \
-                        "''${unfree_hits[*]}" "$file"
+                        "''${unfree_hits[*]}" "$target"
                       read -r reply || reply=n
                       case "$reply" in
                         [nN]*)
@@ -3282,7 +3397,7 @@ in
                     mv "$tmp" "$file"
 
                     if grep -q '#@unfree-allow' "$file"; then
-                      echo "  scaffolded a commented allowUnfreePredicate in $file -- uncomment it to allow just ''${unfree_hits[*]}"
+                      echo "  scaffolded a commented allowUnfreePredicate in $target -- uncomment it to allow just ''${unfree_hits[*]}"
                     else
                       restore
                       echo "nixarchy: failed to write the allowUnfreePredicate scaffold. Nothing was changed." >&2
@@ -3293,11 +3408,11 @@ in
 
                   if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
                     restore
-                    echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                    echo "nixarchy: that would have left $target unparseable. Nothing was changed." >&2
                     exit 1
                   fi
 
-                  # $file has been edited in place all along, with $backup as
+                  # $file has been a work copy edited in place all along, with $snapshot as
                   # the pre-edit copy every restore above already relies on --
                   # so the diff nobody has seen yet is just the two of them,
                   # compared now that the result is known to parse.
@@ -3312,19 +3427,19 @@ in
                   }
 
                   if [ "$dry_run" = true ] || interactive; then
-                    echo "-- $file --"
-                    diff -u --label "$file (before)" --label "$file (after)" "$backup" "$file" || true
+                    echo "-- $target --"
+                    diff -u --label "$target (before)" --label "$target (after)" "$snapshot" "$file" || true
                     echo
                   fi
 
                   if [ "$dry_run" = true ]; then
                     restore
-                    echo "dry run: nothing written to $file"
+                    echo "dry run: nothing written to $target"
                     exit 0
                   fi
 
                   if interactive; then
-                    printf 'Write this to %s? [Y/n] ' "$file"
+                    printf 'Write this to %s? [Y/n] ' "$target"
                     read -r reply || reply=n
                     case "$reply" in
                       [nN]*)
@@ -3335,7 +3450,13 @@ in
                     esac
                   fi
 
-                  count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
+                  # The one write to the real file. nx_put consumes $work, so nothing
+                  # below reads $file.
+                  nx_lock
+                  nx_commit "$snapshot" "$file" "$target" pkg-add
+
+                  count=$(grep -cE '#@pkg(-other)? ' "$target" || true)
+                  nx_unlock
 
                   # A menu pick runs with no terminal attached, so stdout goes nowhere. Say it
                   # on the desktop instead, clickable, because a rebuild is what is still owed.
@@ -3401,8 +3522,12 @@ in
                   # "cannot draft this", not "git is missing".
                   pkgs.git
                   config.nix.package
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
-                text = lib.replaceStrings [ "@nixpkgs@" ] [ "${pkgs.path}" ] (builtins.readFile ../pkgs/pkg-new.sh);
+                text = lib.replaceStrings [ "@nixpkgs@" "@writerLock@" ] [ "${pkgs.path}" writerLock ] (
+                  builtins.readFile ../pkgs/pkg-new.sh
+                );
               })
 
               # Why: modules/AGENTS.md#search-everything-this-machine-could-install-and-r
@@ -3417,8 +3542,11 @@ in
                   pkgs.fzf
                   pkgs.curl
                   config.nix.package
+                  pkgs.util-linux # flock
+                  cfg.package # omarchy-notification-send
                 ];
                 text = ''
+                  ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   cache="''${XDG_CACHE_HOME:-$HOME/.cache}/nixarchy"
                   index="$cache/index.tsv"
@@ -3674,24 +3802,54 @@ in
 
                   [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
-                  backup=$(mktemp)
-                  cp "$file" "$backup"
-                  trap 'rm -f "$backup" "$selected" "$applied" "$shown"' EXIT
+                  # Each insert takes the lock itself and is checked and written alone;
+                  # nothing is held between them, and the writers called below take
+                  # their own.
+                  trap 'nx_unlock; rm -f "$selected" "$applied" "$shown"' EXIT
 
                   changed=0
+                  refused=0
                   scaffolded=0
                   written=0
 
                   # Options are written at the module's top level, before its closing brace.
                   # Nothing here parses Nix: the brace is found textually and the result is
-                  # checked with nix-instantiate before anything is kept.
+                  # checked with nix-instantiate before anything is kept. Under the lock,
+                  # one insert at a time: 0 written, 1 would not parse (file untouched),
+                  # 2 the option is already there.
                   insert_line() {
-                    tmp=$(mktemp)
-                    awk -v payload="$1" '
+                    local payload=$1 opt=$2 tmp
+                    nx_lock
+                    if grep -q "#@opt $opt\$" "$file"; then
+                      nx_unlock
+                      return 2
+                    fi
+                    mkdir -p "$nx_state"
+                    tmp=$(mktemp -p "$nx_state")
+                    awk -v payload="$payload" '
                       !ins && /^}[[:space:]]*$/ { printf "%s", payload; ins = 1 }
                       { print }
                     ' "$file" > "$tmp"
-                    mv "$tmp" "$file"
+                    if ! nix-instantiate --parse "$tmp" >/dev/null 2>&1; then
+                      rm -f "$tmp"
+                      nx_unlock
+                      return 1
+                    fi
+                    nx_put "$tmp" "$file"
+                    nx_unlock
+                  }
+
+                  # Says what insert_line's status means; returns 0 only when it wrote.
+                  inserted() {
+                    case "$1" in
+                      0) return 0 ;;
+                      2) echo "$2 is already in $file" ;;
+                      *)
+                        refused=1
+                        echo "nixarchy: that would have left $file unparseable. Nothing was changed for $2." >&2
+                        ;;
+                    esac
+                    return 1
                   }
 
                   # One option's default or example, structured, straight out of
@@ -3760,10 +3918,13 @@ in
                     esac
 
                     if [ -n "$value" ]; then
-                      insert_line "\n  $path = $value;  #@opt $path\n"
-                      echo "set $path = $value"
-                      changed=1
-                      written=$((written + 1))
+                      status=0
+                      insert_line "\n  $path = $value;  #@opt $path\n" "$path" || status=$?
+                      if inserted "$status" "$path"; then
+                        echo "set $path = $value"
+                        changed=1
+                        written=$((written + 1))
+                      fi
                       return 0
                     fi
 
@@ -3797,13 +3958,16 @@ in
                       fi
                       printf '  # %s = ;  #@opt %s\n' "$path" "$path"
                     } > "$cache/scaffold.$$"
+                    status=0
                     insert_line "$(cat "$cache/scaffold.$$")
-                  "
+                  " "$path" || status=$?
                     rm -f "$cache/scaffold.$$"
-                    echo "scaffolded $path (commented out -- set the value and uncomment it)"
-                    changed=1
-                    written=$((written + 1))
-                    scaffolded=$((scaffolded + 1))
+                    if inserted "$status" "$path"; then
+                      echo "scaffolded $path (commented out -- set the value and uncomment it)"
+                      changed=1
+                      written=$((written + 1))
+                      scaffolded=$((scaffolded + 1))
+                    fi
                   }
 
                   # Why: modules/AGENTS.md#ask-flathub-org-directly
@@ -3908,13 +4072,7 @@ in
                     [ "$pre" = "$(cksum < "$file")" ] || changed=1
                   fi
 
-                  [ "$changed" = 1 ] || exit 0
-
-                  if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
-                    cp "$backup" "$file"
-                    echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
-                    exit 1
-                  fi
+                  [ "$changed" = 1 ] || exit "$refused"
 
                   if [ "$scaffolded" -gt 0 ]; then
                     echo
@@ -3929,6 +4087,7 @@ in
                     echo
                     echo "run 'nixarchy-apply' when you have picked everything you want"
                   fi
+                  [ "$refused" = 0 ]
                 '';
               })
 
@@ -4429,10 +4588,10 @@ in
                   # sitting at "Build and switch now?" with nobody there (#1276).
                   if ! flock -n 9; then
                     if [ -n "$yes" ]; then
-                      echo "nixarchy-apply: another apply is running (it may be waiting at a prompt); try again when it finishes" >&2
+                      echo "nixarchy-apply: a write or another apply is running (it may be waiting at a prompt); try again when it finishes" >&2
                       exit 1
                     fi
-                    echo "nixarchy-apply: another apply is running; waiting for it to finish..." >&2
+                    echo "nixarchy-apply: waiting for a write or another apply to finish..." >&2
                     flock 9
                   fi
 

@@ -1,4 +1,12 @@
 { pkgs }:
+let
+  writerLock = builtins.readFile ../pkgs/writer-lock.sh;
+  pkgNew = pkgs.writeText "pkg-new.sh" (
+    pkgs.lib.replaceStrings [ "@nixpkgs@" "@writerLock@" ] [ "/stub-nixpkgs" writerLock ] (
+      builtins.readFile ../pkgs/pkg-new.sh
+    )
+  );
+in
 # `nixarchy pkg new` against stub nix-init and nix, offline.
 #
 # What only this check can reach: the command's promises that need a network
@@ -21,14 +29,16 @@ pkgs.runCommand "nixarchy-pkg-new"
       pkgs.gnused
       pkgs.gawk
       pkgs.coreutils
+      pkgs.util-linux
     ];
   }
   ''
     export HOME=$PWD/home
     export XDG_CONFIG_HOME=$HOME/.config
+    export XDG_STATE_HOME=$PWD/state
     mkdir -p "$HOME" stub
 
-    sed 's|@nixpkgs@|/stub-nixpkgs|' ${../pkgs/pkg-new.sh} > pkg-new.sh
+    cp ${pkgNew} pkg-new.sh
 
     # A draft the way headless nix-init leaves one for Rust: the src hash
     # prefetched, the cargoHash a placeholder only a build can name.
@@ -44,7 +54,9 @@ pkgs.runCommand "nixarchy-pkg-new"
     # the network. STUB_NIX_FAIL=1 is a build that is simply broken.
     cat > stub/nix <<'EOF'
     #!/bin/sh
-    draft=$(ls "$XDG_CONFIG_HOME"/nixarchy/packages/*.nix)
+    # The draft is named in the --expr argument, the last one.
+    for expr; do :; done
+    draft=$(printf '%s' "$expr" | sed 's/.*callPackage \(.*\) { }$/\1/')
     if [ "''${STUB_NIX_FAIL:-}" = 1 ]; then echo "error: builder failed with exit code 1" >&2; exit 1; fi
     if grep -q 'sha256-GOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOT=' "$draft"; then exit 0; fi
     echo "error: hash mismatch in fixed-output derivation:" >&2
@@ -132,6 +144,23 @@ pkgs.runCommand "nixarchy-pkg-new"
         || fail "--update wrote a second #@draft line into apps.nix"
     fi
 
+    # -- --update through a symlinked draft keeps the link and the inode ----
+    echo '# my edits' >> "$draft"
+    mv "$draft" "$cfg/real-draft.nix"; ln -s ../real-draft.nix "$draft"
+    ino=$(stat -L -c %i "$draft")
+    if ! o=$(bash pkg-new.sh --update https://example.org/x/tool 2>&1); then
+      printf '%s\n' "$o" | sed 's/^/          | /'
+      fail "--update through a symlinked draft failed"
+    else
+      [ -L "$draft" ] && [ "$(stat -L -c %i "$draft")" = "$ino" ] \
+        && ok "--update kept the symlink and the draft's inode" \
+        || fail "--update replaced the symlinked draft"
+      grep -q '# my edits' "$cfg/real-draft.nix" \
+        && fail "--update left the old content behind the link" \
+        || ok "--update wrote the new draft through the link"
+    fi
+    rm -f "$draft" "$cfg/real-draft.nix"; printf '%s\n' '{ }' > "$draft"
+
     # -- --update, but nix-init fails: the edited draft comes back ---------
     echo '# my edits' >> "$draft"
     if o=$(STUB_INIT_FAIL=1 bash pkg-new.sh --update https://example.org/x/tool 2>&1); then
@@ -157,6 +186,18 @@ pkgs.runCommand "nixarchy-pkg-new"
         && fail "a draft that does not build was still added to apps.nix" \
         || ok "apps.nix is untouched by a failed draft"
     fi
+
+    # -- two failed --update runs keep two drafts, not one shared file -----
+    # Each run drafts in its own directory, so a second run of the same name
+    # cannot overwrite the first's work (or have it committed in its place).
+    rm -rf "$cfg" "$XDG_STATE_HOME/nixarchy/pkg-new"; mkapps
+    mkdir -p "$(dirname "$draft")"; printf '%s\n' '{ }' > "$draft"
+    STUB_NIX_FAIL=1 bash pkg-new.sh --update https://example.org/x/tool > /dev/null 2>&1 || :
+    STUB_NIX_FAIL=1 bash pkg-new.sh --update https://example.org/x/tool > /dev/null 2>&1 || :
+    kept=$(find "$XDG_STATE_HOME/nixarchy/pkg-new" -name tool.nix | wc -l)
+    [ "$kept" = 2 ] \
+      && ok "two failed --update runs each kept their own draft" \
+      || fail "two failed --update runs kept $kept draft(s), not 2: they shared a work file"
 
     # -- a reshaped apps.nix is not edited ---------------------------------
     rm -rf "$cfg"; mkdir -p "$cfg"

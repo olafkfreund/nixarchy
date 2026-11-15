@@ -21,12 +21,14 @@ pkgs.runCommand "nixarchy-sshd-enable"
       gnugrep
       gnused
       python3
+      util-linux
     ];
   }
   ''
     fails=0
     export HOME=$PWD/home
     export XDG_CONFIG_HOME=$PWD/config
+    export XDG_STATE_HOME=$PWD/state
     export NIXARCHY_TEMPLATES=$PWD/templates
     export PATH=${catalogueDiff}/bin:$PATH
     mkdir -p "$HOME" "$XDG_CONFIG_HOME/nixarchy" "$NIXARCHY_TEMPLATES"
@@ -232,7 +234,25 @@ pkgs.runCommand "nixarchy-sshd-enable"
         grep -qxF '# no keys' "$HOME/.ssh/authorized_keys"
     }
 
-    for n in $(seq 1 24); do run_case "$n" "case$n"; done
+    case25() {
+      reset_case
+      sed -i '/#@ openssh/ s/^[[:space:]]*# /  /' "$file"
+      lock=$XDG_STATE_HOME/nixarchy/applied/lock
+      mkdir -p "$(dirname "$lock")"
+      ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+      holder=$!
+      sleep 1
+      "$enable" openssh </dev/null >result 2>err25 &
+      worker=$!
+      sleep 1
+      sed -i '/#@ openssh/ s/^/  # /' "$file"
+      kill "$holder"; wait "$holder" 2>/dev/null || :
+      rc=0; wait "$worker" || rc=$?
+      [ "$rc" -eq 75 ] && grep -qF 'changed while' err25 &&
+        grep -qE '^[[:space:]]*#[[:space:]]*programs[.]nixarchy[.]services[.]openssh[.]enable.*#@ openssh' "$file"
+    }
+
+    for n in $(seq 1 25); do run_case "$n" "case$n"; done
     [ "$fails" -eq 0 ]
     echo 'sshd-enable: every case passed'
     touch $out

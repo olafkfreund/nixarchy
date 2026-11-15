@@ -18,6 +18,7 @@ pkgs.runCommand "nixarchy-language-select"
     fails=0
     bad() { echo "  FAILED  $1"; fails=$((fails + 1)); }
     export XDG_CONFIG_HOME=$PWD/cfg
+    export XDG_STATE_HOME=$PWD/state
     mkdir -p "$XDG_CONFIG_HOME/nixarchy"
     file=$XDG_CONFIG_HOME/nixarchy/services.nix
     printf '%s\n' '{"da":{},"fr":{}}' > registry.json

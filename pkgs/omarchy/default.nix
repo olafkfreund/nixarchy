@@ -979,11 +979,18 @@ stdenvNoCC.mkDerivation (finalAttrs: {
               'HOST_PATH=/run/current-system/sw/bin/omarchy-chromium-ytdlp-host'
 
             # Why: pkgs/AGENTS.md#the-browser-theme-policy-and-why-402-broke-it
+            substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-browser \
+              --replace-fail 'saw_any=false' \
+              "$(cat ${./browser-theme-writable.sh})"$'\nsaw_any=false' \
+              --replace-fail "stat -c '%U:%G %a'" "stat -c '%u %a'" \
+              --replace-fail 'root:root 644' '$EUID 644'
             substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-browser-policy \
               --replace-fail 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin' \
               'export PATH=${lib.makeBinPath [ coreutils ]}' \
               --replace-fail 'install -m 0644 -o root -g root -T' \
-              'install -m 0644 -T'
+              'install -m 0644 -T' \
+              --replace-fail '[[ -d $policy_dir && ! -L $policy_dir ]]' \
+              '[[ -d $policy_dir && ! -L $policy_dir && -w $policy_dir ]]'
 
             # The escalation itself, and the /usr/bin path it re-execs. sed ranges
             # rather than more --replace-fail: the blocks they delete quote both '
@@ -1306,6 +1313,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # The dock drops a pin with no entry of that id, silently, so a pinned
                     # web app (X, YouTube) follows its entry to the prefixed name (#1777).
                     shell_json=$out/share/omarchy/config/omarchy/shell.json
+                    # nixpkgs names Chromium's entry chromium-browser.desktop, Arch's chromium (#1777).
+                    ${jq}/bin/jq '.dock.pinned |= map(if . == "chromium" then "chromium-browser" else . end)' \
+                      "$shell_json" > shell.json.tmp && mv shell.json.tmp "$shell_json"
                     pins=$(${jq}/bin/jq -r '.dock.pinned[]?' "$shell_json") || exit 1
                     for pin in $pins; do
                       if [ ! -e "$out/share/applications/$pin.desktop" ] && [ -e "$out/share/applications/omarchy-$pin.desktop" ]; then

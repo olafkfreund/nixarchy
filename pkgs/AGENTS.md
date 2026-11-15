@@ -466,6 +466,14 @@ that does work here.
 Moved here from `pkgs/omarchy/default.nix`'s install phase by #997, with a
 `# Why:` pointer left at the code.
 
+Other NixOS browser modules create root-owned policy directories even with
+`browserThemeUser = null`. Existence is therefore not an opt-in: the caller
+and writer skip non-writable roots. Otherwise every theme change reports a
+browser retint failure on the default configuration. Canonical policy files
+are checked against the writing user's uid, so an unchanged accent is a no-op.
+`checks.theme-gnome-gtk` exercises the packaged caller and writer against both
+read-only and writable directories, including a mixed set.
+
 <a id="the-agent-skills-upstream-writes-for-arch"></a>
 ### The agent skills, which upstream writes for Arch
 

@@ -72,6 +72,22 @@ let
       -pix_fmt yuv420p $out/loop.mp4
   '';
 
+  # Each dock pin with no <pin>.desktop on the session's data path: the dock
+  # drops those, silently (#1777). Reads what the dock reads, defaults included.
+  dockUnpinned = pkgs.writeShellScript "dock-unpinned" ''
+    set -uo pipefail
+    pins=$(omarchy-dock pinned) || { echo "(omarchy-dock pinned failed)"; exit 0; }
+    [[ -n $pins ]] || { echo "(no pins read)"; exit 0; }
+    IFS=: read -ra dirs <<<"''${XDG_DATA_HOME:-$HOME/.local/share}:''${XDG_DATA_DIRS:-}"
+    while IFS= read -r pin; do
+      found=
+      for d in "''${dirs[@]}"; do
+        [[ -n $d && -e $d/applications/$pin.desktop ]] && found=1 && break
+      done
+      [[ -n $found ]] || echo "$pin"
+    done <<<"$pins"
+  '';
+
   # A real published Omarchy theme, pinned. `omarchy theme install` is the
   # sibling of `omarchy plugin add`: it clones a git URL at runtime, past the
   # same omarchy-git-url-check, into ~/.config/omarchy -- so it depends on the
@@ -2944,7 +2960,21 @@ pkgs.testers.runNixOSTest {
     # Lua-era Hyprland reports an o.bind's dispatcher as `HL.Dispatcher(exec_cmd)`
     # with an index for `arg`, never the command text -- so the bind is found by
     # what it does expose: its description, key and modifiers (Super 64 + Shift 1).
-    kill = [b for b in json.loads(aim("hyprctl binds -j"))
+    # Hyprland drops an IPC peer on a write error other than EAGAIN, and hyprctl
+    # then prints the prefix and exits 0; binds is the one reply big enough to
+    # wait on EAGAIN, so a loaded runner can cut it short (#1785). Re-read, loudly.
+    bad = []
+    for _ in range(3):
+        raw = aim("hyprctl binds -j")
+        try:
+            binds = json.loads(raw)
+            break
+        except json.JSONDecodeError as e:
+            bad.append(f"{len(raw)} chars ({e})")
+            machine.log(f"hyprctl binds -j was cut short (#1785): {bad[-1]}")
+    else:
+        raise AssertionError(f"hyprctl binds -j never returned whole JSON: {bad}")
+    kill = [b for b in binds
             if b.get("description") == "ai-mirror: stop agent control"
             and b.get("key", "").upper() == "ESCAPE" and b.get("modmask") == 65]
     assert kill, (
@@ -3326,6 +3356,33 @@ pkgs.testers.runNixOSTest {
     machine.succeed(as_user("cmp /tmp/shell.json.bak ~/.config/omarchy/shell.json"))
     print("a shell.json written under the running shell is recovered by "
           "omarchy-restart-shell, with the file unchanged")
+
+    # ---- every dock pin names an installed desktop entry (#1777) ----------
+    # Dock.qml keeps a pin only when DesktopEntries.byId finds it, and drops
+    # the rest with no message. A login shell, for the session's XDG_DATA_DIRS.
+    def dock_unpinned():
+        return machine.succeed("su - omarchy -c '${dockUnpinned}'").split("\n")
+    unpinned = [p for p in dock_unpinned() if p]
+    assert not unpinned, f"the dock drops these pins, which have no entry of that id: {unpinned}"
+    # A home seeded before the fix pins chromium, whose entry is
+    # chromium-browser here. The post-boot hook repairs it through the dock's
+    # own writer. Proven stale first, so the hook has something to do.
+    pins_before = machine.succeed(as_user("omarchy-dock pinned")).split()
+    stale = [p for p in pins_before if p != "chromium-browser"]
+    machine.succeed(as_user("omarchy-dock pinned chromium " + " ".join(stale)))
+    assert "chromium" in dock_unpinned(), "the injected chromium pin resolves; the hook test proves nothing"
+    machine.succeed("su - omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+                    " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+                    " ~/.config/omarchy/hooks/post-boot.d/dock-pins'")
+    pins_after = machine.succeed(as_user("omarchy-dock pinned")).split()
+    assert pins_after[0] == "chromium-browser", f"the dock-pins hook left {pins_after}"
+    unpinned = [p for p in dock_unpinned() if p]
+    assert not unpinned, f"after the hook, the dock still drops {unpinned}"
+    machine.wait_until_succeeds(as_user("omarchy-shell shell ping"), timeout=60)
+    machine.succeed(as_user("omarchy-dock pinned " + " ".join(pins_before)))
+    machine.succeed(as_user("omarchy-restart-shell"))
+    machine.wait_until_succeeds(as_user("omarchy-shell shell ping"), timeout=60)
+    print(f"every dock pin resolves, and a stale chromium pin is repaired: {pins_after}")
 
     # ---- panel loaders survive a plugin change (#1155) --------------------
     #

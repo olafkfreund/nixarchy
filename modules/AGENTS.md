@@ -36,6 +36,14 @@ working:
 
 ## Working here
 
+The theme engine's GTK 3 overrides need `adw-gtk3`; install it only while
+the engine and GTK target are enabled. `pkgs/theme-engine.nix` adapts the
+pinned engine's `/usr/share/{icons,themes}` lookups to the NixOS system
+profile, using the consumer's pkgs. The module default stays overridable,
+and the Omarchroma plugin receives that same selected engine rather than
+silently invoking the input's unmodified package. `checks.theme-gnome-gtk`
+checks the target's on/off states, a custom package, and actual theme lookup.
+
 - An option added without a `checks.options` assertion in both states is not
   finished.
 - `writeShellApplication` prepends `runtimeInputs` to the caller's PATH. A

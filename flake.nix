@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/7ae4b419e36f18fa5743556e379e4b0154171949";
+      url = "github:0xc000022070/zen-browser-flake/46c4140b55328bc3ee32f22c42185bc534998a1d";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -131,7 +131,7 @@
 
     # Why: docs/internals/flake.md#declarative-secrets-adopted-for-one-concrete-reaso
     sops-nix = {
-      url = "github:Mic92/sops-nix/b18e01ce148eb3efff5de2f2d3181ca53b2b2a54";
+      url = "github:Mic92/sops-nix/11e5885d241743ff0193465d533b20e754bc3ce0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

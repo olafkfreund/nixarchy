@@ -1135,6 +1135,7 @@ in
     programs = {
       nixarchyThemeEngine = {
         enable = lib.mkDefault (cfg.user != null);
+        package = lib.mkDefault (import ../pkgs/theme-engine.nix { inherit inputs pkgs; });
         user = lib.mkDefault (if cfg.user != null then cfg.user else "omarchy");
         managePlugin = false;
       };
@@ -1487,6 +1488,9 @@ in
             adwaita-icon-theme
           ]
         )
+        ++ lib.optionals (
+          config.programs.nixarchyThemeEngine.enable && config.programs.nixarchyThemeEngine.targets.gtk
+        ) [ (lib.lowPrio pkgs.adw-gtk3) ]
         ++ map lib.lowPrio (
           # Why: modules/AGENTS.md#config-hypr-xdph-conf-which-the-package-seeds-into
           #
@@ -1598,7 +1602,17 @@ in
                   # text above said it was not in nixpkgs; it arrived after that was
                   # written, so the keybinding had been failing on a package that was
                   # available the whole time.
-                  inherit (pkgs) cliamp;
+                  # nixpkgs installs no desktop entry; upstream's repo ships one, and the
+                  # dock drops a pin with no entry of that id (#1777).
+                  cliamp = pkgs.symlinkJoin {
+                    name = "cliamp-${pkgs.cliamp.version}";
+                    paths = [ pkgs.cliamp ];
+                    postBuild = ''
+                      install -Dm644 ${pkgs.cliamp.src}/cliamp.desktop $out/share/applications/cliamp.desktop
+                      install -Dm644 ${pkgs.cliamp.src}/Cliamp.svg $out/share/icons/hicolor/scalable/apps/cliamp.svg
+                    '';
+                    inherit (pkgs.cliamp) meta;
+                  };
 
                   # install/omarchy-base.packages names it (omacom/omarchy#14712).
                   # Not in nixpkgs, and this module's pkgs has no overlay of ours.

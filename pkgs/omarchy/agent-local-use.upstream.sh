@@ -6,10 +6,20 @@ if [[ ${1:-} == "use" ]]; then
 
   if [[ " $* " == *" --detach "* ]]; then
     # The agents panel starts a setup in the background, with no terminal to
-    # ask for a password in. While the packages are missing, a terminal
-    # installs them and then hands the setup back to run detached.
+    # ask for a password in, so polkit asks for it instead. The panel shows
+    # the setup's line while this runs and reads the reason from the Error
+    # line; pkexec's 126 is the password dialog dismissed, passed on as is.
     if omarchy-pkg-missing "${packages[@]}"; then
-      run=(omarchy-launch-floating-terminal-with-presentation "omarchy-pkg-add ${packages[*]} && omarchy-local-ai ${*@Q}")
+      echo "Installing ${packages[*]}"
+      pkexec /usr/bin/pacman -S --noconfirm --needed -- "${packages[@]}"
+      status=$?
+      if (( status == 126 )); then
+        echo "Error: Authentication was cancelled"
+        exit 126
+      elif (( status != 0 )) || omarchy-pkg-missing "${packages[@]}"; then
+        echo "Error: Couldn't install ${packages[*]}"
+        exit 1
+      fi
     fi
   else
     omarchy-pkg-add "${packages[@]}" || exit 1

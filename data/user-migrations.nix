@@ -342,6 +342,12 @@
     decision = "not-needed";
     reason = "the package installs omarchy-terminal.desktop and omarchy-browser.desktop into share/applications (pkgs/omarchy/default.nix), and a copy in ~/.local/share/applications would shadow every later package version (#1776)";
   };
+  "1794642577" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    reason = "edge shipped Slack theme sync, whose slack.desktop override in ~/.local/share/applications runs omarchy-launch-slack, which quattro 74de104 removes; this puts Slack's own launcher back (#1782)";
+  };
   predates = [
     "1780057136"
     "1780294774"

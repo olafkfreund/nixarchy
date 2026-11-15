@@ -55,6 +55,10 @@
   "cliamp" = {
     nix = "cliamp";
   };
+  "crun" = {
+    edge = "only";
+    skip = "podman's OCI runtime, a base package since quattro 74de104; here virtualisation.podman brings its own runtime where services.agent-local or Boxes turn podman on.";
+  };
   "cups-pk-helper" = {
     nix = "cups-pk-helper";
   };
@@ -118,6 +122,10 @@
   };
   "gum" = {
     nix = "gum";
+  };
+  "hp-omnibook-3-audio" = {
+    edge = "only";
+    skip = "HP OmniBook 3 (Snapdragon) speakers and microphones; aarch64 hardware, not targeted.";
   };
   "hype" = {
     nix = "nixarchy-apps.hype";
@@ -229,6 +237,10 @@
   "papers" = {
     edge = "only";
     nix = "papers";
+  };
+  "podman" = {
+    edge = "only";
+    skip = "a base package since quattro 74de104, for the local model runner; here services.agent-local and Boxes turn on virtualisation.podman, and the runner's preflight names that option (#1577).";
   };
   "xorg-xrandr" = {
     edge = "only";

@@ -883,17 +883,17 @@
     "nixarchy-herdr": {
       "flake": false,
       "locked": {
-        "lastModified": 1794840098,
-        "narHash": "sha256-8JEBRM/m5ngZifRNrNe+L3tZQT17HwiLFq5Xrv0DIEo=",
+        "lastModified": 1794845015,
+        "narHash": "sha256-M4crsAcL+g9E+7QHPIou3mLN+u+694zm+GnJor5k+3U=",
         "owner": "olafkfreund",
         "repo": "nixarchy-herdr",
-        "rev": "e4c71703b4367d19773471ff76febfa5c0d2e055",
+        "rev": "9c8a8fa7a59263555d4f789a285215a9eabcb22d",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-herdr",
-        "rev": "e4c71703b4367d19773471ff76febfa5c0d2e055",
+        "rev": "9c8a8fa7a59263555d4f789a285215a9eabcb22d",
         "type": "github"
       }
     },

@@ -4669,18 +4669,18 @@ in
                     flock 9
                   fi
 
-                  copy_into_flake() {
+                  replace_file() {
                     local src=$1 dst=$2 tmp
                     # In the flake root, outside the `nixarchy` path staged below,
                     # so a run killed mid-copy leaves nothing for git add to take.
-                    tmp=$(mktemp "$base/.nixarchy-copy.XXXXXX")
-                    cp "$src" "$tmp" || { rm -f "$tmp"; return 1; }
+                    tmp=$(mktemp "$base/.nixarchy-copy.XXXXXX") || return 1
+                    cp "$src" "$tmp" || { rm -f "$tmp" || :; return 1; }
                     if [ -f "$dst" ]; then
-                      chmod --reference="$dst" "$tmp" || { rm -f "$tmp"; return 1; }
+                      chmod --reference="$dst" "$tmp" || { rm -f "$tmp" || :; return 1; }
                     else
-                      chmod --reference="$src" "$tmp" || { rm -f "$tmp"; return 1; }
+                      chmod --reference="$src" "$tmp" || { rm -f "$tmp" || :; return 1; }
                     fi
-                    mv "$tmp" "$dst" || { rm -f "$tmp"; return 1; }
+                    mv "$tmp" "$dst" || { rm -f "$tmp" || :; return 1; }
                   }
                   # flatsnap: written by the nixarchy-flatsnap plugin (#904). Like the
                   # others it is copied only when it exists, so a machine without
@@ -4740,12 +4740,36 @@ in
 
                   select_home_src() {
                     if [ -f "$pinned/home.nix" ]; then
-                      printf '%s\n' "$pinned/home.nix"
+                      printf '%s\n' "$pinned/home.nix" || return 1
                     else
                       local src="$srcdir/home.nix"
-                      [ -f "$src" ] && printf '%s\n' "$src"
+                      if [ -f "$src" ]; then printf '%s\n' "$src" || return 1; fi
                     fi
                     return 0
+                  }
+
+                  snapshot_home() {
+                    home_snap=""
+                    home_state=absent
+                    home_srcmsg="$srcdir/home.nix"
+                    local src
+                    src=$(select_home_src) || return 1
+                    if [ -n "$src" ]; then
+                      home_snap="$pinned/home.snap"
+                      cp "$src" "$home_snap" || return 1
+                    fi
+                  }
+
+                  classify_home() {
+                    home_state=absent
+                    if [ -n "$home_snap" ] && [ -f "$home_snap" ]; then
+                      if cmp -s "$home_snap" "$1"; then
+                        home_state=seed
+                      else
+                        # shellcheck disable=SC2034 # Used when Step 3 wires the decision.
+                        home_state=edited
+                      fi
+                    fi
                   }
 
                   valid_user() {
@@ -4800,6 +4824,84 @@ in
                     return 1
                   }
 
+                  remove_file() {
+                    rm -f -- "$1" || return 1
+                  }
+
+                  restore_one() {
+                    if [ -f "$1" ]; then
+                      cp -p "$1" "$2" || return 1
+                    else
+                      rm -f -- "$2" || return 1
+                    fi
+                  }
+
+                  write_home_pair() {
+                    local copy="$base/nixarchy/home.nix" record kept tmp changed=0
+                    record="$applied/$(printf '%s' "$copy" | sha256sum | cut -c1-16)" || return 1
+                    rm -f "$pinned/home.bak" "$pinned/dest.bak" || return 1
+                    if [ -f "$copy" ]; then cp -p "$copy" "$pinned/home.bak" || return 1; fi
+                    if [ -f "$dest" ]; then cp -p "$dest" "$pinned/dest.bak" || return 1; fi
+                    if [ -f "$copy" ] && [ -f "$record" ] && ! sha256sum <"$copy" | cmp -s - "$record"; then
+                      kept="$applied/home.nix.edited-in-flake.$(date +%Y%m%d%H%M%S)" || return 1
+                      cp "$copy" "$kept" || return 1
+                      echo "NOTE: $copy was edited in the flake since the last apply." || return 1
+                      echo "  Your version is kept at $kept -- move the change into" || return 1
+                      echo "  $home_srcmsg, which is the file apply copies from." || return 1
+                    fi
+                    if [ "$1" = write ]; then
+                      if [ ! -f "$copy" ] || ! cmp -s "$copy" "$home_snap"; then
+                        replace_file "$home_snap" "$copy" || {
+                          restore_one "$pinned/home.bak" "$copy" || :
+                          restore_one "$pinned/dest.bak" "$dest" || :
+                          return 1
+                        }
+                        changed=1
+                      fi
+                      replace_file "$2" "$dest" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      tmp=$(mktemp "$applied/.home-record.XXXXXX") || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      sha256sum <"$copy" >"$tmp" || {
+                        rm -f "$tmp" || :
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      mv "$tmp" "$record" || {
+                        rm -f "$tmp" || :
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      if [ "$changed" -eq 1 ]; then copied="$copied home"; fi
+                    elif [ "$1" = release ]; then
+                      replace_file "$2" "$dest" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      remove_file "$copy" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      rm -f "$record" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                    else
+                      return 1
+                    fi
+                  }
+
                   home_src=$(select_home_src)
                   # The name goes into generated Nix only with a home part, so only then is it checked.
                   user=$(id -un)
@@ -4840,7 +4942,7 @@ in
                       echo "  Your version is kept at $kept -- move the change into"
                       echo "  $srcmsg, which is the file apply copies from."
                     fi
-                    copy_into_flake "$src" "$dst"
+                    replace_file "$src" "$dst"
                     sha256sum <"$dst" >"$record"
                     copied="$copied $part"
                   done
@@ -4862,7 +4964,7 @@ in
                         sha256sum <"$dst" >"$record"
                         continue
                       fi
-                      copy_into_flake "$src" "$dst"
+                      replace_file "$src" "$dst"
                       record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
                       sha256sum <"$dst" >"$record"
                       copied="$copied packages/$(basename "$src")"

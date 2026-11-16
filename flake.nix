@@ -260,7 +260,7 @@
     # No flake upstream, so nothing to follow; a commit on master, bumped the
     # way that page says.
     nixarchy-herdr = {
-      url = "github:olafkfreund/nixarchy-herdr/affd9854cf184622380e5433b4003e3aa82593e0";
+      url = "github:olafkfreund/nixarchy-herdr/9c8a8fa7a59263555d4f789a285215a9eabcb22d";
       flake = false;
     };
 
@@ -296,7 +296,7 @@
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
-      url = "github:olafkfreund/nixarchy-microvm/ca0bc01f11ac5438c1a174ea75559a869bd5616e";
+      url = "github:olafkfreund/nixarchy-microvm/c6b7fce6ef3b24f6527d2fed239d864bfcf976de";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

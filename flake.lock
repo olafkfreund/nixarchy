@@ -991,17 +991,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794866154,
-        "narHash": "sha256-dRpjEEL/swdSBqVOs57Y+794COi1hWMjH8iDiFiizvs=",
+        "lastModified": 1794871403,
+        "narHash": "sha256-NGmn2hVohIQ/KESkXgMa4e4wWRX6Zn2uCakYZM+LcaE=",
         "owner": "olafkfreund",
         "repo": "nixarchy-pkg",
-        "rev": "44eb7d4d49e5cab8005af2f355454abfcf57ef79",
+        "rev": "ca78449395738f3c5fd8ef22cf26c9589706da10",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-pkg",
-        "rev": "44eb7d4d49e5cab8005af2f355454abfcf57ef79",
+        "rev": "ca78449395738f3c5fd8ef22cf26c9589706da10",
         "type": "github"
       }
     },

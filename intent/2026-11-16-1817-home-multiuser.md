@@ -4,9 +4,22 @@ issue: 1817
 author: olafkfreund
 ---
 
-# Intent: per-user home selections, so one user's apply never drops another's
+# Intent: one home owner per host, so a second user's apply never drops the owner's selection
 
 Follows `intent/2026-11-16-1809-home-selection.md` (merged as #1815).
+
+## Decision
+
+The owner chose **one home owner per host** over a full per-user model
+(`home-<user>.nix` per user, one rendered block each). Review of the
+per-user draft found it needs a cross-user lock, shared file permissions in
+the flake, a migration for #1809's single `home.nix`, and handling of stale
+users whose account is gone. And it would not make the rest of apply
+per-user: the `apps`, `services`, `advanced` and `flatsnap` selections are
+already one shared file each, written by whoever applied last. nixarchy's
+system selections are last-writer-wins, i.e. already one owner per host.
+Home selection follows the same shape, with an explicit owner and a refusal
+instead of a silent drop.
 
 ## Problem
 
@@ -23,6 +36,8 @@ flake side of it is single-user:
   form (`modules/apps.nix:4831-4836`), with no home import at all.
 - Every Home Manager user on a `useGlobalPkgs` machine has `home.nix` seeded
   (`modules/home.nix:1408-1410`), so any second user hits this without opting in.
+- `valid_user` (`modules/apps.nix:4750-4752`) accepts a trailing `$`
+  (`[$]?`), which would be spliced into generated Nix.
 
 Two ways a second user's apply drops the first user's selection:
 
@@ -45,75 +60,84 @@ What the tests assume: `tests/home-selection.nix` has one user
 (`someone`, `:25`; the user is `id -un`) and case 8 compares the generated
 file against exactly one `@USER@` substitution (`:161`). `tests/options.nix`
 `homeApps*` cases (`:1361-1404`, fixture `:3115-3193`) define alice and bob
-but import only alice's file; the template is applied once with
-`@USER@`=alice. `tests/coexistence/default.nix:29-49` likewise renders one
-user. Nothing varies the number of users who applied (CLAUDE.md section 3).
+but import only alice's file. `tests/coexistence/default.nix:29-49` likewise
+renders one user. Nothing varies the number of users who applied (CLAUDE.md
+section 3).
 
 ## Proposed outcome
 
-- **Per-user copies in the flake:** `$base/nixarchy/home-<user>.nix`, copied
-  from that user's `~/.config/nixarchy/home.nix`.
-- **Per-user rendered modules:** one block per user, rendered from the
-  template, for every `home-<user>.nix` present in the flake. The generated
-  `nixarchy-apps.nix` imports all of them, whoever applied.
-- **A user's apply rewrites only their own files.** A user without
-  `home.nix` removes nobody else's import (and adds none of their own).
-- Edited-in-flake rules, `--expect-sha256 home=` pins and the `valid_user`
-  check keep their meaning, now per user's file.
-- **Mode A:** with no `home-*.nix` in the flake, `nixarchy-apps.nix` stays
-  byte-identical to today's plain form.
+- **The home owner** is `programs.nixarchy.user` when set. Otherwise it is
+  the user named in the flake's existing generated home import,
+  `home-manager.users."<x>"` in `nixarchy-apps.nix`: the first user who
+  applied a home part.
+- **Refusal before change:** `nixarchy-apply` run by a user who is not the
+  owner, with a home part, exits non-zero with a message naming the owner,
+  before anything is written.
+- **A non-owner's apply without a home part** keeps the owner's existing
+  home import and the copied `nixarchy/home.nix` unchanged (today it writes
+  the plain form and silently drops the import). Only the owner's own apply
+  may replace, or deliberately remove, the home import.
+- **Seeding:** when `programs.nixarchy.user` is set, `home.nix` is seeded
+  only for that user (`modules/home.nix:1408-1410`); when unset, seeding
+  stays as now and the first apply claims the host.
+- **`valid_user` rejects a trailing `$`.**
+- **Unchanged:** a host with one user behaves as today, and a host with no
+  home part anywhere (Mode A) produces the same `nixarchy-apps.nix`, byte
+  for byte.
 
 ## Affected users and systems
 
-- Hosts with two or more Home Manager users applying to one flake (the
-  family or shared-workstation case); single-user machines see no change
-  beyond a renamed copy.
-- Files: `modules/apps.nix` (`nixarchy-apply`, `homeAppsTemplateText`),
-  `tests/home-selection.nix`, `tests/options.nix` (`homeApps*`,
-  `casesD`), `tests/coexistence/`, and the manual page that names
-  `nixarchy/home.nix`.
-- The `apps`, `services`, `advanced` and `flatsnap` parts are shared in the
-  same way (one `$base/nixarchy/<part>.nix`); this intent does not change
-  them (see Open questions).
+- Hosts with two or more Home Manager users, where today the second user's
+  apply silently removes the first's selection. Single-user machines see no
+  change.
+- Files: `modules/apps.nix` (`nixarchy-apply`: owner resolution,
+  `valid_user`, the plain-form branch), `modules/home.nix` (seeding),
+  `tests/home-selection.nix`, `tests/options.nix` if the seeding gate is
+  asserted there, and the manual page that names `nixarchy/home.nix`.
+- The `apps`, `services`, `advanced` and `flatsnap` parts are untouched.
 
 ## Constraints
 
-- **Migration:** a flake carrying #1809's single `nixarchy/home.nix` must
-  keep evaluating after upgrade, and its owner is unrecorded.
-- **Edited-in-flake:** a hand-edit to `home-<user>.nix` is kept, and
-  reported, exactly as for the other parts.
-- **Pins:** `--expect-sha256 home=` pins the invoking user's bytes; no
-  pin may let a different file be applied (#1809 constraint).
-- **Mode A:** no home file anywhere means no home text anywhere in
-  `nixarchy-apps.nix`, byte for byte.
-- **Clearing a selection:** a user who applies with no `home.nix` must not
-  silently lose it, yet there must be a deliberate way to remove it.
-- **Rendering stays Nix-safe:** every user name that reaches generated Nix
-  passes `valid_user`, including names found by scanning the flake.
-- **Checks (section 1):** every new guard is shown failing first. The
-  two-user case must be a fixture that varies the user count, and the
-  failure of both drop paths above must be reproduced before the fix.
+- **Refusal happens before any write:** pins, copies and the generated
+  file are untouched when apply refuses.
+- **Deterministic owner:** read from the generated file; exactly one
+  `home-manager.users."<x>"` line names the owner. Zero lines means no owner
+  yet (first apply claims it); more than one, or a line that does not parse,
+  makes apply refuse rather than guess.
+- **#1809's failure contract** (its three assertions in the template) is
+  unchanged.
+- **Mode A:** no home part means no home text in `nixarchy-apps.nix`.
+- **Rendering stays Nix-safe:** the owner name passes `valid_user`, now
+  without `$`, wherever it reaches generated Nix.
+- **Checks (CLAUDE.md section 1, 3):** every new guard is shown failing
+  first, with a two-user fixture that varies who applies. Cases:
+  1. owner applies: works, import kept.
+  2. non-owner applies without a home part: the owner's import and copy are
+     kept.
+  3. non-owner applies with a home part: refused, nothing changed (pins,
+     copies, generated file byte-identical).
+  4. `programs.nixarchy.user` set: only that user is seeded, and a
+     non-owner is refused even on a fresh flake.
+  5. a user name ending in `$` is refused.
+
+## Out of scope
+
+Separate issues if wanted:
+
+- Concurrent applies by different users (no cross-user lock is added).
+- The same last-writer-wins behaviour on the shared system selections
+  (`apps`, `services`, `advanced`, `flatsnap`).
+- Per-user home selections for several users on one host (the model the
+  owner declined).
 
 ## Open questions
 
-1. **Migration owner.** An existing `nixarchy/home.nix` from #1809 has no
-   recorded owner. Options: (a) the first user to apply after upgrade
-   adopts it if their file's bytes equal it, otherwise it is left and
-   imported for no one (loses it); (b) rename it to `home-<user>.nix` for
-   whoever applies first and tell them; (c) keep importing a legacy
-   `home.nix` for the user named in the existing generated file's
-   `home-manager.users."<user>"` line, deterministic and recoverable.
-   Which?
-2. **Clearing a selection.** How does a user deliberately remove theirs?
-   Options: an empty `home.nix` (already works: empty module); a
-   `nixarchy-apply --drop-home` flag deleting only their own copy; or
-   removing their file by hand in the flake.
-3. **Users whose copy is present but who no longer exist** (account
-   deleted): the `isNormalUser` assertion (`:426`) would fail the build for
-   everyone. Skip with a warning, or keep failing loudly?
-4. **Scope of the shared parts.** Should `apps.nix` and friends become
-   per-user too, or is that a separate issue? (They are inherently
-   machine-wide system selections, so proposed: separate, unchanged.)
-5. **Enumerating users.** Generate imports by scanning
-   `$base/nixarchy/home-*.nix` at apply time, or keep a small manifest? The
-   scan is simpler; a manifest survives a partial git checkout.
+1. **Deliberate removal.** Under this model the owner removes their home
+   selection by applying with an empty `home.nix`, which keeps an empty
+   import. Is that enough, or is a way to drop the import entirely needed?
+2. **Handing over ownership.** With `programs.nixarchy.user` unset, how does
+   the host change owner? Proposed: set `programs.nixarchy.user`, or edit
+   the generated line by hand. Is a documented manual step acceptable?
+3. **Owner whose account is gone.** The template's `isNormalUser` assertion
+   fails the build for everyone. Keep failing loudly (proposed), or
+   release ownership?

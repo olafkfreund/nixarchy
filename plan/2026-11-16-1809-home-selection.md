@@ -178,6 +178,23 @@ build. The lead builds. Report the changed files and any deviation."
      - drop the `configuredElsewhere` file filter, and the
        no-own-configuration case fails;
      - change one byte of apply's substitution, and case 8's `cmp` fails.
+   **Deviations found implementing step 5** (lead):
+   - **"User not defined":** Home Manager's own lookup of
+     `config.users.users.<user>.name` throws before any assertion is read.
+     That is still a pre-switch failure, but with Home Manager's message.
+     The fixture tests the realistic case instead: `alice` as a system user,
+     so nixarchy's `isNormalUser` message fires.
+   - **"No configuration of her own":** without a `home.stateVersion` from
+     somewhere, Home Manager throws first. The fixture supplies it through
+     `home-manager.sharedModules`, the case `configuredElsewhere` exists
+     for, so only nixarchy's assertion refuses.
+   - **`pkgsOther` unset:** the fixture `home.nix` records whether its
+     argument was null in `home.sessionVariables`, and the case reads it.
+     The null-access failure cannot be caught by `tryEval`.
+   - **The template** is exported as
+     `environment.etc."nixarchy/home-apps-template.nix"`, so the tests read
+     its text without IFD.
+
 6. **The rest:**
    - `tests/writer-lock.nix`: `--home` rows for the three writers (:252-261);
    - `tests/options.nix`: `home-template.nix` byte-format assertions and a

@@ -36,6 +36,9 @@ let
     }).config;
   unfreeOff = configWith { nixarchy.allowUnfree = false; };
   noScope = configWith { useGlobalPkgs = false; };
+  homeAppsTemplate = pkgs.writeText "home-apps-template.nix" (
+    (configWith { }).environment.etc."nixarchy/home-apps-template.nix".text
+  );
   variantBin =
     config: name:
     let
@@ -155,7 +158,8 @@ pkgs.runCommand "nixarchy-home-selection"
     NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >case8home.out 2>&1
     rc=$?
     user=$(id -un)
-    [ "$rc" -eq 0 ] && cmp -s "$homefile" flake/nixarchy/home.nix && grep -qF '{ config, options, lib, ... }:' "$generated" && grep -qF 'configuredElsewhere = lib.any' "$generated" && grep -qF 'd.file != __curPos.file' "$generated" && grep -qF "home-manager.users.\"$user\".imports" "$generated" && grep -qF './nixarchy/home.nix' "$generated" && grep -qF 'config.home-manager.useGlobalPkgs' "$generated" && grep -qF "config.users.users.\"$user\".isNormalUser" "$generated" && grep -qF 'assertion = configuredElsewhere' "$generated" || bad 8 "with home: rc=$rc $(cat case8home.out)"
+    sed -e "s|@USER@|$user|g" -e 's|@IMPORTS@| ./nixarchy/apps.nix|g' ${homeAppsTemplate} >home.expected
+    [ "$rc" -eq 0 ] && cmp -s "$homefile" flake/nixarchy/home.nix && cmp -s home.expected "$generated" || bad 8 "with home: rc=$rc $(cat case8home.out)"
 
     cp "$generated" generated.before
     cp flake/nixarchy/home.nix copied.before

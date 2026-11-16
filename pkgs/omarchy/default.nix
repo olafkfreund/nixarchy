@@ -954,6 +954,20 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     ''
                 }
 
+                # Chrome's policy is environment.etc's, filtered by programs.chromium.extraOpts; NixOS owns /etc (#1793).
+                ${lib.optionalString isEdge ''
+                  substituteInPlace $out/share/omarchy/bin/omarchy-install-browser-extensions \
+                    --replace-fail "$(printf '%s\n' \
+                      '  browser_policy_dir_hardened "$chrome_policy_dir" &&' \
+                      '    browser_policy_parents_hardened "$chrome_policy_dir" &&' \
+                      '    cmp -s "$OMARCHY_PATH/default/chromium/policies/chrome-extensions.json" "$chrome_policy_dir/omarchy-extensions.json"')" \
+                    '  [[ -e $chrome_policy_dir/omarchy-extensions.json ]]' \
+                    --replace-fail '      browser_policy_setup_dir "$chrome_policy_dir"' \
+                    "$(printf '%s\n' \
+                      '      echo "The Chrome extension policy comes from the system configuration; rebuild to install it." >&2' \
+                      '      exit 1')"
+                ''}
+
                 # Why: pkgs/AGENTS.md#every-web-app-failed-with
             ${
               if isEdge then

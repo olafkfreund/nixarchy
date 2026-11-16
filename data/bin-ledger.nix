@@ -161,6 +161,11 @@
     class = "patch";
     reason = "The install command launches /usr/bin/chatgpt, which is absent on NixOS; launch the installed command from PATH.";
   };
+  "omarchy-install-browser-extensions" = {
+    class = "patch";
+    edge = "only";
+    reason = "Repairs Chromium-family browsers' bundled extensions. Chrome's policy is declared by environment.etc, so its repair refuses instead of writing /etc (#1793).";
+  };
   "omarchy-install-service-signal" = {
     class = "patch";
     reason = "The install command launches /usr/bin/signal-desktop, which is absent on NixOS; launch the installed command from PATH.";

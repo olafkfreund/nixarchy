@@ -1841,6 +1841,8 @@
             # Upstream desktop and installed /etc sources must exist in the package (#1793).
             "media-viewer-desktop"
             "etc-overlay-sources"
+            # Power actions authorise before closing; the browser-extensions repair stays out of /etc (#1793).
+            "omarchy-system"
             # The notification history keeps text for the newest rows only (#1663).
             "notification-store"
             # data/bin-ledger.nix, held to its own claim. Also the home of the

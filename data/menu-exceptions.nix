@@ -94,6 +94,11 @@
       + "so every machine already has it; there is nothing to install or map.";
     edge = "only";
   };
+  # New in quattro 9f68da8 (#1793), with icon sets.
+  "install.style.icons" = {
+    reason = "an action, not a package: omarchy-icons-install clones an icon set's git repository into ~/.config/omarchy/icons.";
+    edge = "only";
+  };
   "install.ai.perplexity" =
     "dimmed with a reason (#1320): a pacman package nixpkgs does not carry, not a web app";
 }

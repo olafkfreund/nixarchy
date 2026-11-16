@@ -2496,10 +2496,9 @@ in
       # registered, not merely installed, so it belongs here rather than in
       # the package's runtimeDeps. The hyprland portal comes from
       # programs.hyprland.portalPackage above.
-      extraPortals = [
-        pkgs.xdg-desktop-portal-gtk
-      ]
-      ++ lib.optional (cfg.package.passthru.fileChooserPortal or false) cfg.package.passthru.fileManager;
+      # Folio's FileChooser portal needs no entry here: Folio is in the system
+      # path, which links share/xdg-desktop-portal and its D-Bus service (#1793).
+      extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
     };
   };
 }

@@ -54,6 +54,7 @@ pkgs.runCommand "nixarchy-home-selection"
     nativeBuildInputs = with pkgs; [
       bash
       coreutils
+      getent
       gnugrep
       gnused
       nix
@@ -169,9 +170,14 @@ pkgs.runCommand "nixarchy-home-selection"
     rc=$?
     [ "$rc" -eq 4 ] && grep -qF 'Nothing was copied and nothing was built' case9.out && cmp -s generated.before "$generated" && cmp -s copied.before flake/nixarchy/home.nix && cmp -s copied-apps.before flake/nixarchy/apps.nix || bad 9 "rc=$rc $(cat case9.out)"
 
-    sed -n '/^select_home_src() {/,/^}/p' "$apply" >select-home-function
-    [ -s select-home-function ] || bad 10 'select_home_src extraction empty'
-    source select-home-function
+    extract() { sed -n "/^$1() {/,/^}/p" "$apply"; }
+    : >apply-functions
+    for function in valid_user select_home_src read_owner home_decide account_exists release_allowed; do
+      extract "$function" >one-function
+      [ -s one-function ] || bad own-7a "$function extraction empty"
+      cat one-function >>apply-functions
+    done
+    source apply-functions
     pinned=$PWD/pinned
     srcdir=$XDG_CONFIG_HOME/nixarchy
     mkdir -p "$pinned"
@@ -192,11 +198,73 @@ pkgs.runCommand "nixarchy-home-selection"
     # Static, because a PATH stub cannot beat apply's own coreutils: the name check
     # runs only with a home part, so a user without home.nix is never refused.
     grep -qF 'if [ -n "$home_src" ] && ! valid_user "$user"; then' "$apply" || bad 11 'the user-name check is not gated on a home part'
-    sed -n '/^valid_user() {/,/^}/p' "$apply" >valid-user-function
-    [ -s valid-user-function ] || bad 11 'valid_user extraction empty'
-    source valid-user-function
     for name in alice bob_2; do valid_user "$name" || bad 11 "rejected $name"; done
     for name in Alice 'a b' 'x"y' ""; do valid_user "$name" && bad 11 "accepted [$name]"; done
+
+    dest=$PWD/owner.fixture
+    printf '%s\n' 'home-manager.users."alice".imports = [' >"$dest"
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ "$owner" = alice ] || bad own-7a 'single owner not parsed'
+    printf '%s\n' '    home-manager.users."bob_2".imports = [' >"$dest"
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ "$owner" = bob_2 ] || bad own-7a 'indented owner not parsed'
+    sed -e 's|@USER@|alice|g' -e 's|@IMPORTS@| ./nixarchy/apps.nix|g' ${homeAppsTemplate} >"$dest"
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ "$owner" = alice ] || bad own-7a 'generated owner not parsed exactly once'
+    for variant in two duplicate unquoted invalid empty; do
+      case "$variant" in
+        two) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."bob".imports = [' >"$dest" ;;
+        duplicate) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."alice".imports = [' >"$dest" ;;
+        unquoted) printf '%s\n' 'home-manager.users.alice.imports = [' >"$dest" ;;
+        invalid) printf '%s\n' 'home-manager.users."-bad".imports = [' >"$dest" ;;
+        empty) printf '%s\n' 'home-manager.users."".imports = [' >"$dest" ;;
+      esac
+      owner=stale
+      read_owner 2>owner.err
+      [ "$?" -eq 1 ] && [ -z "$owner" ] && grep -qF "$dest names several home owners" owner.err || bad own-7a "$variant was accepted or owner was retained"
+    done
+    rm "$dest"
+    owner=stale
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ -z "$owner" ] || bad own-7a 'missing owner file was not unowned'
+    printf '%s\n' '{ imports = [ ./nixarchy/apps.nix ]; }' >"$dest"
+    owner=stale
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ -z "$owner" ] || bad own-7a 'ownerless file was not unowned'
+
+    decision_expected() {
+      got=$(home_decide "$1" "$2" "$3")
+      rc=$?
+      [ "$rc" -eq 0 ] && [ "$got" = "$4" ] || bad own-11 "owner=[$1] caller=$2 state=$3: rc=$rc, got $got, wanted $4"
+    }
+    decision_expected "" alice edited claim
+    decision_expected "" alice seed keep
+    decision_expected "" alice absent keep
+    decision_expected alice alice seed copy
+    decision_expected alice alice edited copy
+    decision_expected alice alice absent keep
+    decision_expected alice bob absent keep
+    decision_expected alice bob seed keep
+    decision_expected alice bob edited refuse
+
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "%s\n" "$*" >> "$GETENT_CALLS"' 'exit "$GETENT_RC"' >stub/getent
+    chmod +x stub/getent
+    export PATH=$PWD/stub:$PATH GETENT_CALLS=$PWD/getent.calls
+    for GETENT_RC in 0 2 127 1; do
+      export GETENT_RC
+      : >"$GETENT_CALLS"
+      release_allowed alice bob 2>release.err
+      rc=$?
+      case "$GETENT_RC" in
+        0) [ "$rc" -eq 1 ] && grep -qF 'home.nix belongs to alice' release.err || bad own-9a 'existing owner was released' ;;
+        2) [ "$rc" -eq 0 ] && [ ! -s release.err ] || bad own-9a 'absent owner was refused' ;;
+        *) [ "$rc" -eq 1 ] && grep -qF "cannot tell whether alice still has an account (getent exited $GETENT_RC)" release.err || bad own-9a "lookup failure $GETENT_RC was allowed" ;;
+      esac
+      [ "$(cat "$GETENT_CALLS")" = 'passwd alice' ] || bad own-9a "getent call for $GETENT_RC was not passwd alice"
+    done
+    : >"$GETENT_CALLS"
+    release_allowed alice alice 2>release.err
+    [ "$?" -eq 0 ] && [ ! -s "$GETENT_CALLS" ] && [ ! -s release.err ] || bad own-9a 'owner release called getent or was refused'
 
     [ "$fails" -eq 0 ] || { echo "$fails case(s) failed"; exit 1; }
     touch "$out"

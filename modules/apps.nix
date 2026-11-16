@@ -4392,6 +4392,7 @@ in
                   (pkgs.callPackage ../pkgs/branch-guard.nix { })
                   pkgs.coreutils
                   pkgs.diffutils
+                  pkgs.getent
                   pkgs.gnugrep
                   pkgs.git
                   pkgs.gnused
@@ -4749,6 +4750,54 @@ in
 
                   valid_user() {
                     [[ $1 =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
+                  }
+
+                  read_owner() {
+                    owner=""
+                    [ -f "$dest" ] || return 0
+                    local candidates exact
+                    candidates=$(grep -cE '^[[:space:]]*home-manager\.users\.' "$dest" || true)
+                    exact=$(grep -cE '^[[:space:]]*home-manager\.users\."[^"]+"\.imports[[:space:]]*=' "$dest" || true)
+                    if [ "$candidates" -eq 0 ]; then
+                      return 0
+                    fi
+                    if [ "$candidates" -eq 1 ] && [ "$exact" -eq 1 ]; then
+                      owner=$(sed -nE 's/^[[:space:]]*home-manager\.users\."([^"]+)"\.imports[[:space:]]*=.*/\1/p' "$dest") || return 1
+                      if valid_user "$owner"; then
+                        return 0
+                      fi
+                    fi
+                    owner=""
+                    echo "nixarchy-apply: $dest names several home owners (or an unparseable one); fix it by hand" >&2 || return 1
+                    return 1
+                  }
+
+                  home_decide() {
+                    if [ -z "$1" ]; then
+                      if [ "$3" = edited ]; then printf '%s\n' claim || return 1; else printf '%s\n' keep || return 1; fi
+                    elif [ "$1" = "$2" ]; then
+                      if [ "$3" = absent ]; then printf '%s\n' keep || return 1; else printf '%s\n' copy || return 1; fi
+                    elif [ "$3" = edited ]; then
+                      printf '%s\n' refuse || return 1
+                    else
+                      printf '%s\n' keep || return 1
+                    fi
+                  }
+
+                  account_exists() {
+                    getent passwd "$1" >/dev/null 2>&1 || return $?
+                  }
+
+                  release_allowed() {
+                    [ "$1" = "$2" ] && return 0
+                    local rc=0
+                    account_exists "$1" || rc=$?
+                    case "$rc" in
+                      0) echo "nixarchy-apply: home.nix belongs to $1, who still has an account; only $1 can release it" >&2 || return 1 ;;
+                      2) return 0 ;;
+                      *) echo "nixarchy-apply: cannot tell whether $1 still has an account (getent exited $rc); not releasing" >&2 || return 1 ;;
+                    esac
+                    return 1
                   }
 
                   home_src=$(select_home_src)

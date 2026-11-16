@@ -945,17 +945,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1792493889,
-        "narHash": "sha256-Jzts5HEkPPL3I6hMZvA5XxD7dA9ykRRS2pJHNIdNEGc=",
+        "lastModified": 1794844922,
+        "narHash": "sha256-CmQ1l5hG+4ZGnZc8vwbTvl382Yxc4cahY6fJMh8q/q0=",
         "owner": "olafkfreund",
         "repo": "nixarchy-microvm",
-        "rev": "ca0bc01f11ac5438c1a174ea75559a869bd5616e",
+        "rev": "c6b7fce6ef3b24f6527d2fed239d864bfcf976de",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-microvm",
-        "rev": "ca0bc01f11ac5438c1a174ea75559a869bd5616e",
+        "rev": "c6b7fce6ef3b24f6527d2fed239d864bfcf976de",
         "type": "github"
       }
     },

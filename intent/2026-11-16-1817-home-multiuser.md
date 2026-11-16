@@ -36,8 +36,6 @@ flake side of it is single-user:
   form (`modules/apps.nix:4831-4836`), with no home import at all.
 - Every Home Manager user on a `useGlobalPkgs` machine has `home.nix` seeded
   (`modules/home.nix:1408-1410`), so any second user hits this without opting in.
-- `valid_user` (`modules/apps.nix:4750-4752`) accepts a trailing `$`
-  (`[$]?`), which would be spliced into generated Nix.
 
 Two ways a second user's apply drops the first user's selection:
 
@@ -66,21 +64,39 @@ section 3).
 
 ## Proposed outcome
 
+Terms. The **template** is `/etc/nixarchy/home-template.nix`, the seed. A
+caller's **home part** is their `~/.config/nixarchy/home.nix` (or the pinned
+snapshot of it) when it exists and **differs from the template**. A
+`home.nix` byte-identical to the template is the untouched seed and counts as
+no home part.
+
 - **The home owner** is `programs.nixarchy.user` when set. Otherwise it is
   the user named in the flake's existing generated home import,
   `home-manager.users."<x>"` in `nixarchy-apps.nix`: the first user who
-  applied a home part.
-- **Refusal before change:** `nixarchy-apply` run by a user who is not the
-  owner, with a home part, exits non-zero with a message naming the owner,
-  before anything is written.
-- **A non-owner's apply without a home part** keeps the owner's existing
-  home import and the copied `nixarchy/home.nix` unchanged (today it writes
-  the plain form and silently drops the import). Only the owner's own apply
-  may replace, or deliberately remove, the home import.
-- **Seeding:** when `programs.nixarchy.user` is set, `home.nix` is seeded
-  only for that user (`modules/home.nix:1408-1410`); when unset, seeding
-  stays as now and the first apply claims the host.
-- **`valid_user` rejects a trailing `$`.**
+  applied an edited home part.
+- **Claiming:** with `programs.nixarchy.user` unset and no home import in the
+  flake yet, only an edited `home.nix` claims the host. An untouched seed
+  never does. With `programs.nixarchy.user` set, that user is the owner from
+  the start and their `home.nix` is their home part, edited or not.
+- **A non-owner with the untouched seed** has no home part: their apply
+  proceeds with their system parts and keeps the owner's import and the
+  copied `nixarchy/home.nix` unchanged. Seeding therefore stays as today
+  (every Home Manager user with `useGlobalPkgs`, `modules/home.nix:1408-1410`):
+  the seed locks nobody out.
+- **A non-owner with an edited `home.nix`** is refused: exit non-zero, naming
+  the owner, before any change to the flake.
+- **The plain form** (no home text in `nixarchy-apps.nix`) is written only
+  when there is neither a caller home part nor an existing owner import in
+  the flake. Otherwise the owner's import is re-rendered unchanged.
+- **Handover:** when `programs.nixarchy.user` is set and names a different
+  user than the existing generated import, the existing import is kept
+  (nothing is dropped) until the configured owner applies their own home
+  part, which replaces it. Any other user with an edited `home.nix` is
+  refused as above.
+- **Removal:** the owner removes their packages by applying an empty home
+  module (the template with an empty list, not a zero-byte file). The import
+  and the claim remain. Ownership is released by setting
+  `programs.nixarchy.user` to someone else (handover above).
 - **Unchanged:** a host with one user behaves as today, and a host with no
   home part anywhere (Mode A) produces the same `nixarchy-apps.nix`, byte
   for byte.
@@ -90,40 +106,54 @@ section 3).
 - Hosts with two or more Home Manager users, where today the second user's
   apply silently removes the first's selection. Single-user machines see no
   change.
-- Files: `modules/apps.nix` (`nixarchy-apply`: owner resolution,
-  `valid_user`, the plain-form branch), `modules/home.nix` (seeding),
-  `tests/home-selection.nix`, `tests/options.nix` if the seeding gate is
-  asserted there, and the manual page that names `nixarchy/home.nix`.
+- Files: `modules/apps.nix` (`nixarchy-apply`: owner resolution, the
+  template comparison, the refusal, the plain-form branch),
+  `tests/home-selection.nix`, and the manual page that names
+  `nixarchy/home.nix`. `modules/home.nix` seeding is unchanged.
 - The `apps`, `services`, `advanced` and `flatsnap` parts are untouched.
 
 ## Constraints
 
-- **Refusal happens before any write:** pins, copies and the generated
-  file are untouched when apply refuses.
+- **Scope: protection against accidental overwrites, not access control.**
+  Any user's `advanced.nix` (or `apps.nix`) can set `programs.nixarchy.user`
+  or Home Manager options directly, and nixarchy's system selections are
+  unrestricted by design. The owner check stops a second user clobbering the
+  owner by running apply; it does not stop a user who means to.
+- **Refusal comes before the copy loop and the generated-file write.** When
+  apply refuses, the flake (the copies and the generated file) and the pinned
+  snapshots used for the build are untouched. User-local state (the caller's
+  lock file, the state directory) may already exist.
 - **Deterministic owner:** read from the generated file; exactly one
   `home-manager.users."<x>"` line names the owner. Zero lines means no owner
-  yet (first apply claims it); more than one, or a line that does not parse,
-  makes apply refuse rather than guess.
+  yet; more than one, or a line that does not parse, makes apply refuse
+  rather than guess.
 - **#1809's failure contract** (its three assertions in the template) is
   unchanged.
-- **Mode A:** no home part means no home text in `nixarchy-apps.nix`.
-- **Rendering stays Nix-safe:** the owner name passes `valid_user`, now
-  without `$`, wherever it reaches generated Nix.
+- **Mode A:** no home part and no owner import means no home text in
+  `nixarchy-apps.nix`.
+- **Rendering stays Nix-safe:** the owner name passes `valid_user` wherever
+  it reaches generated Nix. A trailing `$` is legal inside the quoted
+  attribute name (`home-manager.users."alice$"` evaluates; interpolation
+  needs dollar-brace, which `valid_user` already rejects), so
+  `valid_user` is unchanged.
 - **Checks (CLAUDE.md section 1, 3):** every new guard is shown failing
   first, with a two-user fixture that varies who applies. Cases:
   1. owner applies: works, import kept.
-  2. non-owner applies without a home part: the owner's import and copy are
-     kept.
-  3. non-owner applies with a home part: refused, nothing changed (pins,
-     copies, generated file byte-identical).
-  4. `programs.nixarchy.user` set: only that user is seeded, and a
-     non-owner is refused even on a fresh flake.
-  5. a user name ending in `$` is refused.
+  2. non-owner with the untouched seed applies: proceeds, the owner's import
+     is kept, the system parts are applied.
+  3. non-owner with an edited `home.nix` applies: refused, flake
+     byte-identical before and after.
+  4. first apply with the untouched seed does not claim the host.
+  5. configured-owner handover: the old import is kept until the configured
+     owner applies, which replaces it.
+  6. the plain form is written only when there is no owner import.
 
 ## Out of scope
 
 Separate issues if wanted:
 
+- Access control: stopping a user who edits `advanced.nix` or `apps.nix` to
+  set `programs.nixarchy.user` or Home Manager options directly.
 - Concurrent applies by different users (no cross-user lock is added).
 - The same last-writer-wins behaviour on the shared system selections
   (`apps`, `services`, `advanced`, `flatsnap`).
@@ -132,12 +162,7 @@ Separate issues if wanted:
 
 ## Open questions
 
-1. **Deliberate removal.** Under this model the owner removes their home
-   selection by applying with an empty `home.nix`, which keeps an empty
-   import. Is that enough, or is a way to drop the import entirely needed?
-2. **Handing over ownership.** With `programs.nixarchy.user` unset, how does
-   the host change owner? Proposed: set `programs.nixarchy.user`, or edit
-   the generated line by hand. Is a documented manual step acceptable?
-3. **Owner whose account is gone.** The template's `isNormalUser` assertion
-   fails the build for everyone. Keep failing loudly (proposed), or
-   release ownership?
+1. **Owner whose account is gone.** The template's `isNormalUser` assertion
+   fails the build for everyone. Keep failing loudly (proposed; the fix is
+   handover by setting `programs.nixarchy.user`), or release ownership
+   automatically?

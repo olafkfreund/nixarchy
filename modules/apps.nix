@@ -3644,20 +3644,23 @@ in
                             + (if .unfree then "  [unfree]" else "" end)
                             + (if .broken then "  [broken]" else "" end)
                           ),
-                          ( (if .unfree then "unfree " else "" end)
-                            + (if .broken then "broken" else "" end)
-                            | sub(" $"; "")
+                          ( [ (if .unfree then "unfree" else empty end),
+                              (if .broken then "broken" else empty end),
+                              (if .insecure then "insecure" else empty end)
+                            ] | join(" ")
                           ),
                           ( "NIXPKGS PACKAGE  " + .attr
                             + "\n\nversion:  " + (if .version == "" then "?" else .version end)
                             + "\nlicence:  " + (if .license == "" then "unknown" else .license end)
                             + (if .homepage == "" then "" else "\nhomepage: " + .homepage end)
                             + (if .broken then "\n\nMarked BROKEN in nixpkgs: expect the build to fail." else "" end)
+                            + (if .insecure then "\n\nMarked INSECURE in nixpkgs." else "" end)
                             + "\n\n" + (if .description == "" then "(no description)" else .description end)
                             + "\n\nAdding this writes it into your app selection:\n  "
                             + "environment.systemPackages = with pkgs; [ " + .attr + " ];"
                             + "\n\nctrl-t tries it now, without installing."
-                          )
+                          ),
+                          .version
                         ] | @tsv' >> "$tmp"; then
                       # Said, not swallowed: out of memory looked like the script
                       # simply stopping after "indexing nixpkgs".

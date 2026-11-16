@@ -3819,6 +3819,9 @@ in
                   # 2 the option is already there.
                   insert_line() {
                     local payload=$1 opt=$2 tmp
+                    # nx_unlock clears a borrowed handshake; keep it for the next insert (#1789).
+                    : "''${nx_borrowed:=''${NIXARCHY_LOCK_HELD:-0}}"
+                    [ "$nx_borrowed" != 1 ] || export NIXARCHY_LOCK_HELD=1
                     nx_lock
                     if grep -q "#@opt $opt\$" "$file"; then
                       nx_unlock

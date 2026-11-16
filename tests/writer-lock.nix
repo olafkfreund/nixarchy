@@ -175,6 +175,21 @@ pkgs.runCommand "nixarchy-writer-lock"
     ins "$w/apps.nix" '\n  a.b = ((;  #@opt a.b\n' a.b 2>/dev/null; rc=$?
     if [ "$rc" = 1 ] && cmp -s "$w/apps.nix" "$w/apps.before"; then pass '13 insert_line refuses an unparseable result'; else fail '13 insert_line refuses an unparseable result' "rc=$rc"; fi
 
+    # 14. Two inserts under a borrowed lock both write: the first one's nx_unlock
+    # must not leave the second to lock against its own parent.
+    mkins
+    ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+    holder=$!
+    sleep 1
+    ( . "$lib"; . "$w/insert_line.sh"; file=$w/apps.nix; export NIXARCHY_LOCK_HELD=1
+      insert_line "$row" a.b && insert_line '\n  c.d = 1;  #@opt c.d\n' c.d ) 2>/dev/null; rc=$?
+    kill "$holder"; wait "$holder" 2>/dev/null || :
+    if [ "$rc" = 0 ] && grep -q '#@opt a.b$' "$w/apps.nix" && grep -q '#@opt c.d$' "$w/apps.nix"; then
+      pass '14 insert_line keeps a borrowed lock across inserts'
+    else
+      fail '14 insert_line keeps a borrowed lock across inserts' "rc=$rc"
+    fi
+
     # The writer matrix: every writer, three ways. (a) refused with exit 75 and the
     # target untouched while somebody holds the lock; (b) succeeds under the
     # handshake with that holder still running; (c) keeps a symlinked target's

@@ -739,7 +739,9 @@ in
       description = ''
         T3 Code theme forced on every activation when installed through Nixarchy apps.
         null publishes the Omarchy palette without selecting a theme. A missing
-        theme other than omarchy falls back to omarchy and logs the fallback.
+        T3 Code built-in themes work without a published file. If T3 Code does
+        not know the requested theme, it logs the failure and falls back to
+        omarchy when that palette is available.
       '';
     };
 

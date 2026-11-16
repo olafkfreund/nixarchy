@@ -64,36 +64,39 @@ writeShellApplication {
       exit 0
     fi
 
-    want="$theme"
-    if [ ! -f "$STATE/themes/$want.json" ]; then
-      if [ "$want" != omarchy ] && [ -f "$STATE/themes/omarchy.json" ]; then
-        log "theme $want not published; using omarchy"
-        want=omarchy
-      else
-        log "theme $want not published"
+    currentTheme=$(jq -r '.defaultTheme // empty' "$STATE/settings.json" 2>/dev/null)
+    if [ "$currentTheme" = "$theme" ]; then
+      exit 0
+    fi
+
+    set_theme() {
+      local output status
+      output=$(mktemp) || {
+        log 'could not create output file'
         exit 0
+      }
+      if timeout -k ${toString killSecs} ${toString timeoutSecs} t3 theme set "$1" --base-dir "$T3CODE_HOME" >"$output" 2>&1; then
+        status=0
+      else
+        status=$?
+        log "t3 theme set exited $status"
+        tail -n 5 "$output" | while IFS= read -r line || [ -n "$line" ]; do
+          log "$line"
+        done
+      fi
+      rm -f "$output"
+      return "$status"
+    }
+
+    if set_theme "$theme"; then
+      exit 0
+    fi
+    if [ "$theme" != omarchy ] && [ -f "$STATE/themes/omarchy.json" ]; then
+      log "theme $theme not available; using omarchy"
+      if [ "$currentTheme" != omarchy ]; then
+        set_theme omarchy || :
       fi
     fi
-
-    currentTheme=$(jq -r '.defaultTheme // empty' "$STATE/settings.json" 2>/dev/null)
-    if [ "$currentTheme" = "$want" ]; then
-      exit 0
-    fi
-
-    output=$(mktemp) || {
-      log 'could not create output file'
-      exit 0
-    }
-    if timeout -k ${toString killSecs} ${toString timeoutSecs} t3 theme set "$want" --base-dir "$T3CODE_HOME" >"$output" 2>&1; then
-      :
-    else
-      status=$?
-      log "t3 theme set exited $status"
-      tail -n 5 "$output" | while IFS= read -r line || [ -n "$line" ]; do
-        log "$line"
-      done
-    fi
-    rm -f "$output"
     exit 0
   '';
 }

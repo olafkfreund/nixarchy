@@ -9,14 +9,23 @@ let
   '';
   t3 = pkgs.writeShellScriptBin "t3" ''
     printf 't3 %s\n' "$*" >> "$HOME/calls"
-    if [ -e "$HOME/t3-seven-lines" ]; then
-      for n in 1 2 3 4 5 6 7; do printf 'line%s\n' "$n"; done
+    if [ "''${T3_MODE:-}" = fail ]; then
+      for n in 1 2 3 4 5 6 7; do printf 'line%s\n' "$n" >&2; done
       exit 1
     fi
     if [ -e "$HOME/t3-hang" ]; then
       trap "" TERM
       exec ${pkgs.coreutils}/bin/sleep 60
     fi
+    case "$3" in
+      ember|grove|iris|ocean|t3-chat) ;;
+      *)
+        if [ ! -f "$5/userdata/themes/$3.json" ]; then
+          printf 'ThemeIdUnknownError: No theme named "%s"\n' "$3" >&2
+          exit 1
+        fi
+        ;;
+    esac
     printf '{"defaultTheme":"%s"}\n' "$3" > "$5/userdata/settings.json"
   '';
   empty = pkgs.runCommand "t3code-empty-bin" { } "mkdir -p $out/bin";
@@ -34,6 +43,7 @@ let
   normal = script { };
   nullTheme = script { theme = null; };
   plus = script { theme = "omarchy-plus"; };
+  emberTheme = script { theme = "ember"; };
   noT3 = script { t3 = empty; };
   noPublisher = script { publisher = empty; };
   vm = inputs.self.nixosConfigurations.vm.extendModules {
@@ -73,7 +83,7 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     }
     run_case() {
       mkdir -p "$root/$1/tmp"
-      if env -i HOME="$root/$1" TMPDIR="$root/$1/tmp" PATH=${pkgs.coreutils}/bin "$2"/bin/nixarchy-t3code-theme >"$root/$1.out" 2>&1; then
+      if env -i HOME="$root/$1" TMPDIR="$root/$1/tmp" PATH=/var/empty T3_MODE="''${T3_MODE:-}" "$2"/bin/nixarchy-t3code-theme >"$root/$1.out" 2>&1; then
         echo "  exit 0: $1"
       else
         fail "$1 exited nonzero: $(cat "$root/$1.out")"
@@ -102,8 +112,9 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     stage placeholder-no-theme '{{'
     touch placeholder-no-theme/no-theme
     run_case placeholder-no-theme ${normal}
-    logged placeholder-no-theme "theme omarchy not published" || fail "placeholder missing theme log"
-    ! called placeholder-no-theme "t3 " || fail "missing theme selected"
+    logged placeholder-no-theme "t3 theme set exited 1" || fail "placeholder missing theme failure log"
+    logged placeholder-no-theme 'ThemeIdUnknownError: No theme named "omarchy"' || fail "placeholder missing theme detail"
+    called placeholder-no-theme "t3 theme set omarchy" || fail "missing theme was not attempted"
 
     stage no-settings
     run_case no-settings ${normal}
@@ -122,9 +133,16 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     run_case selected ${normal}
     ! called selected "t3 " || fail "already selected theme ran t3"
 
+    stage built-in-ember
+    mkdir -p built-in-ember/.t3/userdata
+    printf '{"defaultTheme":"omarchy"}\n' > built-in-ember/.t3/userdata/settings.json
+    run_case built-in-ember ${emberTheme}
+    called built-in-ember "t3 theme set ember --base-dir" || fail "built-in ember was not selected"
+    grep -q '"defaultTheme":"ember"' built-in-ember/.t3/userdata/settings.json || fail "built-in ember selection missing"
+    ! logged built-in-ember "using omarchy" || fail "built-in ember fell back"
+
     stage t3-error
-    touch t3-error/t3-seven-lines
-    run_case t3-error ${normal}
+    T3_MODE=fail run_case t3-error ${normal}
     logged t3-error "t3 theme set exited 1" || fail "t3 error log"
     for n in 3 4 5 6 7; do logged t3-error "line$n" || fail "missing tail line $n"; done
     ! logged t3-error "line1" && ! logged t3-error "line2" || fail "logged more than last five lines"
@@ -137,6 +155,7 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     logged t3-hangs "t3 theme set exited 137" || fail "t3 timeout did not kill"
     [ -z "$(find t3-hangs/tmp -type f -print)" ] || fail "t3 timeout left temp file"
 
+    stage missing-t3
     run_case missing-t3 ${noT3}
     logged missing-t3 "t3 not found" || fail "missing t3 log"
     [ ! -e missing-t3/.t3 ] || fail "missing t3 created state"
@@ -148,8 +167,19 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
 
     stage plus-fallback
     run_case plus-fallback ${plus}
-    logged plus-fallback "theme omarchy-plus not published; using omarchy" || fail "fallback log"
+    called plus-fallback "t3 theme set omarchy-plus --base-dir" || fail "unknown theme was not attempted"
+    logged plus-fallback 'ThemeIdUnknownError: No theme named "omarchy-plus"' || fail "unknown theme detail"
+    logged plus-fallback "theme omarchy-plus not available; using omarchy" || fail "fallback log"
     called plus-fallback "t3 theme set omarchy --base-dir" || fail "fallback did not select omarchy"
+    [ "$(grep -c '^t3 ' plus-fallback/calls)" -eq 2 ] || fail "fallback made the wrong number of calls"
+
+    stage plus-current
+    mkdir -p plus-current/.t3/userdata
+    printf '{"defaultTheme":"omarchy"}\n' > plus-current/.t3/userdata/settings.json
+    run_case plus-current ${plus}
+    called plus-current "t3 theme set omarchy-plus --base-dir" || fail "unknown theme was not attempted from omarchy"
+    logged plus-current "theme omarchy-plus not available; using omarchy" || fail "current theme fallback log"
+    [ "$(grep -c '^t3 ' plus-current/calls)" -eq 1 ] || fail "already current omarchy was selected again"
 
     stage plus-present
     mkdir -p plus-present/.t3/userdata/themes
@@ -158,7 +188,7 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     called plus-present "t3 theme set omarchy-plus --base-dir" || fail "plus theme not selected"
 
     mkdir -p no-home/tmp
-    if env -i TMPDIR="$root/no-home/tmp" PATH=${pkgs.coreutils}/bin ${normal}/bin/nixarchy-t3code-theme > no-home.out 2>&1; then
+    if env -i TMPDIR="$root/no-home/tmp" PATH=/var/empty ${normal}/bin/nixarchy-t3code-theme > no-home.out 2>&1; then
       echo "  exit 0: no-home"
     else
       fail "unset HOME exited nonzero"
@@ -168,9 +198,12 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     stage plus-missing
     touch plus-missing/no-theme
     run_case plus-missing ${plus}
-    logged plus-missing "theme omarchy-plus not published" || fail "plus missing log"
-    ! called plus-missing "t3 " || fail "unpublished plus selected"
+    logged plus-missing "t3 theme set exited 1" || fail "plus missing failure log"
+    logged plus-missing 'ThemeIdUnknownError: No theme named "omarchy-plus"' || fail "plus missing detail"
+    called plus-missing "t3 theme set omarchy-plus --base-dir" || fail "plus missing was not attempted"
+    ! called plus-missing "t3 theme set omarchy --base-dir" || fail "fallback ran without omarchy palette"
 
+    stage missing-publisher
     run_case missing-publisher ${noPublisher}
     logged missing-publisher "omarchy-theme-set-t3code not found" || fail "missing publisher log"
     [ ! -e missing-publisher/.t3 ] || fail "missing publisher created state"
@@ -178,7 +211,7 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     # Run the module's generated entry with the real publisher and a stub t3.
     stage activation
     mkdir -p activation/tmp
-    if env -i HOME="$root/activation" TMPDIR="$root/activation/tmp" PATH=${pkgs.coreutils}/bin ${activationRunner} > activation.out 2>&1; then
+    if env -i HOME="$root/activation" TMPDIR="$root/activation/tmp" PATH=/var/empty ${activationRunner} > activation.out 2>&1; then
       echo "  exit 0: generated activation"
     else
       fail "generated activation failed: $(cat activation.out)"
@@ -188,7 +221,7 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
 
     stage activation-dry
     mkdir -p activation-dry/tmp
-    if env -i HOME="$root/activation-dry" TMPDIR="$root/activation-dry/tmp" PATH=${pkgs.coreutils}/bin DRY_RUN=1 ${activationRunner} > activation-dry.out 2>&1; then
+    if env -i HOME="$root/activation-dry" TMPDIR="$root/activation-dry/tmp" PATH=/var/empty DRY_RUN=1 ${activationRunner} > activation-dry.out 2>&1; then
       echo "  exit 0: generated activation dry"
     else
       fail "generated activation dry failed"
@@ -199,7 +232,7 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     mkdir -p activation-placeholder/tmp activation-placeholder/.t3/userdata/themes
     printf 'previous palette\n' > activation-placeholder/.t3/userdata/themes/omarchy.json
     printf '{"defaultTheme":"omarchy"}\n' > activation-placeholder/.t3/userdata/settings.json
-    if env -i HOME="$root/activation-placeholder" TMPDIR="$root/activation-placeholder/tmp" PATH=${pkgs.coreutils}/bin ${activationRunner} > activation-placeholder.out 2>&1; then
+    if env -i HOME="$root/activation-placeholder" TMPDIR="$root/activation-placeholder/tmp" PATH=/var/empty ${activationRunner} > activation-placeholder.out 2>&1; then
       echo "  exit 0: generated activation placeholder"
     else
       fail "generated activation placeholder failed"

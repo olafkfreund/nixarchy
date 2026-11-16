@@ -49,14 +49,13 @@ pkgs.runCommand "nixarchy-app-selection"
     apply=${apply}/bin/nixarchy-apply
     definstall=${defaultInstall}/bin/nixarchy-default-install
 
-    # A missing row is inserted, and the file keeps its mode. (Whether that
-    # write was a rename is not visible here: enable's own sed -i replaces the
-    # inode straight after. The catalogue-diff case below shows the rename.)
+    # A missing row is inserted, and the file keeps its mode and its inode: the
+    # writers rewrite in place (#1789), so a symlinked config survives.
     sed -i '/#@ firefox/d' "$file"
     inode=$(stat -c %i "$file")
     "$enable" firefox >/dev/null || bad 'enable firefox failed'
     grep -q 'firefox.enable = true' "$file" || bad 'enable did not insert the missing row'
-    test "$(stat -c %a "$file")" = 640 && test "$(stat -c %i "$file")" != "$inode" || bad 'enable did not rename a same-directory temp with the original mode'
+    test "$(stat -c %a "$file")" = 640 && test "$(stat -c %i "$file")" = "$inode" || bad 'enable did not keep the original inode and mode'
 
     # A live false is a selection to turn on, not an already-enabled result.
     sed -i 's/firefox.enable = true/firefox.enable = false/' "$file"
@@ -68,12 +67,12 @@ pkgs.runCommand "nixarchy-app-selection"
     "$disable" firefox >/dev/null || bad 'disable firefox failed'
     grep -q '# firefox.enable' "$file" || bad 'disable did not comment the row'
 
-    # catalogue-diff must report a refusal, and a successful --add also renames.
+    # catalogue-diff must report a refusal, and a successful --add keeps the inode.
     printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '  };' '}' > "$file"
     inode=$(stat -c %i "$file")
     "$diff" --add >/dev/null || bad 'catalogue-diff --add failed'
-    grep -q '#@ firefox' "$file" && test "$(stat -c %i "$file")" != "$inode" &&
-      test "$(stat -c %a "$file")" = 640 || bad 'catalogue-diff did not rename with the original mode'
+    grep -q '#@ firefox' "$file" && test "$(stat -c %i "$file")" = "$inode" &&
+      test "$(stat -c %a "$file")" = 640 || bad 'catalogue-diff did not keep the original inode and mode'
     # --add writes rows as programs.nixarchy.apps.<id>; enable and disable
     # must both recognise that form (#1276 review).
     "$enable" firefox >/dev/null 2>&1 || bad 'enable failed on a full-path row'
@@ -146,6 +145,44 @@ pkgs.runCommand "nixarchy-app-selection"
     if grep -qF '#@pkg kdePackages.kdenlive' "$file"; then bad 'pkg-remove left kdenlive'; fi
     grep -qF '# keep me' "$file" || bad 'pkg-remove changed an unrelated line'
 
+    # pkg-add writes the real file once, under the lock, and only if it is
+    # still what it started from (#1789). Edited meanwhile: refused, edit intact.
+    # A holder keeps pkg-add waiting at its lock, so the edit lands before the commit.
+    lock=$XDG_STATE_HOME/nixarchy/applied/lock
+    mkdir -p "$(dirname "$lock")"
+    ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+    holder=$!
+    sleep 1
+    "$pkgadd" kdePackages.kdenlive > commit.out 2>&1 &
+    addpid=$!
+    sleep 1
+    printf '%s\n' '  # edited meanwhile' >> "$file"
+    kill "$holder"; wait "$holder" 2>/dev/null || true
+    rc=0; wait "$addpid" || rc=$?
+    test "$rc" -eq 75 && grep -qF 'changed while pkg-add was running' commit.out &&
+      grep -qF '# edited meanwhile' "$file" && ! grep -qF '#@pkg kdePackages.kdenlive' "$file" ||
+      bad "pkg-add overwrote an edit made while it ran: rc=$rc $(cat commit.out)"
+
+    # Answering n at "Write this?" under a PTY: the file has not been touched
+    # before the answer, and is not after it either.
+    sed -i '/#@pkg kdePackages.kdenlive/d' "$file"
+    cp "$file" pty.before
+    mkfifo pty.in
+    script -qec "$pkgadd kdePackages.kdenlive" /dev/null < pty.in > pty.out 2>&1 &
+    ptypid=$!
+    exec 7>pty.in
+    for _ in $(seq 120); do grep -qF '[Y/n]' pty.out && break; sleep 0.5; done
+    if grep -qF '[Y/n]' pty.out; then
+      cmp -s pty.before "$file" || bad 'pkg-add wrote the file before the prompt was answered'
+    else
+      bad "pkg-add never reached the [Y/n] prompt: $(cat pty.out)"
+      kill "$ptypid" 2>/dev/null || true
+    fi
+    printf 'n\n' >&7
+    exec 7>&-
+    wait "$ptypid" || true
+    cmp -s pty.before "$file" || bad 'pkg-add changed the file after n'
+
     # Extract the shipped Flathub function. Replace only the terminal read;
     # the query is fixed and fzf/curl stay stubbed, so this needs no network.
     sed -n '/^flathub_search() {/,/^}/p' ${search}/bin/nixarchy-search \
@@ -199,8 +236,34 @@ pkgs.runCommand "nixarchy-app-selection"
     sleep 1
     rc=0; NIXARCHY_FLAKE=$PWD/flake timeout 10 "$apply" --yes --no-preview > lock.out 2>&1 || rc=$?
     kill "$holder" 2>/dev/null || true
-    test "$rc" -eq 1 && grep -q 'another apply is running' lock.out ||
+    test "$rc" -eq 1 && grep -q 'a write or another apply is running (it may be waiting at a prompt)' lock.out ||
       bad "a --yes apply waited on (or ignored) a held lock: rc=$rc $(cat lock.out)"
+
+    # Without --yes it waits, and says so. Bounded, so a bug cannot hang the build.
+    lock=$XDG_STATE_HOME/nixarchy/applied/lock
+    ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+    holder=$!
+    sleep 1
+    NIXARCHY_FLAKE=$PWD/flake timeout 60 "$apply" --no-preview < /dev/null > wait.out 2>&1 &
+    waiter=$!
+    sleep 2
+    grep -q 'waiting for a write or another apply to finish' wait.out ||
+      bad "an interactive apply did not say it was waiting: $(cat wait.out)"
+    kill "$holder"; wait "$holder" 2>/dev/null || true
+    wait "$waiter" || true
+
+    # app-remove stops with 75 when a writer is refused, and says what it did.
+    printf '%s\n' '{ ... }: {' '  programs.nixarchy.apps = {' '    firefox.enable = true;  #@ firefox' '  };' '}' > "$file"
+    cp "$file" remove.before
+    ( exec 8>>"$lock"; flock 8; exec sleep 30 ) &
+    holder=$!
+    sleep 1
+    rc=0
+    FZF_DEFAULT_OPTS=--filter=firefox PATH=${appDisable}/bin:$PATH timeout 60 "$remove" > remove.out 2>&1 || rc=$?
+    kill "$holder"; wait "$holder" 2>/dev/null || true
+    test "$rc" -eq 75 && grep -q 'nixarchy-app-disable was refused; removed so far: nothing' remove.out &&
+      cmp -s "$file" remove.before ||
+      bad "app-remove did not stop with 75 and report: rc=$rc $(cat remove.out)"
 
     # ---- nixarchy-default-install (#1623) ---------------------------------
     defbin=$PWD/defbin

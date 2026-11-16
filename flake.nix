@@ -1828,6 +1828,7 @@
             "t3code-theme"
             "language-locale"
             "language-select"
+            "pkg-index"
             "writer-lock"
             # The notification history keeps text for the newest rows only (#1663).
             "notification-store"

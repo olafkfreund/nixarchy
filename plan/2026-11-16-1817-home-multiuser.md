@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1817
 spec: spec/2026-11-16-1817-home-multiuser.md
 coders:

@@ -1629,6 +1629,16 @@ will bite the next plugin too:
 
 ## `modules/apps.nix`
 
+`nixarchy-apply` reads the single Home Manager owner from the generated
+`nixarchy-apps.nix`: an edited `home.nix` claims an unowned host, the owner's
+file replaces their copy, and another user's edited file is refused.
+`programs.nixarchy.user` is not read for ownership because it is baked into
+the system being rebuilt; making it the owner would deadlock a handoff and
+race with the flake's current selection. In the apply script, functions must
+propagate every fallible command with `|| return 1` or explicit cleanup:
+calling a function in `if`, `&&`, `||` or `$(...)` disables `errexit` inside it,
+so `x=$(f) || exit 1` alone cannot catch an earlier failure in `f`.
+
 <a id="the-command-each-app-puts-on-path-so-the-menu-can-"></a>
 
 ### The command each app puts on PATH, so the menu can tell "you already…

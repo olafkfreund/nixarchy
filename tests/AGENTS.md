@@ -560,6 +560,13 @@ for the same reason the stub is: apply's path to `nh` is reached or not for
 reasons the fixture does not fully control. Treat it as unproven until somebody
 makes it go red, and do not add assertions in its shape without doing so.
 
+## home-selection: the owner holes (#1817)
+
+`checks.home-selection` stubs the account lookup (`getent`), so the real
+account database, and the real difference between "no such user" and a failing
+lookup, are untested. Concurrent applies by different users are untested too:
+there is no cross-user lock.
+
 ## The agent-id comparison, and the two ways it could have been useless
 
 `pkgs/omarchy/default.nix`'s menu check now asserts every

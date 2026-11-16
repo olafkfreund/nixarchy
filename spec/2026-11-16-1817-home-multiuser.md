@@ -296,3 +296,51 @@ output goes in the PR.
 | 12 | snapshot replaced by reading the live file (classification and copy) |
 
 Not run locally here: nothing is built by this spec.
+
+## Clarifications found in plan review (2026-11-16)
+
+Approved text above is unchanged; these settle what it left open.
+
+- **Release restores both files.** In "Pair write" step 4, "restore the backup
+  copy" means both the copy and `$dest`. A release replaces `$dest` first, so if
+  the removal of the copy then fails, restoring only the copy would leave an
+  unowned `$dest` after a failed command. Step 2 therefore backs up both, and a
+  failure restores both (write mode as well, harmlessly). `$applied` is untouched
+  on failure. In release mode "update the copy's record" (step 5) means remove it.
+  Verification gains a release-failure case: the removal step fails after `$dest`
+  changed, and both files are byte-identical to the originals.
+- **A release renders the post-release state once.** `--release-home` clears the
+  owner, forces the home part to `keep` and renders the plain form for the
+  generated file at the normal render point (after the copy loop, where
+  `$imports` is known); it never re-renders the released owner and never writes
+  `$dest` earlier. The same holds for the claim/copy pair write: it runs where
+  `$imports` is known, so only the refusal and the release authorisation precede
+  the copy loop.
+- **Edited-in-flake protection stays for the home part.** The copy loop's rule
+  (an edit made in the flake since the last apply is kept as a persistent
+  `edited-in-flake` backup with a NOTE, not overwritten silently) applies to the
+  home copy in the pair write, on a claim, an owner copy and a release. Verified
+  by a case where the flake copy is edited and the next apply keeps the backup.
+- **`--release-home` combinations.** With `--detach`, `--status` or `--log` it
+  exits 2 before any unit starts or query runs, because the detached unit
+  forwards only `--yes`, `--no-preview` and the expect flags and would otherwise
+  run an ordinary apply. With `--expect-sha256 home=` the pin check runs first.
+- **The validated name is the rendered one.** The user-name check (`:4757`)
+  validates the name that will reach generated Nix (the caller for a
+  claim/copy, the owner for a keep), checked after the decision.
+- **Error handling.** Functions here must not rely on errexit: `set -e` is off
+  inside a function called on the left of `||`, in `if`, or in `$(...)`, so each
+  failing command carries an explicit `|| return`. `x=$(f) || exit 1` does not
+  make errexit apply inside `f`.
+- **Verification seams.** Function-level cases execute the production functions
+  extracted from the script (`snapshot_home`, `read_owner`, `home_decide`,
+  `account_exists`, `release_allowed`, `replace_file`, `remove_file`,
+  `write_home_pair`), not copies. Case 9's "the function pointed at a command
+  that exits 127 / 1" is a stub `getent` first on PATH, which exercises the real
+  `account_exists`. Cases 3-5 pre-seed the home copy with non-seed bytes so a
+  skipped copy cannot pass. Added cases: read_owner rejects a quoted invalid
+  name, a release names the owner on stderr when refused, a release by the
+  owner with an edited caller home.nix still copies the other four parts and
+  does not claim, and `--release-home` with `--detach` is rejected.
+- **Test ids.** The cases above are numbered 1-12 within this spec; the test
+  file already uses 1-11, so the plan names them `own-N`.

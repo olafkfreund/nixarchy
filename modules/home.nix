@@ -1662,6 +1662,59 @@ in
       fi
     '';
 
+    # #1803: installing T3 Code skips Arch's theming steps; publish its palette and select it once without replacing a choice.
+    home.activation.nixarchyT3CodeTheme = lib.mkIf (appEnabled "t3-code") (
+      lib.hm.dag.entryAfter [ "nixarchySeed" ] ''
+        # A T3CODE_HOME set only in a shell rc file does not reach activation.
+        ${
+          if config.home.sessionVariables ? T3CODE_HOME then
+            "t3home=${lib.escapeShellArg config.home.sessionVariables.T3CODE_HOME}"
+          else
+            ''t3home="$HOME/.t3"''
+        }
+        marker=${lib.escapeShellArg "${config.xdg.stateHome}/nixarchy/t3code-theme-selected"}
+        t3="${osConfig.programs.nixarchy.apps.t3-code.package}/bin/t3"
+        warn() { echo "nixarchy: T3 Code: $*" >&2; }
+
+        if ! run mkdir -p "$t3home/userdata" ${lib.escapeShellArg "${config.xdg.stateHome}/nixarchy"}; then
+          warn "could not create profile or state directory"
+        else
+          if run env PATH=${
+            lib.makeBinPath [
+              pkgs.coreutils
+              pkgs.gnused
+              pkgs.gnugrep
+            ]
+          }:$PATH OMARCHY_PATH=${omarchyPath} T3CODE_HOME="$t3home" ${omarchyPath}/bin/omarchy-theme-set-t3code; then
+            if [ -f "$HOME/.local/state/omarchy/current/theme/t3code.json" ] &&
+              ${pkgs.diffutils}/bin/cmp -s "$HOME/.local/state/omarchy/current/theme/t3code.json" "$t3home/userdata/themes/omarchy.json" &&
+              [ ! -e "$marker" ]; then
+              settings="$t3home/userdata/settings.json"
+              if [ ! -e "$settings" ]; then
+                rc=1
+              else
+                rc=0
+                ${pkgs.jq}/bin/jq -e 'has("defaultTheme")' "$settings" >/dev/null || rc=$?
+              fi
+              case "$rc" in
+                1)
+                  if run ${pkgs.coreutils}/bin/timeout -k 5 20 "$t3" theme set omarchy --base-dir "$t3home"; then
+                    run touch "$marker" || warn "could not record theme selection"
+                  else
+                    warn "could not select the Omarchy theme"
+                  fi
+                  ;;
+                0) run touch "$marker" || warn "could not record existing theme choice" ;;
+                *) warn "could not read $settings (jq exit $rc)" ;;
+              esac
+            fi
+          else
+            warn "could not publish the Omarchy palette"
+          fi
+        fi
+      ''
+    );
+
     # #942: clear the hand-written voxtype unit before Home Manager trips over
     # it. Measured on razer, which is the state of anyone who followed
     # Omarchy's own install instructions:

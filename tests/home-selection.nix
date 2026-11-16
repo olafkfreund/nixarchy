@@ -480,6 +480,70 @@ pkgs.runCommand "nixarchy-home-selection"
     kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
     [ "$rc" -eq 0 ] && cmp -s "$homefile" flake/nixarchy/home.nix && [ -n "$kept" ] && [ "$(cat "$kept")" = '# edited in flake' ] || bad own-16b "flake edit not retained: rc=$rc $(cat own16b-second.out)"
 
+    owned_flake "$user" '# previous owner bytes'
+    reset_files
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own8-release.out 2>own8-release.err
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF "released home.nix from $user" own8-release.out && cmp -s plain.expected "$generated" && [ ! -e flake/nixarchy/home.nix ] || bad own-8 "owner release failed: rc=$rc $(cat own8-release.out own8-release.err)"
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own8-claim.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF "home-manager.users.\"$user\".imports" "$generated" && cmp -s "$homefile" flake/nixarchy/home.nix || bad own-8 "claim after release failed: rc=$rc $(cat own8-claim.out)"
+    before=$(fhash)
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home --expect-sha256 home=$(printf %064d 0) >own8-pin.out 2>&1
+    rc=$?
+    [ "$rc" -eq 4 ] && [ "$(fhash)" = "$before" ] || bad own-8 "release ignored a mismatched home pin: rc=$rc $(cat own8-pin.out)"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own8-empty.out 2>&1
+    rc=$?
+    before=$(fhash)
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own8-empty-again.out 2>&1
+    empty_rc=$?
+    [ "$rc" -eq 0 ] && [ "$empty_rc" -eq 0 ] && grep -qF 'no home owner; nothing to release' own8-empty-again.out && [ "$(fhash)" = "$before" ] || bad own-8 "empty owner was not a no-op: rc=$empty_rc $(cat own8-empty-again.out)"
+
+    getent_real=${pkgs.getent}/bin/getent
+    "$getent_real" passwd nobody >/dev/null 2>&1 || bad own-9b 'precondition failed: nobody account is missing'
+    [ "$user" != nobody ] || bad own-9b 'precondition failed: caller is nobody'
+    owned_flake nobody '# previous owner bytes'
+    reset_files
+    before=$(fhash)
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own9b-refused.out 2>own9b-refused.err
+    rc=$?
+    [ "$rc" -eq 1 ] && grep -qF 'home.nix belongs to nobody' own9b-refused.err && [ "$(fhash)" = "$before" ] || bad own-9b "existing account released: rc=$rc $(cat own9b-refused.out own9b-refused.err)"
+    "$getent_real" passwd gone-1817 >/dev/null 2>&1
+    [ "$?" -eq 2 ] || bad own-9b 'precondition failed: gone-1817 account exists or lookup failed'
+    owned_flake gone-1817 '# previous owner bytes'
+    reset_files
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own9b-allowed.out 2>own9b-allowed.err
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF 'released home.nix from gone-1817' own9b-allowed.out && cmp -s plain.expected "$generated" && [ ! -e flake/nixarchy/home.nix ] || bad own-9b "absent account release failed: rc=$rc $(cat own9b-allowed.out own9b-allowed.err)"
+
+    owned_flake "$user" '# previous owner bytes'
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    printf '%s\n' '# changed apps' >>"$appsfile"
+    for part in services advanced flatsnap; do
+      printf '%s\n' "# $part source" >"$XDG_CONFIG_HOME/nixarchy/$part.nix"
+    done
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own13.out 2>&1
+    rc=$?
+    copied_parts=1
+    for part in apps services advanced flatsnap; do
+      cmp -s "$XDG_CONFIG_HOME/nixarchy/$part.nix" "flake/nixarchy/$part.nix" || copied_parts=0
+    done
+    [ "$rc" -eq 0 ] && [ "$copied_parts" -eq 1 ] && [ ! -e flake/nixarchy/home.nix ] && ! grep -qF 'home-manager.users' "$generated" && grep -qF 'released home.nix from' own13.out || bad own-13 "release copied or claimed the wrong parts: rc=$rc $(cat own13.out)"
+
+    owned_flake "$user" '# previous owner bytes'
+    reset_files
+    before=$(fhash)
+    for flag in --detach --status --log; do
+      NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home "$flag" >own15.out 2>own15.err
+      rc=$?
+      [ "$rc" -eq 2 ] && grep -qF -- '--release-home cannot be combined' own15.err && [ "$(fhash)" = "$before" ] || bad own-15 "$flag was accepted or changed the flake: rc=$rc $(cat own15.out own15.err)"
+    done
+    reject_line=$(grep -nF 'nixarchy-apply: --release-home cannot be combined' "$apply" | head -1 | cut -d: -f1)
+    unit_line=$(grep -nF 'systemd-run --user --unit=nixarchy-rebuild' "$apply" | head -1 | cut -d: -f1)
+    [ -n "$reject_line" ] && [ -n "$unit_line" ] && [ "$reject_line" -lt "$unit_line" ] || bad own-15 'release flag rejection is after the detach unit start'
+
     [ "$fails" -eq 0 ] || { echo "$fails case(s) failed"; exit 1; }
     touch "$out"
   ''

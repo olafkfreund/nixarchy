@@ -4418,13 +4418,14 @@ in
                 text = ''
                   # The two answers as flags, for a caller with no terminal (#765).
                   # Anything else exits 2: an unknown flag must never mean "switch".
-                  yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation=""
+                  yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation="" release_home=""
                   expect=()
                   while [ $# -gt 0 ]; do
                     case "$1" in
                       --yes) yes=1 ;;
                       --no-preview) nopreview=1 ;;
                       --detach) detach=1 ;;
+                      --release-home) release_home=1 ;;
                       --status) status=1 ;;
                       --json) json=1 ;;
                       --log) wantlog=1 ;;
@@ -4448,6 +4449,7 @@ in
                       *)
                         echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
                         echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
+                        echo "       nixarchy-apply --release-home [--yes] [--no-preview]" >&2
                         echo "       nixarchy-apply --status [--json]" >&2
                         echo "       nixarchy-apply --log [--follow] [--invocation <id>]" >&2
                         echo "" >&2
@@ -4457,6 +4459,11 @@ in
                     esac
                     shift
                   done
+
+                  if [ -n "$release_home" ] && { [ -n "$detach" ] || [ -n "$status" ] || [ -n "$wantlog" ]; }; then
+                    echo "nixarchy-apply: --release-home cannot be combined with --detach, --status or --log" >&2
+                    exit 2
+                  fi
 
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
@@ -4905,10 +4912,21 @@ in
                   classify_home ${homeTemplate}
                   user=$(id -un)
                   read_owner || exit 1
-                  home_action=$(home_decide "$owner" "$user" "$home_state") || exit 1
-                  if [ "$home_action" = refuse ]; then
-                    echo "nixarchy-apply: home.nix belongs to $owner; $user has edited theirs. Ask $owner to apply, or run nixarchy-apply --release-home to give the host up." >&2
-                    exit 1
+                  if [ -n "$release_home" ]; then
+                    if [ -z "$owner" ]; then
+                      echo "no home owner; nothing to release"
+                      exit 0
+                    fi
+                    release_allowed "$owner" "$user" || exit 1
+                    released=$owner
+                    owner=""
+                    home_action=release
+                  else
+                    home_action=$(home_decide "$owner" "$user" "$home_state") || exit 1
+                    if [ "$home_action" = refuse ]; then
+                      echo "nixarchy-apply: home.nix belongs to $owner; $user has edited theirs. Ask $owner to apply, or run nixarchy-apply --release-home to give the host up." >&2
+                      exit 1
+                    fi
                   fi
                   render_user=""
                   case "$home_action" in
@@ -4997,6 +5015,11 @@ in
                     claim | copy)
                       write_home_pair write "$tmp" || { rm -f "$tmp"; exit 1; }
                       rm -f "$tmp"
+                      ;;
+                    release)
+                      write_home_pair release "$tmp" || { rm -f "$tmp"; exit 1; }
+                      rm -f "$tmp"
+                      echo "released home.nix from $released"
                       ;;
                     *)
                       if [ -f "$dest" ]; then

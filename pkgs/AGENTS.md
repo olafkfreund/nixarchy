@@ -92,6 +92,17 @@ glyph is three bytes of UTF-8, and the sandbox's locale is C, so `awk
 length()` and `wc -c` read an 87-column banner as roughly 250. Count
 characters (`len()` in Python with `encoding="utf-8"`).
 
+**A clean `bash -n` on the phase proves nothing about one `--replace-fail`'s
+quoting.** In #1793, a multi-line `--replace-fail "$(printf '%s\n' '…' '…')"`
+lost the `'` that closed its last line. A `'` further down the phase closed it
+instead, so the extracted `installPhase` passed `bash -n`. The build then
+failed on a *different* substitution, whose pattern had swallowed every
+command in between. To see what a substitution really receives, put its lines
+after `substituteInPlace() { for a in "$@"; do printf '[%s]\n' "$a"; done; }`
+and run them. Each argument prints in brackets, and a misplaced quote is
+visible at once. Extract the phase with `nix derivation show <drv> | jq -r
+'.derivations // . | to_entries[0].value.env.installPhase'`.
+
 ## `writeShellApplication`'s bash has no `compgen`, and an `if` hides that
 
 The shell it wraps is nixpkgs' plain `bash`, not `bashInteractive`, and that

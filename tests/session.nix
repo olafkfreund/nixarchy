@@ -7,6 +7,38 @@
 }:
 let
   omarchyPkg = (pkgs.extend inputs.self.overlays.default).omarchy;
+  portalProbe = pkgs.writeText "portal-probe.py" ''
+    import sys
+    from gi.repository import Gio, GLib
+
+    connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    token = "nixarchy1793"
+    sender = connection.get_unique_name()[1:].replace(".", "_")
+    request = "/org/freedesktop/portal/desktop/request/" + sender + "/" + token
+    loop = GLib.MainLoop()
+    result = []
+
+    def response(_connection, _sender, _path, _interface, _signal, parameters):
+        result.append(parameters.unpack()[0])
+        loop.quit()
+
+    connection.signal_subscribe(
+        "org.freedesktop.portal.Desktop", "org.freedesktop.portal.Request",
+        "Response", request, None, Gio.DBusSignalFlags.NONE, response)
+    connection.call_sync(
+        "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+        "org.freedesktop.portal.FileChooser", "OpenFile",
+        GLib.Variant("(ssa{sv})", ("", "nixarchy 1793 probe",
+                                    {"handle_token": GLib.Variant("s", token)})),
+        None, Gio.DBusCallFlags.NONE, -1, None)
+    print("requested", flush=True)
+    GLib.timeout_add_seconds(120, loop.quit)
+    loop.run()
+    if not result:
+        print("timeout", flush=True)
+        sys.exit(2)
+    print("response " + str(result[0]), flush=True)
+  '';
   # ai-mirror's MCP requests for the #773 block at the end of the script, one
   # JSON-RPC message per line, as the server reads them.
   aimMsg =
@@ -2216,7 +2248,9 @@ pkgs.testers.runNixOSTest {
     # The new apps claim these types (#1612); adding them must not move the handler.
     # Markdown is not asserted: upstream sets no default for it.
     mimes = [("application/pdf", "${omarchyPkg.passthru.pdfDesktop}"),
-             ("video/mp4", "mpv.desktop"),
+             ("video/mp4", "${
+               if (omarchyPkg.passthru.hasOmaview or false) then "omaview.desktop" else "mpv.desktop"
+             }"),
              # From hasPlain, not editorDesktop: the probe must not share the value it tests.
              ("text/plain", "${
                if omarchyPkg.passthru.hasPlain then "plain.desktop" else "nvim.desktop"
@@ -3728,6 +3762,27 @@ pkgs.testers.runNixOSTest {
         "the Fcitx5 repair hook touched an already repaired theme")
     print("#1624: the candidate window's theme has its glyphs")
     print("#1614: keyboard and input-method state restored")
+
+    # Folio's chooser opens through the portal and cancelling returns 1 (#1793).
+    if ${if (omarchyPkg.passthru.fileChooserPortal or false) then "True" else "False"}:
+        machine.succeed(desktop_user(
+            "GI_TYPELIB_PATH=${pkgs.glib.out}/lib/girepository-1.0:"
+            "${pkgs.gobject-introspection.out}/lib/girepository-1.0 "
+            "${pkgs.python3.withPackages (p: [ p.pygobject3 ])}/bin/python3 "
+            "${portalProbe} > /tmp/portal-probe.out 2>&1 < /dev/null &"))
+        folio_clients = (desktop_user("hyprctl clients -j")
+            + " | ${pkgs.jq}/bin/jq -e 'any(.[]; (.class // \"\" | ascii_downcase | contains(\"folio\")))'")
+        try:
+            machine.wait_until_succeeds(folio_clients, timeout=60)
+            folio_class = machine.succeed(desktop_user("hyprctl clients -j")
+                + " | ${pkgs.jq}/bin/jq -r 'first(.[] | select((.class // \"\" | ascii_downcase | contains(\"folio\"))) | .class)'").strip()
+            assert re.fullmatch(r"[A-Za-z0-9._-]+", folio_class), (
+                "#1793: unexpected Folio window class " + repr(folio_class))
+            machine.succeed(desktop_user("hyprctl dispatch closewindow class:" + folio_class))
+            machine.wait_until_succeeds("grep -qx 'response 1' /tmp/portal-probe.out", timeout=60)
+        except Exception as exc:
+            raise AssertionError("#1793: Folio portal chooser did not open and cancel with response 1: "
+                + machine.execute("cat /tmp/portal-probe.out")[1]) from exc
 
     # ---- power actions ask before closing windows (#1659) -----------------
     import shlex

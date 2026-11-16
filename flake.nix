@@ -1843,6 +1843,8 @@
             "etc-overlay-sources"
             # Power actions authorise before closing; the browser-extensions repair stays out of /etc (#1793).
             "omarchy-system"
+            # Runtime dependencies expose ffplay and rsvg-convert on PATH (#1793).
+            "runtime-path"
             # The notification history keeps text for the newest rows only (#1663).
             "notification-store"
             # data/bin-ledger.nix, held to its own claim. Also the home of the

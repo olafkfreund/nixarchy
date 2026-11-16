@@ -294,7 +294,7 @@ let
       lib.mapAttrsToList (name: fp: ''
         flatpak	${name}	${fp.label} -- flatpak, from ${
           if fp ? remote then fp.remote.name else "Flathub"
-        }		FLATPAK  ${name}\n\n${fp.label}\n${fp.note}\n\nDeclared, not reproducible: the id travels to your next machine, the version does not. Enabling this writes a line in your services selection:\n  programs.nixarchy.flatpaks.apps.${name}.enable = true;
+        }		FLATPAK  ${name}\n\n${fp.label}\n${fp.note}\n\nDeclared, not reproducible: the id travels to your next machine, the version does not. Enabling this writes a line in your services selection:\n  programs.nixarchy.flatpaks.apps.${name}.enable = true;''\t
       '') flatpakCatalogue
     )
     # The way out of the catalogue. A row rather than a flag, because a flag
@@ -306,7 +306,7 @@ let
     # picker renders them without complaint.
     + "flatpak	flathub	Search all of Flathub for something not listed here (needs a network)		"
     + "SEARCH FLATHUB\\n\\nAsks flathub.org for anything, not just what nixarchy curates.\\n\\n"
-    + "This is the only row here that needs a network, and the only one that can offer an app nobody has checked. A hit that is in nixarchy's catalogue is enabled the normal way; anything else prints a line for you to paste, because writing an unchecked app id into your configuration is not this tool's call to make.\n"
+    + "This is the only row here that needs a network, and the only one that can offer an app nobody has checked. A hit that is in nixarchy's catalogue is enabled the normal way; anything else prints a line for you to paste, because writing an unchecked app id into your configuration is not this tool's call to make.\t\n"
   );
 
   # The tier below the Flathub row: software in no repository at all (#581).
@@ -320,7 +320,7 @@ let
   # docs/manual/other-packages.md states the limitation.
   pkgNewIndexRow = pkgs.writeText "nixarchy-pkg-new-row.tsv" (
     "new	pkg-new	Missing from nixpkgs? Draft a new package from a source URL		"
-    + "NOT IN NIXPKGS\\n\\nWhen nixpkgs, the app list and Flathub all miss, this drafts a derivation from the software's own source URL (e.g. a GitHub repo) with nix-init, builds it once, and keeps the draft either way.\\n\\nPicking this asks for the URL, then runs:\\n  nixarchy pkg new <url>\\n\\nNeeds a network. The result is a draft for you to review, not a finished package.\n"
+    + "NOT IN NIXPKGS\\n\\nWhen nixpkgs, the app list and Flathub all miss, this drafts a derivation from the software's own source URL (e.g. a GitHub repo) with nix-init, builds it once, and keeps the draft either way.\\n\\nPicking this asks for the URL, then runs:\\n  nixarchy pkg new <url>\\n\\nNeeds a network. The result is a draft for you to review, not a finished package.\t\n"
   );
 
   flatpakRow =
@@ -3598,7 +3598,7 @@ in
                       print "app", $1, $2 " (" $3 ")", "",
                         "OMARCHY APP  " $1 "\\n\\n" $2 "\\n" $3 \
                         note "\\n\\nEnabling this writes a line in your app selection:\\n  " \
-                        $1 ".enable = true;" foot
+                        $1 ".enable = true;" foot, ""
                     }' "$appindex" > "$tmp"
 
                     # Empty when this system builds no manual, in which case the
@@ -3619,7 +3619,8 @@ in
                             + (if $v.example == null then "" else "\nexample:  " + val($v.example) end)
                             + "\n\n" + ($v.description // "(undocumented)")
                             + "\n\ndeclared in:\n  " + (($v.declarations // []) | join("\n  "))
-                          )
+                          ),
+                          ""
                         ] | @tsv' "$optionsjson" >> "$tmp"
                     else
                       echo "  no option index: documentation.nixos.enable is off on this" >&2

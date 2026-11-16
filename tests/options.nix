@@ -509,6 +509,10 @@ let
     on = (aiHomeWith app).home.activation ? "nixarchyNeovimAi-${app}";
     off = (aiHomeWith (aiNeighbour app)).home.activation ? "nixarchyNeovimAi-${app}";
   };
+  t3CodeThemeCase = {
+    on = (homeOn { apps.t3-code.enable = true; } { }).home.activation ? "nixarchyT3CodeTheme";
+    off = defaultHomeOn.home.activation ? "nixarchyT3CodeTheme";
+  };
 
   # The local model with pi as one of its agents, and without: the spec rides
   # on pi being pointed at the model, not on the model merely running.
@@ -1089,6 +1093,8 @@ let
     aiNeovimCodex = aiCase "codex";
     aiNeovimGemini = aiCase "gemini-cli";
     aiNeovimOpencode = aiCase "opencode";
+    # #1803: T3 Code's theme activation follows the app switch in Mode A.
+    t3CodeTheme = t3CodeThemeCase;
 
     aiNeovimLocal = {
       on = (localHome { }).home.activation ? nixarchyNeovimAiLocal;

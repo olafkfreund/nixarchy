@@ -162,7 +162,37 @@ Separate issues if wanted:
 
 ## Open questions
 
-1. **Owner whose account is gone.** The template's `isNormalUser` assertion
+1. **Resolved by the amendment below.** Was: **Owner whose account is gone.** The template's `isNormalUser` assertion
    fails the build for everyone. Keep failing loudly (proposed; the fix is
    handover by setting `programs.nixarchy.user`), or release ownership
    automatically?
+
+## Amendment (2026-11-16, owner's decision after spec review)
+
+Status stays approved. This amendment supersedes "The home owner is
+`programs.nixarchy.user` when set", Claiming's `programs.nixarchy.user`
+sentence, Handover, Removal's last sentence, and open question 1. Everything
+else above stands, including Constraints and the #1809 failure contract.
+
+- **The home owner is only the user named in the flake's existing generated
+  home import** (`home-manager.users."<x>"` in `nixarchy-apps.nix`).
+  `programs.nixarchy.user` no longer affects home ownership. Why: it is baked
+  into the installed apply binary, so an owner whose account was deleted could
+  not be replaced without a rebuild the broken flake would not allow (a
+  deadlock), and handover through it raced the owner's own apply.
+- **Claiming:** with no home import in the flake, the first apply with an
+  *edited* `home.nix` claims the host. The untouched seed never claims.
+- **Handover and recovery are one explicit command,
+  `nixarchy-apply --release-home`.** It removes the home import and the copied
+  `nixarchy/home.nix` from the flake, as one consistent write. It is allowed
+  for the owner, and for any user when the owner's account no longer exists on
+  the machine (`getent passwd <owner>` fails). Anyone else is refused.
+- **After a release the host is unowned**; the next apply with an edited
+  `home.nix` claims it.
+- **Refusal text:** a non-owner with an edited `home.nix` is refused as
+  before, and the message names the owner and points to `--release-home`.
+- **Open question 1 is answered:** a gone owner is recovered by any user's
+  `--release-home`; the build keeps failing loudly until then.
+- **Unchanged:** Mode A (no home files anywhere: byte-identical output);
+  concurrent applies and the system selections' last-writer-wins stay out of
+  scope.

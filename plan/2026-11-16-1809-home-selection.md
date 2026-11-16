@@ -77,8 +77,15 @@ build. The lead builds. Report the changed files and any deviation."
      list in Nix.
    - Verify: `options-files`, and an evaluation that `/etc` has the file.
 2. **`nixarchy-apply`** (`modules/apps.nix`, the script from :4320):
-   - **Source and user:** the selection and `valid_user` (a named function,
-     so step 4 can extract it), before the copy loop (:4670);
+   - **Source and user:** before the copy loop (:4670), two named functions
+     that step 4 extracts:
+     - `select_home_src`: prints `$pinned/home.nix` when pinned, else
+       `$srcdir/home.nix` when it exists, else nothing;
+     - `valid_user`.
+
+     Every later home decision (copy, generated import, assertions) tests
+     only `select_home_src`'s result. The string `$srcdir/home.nix` appears
+     in the script exactly once, inside that function;
    - **Copy loop:** `apps services advanced flatsnap home`, with `home`
      skipped when building `$imports`;
    - **Generated file:** the function form when home was copied, written
@@ -115,21 +122,48 @@ build. The lead builds. Report the changed files and any deviation."
      the way the options tests vary it;
    - **case 7** builds the scripts with `homeScope = 0`, through a fixture
      configuration with `useGlobalPkgs = false`;
-   - **case 10** is static, like `tests/apply-detach-interface.nix:103-118`.
-     That test's comment explains why a timed race cannot fail. It greps
-     that the home selection reads `$pinned/home.nix`. §1: point the
-     selection at the live file, and the grep fails;
+   - **case 10** is behavioural, at the function level, plus one static
+     guard. A timed race cannot fail; see
+     `tests/apply-detach-interface.nix:103-118`.
+     - **Function:** extract `select_home_src`. With `$pinned/home.nix`
+       present and `$srcdir/home.nix` deleted, it prints the pinned path.
+       With neither, it prints nothing.
+     - **Static guard:** `grep -c '\$srcdir/home.nix'` on the built script
+       is exactly 1. So no later decision tests the live file, which is the
+       gap a function test alone cannot see.
+     - **§1:** making the function prefer the live file fails the first
+       part. Adding a second `[ -f "$srcdir/home.nix" ]` test elsewhere
+       fails the guard. This refines the spec's case 10 (recorded as a
+       deviation when committed);
    - **case 11** extracts `valid_user` from the built script.
    - Verify: the check passes, then one named break per case.
-5. **Evaluation of the generated file** (in the same check, or
-   `tests/options.nix` if the evaluation fixtures there are cheaper):
-   - take case 8's generated `nixarchy-apps.nix` and `nixarchy/home.nix`
-     into a fixture NixOS configuration, the reference plus two normal
-     users with their own Home Manager configurations, and
-     `useGlobalPkgs = true`;
-   - force `config.system.build.toplevel.drvPath`;
-   - cover the spec's five evaluation cases, including the `pkgsOther` set
-     and unset.
+5. **Evaluation of the generated file**, inside the check's build, not at
+   flake evaluation. Case 8's output exists only at build time, and
+   importing it at evaluation would be import-from-derivation, which the
+   repository forbids.
+   - **The evaluator:** in the same `runCommand`, with
+     `NIX_STATE_DIR`/`NIX_LOG_DIR` private, as `tests/writer-lock.nix`
+     cases 10-13 already do for `nix-instantiate --parse`. It runs
+     `nix-instantiate --eval --strict --readonly-mode` on a small
+     expression that:
+     - imports nixpkgs' `nixos/lib/eval-config.nix` from the pinned
+       `inputs.nixpkgs` path, which the check references, so it is in the
+       closure and readable offline;
+     - imports Home Manager's NixOS module and nixarchy's own modules (the
+       flake source, also referenced);
+     - adds the generated `nixarchy-apps.nix` and copied `nixarchy/home.nix`
+       from case 8's fixture flake, plus a fixture configuration with two
+       normal users, `alice` and `bob`, each with their own Home Manager
+       configuration, and `useGlobalPkgs = true`;
+     - returns the failed assertions' messages, and the `pname` of each
+       entry in `alice`'s and `bob`'s `home.packages`. These are read
+       directly, so nothing is instantiated and no derivation is written.
+   - It covers the spec's five evaluation cases, with variants of the
+     fixture configuration, including `pkgsOther` set and unset.
+   - **If `--readonly-mode` evaluation of a NixOS configuration does not
+     work in the sandbox**, Codex reports it. The lead then stops and brings
+     a revised step 5 back for approval, rather than substituting a
+     hand-written fixture, which would not test the generator.
    - §1: drop each assertion in turn, and its case passes evaluation when
      it should not; drop the `configuredElsewhere` file filter, and the
      no-own-configuration case passes.
@@ -146,13 +180,20 @@ build. The lead builds. Report the changed files and any deviation."
 - **Cheap and package tier:** every check `generated-checks.sh generated`
   prints, plus `home-selection`, `writer-lock`, `app-selection`, the
   `apply-*` checks and `coexistence`.
-- **VM tier:** `options-files` and `options-home`; `session`, because apply
-  changed.
+- **Evaluation-heavy** (the options tier in §6, not VM boots):
+  `options-files` and `options-home`.
+- **VM tier:** `session` locally, because apply changed, under §6's gate as
+  run today. CI runs it too.
 - **Not run locally:** the install job (CI).
 
 ## Rollback
 
-Revert the merge. A `home.nix` already applied is copied into the flake.
-Reverting removes the import, and the user's home packages go at the next
-rebuild, as with any reverted selection. No state outside the flake is
-written.
+1. Revert the merge.
+2. A machine that already applied a `home.nix` still has the home import in
+   its own generated `nixarchy-apps.nix`, which is outside this
+   repository. Run `nixarchy-apply` once with the reverted script to
+   regenerate it. The reverted script writes the plain file without the
+   home import. Only then rebuild.
+
+Apply also keeps per-file hashes and edited-in-flake backups under
+`$XDG_STATE_HOME/nixarchy/applied`. These are inert after the revert.

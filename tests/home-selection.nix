@@ -176,6 +176,11 @@ pkgs.runCommand "nixarchy-home-selection"
     srcdir=$XDG_CONFIG_HOME/nixarchy
     mkdir -p "$pinned"
     printf '%s\n' pinned >"$pinned/home.nix"
+    # Both present, with different bytes: only the preference order decides.
+    mkdir -p "$srcdir"
+    printf '%s\n' live >"$srcdir/home.nix"
+    selected=$(select_home_src)
+    [ "$selected" = "$pinned/home.nix" ] || bad 10 "pinned selection with a live file present: $selected"
     rm -f "$srcdir/home.nix"
     selected=$(select_home_src)
     [ "$selected" = "$pinned/home.nix" ] || bad 10 "pinned selection: $selected"

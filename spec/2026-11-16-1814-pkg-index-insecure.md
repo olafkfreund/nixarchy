@@ -154,10 +154,16 @@ and one sentence that the index has a sixth `version` column, appended.
 - **Evaluation errors `tryEval` cannot catch** (for example `builtins.head
   [ ]` inside `meta`) still abort the walk. That is today's behaviour for
   the fields the walk already reads, so the guarantee is stated narrowly:
-  - every malformation the fixtures name is survived: throwing, `null`,
-    non-list, missing or non-attribute-set `meta`, and a throwing list
-    element;
+  - every malformation the fixtures name is survived: a throwing `meta`,
+    a throwing, `null` or non-list `insecure` or `knownVulnerabilities`,
+    and a throwing list element;
   - other evaluation errors are not, as before.
+- **Missing or `null` `meta` is out of scope.** The walk's existing
+  licence and unfree reads use `try v.meta { }` without `or`, so a package
+  with no `meta` raises "attribute 'meta' missing" and one with `meta = null`
+  a type error, neither catchable by `tryEval`. Their handling is unchanged
+  here and fixing it is outside #1814. The new expression's `v.meta or { }`
+  plus `isAttrs` guard is kept (harmless) but has no fixture.
 - **Existing indexes go stale** on the next rebuild; `nixarchy search`
   reindexes once (about a minute); the nixarchy-pkg panel shows its stale
   notice until reindexed. Intended (intent).
@@ -212,8 +218,6 @@ Sandbox setup as `tests/writer-lock.nix:131-136` (`NIX_STATE_DIR`,
 | `fixThrowElem` | `knownVulnerabilities = [ (throw "boom") ]` | `insecure` (the list is non-empty; no element is forced) |
 | `fixThrowInsecureList` | `insecure = throw "boom"`, `knownVulnerabilities = [ "x" ]` | `insecure` |
 | `fixThrowMeta` | `meta = throw "boom"` | empty, row still present |
-| `fixNullMeta` | `meta = null` | empty, row still present |
-| `fixNoMeta` | no `meta` attribute | empty, row still present |
 | `fixStrVuln` | `knownVulnerabilities = "oops"` | empty |
 | `fixEmptyList` | `knownVulnerabilities = [ ]` | empty |
 | `fixAll` | unfree licence, `broken = true`, `[ "y" ]` | `unfree broken insecure` |
@@ -227,8 +231,9 @@ Sandbox setup as `tests/writer-lock.nix:131-136` (`NIX_STATE_DIR`,
 1. Stage 1, walk alone (`nix-instantiate --eval --strict --json --arg
    nixpkgs <fixture> $walk | jq`): exits 0; `[.[].attr]` equals the
    expected set (including `fixThrowVuln`, `fixStrVuln`, `sub.*`); `.insecure`
-   is true exactly for `fixVuln`, `fixInsecureOnly`, `fixAll`,
-   `fixBrokenInsecure`, `fixNoVersion`, `fixCurated`. Failure messages name
+   is true exactly for `fixVuln`, `fixInsecureOnly`, `fixThrowElem`,
+   `fixThrowInsecureList`, `fixAll`, `fixBrokenInsecure`, `fixNoVersion`,
+   `fixCurated`. Failure messages name
    the walk, so a walk break and a builder break read differently.
 2. Stage 2, `build_index` exits 0; pkg row count equals the expected
    count (floor against "iterated nothing"); at least one row of each kind
@@ -242,18 +247,22 @@ Sandbox setup as `tests/writer-lock.nix:131-136` (`NIX_STATE_DIR`,
 6. Field 5 of insecure rows contains the "Marked INSECURE" line; clean
    rows do not. `fixAll` keeps `[unfree]  [broken]` in field 3 and
    `Marked BROKEN` in field 5; no row has `[insecure]` in field 3.
-7. Fields 1-5 unchanged, for every row kind, against a golden
+7. Fields 1-5 unchanged, for the `app`, `opt` and `pkg` rows, against a golden
    `tests/fixtures/pkg-index.golden.tsv`.
+   - **Scope:** `flatpakIndexRows` and `pkgNewIndexRow` are let-bound in
+     `modules/apps.nix` to the live catalogue (`data/flatpaks.nix`) and
+     cannot take a fixed fixture catalogue. So the golden covers only the
+     rows the harness controls: `app`, `opt` and `pkg` rows. The `flatpak`
+     and `new` rows are asserted structurally: exactly six tab-separated
+     fields, field 6 empty, field 1 the right kind.
    - **How the golden is made:** before any edit, the same harness is run
-     on `main`'s tree (`main`'s walk, jq builder, `flatpakIndexRows` and
-     `pkgNewIndexRow`). It uses the same fixture nixpkgs, and a fixed
-     fixture catalogue for the flatpak and new-package rows, not the live
-     one. Then `cut -f1-5` of its output is committed in the first
-     implementation step, before the code changes.
-   - **The comparison:** after the change, `cut -f1-5` of every row equals
-     the golden byte for byte, except for insecure `pkg` rows, where only
-     the added word in field 4 and the added paragraph in field 5 may
-     differ.
+     on `main`'s tree (`main`'s walk and jq builder) with the same fixture
+     nixpkgs. Then `cut -f1-5` of its `app`, `opt` and `pkg` rows is
+     committed in the first implementation step, before the code changes.
+   - **The comparison:** after the change, `cut -f1-5` of every `app`,
+     `opt` and `pkg` row equals the golden byte for byte, except for
+     insecure `pkg` rows, where only the added word in field 4 and the
+     added paragraph in field 5 may differ.
    - Comparing the index's flatpak and new rows with their own source file
      would be `cat` compared with its input and could not fail, so it is
      not done.
@@ -280,9 +289,8 @@ break landed with `git diff`.
 | A2. Compute it with no `try` (`v.meta.knownVulnerabilities != [ ]`) | `fixThrowVuln` aborts `--strict`; `build_index` exits 1 |
 | B. Drop `insecure` from the jq flags (walk still emits it) | stage 1 passes, stage 2 field 4 fails (stages separable) |
 | B2. Concatenate flags without `join` | `fixBrokenInsecure` gives `brokeninsecure` |
-| C. Insert version before the preview, in the `pkg` jq and separately in `flatpakIndexRows` | golden for fields 1-5 fails, naming the kind |
-| C3. Change one character of a flatpak row's preview in `flatpakIndexRows` | golden fails on that flatpak row |
-| A3. Replace `try (v.meta or { }) { }` with `v.meta` | `fixThrowMeta` / `fixNullMeta` / `fixNoMeta` abort the walk |
+| C. Insert version before the preview, in the `pkg` jq and separately in `flatpakIndexRows` | `pkg`: golden for fields 1-5 fails, naming the kind; flatpak: the structural field-count / empty-field-6 assertion fails |
+| A3. Replace `try (v.meta or { }) { }` with `v.meta` | `fixThrowMeta` aborts the walk |
 | A4. Merge the two inner `try`s into one | `fixThrowInsecureList` loses `insecure` |
 | C2. Drop the trailing empty field from jq, app awk, opt jq, `flatpakIndexRows` or `pkgNewIndexRow` | `NF != 6` names the kind |
 | D. Remove `"$walk"` from `stamp_key` (`:3702`) | staleness case fails |
@@ -318,3 +326,26 @@ median of three runs. Also report the count of `.insecure` rows.
 
 nixarchy-pkg's reading of field 6 or the `insecure` flag (separate
 repository, owner's call); no VM or panel test.
+
+### Amendments (2026-11-16, found in plan review)
+
+The owner re-approves these with the plan.
+
+- **A. `fixNoMeta` and `fixNullMeta` are dropped.** The unmodified walk's
+  existing licence and unfree reads use `try v.meta { }` without `or`, so a
+  missing `meta` raises "attribute 'meta' missing" and a `null` one a type
+  error, neither catchable by `tryEval`: `main`'s walk cannot produce the
+  golden with those fixtures, and fixing the existing fields is outside
+  #1814. The new expression keeps `v.meta or { }` plus `isAttrs`
+  (harmless); Risks states the existing fields are unchanged. Break A3 now
+  relies on `fixThrowMeta` alone.
+- **B. Assertion 1's exact `.insecure == true` set** also includes
+  `fixThrowElem` and `fixThrowInsecureList`: the approved expression returns
+  `true` for both.
+- **C. Golden scope.** `flatpakIndexRows` and `pkgNewIndexRow` are let-bound
+  to the live catalogue and cannot take a fixture catalogue, so the golden
+  covers `app`, `opt` and `pkg` rows only; `flatpak` and `new` rows are
+  asserted structurally (six fields, field 6 empty, field 1 the right kind).
+  Break C3 is dropped (undetectable without coupling to the live
+  catalogue); C and C2 remain, C2 catching a missing sixth field on those
+  writers through `NF`.

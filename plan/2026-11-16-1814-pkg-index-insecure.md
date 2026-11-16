@@ -8,9 +8,10 @@ coders:
   2: codex  # small tricky Nix expression with exact try/isAttrs semantics
   3: codex  # small tricky jq (join vs concat, version element)
   4: codex  # mechanical-but-exact writer edits across five producers, explicit \t escapes
-  5: codex  # two fixture edits (NF 5->6, five->six field index)
-  6: codex  # one docs paragraph
-  7: codex  # check-only: writes measurement script; lead runs it under the gate
+  5: lead   # the section 1 breaks: applied, observed and restored by the lead, never a Codex edit
+  6: codex  # two fixture edits (NF 5->6, five->six field index)
+  7: codex  # docs paragraphs and the stale-wording comments
+  8: codex  # check-only: writes measurement script; lead runs it under the gate
 reviewers:
   - codex  # reads the diff natively
   - agy    # independent model; given the diff inline
@@ -83,9 +84,10 @@ never forces an element. The row `tryEval` at `:81` is not relied on.
 | curated pass (`:3678-3684`) | no change (assigns `$4`/`$5`, `OFS='\t'`, keeps `$6`) |
 | `cat "$flatpakrows"` / `cat "$pkgnewrow"` (`:3687-3692`) | no change |
 
-Wording "five tab-separated fields" becomes six at `apps.nix:313`, `:3581`,
-`:3687` and `tests/options.nix:4762`. Appended, never inserted: fields 1-5
-keep their positions.
+Wording "five tab-separated fields" / "five-field" becomes six at
+`apps.nix:313`, `:3581`, `:3687` (step 7), `tests/options.nix:4762` and
+`:4772` (step 6) and `modules/AGENTS.md:1710` (step 7). Appended, never
+inserted: fields 1-5 keep their positions.
 
 **Readers needing no change (audited):** status awk (`:3744-3767`), fzf
 (`:3774-3780`, `--with-nth=1,2,3 --nth=2,3`), fzf preview (`:3777`,
@@ -99,7 +101,8 @@ read-only.
 
 **Docs:** `modules/AGENTS.md:2210-2218`: add `insecure` to the list
 homepage, licence, unfree, broken, plus one sentence that the index has a
-sixth `version` column, appended.
+sixth `version` column, appended. `modules/AGENTS.md:1710` (the flatpak
+rows passage) says "Five tab-separated fields" and moves to six.
 
 **Test (`tests/pkg-index.nix`, new `checks.pkg-index`).** Register by adding
 `"pkg-index"` to `uniformChecks` (`flake.nix` ~`:1820-1831`); takes
@@ -111,6 +114,13 @@ sixth `version` column, appended.
 Real `build_index` extracted from the built script with `sed` anchors,
 sourced under `set -eo pipefail`, run in a subshell (it `exit 1`s); the
 harness fails loudly on empty extraction (as `tests/writer-lock.nix:138`).
+The extracted function has no wrapper PATH, so the check's
+`nativeBuildInputs` list every command `build_index` and `stamp_key` call
+(read from `modules/apps.nix` `build_index()`, ~`:3588-3696`):
+`nix` (`nix-instantiate`), `jq`, `gawk` (`awk`), `coreutils` (`mkdir`,
+`mktemp`, `cat`, `mv`, `rm`, `tail`, `printf`), `gnused` (the extraction
+`sed`), and `bash`; re-read the function before step 1 and add anything it
+gained.
 `nixpkgs`, `optionsjson`, `appindex`, `apptable`, `cache` overridden to tiny
 fixtures; `walk`, `flatpakrows`, `pkgnewrow` stay baked. Sandbox setup as
 `tests/writer-lock.nix:131-136` (`NIX_STATE_DIR`, `NIX_LOG_DIR`). No
@@ -125,8 +135,6 @@ Fixtures (attr: meta -> expected flags):
 - `fixThrowElem`: `knownVulnerabilities = [ (throw "boom") ]` -> `insecure`
 - `fixThrowInsecureList`: `insecure = throw "boom"`, `knownVulnerabilities = [ "x" ]` -> `insecure`
 - `fixThrowMeta`: `meta = throw "boom"` -> empty, row present
-- `fixNullMeta`: `meta = null` -> empty, row present
-- `fixNoMeta`: no `meta` -> empty, row present
 - `fixStrVuln`: `knownVulnerabilities = "oops"` -> empty
 - `fixEmptyList`: `knownVulnerabilities = [ ]` -> empty
 - `fixAll`: unfree licence, `broken = true`, `[ "y" ]` -> `unfree broken insecure`
@@ -135,14 +143,20 @@ Fixtures (attr: meta -> expected flags):
 - `fixCurated`: `[ "z" ]` plus an `apptable` line naming it -> `insecure curated:fixcurated`
 - `sub`: `recurseForDerivations`, one clean package (proves descent)
 
+Not fixtured (spec amendment A): `meta = null` and a missing `meta`. The
+walk's existing licence/unfree reads (`try v.meta { }`, no `or`) raise
+errors `tryEval` cannot catch, so `main`'s walk cannot produce the golden
+with them; their handling is unchanged and out of scope. The new
+expression's `v.meta or { }` plus `isAttrs` guard stays.
+
 Assertions:
-1. Stage 1, walk alone (`nix-instantiate --eval --strict --json --arg nixpkgs <fixture> $walk | jq`): exit 0; `[.[].attr]` equals the expected set (including `fixThrowVuln`, `fixStrVuln`, `sub.*`); `.insecure` true exactly for `fixVuln`, `fixInsecureOnly`, `fixAll`, `fixBrokenInsecure`, `fixNoVersion`, `fixCurated`. Messages name the walk.
+1. Stage 1, walk alone (`nix-instantiate --eval --strict --json --arg nixpkgs <fixture> $walk | jq`): exit 0; `[.[].attr]` equals the expected set (including `fixThrowVuln`, `fixStrVuln`, `sub.*`); `.insecure` true exactly for `fixVuln`, `fixInsecureOnly`, `fixThrowElem`, `fixThrowInsecureList`, `fixAll`, `fixBrokenInsecure`, `fixNoVersion`, `fixCurated` (spec amendment B). Messages name the walk.
 2. Stage 2: `build_index` exits 0; pkg row count equals expected (floor against "iterated nothing"); at least one row of each kind (`app`, `opt`, `pkg`, `flatpak`, `new`).
-3. `awk -F'\t' 'NF != 6'` over the whole index prints nothing (names the kind).
+3. `awk -F'\t' 'NF != 6'` over the whole index prints nothing (names the kind). The `flatpak` and `new` rows come from the live catalogue (spec amendment C), so they are asserted only structurally: six fields, field 6 empty, field 1 the right kind.
 4. Field 6: pkg rows equal the version literal and the preview's `version:` value (sed from field 5, newlines are escaped text); `fixNoVersion` empty (preview shows `?`); every other kind empty.
 5. Field 4 equals the fixtures list exactly (no leading, trailing or double space); an insecure-only row does not match `unfree`.
 6. Field 5 of insecure rows contains "Marked INSECURE"; clean rows do not. `fixAll` keeps `[unfree]  [broken]` in field 3 and `Marked BROKEN` in field 5; no row has `[insecure]` in field 3.
-7. Fields 1-5 vs golden `tests/fixtures/pkg-index.golden.tsv`, byte for byte, except insecure `pkg` rows, where only the added word in field 4 and the added paragraph in field 5 may differ. Never compare flatpak/new rows to their own source file (cannot fail).
+7. Fields 1-5 of the `app`, `opt` and `pkg` rows vs golden `tests/fixtures/pkg-index.golden.tsv`, byte for byte, except insecure `pkg` rows, where only the added word in field 4 and the added paragraph in field 5 may differ. The golden has no `flatpak` or `new` rows, and they are never compared to their own source file (cannot fail).
 
 Walk-only staleness case: source `stamp_key`/`index_stale` as
 `tests/options.nix:4950-4967`; walk A (`${../modules/pkg-index.nix}`) and
@@ -150,17 +164,20 @@ walk B (`pkgs.writeText` of the same text plus a newline), `nixpkgs` fixed;
 stamp written under A; `index_stale` false under A, true under B. Passes on
 the current tree (regression guard).
 
-**Golden procedure.** Built in step 1 from `main`'s UNMODIFIED walk, jq,
-`flatpakIndexRows`, `pkgNewIndexRow`, with the same fixture nixpkgs and a
-fixed fixture catalogue for flatpak and new rows (not the live one). The
-golden is `cut -f1-5` of that output, committed before any code change.
-Before step 1's golden is generated, the harness's field-count assertion is
-parametrised (5 on the golden run, 6 after) or skipped for that run, so the
-golden is truly pre-change.
+**Golden procedure.** `flatpakIndexRows` and `pkgNewIndexRow` are let-bound
+in `modules/apps.nix` to the live catalogue (`data/flatpaks.nix`) and cannot
+take a fixture catalogue (spec amendment C), so the golden covers only the
+rows the harness controls: `app`, `opt` and `pkg`.
+`tests/pkg-index.nix` exposes `passthru.golden`: a pure derivation that runs
+the same harness and writes `cut -f1-5` of the `app`/`opt`/`pkg` rows to
+`$out`, then exits 0 whatever the assertions would say. `checks.pkg-index`
+itself always runs every assertion, including the golden comparison. The
+golden is made from `main`'s UNMODIFIED walk and jq (step 1), committed
+before any code change.
 
 **Also updated:** `tests/app-selection.nix:192` five-field index fixture
-becomes six fields; `tests/options.nix:4768` `NF != 5` becomes `NF != 6`
-and its message "five" becomes "six".
+becomes six fields; `tests/options.nix:4770` `NF != 5` becomes `NF != 6`
+and its message (`:4772`) "five" becomes "six".
 
 **Measurement bar.** Same nixpkgs pin, machine and evaluator, after the
 section 6 gate (no p620 system build, 1-minute load below 12,
@@ -185,30 +202,31 @@ run one at a time under `flock /mnt/data/vmtest/codex-build.lock`. Run
 ### Step 1: check harness plus the pre-change golden (coder: codex, lead builds)
 
 - Create `tests/pkg-index.nix` with the harness, fixtures, the stage 1/2
-  assertions and the staleness case, per "Test" above. Create the fixed
-  fixture catalogue for flatpak and new rows. Register `"pkg-index"` in
-  `uniformChecks` (`flake.nix` ~`:1820-1831`).
-- For this step ONLY the harness runs against `main`'s unmodified walk,
-  jq and writers: the six-field assertion (3), the field 6 assertion (4),
-  the flag and preview assertions (1 `.insecure`, 5, 6) are written but the
-  golden-generation run uses a mode that just dumps `cut -f1-5` of the
-  index (for example an env or arg `GOLDEN=1` that writes the file and skips
-  the assertions that the unmodified tree cannot meet).
-- The lead builds the check against the unmodified tree, generates
-  `tests/fixtures/pkg-index.golden.tsv` from the dump, `git add`s it and
-  commits harness plus golden. Confirm `git diff main -- modules/` is empty
-  at that commit, so the golden is truly pre-change.
+  assertions and the staleness case, per "Test" above, exposing
+  `passthru.golden` (see "Golden procedure"). Register `"pkg-index"` in
+  `uniformChecks` (`flake.nix` ~`:1820-1831`). The flatpak and new rows come
+  from the baked live rows, asserted structurally only.
+- Lead procedure: `git add` the new test and an EMPTY
+  `tests/fixtures/pkg-index.golden.tsv`; build
+  `.#checks.x86_64-linux.pkg-index.golden` on the unmodified tree; copy its
+  output into `tests/fixtures/pkg-index.golden.tsv`; build
+  `.#checks.x86_64-linux.pkg-index` on the same tree and confirm it FAILS for
+  the expected reasons only (the missing `insecure` flag and `version`
+  column: stage 1 `.insecure`, field-count, field 6, flag and preview
+  assertions), not for harness errors (empty extraction, missing command,
+  eval failure, golden mismatch); save that output for the PR. The lead
+  commits harness plus golden before step 2, and confirms
+  `git diff main -- modules/` is empty at that commit.
 - Verify: `git add -A`; `nix eval --raw .#checks.x86_64-linux.pkg-index.drvPath`;
   `nix build '<drv>^*' --print-build-logs`; read the golden for one row of
-  each kind (`app`, `opt`, `pkg`, `flatpak`, `new`) and confirm no row has
-  `insecure` in field 4 (it cannot, pre-change). Section 1: on this tree
-  the stage 1 `.insecure` assertion and the field-count assertion must FAIL,
-  proving the harness can fail; save that output for the PR.
+  each of `app`, `opt` and `pkg` and confirm no row has `insecure` in
+  field 4 (it cannot, pre-change).
 - Traps: section 5 flake sees only git-added files (`git add` the new test,
   fixture and golden); `''` strings: escape `${` as `''${`, no heredocs
   (`printf '%s\n'`), `\$` is a literal backslash; `set -e` does not reach
   inside `$(...)` (write `out=$(cmd) || return/exit`); the sed extraction of
-  `build_index` must fail loudly when empty; section 1 pipefail (no
+  `build_index` must fail loudly when empty; the extracted function has no
+  wrapper PATH (see `nativeBuildInputs` above); section 1 pipefail (no
   `| tail` on a status you read); verify under bash; run `nix fmt`.
 
 ### Step 2: the walk (coder: codex)
@@ -217,14 +235,11 @@ run one at a time under `flock /mnt/data/vmtest/codex-build.lock`. Run
   from "Approved decisions", after `broken`. Nothing else in the file.
 - Verify (lead): `nix fmt`; `git diff --stat`; build `checks.pkg-index`:
   stage 1 assertions pass now (the field and builder assertions still fail,
-  expected until steps 3-4). Break A (delete the `insecure =` line) and
-  A2, A3, A4 from the spec's table, each seen failing at stage 1, then
-  restored. Capture failing output for the PR.
+  expected until steps 3-4). Steps 2-4 only verify progress; the breaks run
+  in step 5.
 - Traps: `builtins.tryEval` does not catch a missing attribute (hence the
-  `isAttrs` guard, do not "simplify" it); `git checkout HEAD -- <path>` to
-  restore after a break (never `git checkout --`); commit a clean baseline
-  first; prove each break landed with `git diff`; nixfmt not nixpkgs-fmt
-  (hook may reformat); evaluate drvPath once before long builds.
+  `isAttrs` guard, do not "simplify" it); nixfmt not nixpkgs-fmt (hook may
+  reformat); evaluate drvPath once before long builds.
 
 ### Step 3: the jq builder (coder: codex)
 
@@ -234,10 +249,7 @@ run one at a time under `flock /mnt/data/vmtest/codex-build.lock`. Run
   array. Summary unchanged.
 - Verify (lead): `nix fmt`; build `checks.pkg-index`: stage 1 and the pkg
   flag, preview, version assertions pass; the six-field assertion still
-  fails on the other kinds until step 4. Breaks B (drop `insecure` from the
-  flags, stage 1 still passes while stage 2 fails), B2 (concatenate without
-  `join`, `fixBrokenInsecure` gives `brokeninsecure`), E (rename the flag to
-  contain `unfree`) each seen failing, then restored.
+  fails on the other kinds until step 4. The breaks (B, B2, E) run in step 5.
 - Traps: this jq lives inside a Nix `''` string: `${` must be `''${`, and
   `$` in jq is already literal; a tool that "escapes" every `$` as `\$`
   breaks it (section 5); `nix build` exit status, never its last line;
@@ -248,52 +260,78 @@ run one at a time under `flock /mnt/data/vmtest/codex-build.lock`. Run
 - `modules/apps.nix`: `opt` jq (`:3613-3630`) append `""`; `app` awk
   (`:3596-3604`) trailing empty field; `flatpakIndexRows` (`:292-315`) both
   the catalogue rows and the Flathub row; `pkgNewIndexRow` (`:321-325`)
-  with explicit `\t` escapes (never a literal trailing tab). Update the
-  "five" wording to "six" at `:313`, `:3581`, `:3687`.
+  with explicit `\t` escapes (never a literal trailing tab). The "five"
+  wording is step 7.
 - Verify (lead): `nix fmt`; build `checks.pkg-index`: all assertions pass
-  including golden fields 1-5 and `NF != 6`. Breaks C (insert version
-  before the preview, once in the `pkg` jq and once in `flatpakIndexRows`,
-  golden names the kind), C3 (change one character of a flatpak preview),
-  C2 (drop the trailing empty field from jq, app awk, opt jq,
-  `flatpakIndexRows`, `pkgNewIndexRow` one at a time; `NF != 6` names the
-  kind), each seen failing then restored.
+  including the golden fields 1-5 of `app`/`opt`/`pkg` rows and `NF != 6`
+  (the flatpak and new rows structurally). The breaks (C, C2) run in
+  step 5.
 - Traps: Nix `''` string escaping of `${` and no heredocs; an awk or `printf`
   with a literal trailing tab can be stripped by an editor hook, so use
-  `\t`; `read` with whitespace IFS drops empty fields (the dispatch loop at
+  `\t`; the flatpak catalogue rows (`apps.nix` ~`:295`) sit in a `''` string
+  with literal tabs, so write the empty sixth field there as `''\t`, while
+  the `""` strings (the Flathub row and `pkgNewIndexRow`) use `\t`; `read` with whitespace IFS drops empty fields (the dispatch loop at
   `:4032` is safe only because `type` is non-empty for `opt` rows; do not
   touch it); grep the producers by name before changing what they emit
   (`grep -rn 'flatpakrows\|pkgnewrow\|apptable' modules tests`).
 
-### Step 5: the other tests (coder: codex)
+### Step 5: the section 1 breaks (lead only, no coder)
 
-- `tests/options.nix:4762` wording "five" to "six" and `:4768`
-  `NF != 5` to `NF != 6` with its message; `tests/app-selection.nix:192`
-  fixture to six fields. Add break D (remove `"$walk"` from `stamp_key`,
-  `apps.nix:3702`) proof for the staleness case.
+Runs AFTER step 4, once `checks.pkg-index` passes end to end. Every break
+(A, A2, A3, A4, B, B2, C, C2, D, E from the spec's table; C3 is dropped) is
+applied from a clean HEAD, proved to have landed (`git diff`, and grep the
+drv), seen failing for its named reason, then restored with
+`git checkout HEAD -- <path>` (never `git checkout --`) and seen passing.
+Commit a clean baseline first; `git add -A` before each build; evaluate
+`nix eval --raw .#checks.x86_64-linux.pkg-index.drvPath` once, then
+`nix build '<drv>^*'`. Save each failing output for the PR.
+
+- A: remove the WHOLE `insecure` binding from `row` (every line of it, not
+  just the `insecure =` line), then confirm the walk still evaluates
+  (`nix-instantiate --eval --strict --json --arg nixpkgs <fixture> <walk>`
+  exits 0) so the failure is the missing field, not a syntax error.
+- A3 fails on `fixThrowMeta` alone.
+- C: version before the preview in the `pkg` jq (golden fails) and
+  separately in `flatpakIndexRows` (structural field assertion fails).
+- D: remove `"$walk"` from `stamp_key` (`apps.nix:3703`), observed in the
+  walk-only staleness case of `checks.pkg-index`. The lead does this; it is
+  not a Codex edit.
+- Traps: a break that stays green may be one that never applied; a stale
+  background evaluation can rebuild an old drv; `git checkout -- <path>`
+  restores the index, not HEAD.
+
+### Step 6: the other tests (coder: codex)
+
+- `tests/options.nix:4762` wording "five" to "six" and `:4770`
+  `NF != 5` to `NF != 6` with its message (`:4772`);
+  `tests/app-selection.nix:192` fixture to six fields.
 - Verify (lead): `nix fmt`; build `checks.app-selection`; build one options
   shard that contains the flatpak shape case (the lead finds which with the
   case name; shards are heavy, gate per the section 6 VM/options tier and
-  `options-shards` is cheap). Break D seen failing, restored.
+  `options-shards` is cheap).
 - Traps: options shards peak ~11.5 GB each; at most two at once and only
   when `gh api repos/olafkfreund/nixarchy/actions/runners -q '[.runners[]|select(.busy)]|length'`
   prints `0`; ask again when the slot is taken; a deliberate model change
   that turns an old check red means ask what the check asserts (section 1
   read backwards), and say so in the PR.
 
-### Step 6: docs (coder: codex)
+### Step 7: docs (coder: codex)
 
 - `modules/AGENTS.md:2210-2218`: add `insecure` to the walk's carried list
-  and one sentence about the appended sixth `version` column. Check
+  and one sentence about the appended sixth `version` column.
+  `modules/AGENTS.md:1710` (the flatpak rows passage, "Five tab-separated
+  fields") moves to six. The "five-field" comments in `modules/apps.nix`
+  (~`:313`, `:3581`, `:3687`) say six. Check
   `docs/` and `README` counts: run `.github/scripts/readme-counts.sh` only
   if a counted thing changed (none expected).
-- Verify (lead): `git diff --stat`; read the paragraph; `grep -rn
-  'five tab-separated\|five fields' modules tests docs` returns nothing
-  stale.
+- Verify (lead): `git diff --stat`; read the paragraphs;
+  `grep -rniE 'five[- ](tab|field)' modules tests` returns nothing stale
+  (the `tests/options.nix` hits are step 6).
 - Traps: no new numbered sections in CLAUDE.md (none are added here);
   area lessons go in `modules/AGENTS.md`, general ones in CLAUDE.md in the
   same PR if this work cost an hour.
 
-### Step 7: the measurement (lead runs, codex writes the script)
+### Step 8: the measurement (lead runs, codex writes the script)
 
 - Codex writes the measurement script in the scratchpad (not committed):
   `#!/usr/bin/env bash`, `set -euo pipefail`, three runs each of old and new
@@ -326,7 +364,7 @@ Run by the lead, one at a time by tier, before every push:
 ## Rollback
 
 Each step is its own commit, so `git revert` the step commits in reverse
-order (7 has none). Reverting steps 2-4 alone restores the five-field
+order (8 has none, 5 changes no files). Reverting steps 2-4 alone restores the five-field
 format; `walk=${./pkg-index.nix}` changes the stamp again, so every index
 reads stale once more and `nixarchy search` reindexes (about a minute). The
 golden and harness (step 1) stay valid for the pre-change tree in

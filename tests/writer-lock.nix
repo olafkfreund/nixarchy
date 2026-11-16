@@ -207,6 +207,8 @@ pkgs.runCommand "nixarchy-writer-lock"
     g_svc_off() { printf '%s\n' '{ ... }:' '{' '  # services.foo.enable = true;  #@ foo' '}'; }
     g_svc_on() { printf '%s\n' '{ ... }:' '{' '  services.foo.enable = true;  #@ foo' '}'; }
     g_pkg() { printf '%s\n' '{ pkgs, ... }:' '{' '  environment.systemPackages = with pkgs; [  #@pkgs-begin' '    ripgrep  #@pkg ripgrep' '  ];  #@pkgs-end' '}'; }
+    g_home_pkg() { printf '%s\n' '{ pkgs, pkgsOther, ... }:' '{' '  home.packages = with pkgs; [  #@pkgs-begin' '    ripgrep  #@pkg ripgrep' '  ];  #@pkgs-end' '}'; }
+    g_home_bare() { printf '%s\n' '{ pkgs, pkgsOther, ... }:' '{' '  home.packages = with pkgs; [  #@pkgs-begin' '  ];  #@pkgs-end' '}'; }
     g_draft() { printf '%s\n' '{ pkgs, ... }:' '{' '  environment.systemPackages = [' '    # (callPackage ./packages/tool.nix { })  #@draft tool' '  ];' '}'; }
     g_opt() { printf '%s\n' '{ ... }:' '{' "" '  a.b = 1;  #@opt a.b' '}'; }
     g_bare() { printf '%s\n' '{ pkgs, ... }:' '{' '}'; }
@@ -259,6 +261,9 @@ pkgs.runCommand "nixarchy-writer-lock"
     row pkg-undraft apps.nix g_draft ${bin "pkg-undraft"} tool
     row opt-remove apps.nix g_opt ${bin "opt-remove"} a.b
     row pkg-add apps.nix g_bare ${bin "pkg-add"} kdePackages.kdenlive
+    row 'pkg-add --home' home.nix g_home_bare ${bin "pkg-add"} --home hello
+    row 'pkg-remove --home' home.nix g_home_pkg ${bin "pkg-remove"} --home ripgrep
+    row 'opt-remove --home' home.nix g_opt ${bin "opt-remove"} --home a.b
 
     if [ "$fails" -ne 0 ]; then echo "$fails case(s) failed"; exit 1; fi
     touch $out

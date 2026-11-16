@@ -1824,6 +1824,7 @@
             "apply-imports"
             "apply-staging"
             "home-activation-writes"
+            "home-selection"
             # #1803: check T3 Code palette publication and one-time selection through Home Manager.
             "t3code-theme"
             "language-locale"

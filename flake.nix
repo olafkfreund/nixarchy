@@ -1266,6 +1266,7 @@
           # and the lock screen's video feed. Not in nixpkgs. #1153.
           owe = final.callPackage ./pkgs/apps/owe.nix { };
           folio = final.callPackage ./pkgs/apps/folio.nix { };
+          omaview = final.callPackage ./pkgs/apps/omaview.nix { };
           plain = final.callPackage ./pkgs/apps/plain.nix { };
 
           # The fourth, and the only one that is not a small script or a Qt
@@ -1375,6 +1376,7 @@
             disktree
             ttfx
             folio
+            omaview
             plain
             omasnap
             omarchy-speedtest
@@ -1615,6 +1617,7 @@
             omasnap
             owe
             folio
+            omaview
             plain
             aether
             ttfx

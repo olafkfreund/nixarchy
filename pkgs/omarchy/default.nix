@@ -38,6 +38,7 @@
   # Media / capture
   imagemagick,
   ffmpeg,
+  librsvg,
   gpu-screen-recorder,
   mpv,
   yt-dlp,
@@ -80,6 +81,7 @@
   chromium,
   nautilus,
   folio,
+  omaview,
   plain,
   neovim,
   lazygit,
@@ -137,6 +139,7 @@ let
   );
   hasPapers = builtins.elem "papers" basePackages;
   hasFiles = builtins.elem "folio" basePackages;
+  hasOmaview = builtins.elem "omaview" basePackages;
   hasPlain = builtins.elem "plain" basePackages;
   hasScreensaverPackage = builtins.elem "omarchy-screensaver" basePackages;
   preinstallsMoonlight = lib.hasInfix "moonlight-qt" (
@@ -240,6 +243,7 @@ let
     slurp
     imagemagick
     ffmpeg
+    librsvg # rsvg-convert, which omarchy-icons-preview needs for a set without a prebuilt preview
     gpu-screen-recorder
     mpv
     yt-dlp
@@ -312,7 +316,7 @@ let
     unzip
     pamixer # audio bins
     alsa-utils # amixer/alsamixer
-    imv # image viewer the menus open
+    (if hasOmaview then omaview else imv) # image viewer the menus open
     (if hasPapers then papers else evince) # PDF viewer
     # See pkgs/omarchy/pacman-shim.sh: turns `pacman: command not found` into
     # a pointer at the Nix equivalent, for the ~15 upstream bins that still
@@ -2196,11 +2200,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       runtimeDeps
       hasQtengine
       hasFiles
+      hasOmaview
       hasPlain
       basePackages
       preinstallsMoonlight
       ;
     fileManagerDesktop = if hasFiles then "folio.desktop" else null;
+    mediaViewerDesktop = if hasOmaview then "omaview.desktop" else null;
+    fileManager = if hasFiles then folio else null;
+    fileChooserPortal = hasFiles;
     editorDesktop = if hasPlain then "plain.desktop" else "nvim.desktop";
     pdfViewer = if hasPapers then papers else evince;
     pdfDesktop = if hasPapers then "org.gnome.Papers.desktop" else "org.gnome.Evince.desktop";

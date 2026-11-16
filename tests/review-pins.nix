@@ -23,6 +23,7 @@ let
     "omawrite"
     "owe"
     "folio"
+    "omaview"
     "plain"
     "aether"
     "ttfx"

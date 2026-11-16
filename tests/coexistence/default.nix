@@ -26,6 +26,45 @@ let
 
   configOf = fixture: (reference.extendModules { modules = [ fixture ]; }).config;
 
+  homeFile = builtins.toFile "coexist-home.nix" ''
+    { pkgs, pkgsOther, ... }: {
+      home.packages = [ pkgs.hello ];
+      home.sessionVariables.NIXARCHY_PKGS_OTHER = if pkgsOther == null then "null" else "set";
+    }
+  '';
+  homeAppsFile = builtins.toFile "coexist-apps.nix" (
+    lib.replaceStrings
+      [ "@USER@" "@IMPORTS@" "./nixarchy/home.nix" ]
+      [ "omarchy" "" (builtins.unsafeDiscardStringContext (toString homeFile)) ]
+      reference.config.environment.etc."nixarchy/home-apps-template.nix".text
+  );
+  homeImportConfigOf =
+    fixture:
+    (reference.extendModules {
+      modules = [
+        fixture
+        homeAppsFile
+      ];
+    }).config;
+  homeConflict = builtins.tryEval (
+    (homeImportConfigOf fixtures.home-pkgs-other-conflict)
+    .home-manager.users.omarchy.home.sessionVariables.NIXARCHY_PKGS_OTHER
+  );
+  homeConflictCheck =
+    (configOf fixtures.home-pkgs-other-conflict)
+    .home-manager.users.omarchy.home.sessionVariables.NIXARCHY_OWN_PKGS_OTHER == "user-choice"
+    && !homeConflict.success;
+  homeExtraSpecialArgs = homeImportConfigOf fixtures.home-extra-special-args;
+  homeExtraSpecialArgsCheck =
+    # extraSpecialArgs holds functions (nixosConfig), so compare its keys and the
+    # user's own value rather than the whole set.
+    builtins.attrNames homeExtraSpecialArgs.home-manager.extraSpecialArgs
+    == builtins.attrNames (configOf fixtures.home-extra-special-args).home-manager.extraSpecialArgs
+    && homeExtraSpecialArgs.home-manager.extraSpecialArgs.foo == 1
+    && !(homeExtraSpecialArgs.home-manager.extraSpecialArgs ? pkgsOther)
+    &&
+      homeExtraSpecialArgs.home-manager.users.omarchy.home.sessionVariables.NIXARCHY_PKGS_OTHER == "null";
+
   graphicsNames = [
     "graphics-own-mesa"
     "graphics-32bit"
@@ -515,6 +554,28 @@ pkgs.runCommand "nixarchy-coexistence"
     ${lib.concatStrings viScripts}
     ${ownHypeScript}
     ${nmScript}
+    ${
+      if homeConflictCheck then
+        ''
+          echo 'home-pkgs-other-conflict: ok, a loud evaluation error'
+        ''
+      else
+        ''
+          echo 'home-pkgs-other-conflict: FAIL the user definition alone or the generated conflict' >&2
+          fail=1
+        ''
+    }
+    ${
+      if homeExtraSpecialArgsCheck then
+        ''
+          echo 'home-extra-special-args: ok'
+        ''
+      else
+        ''
+          echo 'home-extra-special-args: FAIL generated import changed extraSpecialArgs' >&2
+          fail=1
+        ''
+    }
     ${hyprlandScript}
     ${chromiumScript}
     ${lib.concatStrings agentLocalScripts}

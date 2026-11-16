@@ -5695,6 +5695,18 @@ pkgs.runCommand "nixarchy-options-files"
         chmod u+w "$appfile"
         run() { HOME=$rmhome XDG_CONFIG_HOME=$rmhome/.config PATH="$vm/sw/bin:$PATH" "$@"; }
 
+        printf '%s\n' \
+          '{ pkgs, pkgsOther, ... }:' \
+          '{' \
+          '  home.packages = with pkgs; [  #@pkgs-begin' \
+          '  ];  #@pkgs-end' \
+          '}' > home-template.expected
+        cmp -s home-template.expected "$vm/etc/nixarchy/home-template.nix" || {
+          echo "home-template.nix differs from the approved byte format" >&2
+          exit 1
+        }
+        echo "home-template.nix has the approved byte format"
+
         # An app: enable uncomments the marked row, disable re-comments it.
         appid=$(grep -oE '#@ [a-z0-9_-]+$' "$appfile" | head -1 | cut -d' ' -f2)
         test -n "$appid" || { echo "the apps template has no plain #@ marker to test with" >&2; exit 1; }
@@ -5731,6 +5743,21 @@ pkgs.runCommand "nixarchy-options-files"
           echo "removing the last package left a #@pkg marker behind" >&2; exit 1
         fi
         echo "an added package can be removed, byte for byte"
+
+        cp "$vm/etc/nixarchy/home-template.nix" "$rmhome/.config/nixarchy/home.nix"
+        homefile=$rmhome/.config/nixarchy/home.nix
+        chmod u+w "$homefile"
+        cp "$homefile" home.before
+        cp "$appfile" apps.before
+        run nixarchy-pkg-add --home hello >/dev/null
+        grep -q '#@pkg hello$' "$homefile" && cmp -s apps.before "$appfile" || {
+          echo "pkg-add --home did not write only to home.nix" >&2; exit 1
+        }
+        run nixarchy-pkg-remove --home hello >/dev/null
+        cmp -s home.before "$homefile" && cmp -s apps.before "$appfile" || {
+          echo "pkg add/remove --home is not symmetric, or changed apps.nix" >&2; exit 1
+        }
+        echo "a home package can be removed, byte for byte, without changing apps.nix"
 
         # A batch with a bad name in it (#496). The names resolve in ONE
         # nixpkgs evaluation, and the property that makes that acceptable is

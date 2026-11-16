@@ -136,6 +136,16 @@ let
   # one they made themselves.
   appEnabled = name: osConfig.programs.nixarchy.apps.${name}.enable or false;
 
+  t3codeOn =
+    (osConfig.programs.nixarchy.enable or false)
+    && (osConfig.programs.nixarchy.session or true)
+    && appEnabled "t3-code";
+  t3codeThemeScript = pkgs.callPackage ./t3code-theme-script.nix { } {
+    publisher = cfg.package;
+    t3 = osConfig.programs.nixarchy.apps."t3-code".package;
+    theme = cfg.t3code.theme;
+  };
+
   # Whether this machine declares a secret -- the predicate sops-nix itself
   # gates on, so the editor plugin below (#658) appears exactly when the
   # mechanism it drives is live and never on a machine that has none.
@@ -720,6 +730,17 @@ in
       type = lib.types.str;
       default = "tokyo-night";
       description = "Theme applied on first login only. Switchable at runtime afterwards.";
+    };
+
+    t3code.theme = lib.mkOption {
+      type = lib.types.nullOr (lib.types.strMatching "[a-z0-9][a-z0-9-]*");
+      default = "omarchy";
+      example = "omarchy-plus";
+      description = ''
+        T3 Code theme forced on every activation when installed through Nixarchy apps.
+        null publishes the Omarchy palette without selecting a theme. A missing
+        theme other than omarchy falls back to omarchy and logs the fallback.
+      '';
     };
 
     # Why: modules/AGENTS.md#declares-which-plugins-are-present-and-deliberatel
@@ -1630,6 +1651,13 @@ in
             fi
           ''
         );
+
+    # Why: modules/AGENTS.md#t3-code-theme-follows-omarchy-when-the-app-is-selected
+    home.activation.nixarchyT3codeTheme = lib.mkIf t3codeOn (
+      lib.hm.dag.entryAfter [ "writeBoundary" "nixarchySeed" ] ''
+        run ${t3codeThemeScript}/bin/nixarchy-t3code-theme
+      ''
+    );
 
     # #1625: removes upstream's exact generated mise launchers, which can only fail now,
     # and records what mise left. Nothing else is deleted.

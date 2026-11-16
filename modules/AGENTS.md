@@ -36,6 +36,18 @@ working:
 
 ## Working here
 
+<a id="t3-code-theme-follows-omarchy-when-the-app-is-selected"></a>
+
+### T3 Code theme follows Omarchy when the app is selected
+
+`home.activation.nixarchyT3codeTheme` runs after the seed only when the Nixarchy
+session and the `t3-code` app are enabled. The script checks for a staged palette
+before creating `~/.t3`, so a missing theme leaves a new home untouched. It uses
+`nounset` without `errexit` or `pipefail`: publisher and `t3` failures are logged
+and do not fail Home Manager activation. The downstream nixos_config module from
+#2973 supplied this behavior before nixarchy owned it; remove that module when
+the consuming flake bumps to this version, so activation does not run twice.
+
 The theme engine's GTK 3 overrides need `adw-gtk3`; install it only while
 the engine and GTK target are enabled. `pkgs/theme-engine.nix` adapts the
 pinned engine's `/usr/share/{icons,themes}` lookups to the NixOS system

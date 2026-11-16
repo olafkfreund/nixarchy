@@ -1400,12 +1400,14 @@ in
                 # the user's picks, and clobbering it would silently undo them.
                 # /etc/nixarchy/apps-template.nix always holds the current full list,
                 # so a newly packaged app is discoverable with a diff against it.
-                # Three files now: apps.nix, services.nix and advanced.nix.
+                # Three files, plus home.nix when Home Manager uses global pkgs.
                 # Each seeded independently and only when absent, so a machine
-                # that predates the split gains the two new ones and keeps the
+                # that predates the split gains the missing ones and keeps the
                 # apps.nix it already has.
                 run mkdir -p "${config.xdg.configHome}/nixarchy"
-                for part in apps services advanced; do
+                for part in apps services advanced${
+                  lib.optionalString (osConfig.home-manager.useGlobalPkgs or false) " home"
+                }; do
                   if [ ! -e "${config.xdg.configHome}/nixarchy/$part.nix" ] \
                     && [ -e "/etc/nixarchy/$part-template.nix" ]; then
                     run ${pkgs.coreutils}/bin/install -m600 \

@@ -396,6 +396,15 @@ let
 
     # Offered by the Omarchy menu but with no nixpkgs equivalent:
     ${unavailableNote}'';
+
+  homeTemplate = pkgs.writeText "nixarchy-home.nix" ''
+    { pkgs, pkgsOther, ... }:
+    {
+      home.packages = with pkgs; [  #@pkgs-begin
+      ];  #@pkgs-end
+    }
+  '';
+
   # summon would run upstream's action otherwise (omacom/omarchy#15742)
   devenvRow = lang: {
     disabled = "true";
@@ -1638,6 +1647,7 @@ in
             "nixarchy/apps-template.nix".source = appsTemplate;
             "nixarchy/services-template.nix".source = servicesTemplate;
             "nixarchy/advanced-template.nix".source = advancedTemplate;
+            "nixarchy/home-template.nix".source = homeTemplate;
             # The generated defaults, exported so CI and `nixarchy-doctor` can
             # read what this machine's menu actually says without resolving
             # OMARCHY_PATH. The tree below is what the shell reads.

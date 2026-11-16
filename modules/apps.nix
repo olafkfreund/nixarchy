@@ -4751,12 +4751,13 @@ in
                     [[ $1 =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
                   }
 
+                  home_src=$(select_home_src)
+                  # The name goes into generated Nix only with a home part, so only then is it checked.
                   user=$(id -un)
-                  if ! valid_user "$user"; then
+                  if [ -n "$home_src" ] && ! valid_user "$user"; then
                     echo "nixarchy-apply: invalid user name: $user" >&2
                     exit 1
                   fi
-                  home_src=$(select_home_src)
 
                   for part in apps services advanced flatsnap home; do
                     # The snapshot, for a part the caller pinned: the bytes that

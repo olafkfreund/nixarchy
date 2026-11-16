@@ -3148,10 +3148,18 @@ let
         {
           programs.nixarchy.enable = true;
           programs.nixarchy.otherChannel.flake = if otherChannel then inputs.nixpkgs.outPath else null;
-          home-manager.useGlobalPkgs = useGlobalPkgs;
-          # A shared module supplies stateVersion, so a user with no configuration
-          # of their own still evaluates and only configuredElsewhere refuses.
-          home-manager.sharedModules = pkgs.lib.optional (!aliceHome) { home.stateVersion = "25.05"; };
+          home-manager = {
+            inherit useGlobalPkgs;
+            # A shared module supplies stateVersion, so a user with no configuration
+            # of their own still evaluates and only configuredElsewhere refuses.
+            sharedModules = pkgs.lib.optional (!aliceHome) { home.stateVersion = "25.05"; };
+            users = {
+              bob.home.stateVersion = "25.05";
+            }
+            // pkgs.lib.optionalAttrs aliceHome {
+              alice.home.stateVersion = "25.05";
+            };
+          };
           users.users = {
             bob = {
               isNormalUser = true;
@@ -3173,12 +3181,6 @@ let
                 };
           };
           users.groups = pkgs.lib.optionalAttrs (!aliceUser) { alice = { }; };
-          home-manager.users = {
-            bob.home.stateVersion = "25.05";
-          }
-          // pkgs.lib.optionalAttrs aliceHome {
-            alice.home.stateVersion = "25.05";
-          };
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";

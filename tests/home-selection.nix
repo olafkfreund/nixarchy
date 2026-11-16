@@ -36,9 +36,9 @@ let
     }).config;
   unfreeOff = configWith { nixarchy.allowUnfree = false; };
   noScope = configWith { useGlobalPkgs = false; };
-  homeAppsTemplate = pkgs.writeText "home-apps-template.nix" (
-    (configWith { }).environment.etc."nixarchy/home-apps-template.nix".text
-  );
+  homeAppsTemplate =
+    pkgs.writeText "home-apps-template.nix"
+      (configWith { }).environment.etc."nixarchy/home-apps-template.nix".text;
   variantBin =
     config: name:
     let
@@ -184,6 +184,9 @@ pkgs.runCommand "nixarchy-home-selection"
     [ -z "$selected" ] || bad 10 "missing selection: $selected"
     [ "$(grep -cF '$srcdir/home.nix' "$apply")" -eq 1 ] || bad 10 'live source is tested outside select_home_src'
 
+    # Static, because a PATH stub cannot beat apply's own coreutils: the name check
+    # runs only with a home part, so a user without home.nix is never refused.
+    grep -qF 'if [ -n "$home_src" ] && ! valid_user "$user"; then' "$apply" || bad 11 'the user-name check is not gated on a home part'
     sed -n '/^valid_user() {/,/^}/p' "$apply" >valid-user-function
     [ -s valid-user-function ] || bad 11 'valid_user extraction empty'
     source valid-user-function

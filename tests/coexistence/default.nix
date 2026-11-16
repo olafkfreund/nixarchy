@@ -46,10 +46,8 @@ let
         homeAppsFile
       ];
     }).config;
-  homeConflict = builtins.tryEval (
-    (homeImportConfigOf fixtures.home-pkgs-other-conflict)
-    .home-manager.users.omarchy.home.sessionVariables.NIXARCHY_PKGS_OTHER
-  );
+  homeConflict = builtins.tryEval (homeImportConfigOf fixtures.home-pkgs-other-conflict)
+    .home-manager.users.omarchy.home.sessionVariables.NIXARCHY_PKGS_OTHER;
   homeConflictCheck =
     (configOf fixtures.home-pkgs-other-conflict)
     .home-manager.users.omarchy.home.sessionVariables.NIXARCHY_OWN_PKGS_OTHER == "user-choice"

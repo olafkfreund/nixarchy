@@ -19,6 +19,10 @@ let
         insecure = throw "boom";
         knownVulnerabilities = [ "x" ];
       };
+      fixInsecureThrowVuln = pkg "fixInsecureThrowVuln" "1.0" {
+        insecure = true;
+        knownVulnerabilities = throw "boom";
+      };
       fixThrowMeta = (pkg "fixThrowMeta" "1.0" {}) // { meta = throw "boom"; };
       fixStrVuln = pkg "fixStrVuln" "1.0" { knownVulnerabilities = "oops"; };
       fixEmptyList = pkg "fixEmptyList" "1.0" { knownVulnerabilities = []; };
@@ -84,10 +88,8 @@ let
         [ "$(wc -l < baked.sh)" -eq 3 ] || { echo 'pkg-index: baked search inputs moved' >&2; exit 1; }
         . ./baked.sh
 
-        if ! ( . ./functions.sh; build_index ); then
-          echo 'pkg-index: build_index failed' >&2
-          exit 1
-        fi
+        # A plain statement, not an if/! condition, so errexit holds inside build_index as in production.
+        ( set -euo pipefail; . ./functions.sh; build_index )
         awk -F '\t' '$1 == "app" || $1 == "opt" || $1 == "pkg"' "$index" | cut -f1-5 > rows.tsv
         ${
           if goldenOnly then
@@ -103,12 +105,12 @@ let
                 echo 'pkg-index: walk evaluation failed' >&2
                 exit 1
               fi
-              insecure='["fixAll","fixBrokenInsecure","fixCurated","fixInsecureOnly","fixNoVersion","fixThrowElem","fixThrowInsecureList","fixVuln"]'
-              expected='["fixAll","fixBrokenInsecure","fixClean","fixCurated","fixEmptyList","fixInsecureOnly","fixNoVersion","fixNullInsecure","fixStrVuln","fixThrowElem","fixThrowInsecureList","fixThrowMeta","fixThrowVuln","fixVuln","sub.child"]'
+              insecure='["fixAll","fixBrokenInsecure","fixCurated","fixInsecureOnly","fixInsecureThrowVuln","fixNoVersion","fixThrowElem","fixThrowInsecureList","fixVuln"]'
+              expected='["fixAll","fixBrokenInsecure","fixClean","fixCurated","fixEmptyList","fixInsecureOnly","fixInsecureThrowVuln","fixNoVersion","fixNullInsecure","fixStrVuln","fixThrowElem","fixThrowInsecureList","fixThrowMeta","fixThrowVuln","fixVuln","sub.child"]'
               jq -e --argjson expected "$expected" '([.[].attr] | sort) == ($expected | sort)' walk.json >/dev/null || fail 'walk attribute set'
               jq -e --argjson expected "$insecure" '([.[] | select(.insecure == true) | .attr] | sort) == ($expected | sort)' walk.json >/dev/null || fail 'walk insecure set'
 
-              awk -F '\t' -v expected=15 '
+              awk -F '\t' -v expected=16 '
                 $1 == "pkg" { n++ }
                 END { if (n != expected) { print "pkg rows: expected " expected ", got " n > "/dev/stderr"; exit 1 } }
               ' "$index" || fail 'package row count'
@@ -131,7 +133,7 @@ let
                   want = ($2 == "fixAll" ? "unfree broken insecure" :
                           $2 == "fixBrokenInsecure" ? "broken insecure" :
                           $2 == "fixCurated" ? "insecure curated:fixcurated" :
-                          $2 ~ /^(fixVuln|fixInsecureOnly|fixThrowElem|fixThrowInsecureList|fixNoVersion)$/ ? "insecure" : "")
+                          $2 ~ /^(fixVuln|fixInsecureOnly|fixInsecureThrowVuln|fixThrowElem|fixThrowInsecureList|fixNoVersion)$/ ? "insecure" : "")
                   if ($4 != want) { print "flags: " $2 ": " $4 > "/dev/stderr"; bad = 1 }
                   marked = index($5, "Marked INSECURE") != 0
                   if (marked != (want ~ /(^| )insecure( |$)/)) { print "preview insecurity: " $2 > "/dev/stderr"; bad = 1 }
@@ -154,7 +156,7 @@ let
                   print $1, $2, $3, $4, $5
                 }
               ' "$index" > comparable.tsv
-              cmp -s comparable.tsv ${./fixtures/pkg-index.golden.tsv} || fail 'app, opt and pkg fields 1-5 differ from golden'
+              diff -u ${./fixtures/pkg-index.golden.tsv} comparable.tsv >&2 || fail 'app, opt and pkg fields 1-5 differ from golden'
 
               . ./functions.sh
               stamp_key > "$stamp"

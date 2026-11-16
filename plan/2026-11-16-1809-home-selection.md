@@ -137,36 +137,47 @@ build. The lead builds. Report the changed files and any deviation."
        deviation when committed);
    - **case 11** extracts `valid_user` from the built script.
    - Verify: the check passes, then one named break per case.
-5. **Evaluation of the generated file**, inside the check's build, not at
-   flake evaluation. Case 8's output exists only at build time, and
-   importing it at evaluation would be import-from-derivation, which the
-   repository forbids.
-   - **The evaluator:** in the same `runCommand`, with
-     `NIX_STATE_DIR`/`NIX_LOG_DIR` private, as `tests/writer-lock.nix`
-     cases 10-13 already do for `nix-instantiate --parse`. It runs
-     `nix-instantiate --eval --strict --readonly-mode` on a small
-     expression that:
-     - imports nixpkgs' `nixos/lib/eval-config.nix` from the pinned
-       `inputs.nixpkgs` path, which the check references, so it is in the
-       closure and readable offline;
-     - imports Home Manager's NixOS module and nixarchy's own modules (the
-       flake source, also referenced);
-     - adds the generated `nixarchy-apps.nix` and copied `nixarchy/home.nix`
-       from case 8's fixture flake, plus a fixture configuration with two
-       normal users, `alice` and `bob`, each with their own Home Manager
-       configuration, and `useGlobalPkgs = true`;
-     - returns the failed assertions' messages, and the `pname` of each
-       entry in `alice`'s and `bob`'s `home.packages`. These are read
-       directly, so nothing is instantiated and no derivation is written.
-   - It covers the spec's five evaluation cases, with variants of the
-     fixture configuration, including `pkgsOther` set and unset.
-   - **If `--readonly-mode` evaluation of a NixOS configuration does not
-     work in the sandbox**, Codex reports it. The lead then stops and brings
-     a revised step 5 back for approval, rather than substituting a
-     hand-written fixture, which would not test the generator.
-   - §1: drop each assertion in turn, and its case passes evaluation when
-     it should not; drop the `configuredElsewhere` file filter, and the
-     no-own-configuration case passes.
+5. **Evaluation of the generated file**, revised and approved by the owner
+   on 2026-11-16. The original in-sandbox evaluator could not work:
+   `builtins.getFlake` writes to the store (`fchmodat2 … Operation not
+   permitted`), and importing nixarchy's modules without it needs every
+   flake input evaluated.
+   - **One template, in Nix.** The home part of the generated file is a
+     single Nix-side template, `homeAppsTemplate` in `modules/apps.nix`: a
+     string with `@USER@` and `@IMPORTS@` placeholders, holding the
+     function header, `configuredElsewhere`, the scoped
+     `_module.args.pkgsOther` import and the three assertions.
+     - It is shipped to the apply script as a file.
+     - `nixarchy-apply` only substitutes the validated user and its
+       `$imports` into it, with no other text assembled in shell.
+     - Without `home.nix`, apply writes today's plain file, unchanged.
+   - **Evaluated at flake evaluation time** (`tests/options.nix`, which
+     evaluates fixture configurations without import-from-derivation):
+     - the template rendered for `alice` with `builtins.toFile`, which
+       writes at evaluation time and is not IFD, is imported into fixture
+       configurations;
+     - they have two normal users, `alice` and `bob`, with their own Home
+       Manager configurations, and `useGlobalPkgs = true`;
+     - a fixture `home.nix` holds a `hello` row, plus a `pkgsOther.hello`
+       variant.
+
+     It asserts the spec's five cases from `config.assertions` (the failed
+     messages) and `home-manager.users.<u>.home.packages`:
+     - `alice` gets `hello`, and `bob` does not;
+     - `useGlobalPkgs = false` gives the first message;
+     - the user not defined gives the second;
+     - `alice` without her own Home Manager configuration gives the third;
+     - with the other channel set, the `pkgsOther` row evaluates. Unset,
+       forcing it fails as a null access.
+   - **The generator is proven in the build.** Case 8 renders the same
+     template for the build's user and imports, with the same
+     substitution, and `cmp`s it with apply's real generated
+     `nixarchy-apps.nix`.
+   - **§1:**
+     - drop each assertion in turn, and its options case fails;
+     - drop the `configuredElsewhere` file filter, and the
+       no-own-configuration case fails;
+     - change one byte of apply's substitution, and case 8's `cmp` fails.
 6. **The rest:**
    - `tests/writer-lock.nix`: `--home` rows for the three writers (:252-261);
    - `tests/options.nix`: `home-template.nix` byte-format assertions and a

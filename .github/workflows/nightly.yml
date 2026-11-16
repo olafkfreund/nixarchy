@@ -562,9 +562,15 @@ jobs:
         run: |
           set -o pipefail
           # The same splice modules/apps.nix performs: @nixpkgs@ becomes the
-          # tree the draft is parsed and built against.
+          # tree the draft is parsed and built against, and @writerLock@ the
+          # lock helper's text. A token left unspliced is refused by name (#1795).
           nixpkgs=$(nix eval --raw --inputs-from . nixpkgs#path)
-          sed "s|@nixpkgs@|$nixpkgs|" pkgs/pkg-new.sh > "$RUNNER_TEMP/pkg-new.sh"
+          sed -e "s|@nixpkgs@|$nixpkgs|" -e '/^@writerLock@$/{r pkgs/writer-lock.sh' -e 'd}' \
+            pkgs/pkg-new.sh > "$RUNNER_TEMP/pkg-new.sh"
+          if grep -noE '@[A-Za-z_]+@' "$RUNNER_TEMP/pkg-new.sh"; then
+            echo "pkg-new.sh has a token modules/apps.nix splices and this step does not" >&2
+            exit 1
+          fi
           export XDG_CONFIG_HOME="$RUNNER_TEMP/config"
           nix shell --inputs-from . nixpkgs#nix-init -c \
             bash "$RUNNER_TEMP/pkg-new.sh" \

@@ -2608,6 +2608,15 @@ in
                 text = ''
                   ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                  homeScope=${if config.home-manager.useGlobalPkgs then "1" else "0"}
+                  scope=system
+                  if [ "''${1:-}" = --home ]; then
+                    [ "$homeScope" = 1 ] || { echo "user-scope packages need home-manager.useGlobalPkgs = true" >&2; exit 1; }
+                    scope=home
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/home.nix"
+                    shift
+                    [ -f "$file" ] || { echo "no home.nix -- log in again to have it created" >&2; exit 1; }
+                  fi
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
                   if [ $# -eq 0 ]; then
@@ -2833,6 +2842,15 @@ in
                 text = ''
                   ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                  homeScope=${if config.home-manager.useGlobalPkgs then "1" else "0"}
+                  scope=system
+                  if [ "''${1:-}" = --home ]; then
+                    [ "$homeScope" = 1 ] || { echo "user-scope packages need home-manager.useGlobalPkgs = true" >&2; exit 1; }
+                    scope=home
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/home.nix"
+                    shift
+                    [ -f "$file" ] || { echo "no home.nix -- log in again to have it created" >&2; exit 1; }
+                  fi
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
                   if [ $# -eq 0 ]; then
@@ -2947,6 +2965,8 @@ in
                 text = ''
                   ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                  homeScope=${if config.home-manager.useGlobalPkgs then "1" else "0"}
+                  scope=system
                   table=${appAttrTable}
                   nixpkgs=${pkgs.path}
                   # This generation's licence policy, baked in at build time: the
@@ -3004,6 +3024,7 @@ in
                   dry_run=false
                   while [ $# -gt 0 ]; do
                     case "$1" in
+                      --home)     scope=home; shift ;;
                       --stable)   other=true; want_channel=stable;   shift ;;
                       --unstable) other=true; want_channel=unstable; shift ;;
                       --dry-run)  dry_run=true; shift ;;
@@ -3012,6 +3033,12 @@ in
                       *) break ;;
                     esac
                   done
+
+                  if [ "$scope" = home ]; then
+                    [ "$homeScope" = 1 ] || { echo "user-scope packages need home-manager.useGlobalPkgs = true" >&2; exit 1; }
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/home.nix"
+                    [ -f "$file" ] || { echo "no home.nix -- log in again to have it created" >&2; exit 1; }
+                  fi
 
                   if [ "$other" = true ]; then
                     # Which channel this machine follows, read the way
@@ -3062,13 +3089,15 @@ in
                   if [ $# -eq 0 ]; then
                     # No arguments is not a mistake to scold, it is "show me what
                     # there is" -- which is exactly what the picker answers (#492).
-                    if can_pick; then
+                    if [ "$scope" != home ] && can_pick; then
                       nx_unlock
                       exec nixarchy-search
                     fi
-                    echo "usage: nixarchy-pkg-add [--stable|--unstable] [--dry-run] <nixpkgs-attribute>..." >&2
+                    echo "usage: nixarchy-pkg-add [--home] [--stable|--unstable] [--dry-run] <nixpkgs-attribute>..." >&2
                     echo "  e.g. nixarchy-pkg-add ripgrep fd" >&2
-                    echo "  or run 'nixarchy-search' to browse everything" >&2
+                    if [ "$scope" != home ]; then
+                      echo "  or run 'nixarchy-search' to browse everything" >&2
+                    fi
                     echo >&2
                     echo "  --stable / --unstable take ONE package from the other" >&2
                     echo "  channel. The two share no store paths even at the same" >&2
@@ -3108,13 +3137,16 @@ in
                   ensure_block() {
                     grep -q '#@pkgs-end' "$file" && return 0
 
+                    list_attr=environment.systemPackages
+                    [ "$scope" != home ] || list_attr=home.packages
+
                     # systemPackages needs `pkgs`, and the generated template takes `{ ... }:`.
                     if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
                       sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgs, ... }:/' "$file"
                     fi
 
                     tmp=$(mktemp)
-                    awk '
+                    awk -v list_attr="$list_attr" '
                       !ins && /^}[[:space:]]*$/ {
                         print "";
                         print "  # ── Extra packages ──────────────────────────────────────────────";
@@ -3123,7 +3155,7 @@ in
                         print "  # not offer them and will not remove them. The file stays yours --";
                         print "  # reformat and annotate freely, the tool only ever inserts one";
                         print "  # line before the end marker.";
-                        print "  environment.systemPackages = with pkgs; [  #@pkgs-begin";
+                        print "  " list_attr " = with pkgs; [  #@pkgs-begin";
                         print "  ];  #@pkgs-end";
                         ins = 1;
                       }
@@ -3135,7 +3167,7 @@ in
                       echo "nixarchy: could not find the closing '}' of $target." >&2
                       echo "Add this to it by hand, then run this again:" >&2
                       echo >&2
-                      echo "  environment.systemPackages = with pkgs; [  #@pkgs-begin" >&2
+                      echo "  $list_attr = with pkgs; [  #@pkgs-begin" >&2
                       echo "  ];  #@pkgs-end" >&2
                       restore
                       exit 1
@@ -3324,11 +3356,13 @@ in
                   # resolve is already committed above.
                   open_missed() {
                     [ ''${#missed[@]} -gt 0 ] || return 0
-                    if ! can_pick; then
+                    if [ "$scope" = home ] || ! can_pick; then
                       echo "nixpkgs has no package matching: ''${missed[*]}" >&2
                       echo >&2
-                      echo "Search for the right name:" >&2
-                      echo "  nixarchy-search ''${missed[*]}" >&2
+                      if [ "$scope" != home ]; then
+                        echo "Search for the right name:" >&2
+                        echo "  nixarchy-search ''${missed[*]}" >&2
+                      fi
                       echo >&2
                       echo "If nixpkgs genuinely does not have it, draft a package from its source:" >&2
                       echo "  nixarchy pkg new <url>" >&2
@@ -3358,6 +3392,10 @@ in
                   # Runs before the parse check so one validation covers it.
                   offer_unfree_grant() {
                     [ ''${#unfree_hits[@]} -gt 0 ] || return 0
+                    if [ "$scope" = home ]; then
+                      echo "this package is unfree; allow it in the system configuration (programs.nixarchy.allowUnfree, or an allowUnfreePredicate in ~/.config/nixarchy/apps.nix), then apply" >&2
+                      return 0
+                    fi
 
                     if grep -q '#@unfree-allow' "$file"; then
                       # A grant already exists (ours, by its marker): grow its

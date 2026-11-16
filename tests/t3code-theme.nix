@@ -1,7 +1,7 @@
 { inputs, pkgs }:
 let
-  lib = pkgs.lib;
-  omarchy = (pkgs.extend inputs.self.overlays.default).omarchy;
+  inherit (pkgs) lib;
+  inherit (pkgs.extend inputs.self.overlays.default) omarchy;
   fixtureT3 = pkgs.writeShellScriptBin "t3" ''
     echo "t3 $*" >> "$T3_CALLS"
     exec ${pkgs.t3code}/bin/t3 "$@"

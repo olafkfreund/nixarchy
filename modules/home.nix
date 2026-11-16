@@ -737,7 +737,8 @@ in
       default = "omarchy";
       example = "omarchy-plus";
       description = ''
-        T3 Code theme forced on every activation when installed through Nixarchy apps.
+        T3 Code theme re-selected on activation when it differs from this option,
+        reverting a theme chosen in the app at the next activation.
         null publishes the Omarchy palette without selecting a theme. A missing
         T3 Code built-in themes work without a published file. If T3 Code does
         not know the requested theme, it logs the failure and falls back to

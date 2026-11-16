@@ -14,6 +14,8 @@ let
       exit 1
     fi
     if [ -e "$HOME/t3-hang" ]; then
+      ${pkgs.util-linux}/bin/setsid ${pkgs.coreutils}/bin/sleep 60 &
+      printf '%s\n' "$!" > "$HOME/detached-pid"
       trap "" TERM
       exec ${pkgs.coreutils}/bin/sleep 60
     fi
@@ -112,6 +114,8 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
     stage placeholder-no-theme '{{'
     touch placeholder-no-theme/no-theme
     run_case placeholder-no-theme ${normal}
+    logged placeholder-no-theme "palette has unresolved colours; nothing published yet" || fail "placeholder without prior palette log"
+    ! logged placeholder-no-theme "kept the previous one" || fail "placeholder claimed a previous palette"
     logged placeholder-no-theme "t3 theme set exited 1" || fail "placeholder missing theme failure log"
     logged placeholder-no-theme 'ThemeIdUnknownError: No theme named "omarchy"' || fail "placeholder missing theme detail"
     called placeholder-no-theme "t3 theme set omarchy" || fail "missing theme was not attempted"
@@ -149,10 +153,14 @@ pkgs.runCommand "nixarchy-t3code-theme-check"
 
     stage t3-hangs
     touch t3-hangs/t3-hang
+    trap 'if [ -f t3-hangs/detached-pid ]; then kill "$(cat t3-hangs/detached-pid)" 2>/dev/null || :; fi' EXIT
     start=$(date +%s)
-    run_case t3-hangs ${normal}
+    run_case t3-hangs ${plus}
+    if [ -f t3-hangs/detached-pid ]; then kill "$(cat t3-hangs/detached-pid)" 2>/dev/null || :; fi
+    trap - EXIT
     [ $(( $(date +%s) - start )) -lt 15 ] || fail "t3 timeout took 15 seconds"
     logged t3-hangs "t3 theme set exited 137" || fail "t3 timeout did not kill"
+    [ "$(grep -c '^t3 ' t3-hangs/calls)" -eq 1 ] || fail "timeout caused a second t3 call"
     [ -z "$(find t3-hangs/tmp -type f -print)" ] || fail "t3 timeout left temp file"
 
     stage missing-t3

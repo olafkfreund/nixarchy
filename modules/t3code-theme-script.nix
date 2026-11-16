@@ -50,7 +50,11 @@ writeShellApplication {
     mkdir -p "$STATE"
     if omarchy-theme-set-t3code; then
       if grep -qF '{{' "$HOME/.local/state/omarchy/current/theme/t3code.json"; then
-        log 'palette has unresolved colours; kept the previous one'
+        if [ -f "$STATE/themes/omarchy.json" ]; then
+          log 'palette has unresolved colours; kept the previous one'
+        else
+          log 'palette has unresolved colours; nothing published yet'
+        fi
       fi
     else
       status=$?
@@ -69,8 +73,10 @@ writeShellApplication {
       exit 0
     fi
 
+    output=""
+    trap 'rm -f "''${output:-}"' EXIT
     set_theme() {
-      local output status
+      local status
       output=$(mktemp) || {
         log 'could not create output file'
         exit 0
@@ -85,13 +91,16 @@ writeShellApplication {
         done
       fi
       rm -f "$output"
+      output=""
       return "$status"
     }
 
     if set_theme "$theme"; then
       exit 0
+    else
+      status=$?
     fi
-    if [ "$theme" != omarchy ] && [ -f "$STATE/themes/omarchy.json" ]; then
+    if [ "$status" -eq 1 ] && [ "$theme" != omarchy ] && [ -f "$STATE/themes/omarchy.json" ]; then
       log "theme $theme not available; using omarchy"
       if [ "$currentTheme" != omarchy ]; then
         set_theme omarchy || :

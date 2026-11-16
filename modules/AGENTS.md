@@ -913,7 +913,9 @@ logged and do not fail Home Manager activation. T3 Code validates the theme ID:
 built-in themes need no file, and an unknown ID falls back to the published
 Omarchy palette. The downstream nixos_config module from #2973 supplied this
 behavior before nixarchy owned it; remove that module when the consuming flake
-bumps to this version, so activation does not run twice.
+bumps to this version, so activation does not run twice. The
+`writeShellApplication` PATH export runs under `nounset`, so the script
+assumes PATH is set, as it always is in Home Manager activation.
 
 <a id="what-omarchy-path-points-at-and-the-source-of-ever"></a>
 

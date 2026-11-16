@@ -149,6 +149,7 @@ let
   t3SessionOffHome = homeOn (t3App // { session = false; }) { };
   t3NixarchyOffHome = homeOn (t3App // { enable = false; }) { };
   t3PlusHome = homeOn t3App { programs.nixarchy.t3code.theme = "omarchy-plus"; };
+  t3NullHome = homeOn t3App { programs.nixarchy.t3code.theme = null; };
   neovimOffHome = homeOn { } { programs.nixarchy.neovim = "off"; };
   # #888: the same machine with the nix-skills input turned off.
   skillsOffHome = homeOn { nixSkills = false; } { };
@@ -1398,6 +1399,14 @@ let
         || (builtins.tryEval
           (homeOn t3App { programs.nixarchy.t3code.theme = "-x"; }).programs.nixarchy.t3code.theme
         ).success;
+    };
+    t3codeNullTheme = {
+      on =
+        t3NullHome.programs.nixarchy.t3code.theme == null
+        &&
+          t3NullHome.home.activation.nixarchyT3codeTheme.data
+          != t3Home.home.activation.nixarchyT3codeTheme.data;
+      off = t3Home.programs.nixarchy.t3code.theme == null;
     };
     # ---- nixi, on for everyone, and provably gone when told ----
     #

@@ -83,8 +83,24 @@ Home Manager module system fails the build; the manual says so.
 
 ### `--release-home` and `account_exists`
 
-`account_exists() { getent passwd "$1" >/dev/null; }` is its own function so a
-test can extract the logic and replace it. `--release-home` is parsed with the
+`account_exists` is its own function so a test can extract the logic and
+replace it. It runs `getent passwd "$1"` and maps the status to three answers,
+never two:
+
+- exit 0: the account exists.
+- exit 2: confirmed absent (getent's "key not found").
+- any other status (127 command missing, 1, 3, ...): a lookup failure, which
+  **refuses** the release with a message naming the status
+  (`nixarchy-apply: cannot tell whether <owner> still has an account (getent
+  exited <n>); not releasing`). Only confirmed absence lets a non-owner
+  release.
+
+`getent` is not in `nixarchy-apply`'s `runtimeInputs` (`:4391`: branch-guard,
+coreutils, diffutils, gnugrep, git, gnused, util-linux, nh, systemd, ...), so
+the plan adds it there: `pkgs.getent` (nixpkgs' glibc getent package; the plan
+confirms the attribute evaluates before using it, `pkgs.glibc.bin` being the
+fallback). An undeclared command would otherwise be status 127, which the rule
+above turns into a refusal rather than a wrong "gone". `--release-home` is parsed with the
 other flags; it takes the lock like any apply. After `read_owner`:
 
 - owner empty: print `no home owner; nothing to release`, exit 0.
@@ -104,11 +120,24 @@ the flake imports one user with another user's selection.
    generated file through the existing template/plain branches, `@USER@` =
    `render_user`, validated). Nothing in the flake has changed yet.
 2. Back up the current copy to `$pinned/home.bak` (or note it was absent).
-3. Replace the copy (`mv`, or `rm` for a release), then replace `$dest`,
-   back to back.
-4. If either step fails: restore the backup copy (or remove a copy that did not
+3. Write order depends on the result, and each replacement goes through a named
+   function `replace_file <src> <dst>` (a temp file `mv`d into place, so each
+   is atomic):
+   - the result **has an import** (claim, owner copy): the home copy first,
+     `$dest` second;
+   - the result **removes the import** (`--release-home`): `$dest` first
+     (dropping the import), then remove the copy.
+4. If a step fails: restore the backup copy (or remove a copy that did not
    exist before) and exit non-zero. The previous pair is what remains.
 5. Only after success, update the copy's record in `$applied`.
+
+Why the order makes a crash safe: killed between the two writes, the has-import
+order leaves the old `$dest` (old import, or none) beside a new copy, which is
+either the same user's file or unimported; the release order leaves `$dest`
+without the import beside the old copy, an orphan nothing imports. So no
+interruption leaves an import pointing at a missing file or at another user's
+file. An orphan copy is harmless and the next apply or `--release-home`
+rewrites or removes it.
 
 The home iteration of the copy loop (`:4762`) is removed from the loop; the
 other four parts keep it. Render choice at `:4828`: the template branch when
@@ -160,8 +189,9 @@ by applying the empty module; the zero-byte note.
   update it. The "real generated file parses as one owner" case fails loudly.
 - Scope is accidental overwrite, not access control (intent): anyone can run
   `--release-home` once the owner's account is gone, and edit the flake.
-- A crash (not a failed command) between the two pair writes is not rolled
-  back; the window is two `mv`s and the next apply re-renders both.
+- A crash between the two pair writes is made safe by write order, not rolled
+  back: see "Why the order makes a crash safe" above. The worst case is an
+  unimported orphan copy, cleaned by the next apply or release.
 - Coexistence (CLAUDE.md s14): no new option or merged-env contribution, so no
   fixture; Mode A is covered by the plain-form case.
 - Concurrent applies and system-selection last-writer-wins stay out of scope.
@@ -220,15 +250,26 @@ sha256sum`.
 9. `--release-home` by a non-owner: refused with `fhash` identical while the
    owner's account exists; allowed when it is gone. `account_exists` is the
    seam: extract `home_decide`-adjacent functions and redefine `account_exists`
-   after sourcing for the function-level cases; end to end, use a name that
+   after sourcing for the function-level cases; function-level cases cover
+   all three answers: a status-2 result (confirmed absent) lets a non-owner
+   release, and a lookup failure (the function pointed at a command that exits
+   127, and another that exits 1) refuses with the lookup-failure message and
+   no write; end to end, use a name that
    certainly has no account (`gone-1817`) for "gone" and `nobody`, with a
    precondition that `getent passwd nobody` succeeds in the sandbox, for
    "present".
-10. pair-write failure: extract `write_home_pair`, point the generated-file
-    target at a missing directory so the second step fails; the previous copy
-    and generated file are byte-identical afterwards, and when there was no
-    previous copy none is left.
+10. pair-write failure: extract `write_home_pair` and define `replace_file`
+    after sourcing so it delegates to the real one on the first call and fails
+    on the second. Assert first that the first replacement happened (the copy
+    changed on disk mid-run), then that after the failure both the copy and the
+    generated file are byte-identical to the originals; and when there was no
+    previous copy none is left. Removing the restore leaves the changed copy
+    and fails the case; a test that fails the first call would not prove it.
 11. `home_decide` table: every row, sourced with explicit arguments.
+12. snapshot: function-level. Snapshot the caller's home.nix, then change the
+    live file, then classify and copy; assert the classification and the copied
+    bytes both match the snapshot, not the live file (use a live change that
+    flips seed to edited, so classification differs too).
 
 The #1809 three assertions (template) and Mode A (case 8 plain) are unchanged.
 
@@ -251,6 +292,7 @@ output goes in the PR.
 | 8 | release removes only the import |
 | 9 | account check always true, then always false |
 | 10 | restore step deleted |
-| classification | snapshot replaced by reading the live file |
+| 9 | lookup failure treated as absent (any nonzero = gone) |
+| 12 | snapshot replaced by reading the live file (classification and copy) |
 
 Not run locally here: nothing is built by this spec.

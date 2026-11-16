@@ -1824,6 +1824,7 @@
             "apply-imports"
             "apply-staging"
             "home-activation-writes"
+            "t3code-theme"
             "language-locale"
             "language-select"
             "writer-lock"

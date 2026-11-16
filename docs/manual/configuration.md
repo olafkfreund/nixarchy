@@ -45,6 +45,12 @@ And in Home Manager:
 }
 ```
 
+`programs.nixarchy.t3code.theme` defaults to `"omarchy"` when T3 Code is
+enabled through `programs.nixarchy.apps`. It selects that theme again on every
+activation. Set it to `null` to publish the Omarchy palette without selecting
+a theme. If a requested theme is not published, it logs the problem and falls
+back to `omarchy` when that theme is available.
+
 ## Shell functions
 
 Omarchy's [shell functions](https://omarchy.org/manual/shell-functions/) —

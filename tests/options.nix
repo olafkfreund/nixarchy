@@ -137,6 +137,18 @@ let
   omathemeMachine = configNamed "omatheme" { user = "someone"; };
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
+  t3Stub = pkgs.writeShellScriptBin "t3" "exit 0";
+  t3App = {
+    apps."t3-code" = {
+      enable = true;
+      package = t3Stub;
+    };
+  };
+  t3Home = homeOn t3App { };
+  t3OffHome = homeOn { apps."t3-code".package = throw "t3code forced"; } { };
+  t3SessionOffHome = homeOn (t3App // { session = false; }) { };
+  t3NixarchyOffHome = homeOn (t3App // { enable = false; }) { };
+  t3PlusHome = homeOn t3App { programs.nixarchy.t3code.theme = "omarchy-plus"; };
   neovimOffHome = homeOn { } { programs.nixarchy.neovim = "off"; };
   # #888: the same machine with the nix-skills input turned off.
   skillsOffHome = homeOn { nixSkills = false; } { };
@@ -1352,6 +1364,41 @@ let
   };
 
   casesD = {
+    t3codeActivationGate = {
+      on =
+        t3Home.home.activation ? nixarchyT3codeTheme
+        && t3Home.home.activation ? nixarchySeed
+        && builtins.elem "writeBoundary" t3Home.home.activation.nixarchyT3codeTheme.after
+        && builtins.elem "nixarchySeed" t3Home.home.activation.nixarchyT3codeTheme.after
+        && t3Home.programs.nixarchy.t3code.theme == "omarchy";
+      off =
+        t3OffHome.home.activation ? nixarchyT3codeTheme
+        || !(builtins.tryEval (builtins.deepSeq (activationText t3OffHome) true)).success
+        || pkgs.lib.hasInfix "nixarchy-t3code-theme" (activationText t3OffHome)
+        || t3OffHome.programs.nixarchy.t3code.theme != "omarchy";
+    };
+    t3codeSessionGate = {
+      on = t3Home.home.activation ? nixarchyT3codeTheme;
+      off = t3SessionOffHome.home.activation ? nixarchyT3codeTheme;
+    };
+    t3codeNixarchyGate = {
+      on = t3Home.home.activation ? nixarchyT3codeTheme;
+      off = t3NixarchyOffHome.home.activation ? nixarchyT3codeTheme;
+    };
+    t3codeThemeValidation = {
+      on =
+        t3PlusHome.programs.nixarchy.t3code.theme == "omarchy-plus"
+        &&
+          t3PlusHome.home.activation.nixarchyT3codeTheme.data
+          != t3Home.home.activation.nixarchyT3codeTheme.data;
+      off =
+        (builtins.tryEval
+          (homeOn t3App { programs.nixarchy.t3code.theme = "Bad Id"; }).programs.nixarchy.t3code.theme
+        ).success
+        || (builtins.tryEval
+          (homeOn t3App { programs.nixarchy.t3code.theme = "-x"; }).programs.nixarchy.t3code.theme
+        ).success;
+    };
     # ---- nixi, on for everyone, and provably gone when told ----
     #
     # These are the reverse of every other case in this file, and the header's

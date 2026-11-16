@@ -22,6 +22,8 @@ Install row does here: they queue the app in `~/.config/nixarchy/apps.nix`, and
 `nixarchy-apply` rebuilds. See
 [the philosophy page](philosophy#what-this-does-to-the-install-menu).
 
+T3 Code follows the Omarchy desktop theme when enabled through the app selection.
+
 The HEY CLI is packaged as `hey-cli` and installs its binary as `hey`. It has
 no Install row yet because the Omarchy release nixarchy vendors ships none, so
 enable it from your flake:

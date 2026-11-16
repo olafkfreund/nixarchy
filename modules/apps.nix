@@ -2609,10 +2609,8 @@ in
                   ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   homeScope=${if config.home-manager.useGlobalPkgs then "1" else "0"}
-                  scope=system
                   if [ "''${1:-}" = --home ]; then
                     [ "$homeScope" = 1 ] || { echo "user-scope packages need home-manager.useGlobalPkgs = true" >&2; exit 1; }
-                    scope=home
                     file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/home.nix"
                     shift
                     [ -f "$file" ] || { echo "no home.nix -- log in again to have it created" >&2; exit 1; }
@@ -2843,10 +2841,8 @@ in
                   ${writerLock}
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   homeScope=${if config.home-manager.useGlobalPkgs then "1" else "0"}
-                  scope=system
                   if [ "''${1:-}" = --home ]; then
                     [ "$homeScope" = 1 ] || { echo "user-scope packages need home-manager.useGlobalPkgs = true" >&2; exit 1; }
-                    scope=home
                     file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/home.nix"
                     shift
                     [ -f "$file" ] || { echo "no home.nix -- log in again to have it created" >&2; exit 1; }

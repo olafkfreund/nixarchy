@@ -129,7 +129,7 @@ pkgs.runCommand "nixarchy-home-selection"
 
     reset_files
     cp "$homefile" home.before; cp "$appsfile" apps.before
-    for command in "$noscopeadd hello" "$noscoperemove hello" "$noscopeoptremove a.b"; do
+    for command in "$noscopeadd --home hello" "$noscoperemove --home hello" "$noscopeoptremove --home a.b"; do
       $command >case7.out 2>&1
       rc=$?
       [ "$rc" -eq 1 ] && grep -qF 'home-manager.useGlobalPkgs = true' case7.out && cmp -s home.before "$homefile" && cmp -s apps.before "$appsfile" || bad 7 "$command: rc=$rc $(cat case7.out)"

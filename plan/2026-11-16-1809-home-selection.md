@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1809
 spec: spec/2026-11-16-1809-home-selection.md
 coders:

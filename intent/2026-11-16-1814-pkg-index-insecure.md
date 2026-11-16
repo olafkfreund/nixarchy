@@ -4,7 +4,7 @@ issue: 1814
 author: olafkfreund
 ---
 
-# Intent: the package index carries an insecure flag
+# Intent: the package index carries an insecure flag and a version column
 
 ## Problem
 
@@ -105,6 +105,19 @@ Facts, in nixarchy-pkg (read-only, `bin/nixarchy-pkg` and the QML files):
   that the package is marked insecure, with no count and no vulnerability
   text. With `meta.insecure = true` and no list, a count would read "0
   vulnerabilities".
+- **A `version` column, appended as the sixth field** (the owner chose it
+  over the draft's deferral):
+  - for `pkg` rows it holds the package's version, the same value the
+    preview's `version:` line shows;
+  - for `opt`, flatpak and new-package rows it is empty;
+  - it is appended, never inserted, so fields 1-5 keep their positions and
+    every positional reader keeps working:
+    - nixarchy-pkg's `labels_tsv` (`$5`) and `cmd_search` (`$1`-`$5`);
+    - `apps.nix`'s status and curated awk passes;
+    - `read -r kind name _ _ _` (`apps.nix:3791`), whose last variable absorbs
+      fields 5-6 and is discarded;
+  - nixarchy-pkg ignores the column until it opts in to read it. Its
+    preview parse keeps working, because the preview's `version:` line stays.
 - **No `[insecure]` summary suffix in this change.** nixarchy-pkg's `untag`
   strips only `[unfree]` and `[broken]`, so a suffix would show twice on the
   panel's card. It follows once nixarchy-pkg strips it.
@@ -112,7 +125,7 @@ Facts, in nixarchy-pkg (read-only, `bin/nixarchy-pkg` and the QML files):
   file's store path changing. A check demonstrates it by changing only the
   walk, with `nixpkgs` held fixed, so the existing nixpkgs-change test
   cannot mask a missing dependency.
-- **No other change** to row order, field count or meaning.
+- **No other change** to the order or meaning of fields 1-5.
 
 ## Affected users and systems
 
@@ -143,15 +156,23 @@ Facts, in nixarchy-pkg (read-only, `bin/nixarchy-pkg` and the QML files):
   - **The assertions:**
     - the first two rows carry `insecure`, and the clean one does not;
     - the malformed ones neither carry the flag nor abort the walk;
-    - every row still has five tab-separated fields;
+    - every row has exactly six tab-separated fields, fields 1-5 unchanged
+      in content from before. For `pkg` rows field 6 equals the preview's
+      `version:` line, and for every other kind it is empty;
     - the unfree and broken flags and the preview are preserved.
   - **Breaks:** it is seen to fail separately when the walk drops the field,
     and when the jq builder drops it.
   - The existing grep (`tests/options.nix:5014`) proves only that a word is
     in the file, so it cannot stand in for this. No fixture names a real
     package whose vulnerabilities could be fixed upstream.
-- **Row format stays backward compatible.** The field count stays five;
-  `insecure` is one more word in a field consumers already split on spaces.
+- **Row format stays backward compatible.** `insecure` is one more word in
+  a field consumers already split on spaces. The version is a sixth field
+  appended after the preview.
+  - The spec reads every reader of the index in this repository (awk `-F'\t'`
+    passes, `read` loops, fzf's `--with-nth`/`--delimiter`, the preview
+    command) and states that each either ignores field 6 or is changed to.
+  - A display that shows "the rest of the line" must not start showing the
+    version, or its tab, in a picker. The spec finds every such display.
   The flag name must not contain `unfree` (`apps.nix:3761`) and must not
   collide with the `curated:` prefix convention. Any consumer that matches
   flags exactly keeps working; only a consumer that rejects unknown flags
@@ -188,21 +209,8 @@ Facts, in nixarchy-pkg (read-only, `bin/nixarchy-pkg` and the QML files):
 
 ## Open questions
 
-1. **A `version` column?** The issue asks to consider one. Recommendation:
-   **no, not in this change.**
-   - **An inserted column breaks positional readers.** It shifts field 5
-     (the preview), which these read by position:
-     - nixarchy-pkg's `labels_tsv` (`$5`);
-     - `apps.nix`'s own status and curated awk passes (`$3`, `$4`, `$5`);
-     - the flatpak and new-package rows (`apps.nix:3689`, `:3692`), which are
-       in the five-field shape.
-   - **An appended sixth column would be dropped.** nixarchy-pkg's
-     `cmd_search` rebuilds its rows from `$1`-`$5`, and supplies its own
-     `scope` (`bin/nixarchy-pkg:579`), so the column would be silently
-     ignored there. That does not break anything, but it does nothing
-     until both repositories agree on a format change.
-   - **Benefit:** nixarchy-pkg already reads the version from the preview,
-     and nothing there waits for a column (the issue says so).
-   - So do it later, as its own coordinated change.
+1. **The version column's consumer.** nixarchy-pkg can then read field 6
+   instead of parsing the preview. That is a change in that repository, and
+   the owner decides when to make it. This change does not file it there.
 2. **Flag word.** `insecure`, which matches the issue and the panel's
    wording, does not contain `unfree`, and does not collide with `curated:`.

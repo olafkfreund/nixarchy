@@ -25,6 +25,11 @@
     follow = true;
     reason = "rewrites ~/.config/hypr/monitors.lua to the new template and saves a .bak.<time> backup";
   };
+  "omarchy-install-browser-extensions" = {
+    edge = "only";
+    follow = true;
+    reason = "repairs --load-extension in ~/.config/<browser>-flags.conf and the native-messaging hosts under ~/.config/<profile>";
+  };
   "omarchy-install-chromium-copy-url" = {
     follow = true;
     reason = "writes NativeMessagingHosts/org.omarchy.copy_url.json into browser dirs under ~/.config";

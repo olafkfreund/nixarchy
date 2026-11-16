@@ -146,6 +146,7 @@
     nix = "imagemagick";
   };
   "imv" = {
+    edge = "absent";
     nix = "imv";
   };
   "inotify-tools" = {
@@ -181,6 +182,10 @@
   "man-db" = {
     nix = "man-db";
   };
+  "microsoft-surface-snapdragon-addresses" = {
+    edge = "only";
+    skip = "Surface Laptop 7 (Snapdragon) board addresses; aarch64 hardware, not targeted.";
+  };
   "mise-bin" = {
     skip = "nixarchy does not ship mise (#1625). A person who wants it adds pkgs.mise to their own configuration.";
   };
@@ -188,6 +193,7 @@
     nix = "nixarchy-apps.monologue";
   };
   "mpv" = {
+    edge = "absent";
     nix = "mpv";
   };
   "noto-fonts" = {
@@ -227,6 +233,10 @@
   };
   "omasnap" = {
     nix = "nixarchy-apps.omasnap";
+  };
+  "omaview" = {
+    edge = "only";
+    nix = "nixarchy-apps.omaview";
   };
   "omawrite" = {
     nix = "nixarchy-apps.omawrite";
@@ -797,6 +807,7 @@
     skip = "Mapped for pkg-add advice only (data/arch-extras.nix); not installed.";
   };
   "mpv-mpris" = {
+    edge = "absent";
     skip = "Unsure; mpv-with-scripts may carry it.";
   };
   "qemu-user-static-binfmt" = {

@@ -348,6 +348,36 @@
     edge = "only";
     reason = "edge shipped Slack theme sync, whose slack.desktop override in ~/.local/share/applications runs omarchy-launch-slack, which quattro 74de104 removes; this puts Slack's own launcher back (#1782)";
   };
+  "1794644424" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    reason = "moves the user's themed/icons/*.svg.tpl to icons/papercraft/ with mv -n and redraws; reads the read-only tree only (#1793)";
+  };
+  "1794741886" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    reason = "runs omarchy-install-browser-extensions chrome; the policy itself is environment.etc's and already names the new ids, so here it refreshes the native-messaging hosts under ~/.config (#1793)";
+  };
+  "1794763180" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    reason = "installs omarchy-agent-<provider>.desktop from $OMARCHY_PATH/default/applications for signed-in agents (#1793)";
+  };
+  "1794774234" = {
+    decision = "partial";
+    run = "edited";
+    edge = "only";
+    reason = "deletes stock imv/mpv launchers by checksum as upstream does; omarchy-pkg-add omaview and omarchy-pkg-drop imv mpv-mpris are the runtime list's job (#1793)";
+  };
+  "1794775358" = {
+    decision = "ported";
+    run = "upstream";
+    edge = "only";
+    reason = "adds FileChooser=folio;gtk to the user's hyprland-portals.conf only where no chooser is chosen (#1793)";
+  };
   predates = [
     "1780057136"
     "1780294774"

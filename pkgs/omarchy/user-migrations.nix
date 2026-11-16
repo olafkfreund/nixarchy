@@ -144,6 +144,12 @@ runCommand "nixarchy-user-migrations"
               if [[ -f $bindings ]] && ! store_owned "$bindings" && grep -qxF "$legacy" "$bindings"; then' \
                 --replace-fail '@helper@' '${tree}/lib/nixarchy-store-owned.sh'
               ;;
+            1794774234)
+              # Omaview, imv and mpv-mpris come from the runtime list, not a package manager (#1793).
+              substituteInPlace "$script" \
+                --replace-fail 'omarchy-pkg-add omaview' "" \
+                --replace-fail 'omarchy-pkg-drop imv mpv-mpris' ""
+              ;;
             *) echo "no edit defined for $id" >&2; exit 1 ;;
           esac
           ;;

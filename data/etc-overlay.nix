@@ -159,6 +159,7 @@
   };
 
   "mpv/mpv.conf" = {
+    edge = "absent";
     class = "installed";
     reason = "hwdec=auto-safe, so mpv decodes video on the GPU where it safely can. libmpv reads /etc/mpv, and ~/.config/mpv still overrides it; installed as the shipped file through environment.etc.";
   };

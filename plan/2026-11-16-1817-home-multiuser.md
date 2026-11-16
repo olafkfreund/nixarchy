@@ -57,7 +57,7 @@ is not read; nothing about ownership is baked in.
   `$pinned/home.snap`. State is computed from, and the copy reads, the
   snapshot, so an editor change mid-apply cannot split classification from copy.
   The live path `$srcdir/home.nix` is named only inside `select_home_src` and
-  `snapshot_home`.
+  `snapshot_home`; `classify_home` reads only `$home_snap`.
 
 ## Functions (production code the tests execute)
 
@@ -84,10 +84,13 @@ every global a function reads is set before the first call.
   (`$pinned/home.snap`, or empty when there is no home.nix), `home_state`
   (`absent|seed|edited`) and `home_srcmsg` (`$srcdir/home.nix`, for messages).
   Calls `select_home_src`; when its result is non-empty, `cp` it to the snapshot
-  (guarded: no `cp` of an empty name), then classifies the SNAPSHOT: `[ -f ]` for
-  absent (never `-s`, so a zero-byte file is edited), `cmp -s "$home_snap"
-  "$1"` for seed, else edited. The caller passes `${homeTemplate}`, the store
-  path (a test passes its own template file).
+  (guarded: no `cp` of an empty name). It does not classify.
+- `classify_home <template>`: global read `home_snap`; sets `home_state` from
+  the SNAPSHOT only: empty `home_snap` or `[ ! -f ]` is absent (never `-s`, so a
+  zero-byte file is edited), `cmp -s "$home_snap" "$1"` is seed, else edited.
+  Separate from `snapshot_home` so own-12 can change the live file between the
+  two calls. The caller passes `${homeTemplate}`, the store path (a test passes
+  its own template file).
 - `read_owner`: global read `dest`; sets global `owner` (name, or empty). Missing
   `$dest` or no candidate: empty, return 0. Malformed, or a name failing
   `valid_user`: message naming `$dest` on stderr, return 1. Rules:
@@ -155,11 +158,12 @@ every global a function reads is set before the first call.
      differs from it, `cp` the copy to `$applied/home.nix.edited-in-flake.<ts>`
      (persistent, not in `$pinned`) and print the NOTE naming `$home_srcmsg`.
      Release does this too: it deletes the copy.
-  3. `write`: if the copy exists and is byte-identical to `$home_snap`, refresh
-     its record and skip the copy write (the loop's "already up to date" rule);
-     otherwise `replace_file "$home_snap" copy` first, `replace_file
-     "<rendered-dest>" "$dest"` second, and add ` home` to `copied` when the copy
-     was written. `release`: `replace_file "<rendered-dest>" "$dest"` first, then
+  3. `write`: if the copy exists and is byte-identical to `$home_snap`, skip
+     the copy write (the loop's "already up to date" rule); otherwise
+     `replace_file "$home_snap" copy` first, `replace_file "<rendered-dest>"
+     "$dest"` second, and add ` home` to `copied` when the copy was written.
+     The `$applied` record is refreshed (in both branches) only AFTER the
+     `$dest` replacement succeeds, so a failure leaves `$applied` untouched. `release`: `replace_file "<rendered-dest>" "$dest"` first, then
      `remove_file` of the copy. Each call is `... || { restore_one
      "$pinned/home.bak" copy; restore_one "$pinned/dest.bak" "$dest"; return 1; }`.
   4. On any failed step, BOTH the copy and `$dest` are restored (a release has
@@ -183,7 +187,7 @@ every global a function reads is set before the first call.
   apply. `--expect-sha256 home=` with `--release-home` is allowed; the pin check
   runs first and a mismatch exits 4 before anything is written.
 - **Placement, after the pins and `valid_user` (`:4750`):**
-  `snapshot_home ${homeTemplate}`; `user=$(id -un)`; `read_owner`; then
+  `snapshot_home`; `classify_home ${homeTemplate}`; `user=$(id -un)`; `read_owner`; then
   - normal: `home_action=$(home_decide "$owner" "$user" "$home_state")`;
     `refuse` prints the refusal and `exit 1` before the copy loop (flake and pins
     untouched);
@@ -243,7 +247,7 @@ Test file conventions (`tests/home-selection.nix`, a bash script under `set +e`,
 so `bad` counts failures): add `getent` to its `nativeBuildInputs`; a helper
 `extract() { sed -n "/^$1() {/,/^}/p" "$apply"; }` writes the production
 functions into one file, sourced once (`valid_user select_home_src
-snapshot_home read_owner home_decide account_exists release_allowed
+snapshot_home classify_home read_owner home_decide account_exists release_allowed
 replace_file remove_file restore_one write_home_pair`; an empty extraction is a
 `bad`). Function-level cases set the globals the function lists, call it, and
 read results; a stub `getent` is a script first on PATH (`exit "$GETENT_RC"`),
@@ -275,10 +279,11 @@ flake -type f | sort | xargs sha256sum | sha256sum`.
    the renamed `replace_file`. Update case 10's static grep to the new shape: the
    count of `$srcdir/home.nix` outside `select_home_src` and `snapshot_home`
    (delete both bodies with sed, then `grep -cF`) must be 0 and the unmodified
-   file's count must be at least 1. Tests, function level: own-12 (snapshot_home
-   with a template file, then change the live file so seed becomes edited and
-   change the pinned file too; `home_state` and the bytes `write_home_pair
-   write` puts in the copy both equal the snapshot-time content); own-10 (stub
+   file's count must be at least 1. Tests, function level: own-12 (`snapshot_home`
+   with the live file equal to the template, then change the live file so it
+   is edited (and the pinned file too, when pinned), THEN `classify_home`;
+   `home_state` must be `seed`, and the bytes `write_home_pair write` puts in
+   the copy must equal the snapshot-time content); own-10 (stub
    `replace_file` after sourcing: real on the first call, fail on the second;
    assert the copy changed on disk after the first, then after the failure copy
    and `$dest` are byte-identical to the originals, `$applied` record unchanged;
@@ -358,10 +363,10 @@ flake -type f | sort | xargs sha256sum | sha256sum`.
    - own-9a/own-9b: `release_allowed` always allows, then always refuses;
      `account_exists` maps every nonzero status to 2; lookup failure treated as
      absent;
-   - own-10: restore deleted; the record updated before the second
-     `replace_file`; own-14: release restores only the copy (not `$dest`);
-   - own-12: snapshot replaced by the live file in `snapshot_home`, and again in
-     `write_home_pair`; own-15: reject rule removed; own-16a/own-16b: the
+   - own-10: restore deleted; the record refreshed before the `$dest`
+     replacement (in either branch); own-14: release restores only the copy (not `$dest`);
+   - own-12: `classify_home` reads the live file instead of `$home_snap`, and
+     separately `write_home_pair` copies the live file; own-15: reject rule removed; own-16a/own-16b: the
      edited-in-flake backup removed from `write_home_pair`.
    The failing output goes in the PR (template section). Then the lead runs
    every `generated-checks.sh` target plus claimed checks touching these files,

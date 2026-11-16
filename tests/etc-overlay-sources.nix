@@ -1,6 +1,6 @@
 { inputs, pkgs, ... }:
 let
-  lib = pkgs.lib;
+  inherit (pkgs) lib;
   cfg = inputs.self.nixosConfigurations.reference.config;
   pkg = cfg.programs.nixarchy.package;
   prefix = "${pkg}/share/omarchy/etc/";

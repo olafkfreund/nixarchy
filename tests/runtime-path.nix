@@ -1,6 +1,6 @@
 { inputs, pkgs, ... }:
 let
-  lib = pkgs.lib;
+  inherit (pkgs) lib;
   pkg = inputs.self.nixosConfigurations.reference.config.programs.nixarchy.package;
 in
 pkgs.runCommand "nixarchy-runtime-path" { } ''

@@ -310,7 +310,7 @@ let
   );
 
   # The tier below the Flathub row: software in no repository at all (#581).
-  # Same five-field shape, whole row on one line, preview newlines escaped --
+  # Same six-field shape, whole row on one line, preview newlines escaped --
   # the same rules the flathub row above documents. One static row, so
   # `nixarchy pkg new` is findable from the picker at all. Findable is the
   # honest word: the picker is a single fzf call, so this row appears only
@@ -3578,11 +3578,12 @@ in
                   reindex=0
                   [ "''${1:-}" = "--reindex" ] && { reindex=1; shift; }
 
-                  # One index, five tab-separated fields: kind, name, one-line summary,
+                  # One index, six tab-separated fields: kind, name, one-line summary,
                   # a kind-specific fourth (an option's type; a package's flags, e.g.
-                  # "unfree broken curated:firefox"; empty otherwise), and the preview
-                  # text with its newlines escaped. The preview is carried in the line
-                  # rather than looked up on selection because fzf runs the preview
+                  # "unfree broken curated:firefox"; empty otherwise), the preview
+                  # text with its newlines escaped, and a package's version (empty
+                  # otherwise). The preview is carried in the line rather than looked
+                  # up on selection because fzf runs the preview
                   # command on every keystroke, and a jq pass over 19 MB of package
                   # metadata is not something to do sixty times a second.
                   build_index() {
@@ -3688,7 +3689,7 @@ in
                     mv "$tmp2" "$tmp"
 
                     # Curated flatpaks and the Flathub entry point. A plain cat:
-                    # these rows are already in the index's five-field shape, and
+                    # these rows are already in the index's six-field shape, and
                     # they are local, so building the index still needs no network.
                     cat "$flatpakrows" >> "$tmp"
 

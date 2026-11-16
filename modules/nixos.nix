@@ -59,8 +59,13 @@ let
   );
 
   # The rows of upstream's /etc overlay that are installed as themselves.
+  isEdge = lib.hasPrefix "edge-" cfg.package.version;
   installedEtc = lib.attrNames (
-    lib.filterAttrs (_: row: row.class == "installed") (import ../data/etc-overlay.nix)
+    lib.filterAttrs (
+      _: row:
+      row.class == "installed"
+      && !(row.edge or "" == "only" && !isEdge || row.edge or "" == "absent" && isEdge)
+    ) (import ../data/etc-overlay.nix)
   );
 
   # Every storage driver nixpkgs would put in a "supports most hardware"
@@ -2418,14 +2423,68 @@ in
     xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) (
       {
         "application/pdf" = cfg.package.passthru.pdfDesktop;
-        "video/mp4" = "mpv.desktop";
-        "video/x-matroska" = "mpv.desktop";
-        "video/quicktime" = "mpv.desktop";
-        "video/webm" = "mpv.desktop";
-        "video/x-msvideo" = "mpv.desktop";
-        "video/mpeg" = "mpv.desktop";
         "text/plain" = cfg.package.passthru.editorDesktop;
       }
+      // (
+        if (cfg.package.passthru.mediaViewerDesktop or null) != null then
+          # Upstream's default/applications/mimeapps.list Omaview rows (#1793).
+          lib.genAttrs [
+            "image/png"
+            "image/jpeg"
+            "image/gif"
+            "image/webp"
+            "image/bmp"
+            "image/tiff"
+            "image/svg+xml"
+            "image/x-icon"
+            "image/x-tga"
+            "image/x-portable-pixmap"
+            "image/x-portable-graymap"
+            "image/x-portable-bitmap"
+            "image/x-xbitmap"
+            "image/x-xpixmap"
+            "image/heif"
+            "image/heic"
+            "image/avif"
+            "image/jxl"
+            "video/mp4"
+            "video/x-msvideo"
+            "video/x-matroska"
+            "video/x-flv"
+            "video/x-ms-wmv"
+            "video/mpeg"
+            "video/ogg"
+            "video/webm"
+            "video/quicktime"
+            "video/3gpp"
+            "video/3gpp2"
+            "video/x-ms-asf"
+            "video/x-ogm+ogg"
+            "video/x-theora+ogg"
+            "video/mp2t"
+            "video/x-m4v"
+            "application/ogg"
+            "audio/mpeg"
+            "audio/flac"
+            "audio/ogg"
+            "audio/x-wav"
+            "audio/wav"
+            "audio/mp4"
+            "audio/aac"
+            "audio/opus"
+            "audio/x-vorbis+ogg"
+            "audio/x-matroska"
+          ] (_: cfg.package.passthru.mediaViewerDesktop)
+        else
+          {
+            "video/mp4" = "mpv.desktop";
+            "video/x-matroska" = "mpv.desktop";
+            "video/quicktime" = "mpv.desktop";
+            "video/webm" = "mpv.desktop";
+            "video/x-msvideo" = "mpv.desktop";
+            "video/mpeg" = "mpv.desktop";
+          }
+      )
       // lib.optionalAttrs (cfg.package.passthru.fileManagerDesktop != null) {
         "inode/directory" = cfg.package.passthru.fileManagerDesktop;
       }
@@ -2437,7 +2496,10 @@ in
       # registered, not merely installed, so it belongs here rather than in
       # the package's runtimeDeps. The hyprland portal comes from
       # programs.hyprland.portalPackage above.
-      extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+      extraPortals = [
+        pkgs.xdg-desktop-portal-gtk
+      ]
+      ++ lib.optional (cfg.package.passthru.fileChooserPortal or false) cfg.package.passthru.fileManager;
     };
   };
 }

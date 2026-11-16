@@ -1151,9 +1151,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'omp)' 'antigravity) command=(agy --dangerously-skip-permissions) ;; omp)'
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 --no-backup-if-mismatch < ${./1625-no-mise.patch}
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 --no-backup-if-mismatch < ${
+                      if isEdge then ./1625-no-mise-edge.patch else ./1625-no-mise.patch
+                    }
                     # Why: pkgs/AGENTS.md#power-actions-authorise-before-closing-windows-1659
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1659-system-authorise-first.patch}
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
+                      if isEdge then ./1659-system-authorise-first-edge.patch else ./1659-system-authorise-first.patch
+                    }
                     rm $out/share/omarchy/install/user/mise.sh
                     substituteInPlace $out/share/omarchy/bin/omarchy-agent $out/share/omarchy/bin/omarchy-agent-account-exec \
                       --replace-fail '@omarchyDispatch@' "$out/share/omarchy/agent-dispatch"
@@ -1579,9 +1583,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       ${lib.optionalString isEdge "grep -qx 'NoDisplay=true' \"$desktop\" && continue"}
                       icon=$(sed -n 's/^Icon=//p' "$desktop")
                       [ -n "$icon" ] || continue
-                      # A themed icon is drawn into the home by omarchy-theme-set-icons (#1776).
+                      # Themed and papercraft icons are drawn into the home by omarchy-theme-set-icons (#1776, #1793).
                       if [ ! -e "$out/share/icons/hicolor/256x256/apps/$icon.png" ] \
-                        && [ ! -e "$out/share/omarchy/default/themed/icons/$icon.svg.tpl" ]; then
+                        && [ ! -e "$out/share/omarchy/default/themed/icons/$icon.svg.tpl" ] \
+                        && [ ! -e "$out/share/omarchy/icons/papercraft/$icon.svg.tpl" ] \
+                        && [ ! -e "$out/share/omarchy/icons/papercraft/$icon.svg" ]; then
                         echo "$(basename "$desktop") wants icon '$icon', which is not installed" >&2
                         exit 1
                       fi
@@ -2117,7 +2123,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail '  function activateIndex(index, fromPointer) {' "$(cat ${./1305-menu-right-enters.js})"$'\n\n'"  function activateIndex(index, fromPointer) {"
                     # Bug 2: a request the next one displaces releases its caller.
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
-                      --replace-fail "  function openExistingMenu(initialMenu) {"$'\n'"    requestSerial += 1" "$(cat ${./1305-menu-release-displaced.js})"$'\n\n'"  function openExistingMenu(initialMenu) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1" \
+                      --replace-fail "  function openExistingMenu(initialMenu) {"$'\n'"${lib.optionalString isEdge "    altHeld = false\n"}    requestSerial += 1" "$(cat ${./1305-menu-release-displaced.js})"$'\n\n'"  function openExistingMenu(initialMenu) {"$'\n'"${lib.optionalString isEdge "    altHeld = false\n"}    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1" \
                       --replace-fail "  function openDmenu(payload) {"$'\n'"    requestSerial += 1" "  function openDmenu(payload) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1"
 
                     # Why: pkgs/AGENTS.md#the-menu-fits-its-widest-label-1339

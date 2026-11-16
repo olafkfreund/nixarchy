@@ -79,7 +79,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/74de10479d3bf7aa7865408e33219064cfe45432";
+      url = "github:basecamp/omarchy/9f68da882545cf4aae8a6c15cce06fada0f116dd";
       flake = false;
     };
 
@@ -433,7 +433,7 @@
         ) boxImagePins
       );
 
-      omarchyVersion = "edge-20261116-74de104";
+      omarchyVersion = "edge-20261116-9f68da8";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).

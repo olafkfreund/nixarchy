@@ -1,0 +1,41 @@
+--- a/bin/omarchy-system
++++ b/bin/omarchy-system
+@@ -59,6 +59,11 @@
+     fi
+   fi
+ 
++  if [[ $action != "logout" ]]; then
++    # logind checks authorisation when the shutdown is scheduled.
++    "${command[@]}" --when=+5s || return $?
++  fi
++
+   # Only show the OSD once the exit has taken 2 seconds, so a quick one doesn't flash it.
+   { sleep 2; omarchy-osd -i "${action/firmware/reboot}" -m "$message" -d 0; } &
+   local osd_pid=$!
+@@ -69,7 +74,8 @@
+ 
+   # Proceed as soon as apps exit, with a bound for unresponsive windows.
+   timeout 2s omarchy-hyprland-window-close-all --wait
+-  if "${command[@]}"; then
++  # A shutdown is already scheduled; only a logout runs its command here.
++  if [[ $action != "logout" ]] || "${command[@]}"; then
+     # The unit kills the delayed OSD when this script exits, so stay until the session goes down.
+     wait "$osd_pid"
+   else
+@@ -98,7 +104,15 @@
+   fi
+ elif [[ -z ${2:-} ]]; then
+   # Survive closing the terminal that requested the session exit.
+-  systemd-run --user --collect --quiet --property=Type=exec --property=RuntimeMaxSec=30s \
++  stop_post=()
++  if [[ $action != "logout" ]]; then
++    # $$ survives systemd's command expansion; the shell sees $SERVICE_RESULT.
++    stop_post=(--property="ExecStopPost=$(command -v sh) -c 'if [ \"\$\$SERVICE_RESULT\" = timeout ]; then omarchy-notification-send -u critical \"\$\$OMARCHY_SYSTEM_FAILED_TITLE\" \"\$\$OMARCHY_SYSTEM_FAILED_BODY\"; fi'")
++    stop_post+=(--setenv=OMARCHY_SYSTEM_FAILED_TITLE="$failed_title")
++    stop_post+=(--setenv=OMARCHY_SYSTEM_FAILED_BODY="$failed_body")
++  fi
++  systemd-run --user --collect --quiet --property=Type=exec \
++    --property=RuntimeMaxSec=${OMARCHY_SYSTEM_TIMEOUT:-30s} "${stop_post[@]}" \
+     --setenv=PATH --setenv=HYPRLAND_INSTANCE_SIGNATURE --setenv=OMARCHY_PATH \
+     "$0" "$action" --execute
+ else

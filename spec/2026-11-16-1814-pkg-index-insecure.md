@@ -16,23 +16,41 @@ from this worktree (branch base `main` at 22cfc89e).
 In `row` (`:55-67`), after `broken`, add:
 
 ```nix
-insecure = try (
+insecure =
   let
-    m = try v.meta { };
-    kv = m.knownVulnerabilities or null;
+    m = try (v.meta or { }) { };
   in
-  (m.insecure or false) == true || (builtins.isList kv && kv != [ ])
-) false;
+  builtins.isAttrs m
+  && (
+    try ((m.insecure or false) == true) false
+    || try (
+      let
+        kv = m.knownVulnerabilities or null;
+      in
+      builtins.isList kv && kv != [ ]
+    ) false
+  );
 ```
 
-(Final form is the intent's expression; `nix fmt` decides the layout.)
+This exact expression is the design; `nix fmt` may only change layout.
 
-- One `try`, result is a bool, so `--strict --json` has nothing left to
-  force outside it. `kv != [ ]` forces only the list constructor, never an
-  element, so a throwing element is harmless.
-- `null` or non-bool `insecure` compares unequal to `true`; a non-list
-  `knownVulnerabilities` fails `isList`; a throwing field hits the `try`
-  and gives `false`. The row-level `tryEval` at `:81` is not relied on.
+- **`v.meta or { }` plus `isAttrs`:** a package with no `meta`, a `null`
+  `meta` or a non-attribute-set `meta` gives `false`. `tryEval` cannot catch
+  "attribute missing" or "value is null while a set was expected", so these
+  are guarded by structure, not by `try`.
+- **Two separate `try`s,** each reducing to a bool:
+  - a throwing `insecure` cannot hide a real `knownVulnerabilities` list,
+    and a throwing list cannot hide `insecure = true`;
+  - `null` or non-bool `insecure` compares unequal to `true`;
+  - a non-list `knownVulnerabilities` fails `isList`;
+  - `kv != [ ]` compares list lengths first and never forces an element,
+    so a throwing element is harmless.
+
+  The row-level `tryEval` at `:81` is not relied on.
+- **What it cannot guard:** `tryEval` catches `throw` and `assert` only. A
+  `meta` value whose evaluation raises another error (for example
+  `builtins.head [ ]`) still aborts the walk, exactly as it does today for
+  the fields the walk already reads. Nothing new is exposed. See Risks.
 - Both inputs are read (intent): nixpkgs derives `meta.insecure` from
   `knownVulnerabilities != [ ]` (check-meta.nix `:163-164`, `:613`), so
   they agree on this pin; reading both covers an overlay setting one.
@@ -52,7 +70,9 @@ insecure = try (
 - **Summary (field 3): unchanged.** No `[insecure]` suffix (intent:
   nixarchy-pkg's `untag` would leave it showing twice).
 - **Preview (field 5):** after the "Marked BROKEN" line (`:3655`) add
-  `(if .insecure then "\n\nMarked INSECURE in nixpkgs: it lists known vulnerabilities." else "" end)`.
+  `(if .insecure then "\n\nMarked INSECURE in nixpkgs." else "" end)`. No
+  claim of a vulnerability list, which a package with only
+  `meta.insecure = true` does not have.
   No count, no vulnerability text (a count reads "0" for
   `meta.insecure = true` with no list).
 - **Version (field 6):** append `.version` as the last array element.
@@ -70,8 +90,8 @@ producers are padded, not only `pkg`. Field 6 is empty except for `pkg`.
 | `pkg` jq (`apps.nix:3640-3661`) | element 6 = `.version` (above) |
 | `opt` jq (`:3613-3630`) | append `""` to the `@tsv` array |
 | `app` awk (`:3596-3604`) | print a trailing empty sixth field |
-| `flatpakIndexRows` (`:292-315`), both the catalogue rows and the Flathub row | trailing tab after the preview (the preview already ends the line) |
-| `pkgNewIndexRow` (`:321-325`) | trailing tab after the preview |
+| `flatpakIndexRows` (`:292-315`), both the catalogue rows and the Flathub row | an empty sixth field after the preview, written with an explicit `\t` escape, never a literal trailing tab an editor could strip |
+| `pkgNewIndexRow` (`:321-325`) | the same, with an explicit `\t` |
 | curated pass (`:3678-3684`) | none: assigns `$4`/`$5` with `OFS='\t'`, keeps `$6` |
 | `cat "$flatpakrows"` / `cat "$pkgnewrow"` (`:3687-3692`) | none: pass-through |
 
@@ -129,9 +149,15 @@ and one sentence that the index has a sixth `version` column, appended.
 
 ## Risks
 
-- **Evaluation cost/abort.** One extra lazy `meta` read per row. Bar and
-  measurement below. A malformed field must not abort the walk: covered by
-  the throwing, null and non-list fixtures.
+- **Evaluation cost.** One extra lazy `meta` read per row. The bar and
+  measurement are below.
+- **Evaluation errors `tryEval` cannot catch** (for example `builtins.head
+  [ ]` inside `meta`) still abort the walk. That is today's behaviour for
+  the fields the walk already reads, so the guarantee is stated narrowly:
+  - every malformation the fixtures name is survived: throwing, `null`,
+    non-list, missing or non-attribute-set `meta`, and a throwing list
+    element;
+  - other evaluation errors are not, as before.
 - **Existing indexes go stale** on the next rebuild; `nixarchy search`
   reindexes once (about a minute); the nixarchy-pkg panel shows its stale
   notice until reindexed. Intended (intent).
@@ -159,10 +185,14 @@ script as `testLib.vmPackage "nixarchy-search"` (`tests/lib.nix:11-17`).
 
 **Pipeline, all real except the inputs.** The real walk
 (`modules/pkg-index.nix`) runs against a fixture nixpkgs
-(`tests/fixtures/pkg-index.nix`: a function `{ config ? {}, ... }:` returning
-`lib` from the real nixpkgs plus stub packages
-`{ type = "derivation"; name; version; meta; }`, which `lib.isDerivation`
-accepts without touching the store). The real `build_index` (extracted from
+(generated in the check with `pkgs.writeText`, not checked in: a function
+`{ config ? {}, ... }:` that returns `lib = import ${pkgs.path}/lib` plus
+stub packages `{ type = "derivation"; name; version; meta; }`, which
+`lib.isDerivation` accepts without touching the store).
+- `${pkgs.path}` is interpolated at evaluation time, so the fixture names a
+  store path already in the check's closure.
+- The fixture contains no path literals (`./x`), which would be copied into
+  the store, and the sandbox's private `NIX_STATE_DIR` cannot write there. The real `build_index` (extracted from
 the built script, sourced under `set -eo pipefail`, called in a subshell
 because it `exit 1`s) runs the real jq builder and curated awk. `nixpkgs`,
 `optionsjson`, `appindex`, `apptable` and `cache` are overridden to tiny
@@ -179,6 +209,11 @@ Sandbox setup as `tests/writer-lock.nix:131-136` (`NIX_STATE_DIR`,
 | `fixClean` | description only | empty |
 | `fixNullInsecure` | `insecure = null` | empty |
 | `fixThrowVuln` | `knownVulnerabilities = throw "boom"` | empty, row still present |
+| `fixThrowElem` | `knownVulnerabilities = [ (throw "boom") ]` | `insecure` (the list is non-empty; no element is forced) |
+| `fixThrowInsecureList` | `insecure = throw "boom"`, `knownVulnerabilities = [ "x" ]` | `insecure` |
+| `fixThrowMeta` | `meta = throw "boom"` | empty, row still present |
+| `fixNullMeta` | `meta = null` | empty, row still present |
+| `fixNoMeta` | no `meta` attribute | empty, row still present |
 | `fixStrVuln` | `knownVulnerabilities = "oops"` | empty |
 | `fixEmptyList` | `knownVulnerabilities = [ ]` | empty |
 | `fixAll` | unfree licence, `broken = true`, `[ "y" ]` | `unfree broken insecure` |
@@ -207,12 +242,21 @@ Sandbox setup as `tests/writer-lock.nix:131-136` (`NIX_STATE_DIR`,
 6. Field 5 of insecure rows contains the "Marked INSECURE" line; clean
    rows do not. `fixAll` keeps `[unfree]  [broken]` in field 3 and
    `Marked BROKEN` in field 5; no row has `[insecure]` in field 3.
-7. Fields 1-5 unchanged: a golden `tests/fixtures/pkg-index.golden.tsv`
-   is frozen from the unmodified tree before any edit. After the change,
-   `cut -f1-5` of non-insecure rows equals it byte for byte; for insecure
-   rows only the added word in field 4 and the added paragraph in field 5
-   may differ. For the real flatpak and new rows, `cut -f1-5` of the index
-   equals `cut -f1-5` of the source file (not goldened: the catalogue moves).
+7. Fields 1-5 unchanged, for every row kind, against a golden
+   `tests/fixtures/pkg-index.golden.tsv`.
+   - **How the golden is made:** before any edit, the same harness is run
+     on `main`'s tree (`main`'s walk, jq builder, `flatpakIndexRows` and
+     `pkgNewIndexRow`). It uses the same fixture nixpkgs, and a fixed
+     fixture catalogue for the flatpak and new-package rows, not the live
+     one. Then `cut -f1-5` of its output is committed in the first
+     implementation step, before the code changes.
+   - **The comparison:** after the change, `cut -f1-5` of every row equals
+     the golden byte for byte, except for insecure `pkg` rows, where only
+     the added word in field 4 and the added paragraph in field 5 may
+     differ.
+   - Comparing the index's flatpak and new rows with their own source file
+     would be `cat` compared with its input and could not fail, so it is
+     not done.
 
 **Walk-only staleness case.** Source `stamp_key`/`index_stale` as
 `tests/options.nix:4950-4967` does. Build walk A (`${../modules/pkg-index.nix}`)
@@ -236,7 +280,10 @@ break landed with `git diff`.
 | A2. Compute it with no `try` (`v.meta.knownVulnerabilities != [ ]`) | `fixThrowVuln` aborts `--strict`; `build_index` exits 1 |
 | B. Drop `insecure` from the jq flags (walk still emits it) | stage 1 passes, stage 2 field 4 fails (stages separable) |
 | B2. Concatenate flags without `join` | `fixBrokenInsecure` gives `brokeninsecure` |
-| C. Insert version before the preview | golden for fields 1-5 fails |
+| C. Insert version before the preview, in the `pkg` jq and separately in `flatpakIndexRows` | golden for fields 1-5 fails, naming the kind |
+| C3. Change one character of a flatpak row's preview in `flatpakIndexRows` | golden fails on that flatpak row |
+| A3. Replace `try (v.meta or { }) { }` with `v.meta` | `fixThrowMeta` / `fixNullMeta` / `fixNoMeta` abort the walk |
+| A4. Merge the two inner `try`s into one | `fixThrowInsecureList` loses `insecure` |
 | C2. Drop the trailing empty field from jq, app awk, opt jq, `flatpakIndexRows` or `pkgNewIndexRow` | `NF != 6` names the kind |
 | D. Remove `"$walk"` from `stamp_key` (`:3702`) | staleness case fails |
 | E. Name the flag so it contains `unfree` | substring assertion fails |
@@ -245,6 +292,13 @@ The PR carries each break's failing output, then the passing run.
 Also run `nix fmt -- --ci`, statix and deadnix, `checks.options-*`
 shards (Mode A unchanged), `readme-counts.sh` if counts are touched, and
 the existing flatpak shape test at its new `NF != 6`.
+
+### Also updated
+
+`tests/app-selection.nix:192` writes a five-field index fixture. It moves
+to six fields, so the fixture matches the format, even though its reader
+uses only fields 1-2. `tests/options.nix:4768`'s `NF != 5` becomes
+`NF != 6`.
 
 ### Measurement bar
 

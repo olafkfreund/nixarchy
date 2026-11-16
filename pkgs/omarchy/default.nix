@@ -92,6 +92,7 @@
   gtk3,
   udiskie,
   git,
+  desktop-file-utils,
   less,
   man-db,
   unzip,
@@ -311,6 +312,7 @@ let
     # autostart.lua execs this on every login.
     udiskie
     git # theme install, update checks
+    desktop-file-utils # update-desktop-database, which user migrations run (#1793)
     less
     man-db
     unzip

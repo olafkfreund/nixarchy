@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1814
 intent: intent/2026-11-16-1814-pkg-index-insecure.md
 ---

@@ -120,7 +120,8 @@ let
           palette=$t3home/userdata/themes/omarchy.json
           source_entry ${spaced}; published && cmp -s "$theme" "$palette" &&
             [ "$(choice)" = omarchy ] && [ -f "$marker" ] && [ "$(set_calls)" -eq 1 ] ;;
-      11) mkdir -p "$(dirname "$palette")"; cp "$theme" "$palette"
+      # The marker's parent exists, so only run's dry-run guard keeps the marker away.
+      11) mkdir -p "$(dirname "$palette")" "$(dirname "$marker")"; cp "$theme" "$palette"
           export DRY_RUN=1; source_entry ${regular}; no_set && [ ! -e "$marker" ] &&
             [ ! -e "$settings" ] && [ -z "$(find "$t3home/userdata" -type f ! -name omarchy.json -print)" ] ;;
       12) start=$(date +%s); source_entry ${sleepy}; elapsed=$(( $(date +%s) - start ))

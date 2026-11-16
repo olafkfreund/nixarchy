@@ -4,6 +4,19 @@
 # still works, per AGENTS.md#14. See #1162 -> #1163 for the worked example of
 # what a coexistence bug looks like without one of these.
 {
+  home-pkgs-other-conflict = {
+    home-manager.users.omarchy =
+      { pkgsOther, ... }:
+      {
+        _module.args.pkgsOther = "user-choice";
+        home.sessionVariables.NIXARCHY_OWN_PKGS_OTHER = pkgsOther;
+      };
+  };
+
+  home-extra-special-args = {
+    home-manager.extraSpecialArgs.foo = 1;
+  };
+
   # The commonest pattern: add a package to the merged graphics-drivers env.
   # Use nixarchy's selected package: its Mesa follows Hyprland's own nixpkgs,
   # not necessarily this configuration's pkgs.mesa.

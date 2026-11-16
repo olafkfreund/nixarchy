@@ -3774,11 +3774,13 @@ pkgs.testers.runNixOSTest {
             + " | ${pkgs.jq}/bin/jq -e 'any(.[]; (.class // \"\" | ascii_downcase | contains(\"folio\")))'")
         try:
             machine.wait_until_succeeds(folio_clients, timeout=60)
-            folio_class = machine.succeed(desktop_user("hyprctl clients -j")
-                + " | ${pkgs.jq}/bin/jq -r 'first(.[] | select((.class // \"\" | ascii_downcase | contains(\"folio\"))) | .class)'").strip()
-            assert re.fullmatch(r"[A-Za-z0-9._-]+", folio_class), (
-                "#1793: unexpected Folio window class " + repr(folio_class))
-            machine.succeed(desktop_user("hyprctl dispatch closewindow class:" + folio_class))
+            folio_addr = machine.succeed(desktop_user("hyprctl clients -j")
+                + " | ${pkgs.jq}/bin/jq -r 'first(.[] | select((.class // \"\" | ascii_downcase | contains(\"folio\"))) | .address)'").strip()
+            assert re.fullmatch(r"0x[0-9a-f]+", folio_addr), (
+                "#1793: unexpected Folio window address " + repr(folio_addr))
+            # Hyprland's dispatch takes Lua; close by address as omarchy-hyprland-window-close-all does.
+            machine.succeed(desktop_user(
+                'hyprctl dispatch "hl.dsp.window.close({ window = \\"address:' + folio_addr + '\\" })"'))
             machine.wait_until_succeeds("grep -qx 'response 1' /tmp/portal-probe.out", timeout=60)
         except Exception as exc:
             raise AssertionError("#1793: Folio portal chooser did not open and cancel with response 1: "

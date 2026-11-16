@@ -21,22 +21,29 @@ Facts, in this repository:
   `allowInsecurePredicate = _: true` (`pkg-index.nix:26`), so an insecure
   package costs a row, not an evaluation error. It is "show everything and
   say what it is" (`pkg-index.nix:21-23`) with one thing left unsaid.
-- **Every meta read is guarded.** `try` (`pkg-index.nix:32-38`) wraps
-  `tryEval`, and each field is read as `try (v.meta.x or default) default`
-  (`:57-66`); the whole row sits under `builtins.tryEval` (`:81`), so a bad
-  meta costs one row, not the index.
-- **The flags column is built in `modules/apps.nix:3639-3644`**: the jq
-  program emits `unfree ` and `broken`, trimmed with `sub(" $"; "")`. The
-  one-line summary also gets `  [unfree]` / `  [broken]` suffixes
-  (`:3643-3645`), and the preview text gets a "Marked BROKEN" paragraph
-  (`:3655`). Insecure has none of the three.
+- **Meta reads are guarded per field, not per row.** `try`
+  (`pkg-index.nix:32-38`) wraps `tryEval`, and each field is read as `try
+  (v.meta.x or default) default` (`:57-66`).
+  - The `builtins.tryEval` around the row (`:81`) forces the row only to an
+    attribute set (weak head normal form). Its fields are forced later, by
+    `nix-instantiate --strict --json`, outside any `tryEval`.
+  - So a new field is only as safe as its own `try`. That `try` must reduce
+    the value to a plain boolean inside it. A `try` that returns a list, to
+    be tested later, can still abort the whole walk.
+- **The flags column is built by the jq program in `modules/apps.nix:3640-3661`**:
+  - it emits `unfree ` and `broken`, trimmed with `sub(" $"; "")`;
+  - the one-line summary gets `  [unfree]` / `  [broken]` suffixes
+    (`:3644-3645`);
+  - the preview text gets a "Marked BROKEN" paragraph (`:3655`).
+
+  Insecure has none of the three.
 - **Row format.** Five tab-separated fields: kind, name, summary, flags,
   preview (`apps.nix:3582-3586`). For packages the fourth field is a
   space-separated flag list, e.g. `unfree broken curated:firefox`. The
   curated pass appends `curated:<name>` to it (`apps.nix:3679`). The
   version is not a field: it is the line `version:  <v>` inside the preview
   (`apps.nix:3652`).
-- **Staleness.** `stamp_key` (`apps.nix:3698-3700`) is the list of
+- **Staleness.** `stamp_key` (`apps.nix:3701-3703`) is the list of
   `nixpkgs`, `walk`, `optionsjson`, `appindex`, `apptable`, `flatpakrows`,
   `pkgnewrow`; `index_stale` (`:3704-3706`) compares it to the stored
   stamp. `walk=${./pkg-index.nix}` (`:3561`) is a store path hashed from the
@@ -60,44 +67,59 @@ Facts, in nixarchy-pkg (read-only, `bin/nixarchy-pkg` and the QML files):
 
 - **It reads flags by splitting on spaces.** `cmd_search` takes
   `(.[3] // "") | split(" ")` for every non-option row and hands the result
-  to the panel as `flags` (`nixarchy-pkg` around the `rows:` jq at ~596-614).
-  An unknown flag is carried through as a string; `Card.qml:56-59` draws
-  whatever flags a row has. It would show a bare `insecure` tag today
-  without breaking.
+  to the panel as `flags` (the `rows:` jq, `bin/nixarchy-pkg:600-621`).
+  - An unknown flag is carried through as a string.
+  - `Card.qml:342-343` picks a tone by exact match on `broken`, `unfree` and
+    `other`. Any other flag gets the default tone and still draws.
+  - So it would show a bare `insecure` tag today without breaking.
+- **Its `untag`** (`UNTAG_JQ`, `bin/nixarchy-pkg:80-83`) strips only
+  `[unfree]` and `[broken]` from summaries.
 - **It reads the version from the preview.** `labels_tsv` extracts it from
   field 5 after `\nversion:  ` (`nixarchy-pkg` ~506-513) for selected
   packages. It reads field 5 by position, so a new column inserted before it
   would break it.
 - **It reproduces the staleness test** (`nixarchy-pkg` ~355-372): the seven
-  stamp inputs and their globs, `*-pkg-index.nix` for the walk. It matches
-  the shape of the walk's store path, not its content, so a changed walk
-  still reads as recognised. The panel's "stale index" notice
-  (`Card.qml:576`) is what a user with an old index sees.
+  stamp inputs and their globs, `*-pkg-index.nix` for the walk.
+  - It matches the shape of the walk's store path, not its content, so a
+    changed walk still reads as recognised.
+  - The panel does not reindex by itself. Its search reads the existing
+    index and shows a "stale index" notice (`Card.qml:576`), and reindexing
+    is a separate action. Terminal `nixarchy search` reindexes
+    automatically.
 - nixarchy-pkg#71 (version in the selection rows) is closed and is the
   consumer of the version-in-preview parse the issue mentions.
 
 ## Proposed outcome
 
 - **An `insecure` flag in the flags column** of `pkg` rows, beside `unfree`
-  and `broken`: true when `meta.insecure` is true or `meta.knownVulnerabilities`
-  is a non-empty list. The walk gains an `insecure` field; the jq builder
-  writes it into the flags column in the existing space-separated style.
-  Nothing else about the row changes.
-- **The summary and preview say it too**, like the other two flags: a
-  `  [insecure]` suffix on the summary and a short paragraph in the preview
-  that names the known vulnerabilities' count, not their text (see
-  Constraints). The panel's duplicate-tag logic (`untag` in nixarchy-pkg)
-  only strips `[unfree]` and `[broken]`, so the summary suffix is a
-  nixarchy-pkg follow-up to coordinate; see open question 2.
+  and `broken`:
+  - it is true when `meta.insecure` is `true`, or `meta.knownVulnerabilities`
+    is a non-empty list, as the issue asks. Both inputs are read;
+  - in the pinned nixpkgs, `meta.insecure` is computed from
+    `knownVulnerabilities != [ ]` (`pkgs/stdenv/generic/check-meta.nix:613`,
+    `:163-164`), so on current nixpkgs the two agree. Reading both also
+    covers an older nixpkgs or an overlay that sets one without the other;
+  - the walk gains one boolean field, and the jq builder writes it into the
+    flags column in the existing space-separated style.
+- **The preview says it too:** a one-line paragraph, like "Marked BROKEN",
+  that the package is marked insecure, with no count and no vulnerability
+  text. With `meta.insecure = true` and no list, a count would read "0
+  vulnerabilities".
+- **No `[insecure]` summary suffix in this change.** nixarchy-pkg's `untag`
+  strips only `[unfree]` and `[broken]`, so a suffix would show twice on the
+  panel's card. It follows once nixarchy-pkg strips it.
 - **`index_stale` treats older indexes as stale.** This comes from the walk
-  file's store path changing; the outcome is that a check demonstrates it
-  rather than assuming it.
+  file's store path changing. A check demonstrates it by changing only the
+  walk, with `nixpkgs` held fixed, so the existing nixpkgs-change test
+  cannot mask a missing dependency.
 - **No other change** to row order, field count or meaning.
 
 ## Affected users and systems
 
-- Anyone using `nixarchy search` or the nixarchy-pkg panel: the next search
-  after the rebuild reindexes (about a minute, once; `apps.nix:3624-3625`).
+- **`nixarchy search` users:** the next search after the rebuild reindexes,
+  about a minute, once (`apps.nix:3624-3625`).
+- **nixarchy-pkg panel users:** the panel shows its "stale index" notice
+  until they reindex. That is a separate action there.
 - nixarchy-pkg: the panel can draw an `insecure` tag and warn on a selection
   row. That repository's change is separate and out of scope here.
 - Files: `modules/pkg-index.nix`, `modules/apps.nix` (jq at ~3639-3660),
@@ -107,26 +129,52 @@ Facts, in nixarchy-pkg (read-only, `bin/nixarchy-pkg` and the QML files):
 
 ## Constraints
 
-- **CLAUDE.md section 1: the check fails without the flag.** A check must
-  evaluate the walk (or its row builder) against a fixture package with
-  `meta.knownVulnerabilities = [ "x" ]` and another with `meta.insecure =
-  true`, assert both rows carry `insecure` in the flags column, and a clean
-  package does not; and it must be seen to fail with the flag removed from
-  the walk. The existing grep at `tests/options.nix:5014` proves only that a
-  word is in the file, so it cannot stand in for this. The fixture must not
-  name a real package whose vulnerabilities could be fixed upstream.
+- **CLAUDE.md section 1: the check fails without the flag, at each stage.**
+  - **The pipeline:** fixture packages pass through the actual walk and then
+    the actual jq row builder, never fabricated JSON. A builder test fed
+    made-up JSON passes even when the walk never emits the flag.
+  - **The fixtures:**
+    - one with `meta.knownVulnerabilities = [ "x" ]`;
+    - one with `meta.insecure = true` and no list;
+    - a clean one;
+    - malformed ones: `meta.insecure = null`, a throwing
+      `knownVulnerabilities`, and a non-list `knownVulnerabilities`;
+    - one that is also unfree and broken.
+  - **The assertions:**
+    - the first two rows carry `insecure`, and the clean one does not;
+    - the malformed ones neither carry the flag nor abort the walk;
+    - every row still has five tab-separated fields;
+    - the unfree and broken flags and the preview are preserved.
+  - **Breaks:** it is seen to fail separately when the walk drops the field,
+    and when the jq builder drops it.
+  - The existing grep (`tests/options.nix:5014`) proves only that a word is
+    in the file, so it cannot stand in for this. No fixture names a real
+    package whose vulnerabilities could be fixed upstream.
 - **Row format stays backward compatible.** The field count stays five;
   `insecure` is one more word in a field consumers already split on spaces.
   The flag name must not contain `unfree` (`apps.nix:3761`) and must not
   collide with the `curated:` prefix convention. Any consumer that matches
   flags exactly keeps working; only a consumer that rejects unknown flags
   would break, and none was found in either repository.
-- **Evaluation cost and safety.** Reading `meta.knownVulnerabilities` for
-  ~112,755 attrs (`AGENTS.md:2225`) must not throw or slow the walk
-  measurably. It is read like the other meta: `try (v.meta.knownVulnerabilities or [ ]) [ ]`
-  and `try (v.meta.insecure or false) false`, inside the existing row
-  `tryEval`. The spec measures the walk's time before and after, because
-  the walk is the cost of a reindex.
+- **Evaluation safety.** The flag is computed inside a single `try` that
+  reduces to a boolean, with explicit type checks, for example:
+
+  ```nix
+  try (
+    (v.meta.insecure or false) == true
+    || builtins.isList (v.meta.knownVulnerabilities or null)
+       && v.meta.knownVulnerabilities != [ ]
+  ) false
+  ```
+
+  A `null`, a non-list or a throw gives `false` for that row and never aborts
+  the walk. The row `tryEval` at `:81` is not relied on.
+- **Evaluation cost, with a defined bar.** Both attributes are lazy `meta`
+  fields, so cost is expected to be one thunk per row. The spec measures it
+  on the same nixpkgs pin, machine and evaluator, before and after:
+  wall-clock time, peak memory and emitted row count. The bar: the same row
+  count, and time and peak memory each within 10% of before, taking the
+  median of three runs.
 - **No vulnerability text in the index.** The text can be long and carries
   tabs and newlines; the index is one row per line, tab-separated. Only the
   fact and, at most, the count go in.
@@ -142,29 +190,19 @@ Facts, in nixarchy-pkg (read-only, `bin/nixarchy-pkg` and the QML files):
 
 1. **A `version` column?** The issue asks to consider one. Recommendation:
    **no, not in this change.**
-   - Cost of adding it: an inserted column shifts field 5 (preview). The
-     index is read by position in nixarchy-pkg (`labels_tsv` reads `$5`,
-     `cmd_search` reads `.[4]` and `.[5]`), `apps.nix` itself (the status
-     and curated awk passes read `$3`, `$4`, `$5`) and the flatpak/new-package
-     rows (`apps.nix:3699-3700`, already in the five-field shape). Appending
-     a sixth column after the preview collides with the `scope` column
-     nixarchy-pkg already puts at `.[5]` for its merged rows. So any
-     placement breaks something or needs a coordinated change in two
-     repositories.
-   - Benefit: nixarchy-pkg already reads the version from the preview and
-     nothing there waits for a column (the issue says so).
-   - Do it later, as its own change with the row-format version bump the
-     two repositories agree on.
-2. **The `[insecure]` summary suffix.** Writing it keeps the three flags
-   consistent in `nixarchy search`, but nixarchy-pkg's `untag` does not strip
-   it, so the panel's card would show the tag twice (the problem #30 fixed
-   for the other two). Options: write the flag only (no suffix), or write the
-   suffix and have nixarchy-pkg's `untag` learn it first. Recommendation:
-   flag and preview paragraph now, summary suffix only after nixarchy-pkg
-   strips it.
-3. **`meta.insecure`.** nixpkgs' own test is `knownVulnerabilities != [ ]`
-   (check-meta); `meta.insecure` is not a nixpkgs attribute that I found. The
-   issue names both, so the walk reads both. The spec verifies against the
-   pinned nixpkgs whether `meta.insecure` is ever set, and drops it if not.
-4. **Flag word.** `insecure` (matches the issue and the panel's wording).
-   Confirm with the nixarchy-pkg side before it ships.
+   - **An inserted column breaks positional readers.** It shifts field 5
+     (the preview), which these read by position:
+     - nixarchy-pkg's `labels_tsv` (`$5`);
+     - `apps.nix`'s own status and curated awk passes (`$3`, `$4`, `$5`);
+     - the flatpak and new-package rows (`apps.nix:3689`, `:3692`), which are
+       in the five-field shape.
+   - **An appended sixth column would be dropped.** nixarchy-pkg's
+     `cmd_search` rebuilds its rows from `$1`-`$5`, and supplies its own
+     `scope` (`bin/nixarchy-pkg:579`), so the column would be silently
+     ignored there. That does not break anything, but it does nothing
+     until both repositories agree on a format change.
+   - **Benefit:** nixarchy-pkg already reads the version from the preview,
+     and nothing there waits for a column (the issue says so).
+   - So do it later, as its own coordinated change.
+2. **Flag word.** `insecure`, which matches the issue and the panel's
+   wording, does not contain `unfree`, and does not collide with `curated:`.

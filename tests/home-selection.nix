@@ -225,10 +225,11 @@ pkgs.runCommand "nixarchy-home-selection"
     sed -e 's|@USER@|alice|g' -e 's|@IMPORTS@| ./nixarchy/apps.nix|g' ${homeAppsTemplate} >"$dest"
     read_owner 2>owner.err
     [ "$?" -eq 0 ] && [ "$owner" = alice ] || bad own-7a 'generated owner not parsed exactly once'
-    for variant in two duplicate unquoted invalid empty; do
+    for variant in two duplicate mixed unquoted invalid empty; do
       case "$variant" in
         two) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."bob".imports = [' >"$dest" ;;
         duplicate) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."alice".imports = [' >"$dest" ;;
+        mixed) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users.bob.imports = [' >"$dest" ;;
         unquoted) printf '%s\n' 'home-manager.users.alice.imports = [' >"$dest" ;;
         invalid) printf '%s\n' 'home-manager.users."-bad".imports = [' >"$dest" ;;
         empty) printf '%s\n' 'home-manager.users."".imports = [' >"$dest" ;;
@@ -453,12 +454,13 @@ pkgs.runCommand "nixarchy-home-selection"
     rc=$?
     [ "$rc" -ne 0 ] && grep -qF alice own6.out && grep -qF -- '--release-home' own6.out && [ "$(fhash)" = "$before" ] || bad own-6 "non-owner edit was copied before refusal: rc=$rc $(cat own6.out)"
 
-    for variant in two duplicate unquoted invalid; do
+    for variant in two duplicate mixed unquoted invalid; do
       owned_flake alice '# previous owner bytes'
       reset_files
       case "$variant" in
         two) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."bob".imports = [' >"$generated" ;;
         duplicate) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."alice".imports = [' >"$generated" ;;
+        mixed) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users.bob.imports = [' >"$generated" ;;
         unquoted) printf '%s\n' 'home-manager.users.alice.imports = [' >"$generated" ;;
         invalid) printf '%s\n' 'home-manager.users."-bad".imports = [' >"$generated" ;;
       esac

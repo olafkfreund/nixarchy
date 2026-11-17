@@ -545,6 +545,34 @@ cannot be combined with `--detach`, `--status` or `--log`. A zero-byte
 `home.nix` counts as edited: applying it as the owner copies it and the build
 fails, rather than treating it as an empty module.
 
+### See what apply would do with your home file
+
+`nixarchy-apply --home-plan [--json]` reports the current home owner, caller,
+whether your `home.nix` is the untouched seed, edited or absent, and whether
+apply would claim, copy, keep or refuse it. It takes no lock and changes
+nothing: it writes only to a private temporary directory, not to your flake
+or Nixarchy state. The answer is advisory; apply checks again under its own
+lock when you run it.
+
+With `--json`, the one-line contract is
+`{"version":1,"owner":null,"caller":"bob","state":"edited","action":"claim","renderUser":"bob","message":null}`.
+All seven keys are always present. `owner` is `null` when there is no owner;
+`state` is `seed`, `edited` or `absent`; `action` is `claim`, `copy`, `keep` or
+`refuse`. `renderUser` is the caller for `claim` or `copy`, the owner for
+`keep` (or `null` if there is none), and `null` for `refuse`. `message` is
+`null` except on `refuse`, when it is exactly apply's refusal text, including
+the `nixarchy-apply: ` prefix. Every decision, including `refuse`, exits 0.
+Errors exit 1 and, with `--json`, print `{"version":1,"error":"<text>"}`
+on stdout and the same text on stderr; without it, errors print only on
+stderr. Any other flag combined with `--home-plan` exits 2 with usage text.
+The plain line without `--json` is for people, not a stable contract.
+
+Apply now refuses a caller whose user name fails its Unix-name check
+(lower-case letters, digits, `_` and `-`), even when it would only keep the
+owner's selection; `--release-home` remains exempt. A damaged or unreadable
+`nixarchy-apps.nix` is reported as unreadable, and a seed that cannot be
+compared is an error rather than an edited file.
+
 ## Rebuilding refuses a branch you did not choose to deploy
 
 Installing an app from the menu, the bar's rebuild button, `omarchy update`

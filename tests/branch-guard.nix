@@ -137,9 +137,9 @@ pkgs.runCommand "nixarchy-branch-guard-check"
 
     # --detach cannot run here (systemd-run). What must hold is read from the
     # script itself: the parent skips the guard, and the unit gets the override.
-    grep -qF '[ -n "$detach" ] || nixarchy-branch-guard "$flake"' "$applybin" &&
-      ok "the --detach parent leaves the refusal to the unit" ||
-      bad "the guard call in apply is not skipped for the --detach parent"
+    grep -qF '[ -n "$detach" ] || [ -n "$homeplan" ] || nixarchy-branch-guard "$flake"' "$applybin" &&
+      ok "the --detach parent leaves the refusal to the unit, and --home-plan asks before any guard" ||
+      bad "the guard call in apply is not skipped for the --detach parent and --home-plan"
     grep -qF -- '--setenv=ALLOW_BRANCH_DEPLOY=' "$applybin" &&
       ok "the detached unit is handed ALLOW_BRANCH_DEPLOY" ||
       bad "the detached unit would refuse even with ALLOW_BRANCH_DEPLOY=1"

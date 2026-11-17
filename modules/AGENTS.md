@@ -1717,8 +1717,8 @@ Flathub. Written whole in Nix rather than transformed by awk at index time
 like the app rows: there are a handful of these and the preview text is
 prose, so a template is clearer than a transformation.
 
-Five tab-separated fields, matching every other source: kind, name,
-summary, option type (unused here), preview.
+Six tab-separated fields, matching every other source: kind, name,
+summary, option type (unused here), preview, version (empty here).
 
 <a id="services-and-system-settings-as-nixos-configuratio"></a>
 
@@ -2220,11 +2220,13 @@ refuse is worse than no index.
 The package rows come from our own walk (modules/pkg-index.nix),
 not `nix search`. That is not taste: `nix search --json` emits only
 pname, version and description -- verified on Nix 2.34, not read --
-so homepage, licence, unfree and broken (#493) had to come from an
-eval of our own. The walk follows the same recurseForDerivations
+so homepage, licence, unfree and broken (#493), plus insecure (#1814),
+come from an eval of our own. The walk follows the same recurseForDerivations
 rule nix search does and was verified to produce the identical row
 set (112,755 attrs, both ways) at the same ~30s cost, once per
 generation.
+The index appends `version` as its sixth column; fields 1-5 keep their
+positions.
 
 Status -- [enabled], [queued], nothing -- is stamped at picker
 START, not into the cached index: the selection changes with every

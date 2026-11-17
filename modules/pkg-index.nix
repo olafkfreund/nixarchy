@@ -64,6 +64,20 @@ let
     license = try (licNames (try v.meta { })) "";
     unfree = try (isUnfree (try v.meta { })) false;
     broken = try (v.meta.broken or false) false;
+    insecure =
+      let
+        m = try (v.meta or { }) { };
+      in
+      builtins.isAttrs m
+      && (
+        try ((m.insecure or false) == true) false
+        || try (
+          let
+            kv = m.knownVulnerabilities or null;
+          in
+          builtins.isList kv && kv != [ ]
+        ) false
+      );
   };
 
   go =

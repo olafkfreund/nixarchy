@@ -28,6 +28,8 @@ let
     "omarchy-screensaver"
     "hype"
     "monologue"
+    "cards"
+    "checkmate"
     "omarchy-local-ai"
     "signed"
     "omarchy-hyprland-titlebars"

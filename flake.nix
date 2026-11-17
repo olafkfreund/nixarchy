@@ -1248,6 +1248,8 @@
           # programs.nixarchy.omarchyApps.enable.
           hype = final.callPackage ./pkgs/apps/hype.nix { };
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };
+          cards = final.callPackage ./pkgs/apps/cards.nix { };
+          checkmate = final.callPackage ./pkgs/apps/checkmate.nix { };
           omarchy-local-ai = final.callPackage ./pkgs/apps/omarchy-local-ai.nix { };
           signed = final.callPackage ./pkgs/apps/signed.nix { };
           disktree = final.callPackage ./pkgs/apps/disktree.nix { };
@@ -1616,6 +1618,8 @@
             omarchy-screensaver
             hype
             monologue
+            cards
+            checkmate
             omarchy-local-ai
             signed
             disktree

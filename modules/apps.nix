@@ -1463,7 +1463,7 @@ in
       type = lib.types.bool;
       default = cfg.preinstalls;
       defaultText = lib.literalExpression "config.programs.nixarchy.preinstalls";
-      description = "Omarchy's own default applications (Hype, Signed, Monologue, Omacalc, Omacut, Omawrite, Aether). Follows `preinstalls`. A line in apps.nix still turns any one of them off.";
+      description = "Omarchy's own default applications (Hype, Signed, Monologue, Cards, Checkmate, Omacalc, Omacut, Omawrite, Aether). Follows `preinstalls`. A line in apps.nix still turns any one of them off.";
     };
 
     # ---- the per-package escape (#530) --------------------------------

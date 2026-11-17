@@ -571,6 +571,22 @@
     preinstall = true;
     arch = "monologue";
   };
+  cards = {
+    label = "Cards";
+    category = "Utility";
+    attr = "cards";
+    ours = true;
+    preinstall = true;
+    arch = "cards";
+  };
+  checkmate = {
+    label = "Checkmate";
+    category = "Utility";
+    attr = "checkmate";
+    ours = true;
+    preinstall = true;
+    arch = "checkmate";
+  };
   omarchy-local-ai = {
     # Omarchy's local model runner (rootless Podman); the system side is
     # programs.nixarchy.services.agent-local (#1577).

@@ -640,7 +640,7 @@ in
         omarchy-install-preinstalls restores and Remove > Preinstalls takes
         away. Upstream has these on a fresh machine, so they are on here too.
 
-        Omarchy's own applications (Hype, Signed, Monologue, Omacalc, Omacut,
+        Omarchy's own applications (Hype, Signed, Monologue, Cards, Checkmate, Omacalc, Omacut,
         Omawrite, Aether) come through `omarchyApps.enable`, which follows this
         option. obsidian is unfree, so it would abort the whole rebuild rather
         than fail on its own: enable `apps.obsidian` for it instead. cliamp is

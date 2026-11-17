@@ -457,6 +457,8 @@ let
     "aether"
     "hype"
     "monologue"
+    "cards"
+    "checkmate"
     "signed"
   ];
 

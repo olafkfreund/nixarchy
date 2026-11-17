@@ -13,15 +13,15 @@ pacman. None of that applies here, and the reasons are on the
 
 The Install menu still exists and still has every row Omarchy ships. Each row
 has been mapped to how NixOS installs the thing, beside a few apps upstream does
-not list. There are 76 apps in total:
+not list. There are 78 apps in total:
 50 are plain nixpkgs packages,
 7 are NixOS modules,
-13 are built by nixarchy itself because nixpkgs does not carry them,
+15 are built by nixarchy itself because nixpkgs does not carry them,
 and 6 have no equivalent and say so in the menu.
 
 Picking a row does not install anything. It uncomments one line in
 `~/.config/nixarchy/apps.nix`, which is a file nixarchy writes for you, fully
-populated with every app and every line commented out. The seven apps on by
+populated with every app and every line commented out. The nine apps on by
 default have `.enable = false` rows, because uncommenting one turns that app
 off. Pick five rows and you have five uncommented lines. Then _Install > Apply
 changes_ opens the rebuild panel, which says what it is about to do and starts
@@ -57,13 +57,14 @@ system partly changed.
 
 ## Omarchy's own apps
 
-Omarchy installs seven applications of its own on every machine: Omawrite, Omacalc,
-Omacut, Aether, Hype (Markdown presentations), Monologue (a webcam recorder) and
-Signed (sign and fill PDFs). nixpkgs carries none of them, so nixarchy builds them,
+Omarchy installs nine applications of its own on every machine: Omawrite, Omacalc,
+Omacut, Aether, Hype (Markdown presentations), Monologue (a webcam recorder),
+Signed (sign and fill PDFs), Cards (Klondike solitaire) and Checkmate (3D chess).
+nixpkgs carries none of them, so nixarchy builds them,
 and they come by default.
 
 To leave one out, use _Remove > App / package_, or add `hype.enable = false;` to
-`apps.nix`. `programs.nixarchy.omarchyApps.enable = false` leaves out all seven, and
+`apps.nix`. `programs.nixarchy.omarchyApps.enable = false` leaves out all nine, and
 `programs.nixarchy.preinstalls = false` leaves out those and the rest of the
 preinstalled set.
 

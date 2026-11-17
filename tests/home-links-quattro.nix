@@ -55,7 +55,7 @@ pkgs.runCommand "nixarchy-home-links-quattro"
         printf '%s\n' '[MIME Cache]' 'x-scheme-handler/http=firefox.desktop;chromium-browser.desktop;' > "$XDG_DATA_DIRS/applications/mimeinfo.cache"
         cp --no-preserve=mode "${shipped}/share/applications/omarchy-HEY.desktop" "$XDG_DATA_DIRS/applications/omarchy-HEY.desktop"
 
-        for command in omarchy-notification-send omarchy-launch-config-editor chromium firefox; do
+        for command in omarchy-notification-send omarchy-launch-editor chromium firefox; do
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$TMPDIR/bin/$command"
         done
         printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo backed-up' > "$TMPDIR/bin/omarchy-i18n"

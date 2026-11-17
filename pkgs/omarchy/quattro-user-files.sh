@@ -48,7 +48,7 @@ if [[ $shared_linked == true && ! -e $canonical ]]; then
       echo "~/.agents/AGENTS.md is managed by Home Manager; edit it in your configuration (home.file.\".agents/AGENTS.md\")" >&2
       exit 0
     fi
-    exec omarchy-launch-config-editor "$canonical"
+    exec omarchy-launch-editor "$canonical"
   fi
   echo "~/.agents/AGENTS.md is managed elsewhere and does not exist; no harness was linked" >&2
   exit 0
@@ -62,12 +62,12 @@ if [[ -L $target ]] || store_owned "$target"; then
   echo "Skipping $target: a link you manage" >&2
   return 0
 fi' \
-  --replace-fail '  exec omarchy-launch-config-editor "$canonical"' \
+  --replace-fail '  exec omarchy-launch-editor "$canonical"' \
     '  if store_owned "$canonical"; then
   echo "~/.agents/AGENTS.md is managed by Home Manager; edit it in your configuration (home.file.\".agents/AGENTS.md\")" >&2
   exit 0
 fi
-exec omarchy-launch-config-editor "$canonical"'
+exec omarchy-launch-editor "$canonical"'
 substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-gnome \
   --replace-fail 'gsettings set org.gnome.desktop.interface icon-theme "Adwaita"' \
     '# A theme the user chose stays; gsettings quotes its value, so strip the quotes (\\047).

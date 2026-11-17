@@ -122,6 +122,17 @@ line a patch depends on **fails the build** rather than quietly restoring Arch
 instructions. Only `SKILL.md` and `contributing.md` are replaced outright, where
 the guidance is wrong here rather than merely misspelt.
 
+**`--replace-fail` cannot see that it matched your own text.** One
+`substituteInPlace` call applies its replacements in order, to the file as the
+earlier ones left it. So a pattern can also match text an earlier replacement in
+the same call inserted. In `quattro-user-files.sh`, the agent-instructions guard
+inserts `exec omarchy-launch-config-editor` and later targets that same line.
+When quattro renamed upstream's call to `omarchy-launch-editor` (#1823), the
+later pattern kept matching our inserted copy. The build stayed green and
+upstream's real `--edit` exec went unguarded; only `checks.agent-instructions`
+saw it. When a later pattern repeats an earlier insertion, anchor it on
+upstream-only context, or check the built file for the line you meant to change.
+
 CI additionally asserts that no skill code block contains a `pacman`, `yay`,
 `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch on
 purpose; a fenced block is what an agent copies.

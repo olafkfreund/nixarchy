@@ -378,6 +378,16 @@
     edge = "only";
     reason = "adds FileChooser=folio;gtk to the user's hyprland-portals.conf only where no chooser is chosen (#1793)";
   };
+  "1794827288" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "installs Checkmate with omarchy-pkg-add, which is the package list's job here and Checkmate is not packaged yet (#1826); the icon redraw serves only the newly installed app, and omarchy-theme-set-icons runs again on every theme switch";
+  };
+  "1794839103" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "installs Cards with omarchy-pkg-add, which is the package list's job here and Cards is not packaged yet (#1826); the icon redraw serves only the newly installed app, and omarchy-theme-set-icons runs again on every theme switch";
+  };
   predates = [
     "1780057136"
     "1780294774"

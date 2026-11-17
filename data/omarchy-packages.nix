@@ -48,6 +48,14 @@
   "btrfs-progs" = {
     nix = "btrfs-progs";
   };
+  "cards" = {
+    edge = "only";
+    skip = "Omarchy's own Cards (omacom/cards), a base package since quattro fad23cf; nixpkgs has none, packaging tracked in #1826.";
+  };
+  "checkmate" = {
+    edge = "only";
+    skip = "Omarchy's own Checkmate (omacom/checkmate), a base package since quattro 3489996; nixpkgs has none, packaging tracked in #1826.";
+  };
   "chromium" = {
     edge = "absent";
     nix = "chromium";
@@ -688,6 +696,10 @@
   };
   "sof-firmware" = {
     module = "hardware.enableRedistributableFirmware"; # nixos/modules/hardware/all-firmware.nix lists it
+  };
+  "systemd-stub-omarchy" = {
+    edge = "only";
+    skip = "Snapdragon boot-image stub holding every device tree (quattro dceae18); aarch64 hardware, not targeted.";
   };
   "systemd-ukify" = {
     skip = "Qualcomm (aarch64) boot tooling; not targeted.";

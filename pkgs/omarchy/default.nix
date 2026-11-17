@@ -483,7 +483,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
                       --replace-fail '      if (!seen) return' '      if (!seen) return
       if (f["submap"] != "" && f["description"] == "") { seen = 0; return }' \
-                      --replace-fail "printf 'v19\\n'" "printf 'v19-submaps\\n'"
+                      --replace-quiet "printf 'v19\\n'" "printf 'v19-submaps\\n'" \
+                      --replace-quiet "printf 'v20\\n'" "printf 'v20-submaps\\n'"
+                    # The tag pin says v19, quattro v20: one of the two must have matched.
+                    grep -q "printf 'v[0-9]*-submaps" $out/share/omarchy/bin/omarchy-menu-keybindings \
+                      || { echo "omarchy-menu-keybindings: cache tag moved; update the -submaps tag" >&2; exit 1; }
                     # Summoned from a key bind, the menu reaches the screen after omarchy-shell's
                     # 2 s IPC timeout; the script then exits and the menu it opened does nothing.
                     # The script waits for the selection anyway, so a longer timeout costs nothing.

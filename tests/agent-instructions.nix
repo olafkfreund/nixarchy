@@ -33,7 +33,7 @@ pkgs.runCommand "nixarchy-agent-instructions"
           default_agent=$package/bin/omarchy-default-agent
           fail() { echo "FAILED $1" >&2; exit 1; }
           reset_home() { rm -rf "$HOME"; mkdir -p "$HOME/.agents" "$XDG_CONFIG_HOME"; }
-          printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "editor %s\n" "$1" >> "$LOG"' > "$root/bin/omarchy-launch-config-editor"
+          printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "editor %s\n" "$1" >> "$LOG"' > "$root/bin/omarchy-launch-editor"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > "$root/bin/omarchy-notification-send"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo backed-up' > "$root/bin/omarchy-i18n"
           printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo "$PATH"' > "$root/bin/omarchy-agent-real-path"

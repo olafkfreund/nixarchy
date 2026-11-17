@@ -56,11 +56,18 @@ commits one step per commit (full-sentence subject, no conventional prefix).
 2. `tests/pkg-index.nix`: the verification of the spec, as follows. Add a
    section to the check script (the non-golden branch, after the existing
    flags/preview assertions), run under `set -eo pipefail`:
-   - make a writable copy of `${testLib.vmPackage "nixarchy-pkg-add"}/bin/nixarchy-pkg-add`,
-     `sed -i "s|^\( *\)nixpkgs=.*|\1nixpkgs=${fixture}|"` on the baked `nixpkgs=`
-     line, then `grep -qF "nixpkgs=${fixture}"` to prove it landed (fail otherwise).
+   - make an executable writable copy with `install -m755
+     ${testLib.vmPackage "nixarchy-pkg-add"}/bin/nixarchy-pkg-add pkg-add-copy`
+     (store files are 0555; `cp` keeps that), then
+     `sed -i "s|^\( *\)nixpkgs=.*|\1nixpkgs=${fixture}|;s|^\( *\)allowunfree=.*|\1allowunfree=true|"`
+     and `grep -qF "nixpkgs=${fixture}"` and `grep -qx 'allowunfree=true'` to prove
+     both landed (fail otherwise). `allowunfree=true` makes `fixAll` print the
+     `[unfree -- fine here ...]` notice whatever the VM config baked, with no
+     unfree-grant prompt.
      Note `''${` escaping in the Nix string for any bash `${}`.
-   - private `HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`; `NIX_STATE_DIR` and
+   - private `HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, all `mkdir -p`ed
+     (`$XDG_CONFIG_HOME/nixarchy` too; `HOME` is `/homeless-shelter` otherwise);
+     `NIX_STATE_DIR` and
      `NIX_LOG_DIR` are already set by the check. `jq` and `gnused` are already
      in `nativeBuildInputs`; add anything missing (`flock` is `util-linux`, add
      it) to `nativeBuildInputs`, since the script's `runtimeInputs` do not reach
@@ -71,26 +78,39 @@ commits one step per commit (full-sentence subject, no conventional prefix).
      (`{ pkgs, ... }:` / `{` / `  environment.systemPackages = with pkgs; [  #@pkgs-begin` /
      `  ];  #@pkgs-end` / `}`; build it with `printf '%s\n'`, not a heredoc,
      CLAUDE.md s5), run the copy as `rc=0; "$copy" "$attr" >"out.$attr" 2>&1 || rc=$?`.
-   - case 1: attrs whose output row contains `[insecure in nixpkgs` to
+   - case 1: attrs whose output row contains the whole notice
+     `[insecure in nixpkgs -- the rebuild will refuse it unless you permit it]` to
      `got.txt`; index insecure set minus `fixCurated` from `walk.json` to
      `want.txt`; sort both; assert `want.txt` is non-empty; `diff` them.
-   - case 2: `fixAll` row has `[unfree`, `[broken`, `[insecure` in this order
-     (awk/index positions); `fixClean` output matches
-     `fixClean-1.0 -- clean package$` and has no `[`.
+   - case 2: `fixAll` row has `[unfree`, `[broken`, `[insecure` in this order:
+     `u=index(row,"[unfree"); b=index(row,"[broken"); i=index(row,"[insecure")`
+     and require `u > 0 && u < b && b < i` (`index` returns 0 when absent, so a
+     bare `<` chain would pass with the notice missing); `fixClean` output ends
+     in `fixClean -- clean package` (the probe reads `name`, which the fixture
+     sets without the version; CORRECTS spec case 2, which said `fixClean-1.0`)
+     and has no `[`.
    - case 3: `fixThrowVuln fixThrowElem fixThrowInsecureList fixInsecureThrowVuln`
      have rc 0 and an `added` row; `fixThrowMeta` has rc != 0 and `no match`.
-   - failures go through the file's existing `fail` helper (they accumulate).
+   - failures go through the file's existing `fail` helper (they accumulate);
+     put the whole section BEFORE the final `[ "$fails" -eq 0 ] || exit 1` /
+     `touch "$out"` lines, or a `fail` there is a silent pass; write `diff -u
+     want.txt got.txt || fail '...'` so `set -e` does not skip accumulation.
    Verify: `nix build .#checks.x86_64-linux.pkg-index --no-link` green. Traps:
    the check's `''` string escaping; process substitution swallows a producer's
    failure (use files); a second add of the same name reports "already in"
    (reset the file per run); the golden branch (`goldenOnly`) must stay
    untouched, so add the section only inside the non-golden `''` block.
 3. Lead only: break proofs (spec Verification 4: (i) delete the flags line,
-   (ii) bare `q.meta.insecure or false`, (iii) drop the `try` around the
+   (ii) drop the `try` around `(m.insecure or false) == true` (keep the
+   `knownVulnerabilities` disjunct), (iii) drop the `try` around the
    `knownVulnerabilities` read), each shown landed by `git diff`, restored with
    `git checkout HEAD -- <path>` from a committed baseline; then
    `app-selection home-selection pkg-index pkg-new`, statix, deadnix,
-   `nix fmt`; then the whole generated set once and the options shards.
+   `nix fmt`; then every target `.github/scripts/generated-checks.sh generated`
+   prints, in one `nix build --keep-going --max-jobs 2 --no-link`, under the
+   flock, and the four options shards
+   (`.#checks.x86_64-linux.options-{system,home,microvm,files}`) once the gates
+   in CLAUDE.md s6 allow (no busy self-hosted runner, load under 12).
 
 ## Tests
 

@@ -103,7 +103,8 @@ Cases:
    and the two are equal (files compared with `diff`, never process
    substitution, so a failing producer is not swallowed).
 2. `fixAll` carries `[unfree`, then `[broken`, then `[insecure` in that order
-   on its row. `fixClean`'s row ends exactly in `fixClean-1.0 -- clean package`
+   on its row. `fixClean`'s row ends exactly in `fixClean -- clean package`
+   (the probe reads `name`, which the fixture sets without the version)
    (no bracket anywhere). No self-comparison against a mutated copy of the
    script.
 3. `fixThrowVuln`, `fixThrowElem`, `fixThrowInsecureList`, `fixInsecureThrowVuln`

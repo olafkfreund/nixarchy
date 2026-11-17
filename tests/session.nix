@@ -2237,7 +2237,7 @@ pkgs.testers.runNixOSTest {
     # The apps come by default, following preinstalls; dua is gone because
     # upstream replaced Disk Usage with disktree.
     # One name per call: `command -v a b` succeeds if ANY of them resolves.
-    for app in ["hype", "signed", "monologue", "omacalc", "omacut", "omawrite", "aether", "disktree"]:
+    for app in ["hype", "signed", "monologue", "cards", "checkmate", "omacalc", "omacut", "omawrite", "aether", "disktree"]:
         machine.succeed(user % f"command -v {app}")
     machine.fail(user % "command -v dua")
     # This machine has real vim, whose vi beats the wrapper; checks.coexistence holds the wrapper.
@@ -2368,7 +2368,7 @@ pkgs.testers.runNixOSTest {
         on_desktop("hyprctl plugin list | grep hyprbars >/dev/null"), timeout=60)
     # Back to tiling, so what follows sees the layout it always saw.
     machine.succeed(on_desktop("omarchy-hyprland-workspace-layout-toggle"))
-    print("hype, signed, monologue, omacalc, omacut, omawrite, aether and disktree are on PATH; dua, obs, kdenlive and xournalpp are absent; PDF, MP4 and plain-text handlers are unchanged; a floating workspace loads hyprbars")
+    print("hype, signed, monologue, cards, checkmate, omacalc, omacut, omawrite, aether and disktree are on PATH; dua, obs, kdenlive and xournalpp are absent; PDF, MP4 and plain-text handlers are unchanged; a floating workspace loads hyprbars")
 
     # ---- the shell rc files know where they live --------------------------
     # All three opened with a fallback to /usr/share/omarchy for when

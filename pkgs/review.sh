@@ -135,6 +135,8 @@ omarchy-speedtest	pkgs/apps/omarchy-speedtest.nix	omacom/omarchy-speedtest
 omarchy-screensaver	pkgs/apps/omarchy-screensaver.nix	omacom/omarchy-screensaver
 hype	pkgs/apps/hype.nix	omacom/hype
 monologue	pkgs/apps/monologue.nix	omacom/monologue
+cards	pkgs/apps/cards.nix	omacom/cards
+checkmate	pkgs/apps/checkmate.nix	omacom/checkmate
 omarchy-local-ai	pkgs/apps/omarchy-local-ai.nix	omacom/omarchy-local-ai
 signed	pkgs/apps/signed.nix	omacom/signed
 omarchy-hyprland-titlebars	pkgs/apps/omarchy-hyprland-titlebars.nix	omacom/omarchy-hyprland-titlebars

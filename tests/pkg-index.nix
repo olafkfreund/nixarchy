@@ -61,6 +61,7 @@ let
           gnused
           jq
           nix
+          util-linux
         ];
       }
       ''
@@ -163,6 +164,46 @@ let
               index_stale && fail 'walk A stamp is stale'
               walk=${walkB}
               index_stale || fail 'walk B did not stale the stamp'
+
+              copy=$PWD/pkg-add-copy
+              install -m755 ${testLib.vmPackage "nixarchy-pkg-add"}/bin/nixarchy-pkg-add "$copy"
+              sed -i "s|^\( *\)nixpkgs=.*|\1nixpkgs=${fixture}|;s|^\( *\)allowunfree=.*|\1allowunfree=true|" "$copy"
+              grep -qF "nixpkgs=${fixture}" "$copy" || { fail 'pkg-add fixture rewrite'; exit 1; }
+              grep -qx 'allowunfree=true' "$copy" || { fail 'pkg-add allowunfree rewrite'; exit 1; }
+
+              export HOME=$PWD/home XDG_CONFIG_HOME=$PWD/home/.config XDG_STATE_HOME=$PWD/home/.local/state
+              mkdir -p "$HOME" "$XDG_CONFIG_HOME/nixarchy" "$XDG_STATE_HOME"
+              file=$XDG_CONFIG_HOME/nixarchy/apps.nix
+              jq -r '.[].attr | select(. != "fixCurated")' walk.json > attrs.txt
+              : > got.txt
+              while IFS= read -r attr; do
+                printf '%s\n' '{ pkgs, ... }:' '{' '  environment.systemPackages = with pkgs; [  #@pkgs-begin' '  ];  #@pkgs-end' '}' > "$file"
+                rc=0; "$copy" "$attr" >"out.$attr" 2>&1 || rc=$?
+                printf '%s\n' "$rc" > "rc.$attr"
+                awk -v attr="$attr" -v notice='[insecure in nixpkgs -- the rebuild will refuse it unless you permit it]' \
+                  '$1 == attr && $2 == "added" && index($0, notice) { print attr }' "out.$attr" >> got.txt
+              done < attrs.txt
+
+              jq -r '.[] | select(.insecure == true and .attr != "fixCurated") | .attr' walk.json > want.txt
+              sort -o want.txt want.txt
+              sort -o got.txt got.txt
+              [ -s want.txt ] || fail 'empty index insecure set'
+              diff -u want.txt got.txt || fail 'pkg-add insecure notices differ from index'
+
+              awk '$1 == "fixAll" && $2 == "added" {
+                u = index($0, "[unfree"); b = index($0, "[broken"); i = index($0, "[insecure")
+                if (u > 0 && u < b && b < i) ok = 1
+              } END { exit !ok }' out.fixAll || fail 'fixAll notice order'
+              awk '$0 ~ /^[[:space:]]*fixClean[[:space:]]+added[[:space:]]+fixClean -- clean package$/ && index($0, "[") == 0 { ok = 1 }
+                END { exit !ok }' out.fixClean || fail 'fixClean report row'
+
+              for attr in fixThrowVuln fixThrowElem fixThrowInsecureList fixInsecureThrowVuln; do
+                [ "$(cat "rc.$attr")" -eq 0 ] || fail "$attr pkg-add exit status"
+                awk -v attr="$attr" '$1 == attr && $2 == "added" { ok = 1 } END { exit !ok }' "out.$attr" || fail "$attr added row"
+              done
+              [ "$(cat rc.fixThrowMeta)" -ne 0 ] || fail 'fixThrowMeta pkg-add exit status'
+              awk '$1 == "fixThrowMeta" && $2 == "no" && $3 == "match" { ok = 1 } END { exit !ok }' out.fixThrowMeta || fail 'fixThrowMeta no match row'
+
               [ "$fails" -eq 0 ] || exit 1
               touch "$out"
             ''

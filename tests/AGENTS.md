@@ -567,6 +567,16 @@ account database, and the real difference between "no such user" and a failing
 lookup, are untested. Concurrent applies by different users are untested too:
 there is no cross-user lock.
 
+`--home-plan` (#1825) is driven end to end by the real caller: apply's own
+coreutils beat a PATH stub, so `id -un` cannot be faked, and the "owner is
+somebody else" rows use `alice`. A failing `id` is therefore untested. Two
+traps from writing those cases: `a || guard || b` still runs `guard` (put
+both skips before it: `[ x ] || [ y ] || guard`), and awk's `index()` returns
+0 for "absent", so `u < b && b < i` passes with a notice missing; require
+`u > 0`. `tests/pkg-index.nix` runs `nixarchy-pkg-add` against the index's own
+fixture nixpkgs for the same reason: two readings of "insecure" are compared,
+not trusted to agree.
+
 ## The agent-id comparison, and the two ways it could have been useless
 
 `pkgs/omarchy/default.nix`'s menu check now asserts every

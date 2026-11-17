@@ -883,17 +883,17 @@
     "nixarchy-herdr": {
       "flake": false,
       "locked": {
-        "lastModified": 1794845015,
-        "narHash": "sha256-M4crsAcL+g9E+7QHPIou3mLN+u+694zm+GnJor5k+3U=",
+        "lastModified": 1794913287,
+        "narHash": "sha256-EtRVZOUcaEZ1/FkhgUXTIrZxre0UPgvzYoIY/I9L/Fk=",
         "owner": "olafkfreund",
         "repo": "nixarchy-herdr",
-        "rev": "9c8a8fa7a59263555d4f789a285215a9eabcb22d",
+        "rev": "7b678da44fb6aa8c4d9508cf6552a260949db89f",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-herdr",
-        "rev": "9c8a8fa7a59263555d4f789a285215a9eabcb22d",
+        "rev": "7b678da44fb6aa8c4d9508cf6552a260949db89f",
         "type": "github"
       }
     },
@@ -945,17 +945,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794844922,
-        "narHash": "sha256-CmQ1l5hG+4ZGnZc8vwbTvl382Yxc4cahY6fJMh8q/q0=",
+        "lastModified": 1794914023,
+        "narHash": "sha256-/C22XtT4QHLqHgZ+NNaxqr6/opcgfIXOW7NFGyAGYjo=",
         "owner": "olafkfreund",
         "repo": "nixarchy-microvm",
-        "rev": "c6b7fce6ef3b24f6527d2fed239d864bfcf976de",
+        "rev": "1edff4ac378cd4688f6ef6c8e8559615b9dade66",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-microvm",
-        "rev": "c6b7fce6ef3b24f6527d2fed239d864bfcf976de",
+        "rev": "1edff4ac378cd4688f6ef6c8e8559615b9dade66",
         "type": "github"
       }
     },
@@ -991,17 +991,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794871403,
-        "narHash": "sha256-NGmn2hVohIQ/KESkXgMa4e4wWRX6Zn2uCakYZM+LcaE=",
+        "lastModified": 1794909981,
+        "narHash": "sha256-m67G0yfw7sN5AB3X6uHRo2qaDqn8tWlNzHGfrNXl+TM=",
         "owner": "olafkfreund",
         "repo": "nixarchy-pkg",
-        "rev": "ca78449395738f3c5fd8ef22cf26c9589706da10",
+        "rev": "d2d2d7c4f1e7f5b9edc9f866205c92033a8527c0",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-pkg",
-        "rev": "ca78449395738f3c5fd8ef22cf26c9589706da10",
+        "rev": "d2d2d7c4f1e7f5b9edc9f866205c92033a8527c0",
         "type": "github"
       }
     },

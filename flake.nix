@@ -206,7 +206,7 @@
     # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-pkg = {
-      url = "github:olafkfreund/nixarchy-pkg/ca78449395738f3c5fd8ef22cf26c9589706da10";
+      url = "github:olafkfreund/nixarchy-pkg/d2d2d7c4f1e7f5b9edc9f866205c92033a8527c0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -260,7 +260,7 @@
     # No flake upstream, so nothing to follow; a commit on master, bumped the
     # way that page says.
     nixarchy-herdr = {
-      url = "github:olafkfreund/nixarchy-herdr/9c8a8fa7a59263555d4f789a285215a9eabcb22d";
+      url = "github:olafkfreund/nixarchy-herdr/7b678da44fb6aa8c4d9508cf6552a260949db89f";
       flake = false;
     };
 
@@ -296,7 +296,7 @@
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
-      url = "github:olafkfreund/nixarchy-microvm/c6b7fce6ef3b24f6527d2fed239d864bfcf976de";
+      url = "github:olafkfreund/nixarchy-microvm/1edff4ac378cd4688f6ef6c8e8559615b9dade66";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -1248,6 +1248,8 @@
           # programs.nixarchy.omarchyApps.enable.
           hype = final.callPackage ./pkgs/apps/hype.nix { };
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };
+          cards = final.callPackage ./pkgs/apps/cards.nix { };
+          checkmate = final.callPackage ./pkgs/apps/checkmate.nix { };
           omarchy-local-ai = final.callPackage ./pkgs/apps/omarchy-local-ai.nix { };
           signed = final.callPackage ./pkgs/apps/signed.nix { };
           disktree = final.callPackage ./pkgs/apps/disktree.nix { };
@@ -1625,6 +1627,8 @@
             omarchy-screensaver
             hype
             monologue
+            cards
+            checkmate
             omarchy-local-ai
             signed
             disktree

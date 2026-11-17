@@ -50,11 +50,11 @@
   };
   "cards" = {
     edge = "only";
-    skip = "Omarchy's own Cards (omacom/cards), a base package since quattro fad23cf; nixpkgs has none, packaging tracked in #1826.";
+    nix = "nixarchy-apps.cards";
   };
   "checkmate" = {
     edge = "only";
-    skip = "Omarchy's own Checkmate (omacom/checkmate), a base package since quattro 3489996; nixpkgs has none, packaging tracked in #1826.";
+    nix = "nixarchy-apps.checkmate";
   };
   "chromium" = {
     edge = "absent";

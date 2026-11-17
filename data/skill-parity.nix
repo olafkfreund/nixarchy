@@ -74,6 +74,7 @@
   "## Command Discovery" = {
     class = "adapted";
     upstream = "7a68ba28af0a";
+    tag_upstream = "d45ca4a1fa32";
     anchor = "omarchy commands --json";
     reason = "The discovery commands are upstream's. What changes is where a command's source is read from -- $OMARCHY_PATH rather than /usr/share/omarchy -- because the store path is the only correct spelling here. Upstream's exception (run omarchy-debug directly, #1823) is for a package install whose router cannot see omarchy-debug; here every omarchy-* is a sibling in one bin/, so `omarchy debug` resolves and the port keeps it.";
   };
@@ -213,6 +214,7 @@
   "## System Commands" = {
     class = "adapted";
     upstream = "d1eaec573e50";
+    tag_upstream = "0e08895d8c64";
     anchor = "omarchy update                  # nix flake update + nixos-rebuild switch";
     reason = "The command list is upstream's; the comment on `omarchy update` names what it runs here, for the same reason the command-group row does.";
   };
@@ -220,6 +222,7 @@
   "## Troubleshooting" = {
     class = "adapted";
     upstream = "f7c3905784a5";
+    tag_upstream = "f1b9b329a7d8";
     anchor = "**`omarchy reinstall` exists but cannot finish here.**";
     reason = "Upstream's debug and refresh commands are kept. What is added is the one command that is present and cannot complete: `omarchy reinstall` starts with a pacman transaction the shim refuses, and an agent needs to know that before it recommends it.";
   };

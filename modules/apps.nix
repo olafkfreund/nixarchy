@@ -4423,8 +4423,30 @@ in
                 text = ''
                   # The two answers as flags, for a caller with no terminal (#765).
                   # Anything else exits 2: an unknown flag must never mean "switch".
-                  yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation="" release_home=""
+                  yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation="" release_home="" homeplan=""
                   expect=()
+                  usage() {
+                    echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
+                    echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
+                    echo "       nixarchy-apply --release-home [--yes] [--no-preview]" >&2
+                    echo "       nixarchy-apply --status [--json]" >&2
+                    echo "       nixarchy-apply --home-plan [--json]" >&2
+                    echo "       nixarchy-apply --log [--follow] [--invocation <id>]" >&2
+                    echo "" >&2
+                    echo "  --json is a stable contract; the plain --status output is NOT." >&2
+                    exit 2
+                  }
+                  for arg in "$@"; do
+                    if [ "$arg" = --home-plan ]; then homeplan=1; fi
+                  done
+                  if [ -n "$homeplan" ]; then
+                    for arg in "$@"; do
+                      case "$arg" in
+                        --home-plan | --json) ;;
+                        *) usage ;;
+                      esac
+                    done
+                  fi
                   while [ $# -gt 0 ]; do
                     case "$1" in
                       --yes) yes=1 ;;
@@ -4432,6 +4454,7 @@ in
                       --detach) detach=1 ;;
                       --release-home) release_home=1 ;;
                       --status) status=1 ;;
+                      --home-plan) homeplan=1 ;;
                       --json) json=1 ;;
                       --log) wantlog=1 ;;
                       --follow) follow=1 ;;
@@ -4451,16 +4474,7 @@ in
                       # exactly the guarantee the flag exists to give, missing in
                       # the mode a panel actually uses.
                       --expect-sha256=*) expect+=("''${1#--expect-sha256=}") ;;
-                      *)
-                        echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
-                        echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
-                        echo "       nixarchy-apply --release-home [--yes] [--no-preview]" >&2
-                        echo "       nixarchy-apply --status [--json]" >&2
-                        echo "       nixarchy-apply --log [--follow] [--invocation <id>]" >&2
-                        echo "" >&2
-                        echo "  --json is a stable contract; the plain --status output is NOT." >&2
-                        exit 2
-                        ;;
+                      *) usage ;;
                     esac
                     shift
                   done
@@ -4595,7 +4609,7 @@ in
                   # after the read-only modes above, before anything is written.
                   # Not in the --detach parent -- the panel ignores its output,
                   # so the unit refuses instead, where the panel can see it.
-                  [ -n "$detach" ] || nixarchy-branch-guard "$flake"
+                  [ -n "$detach" ] || [ -n "$homeplan" ] || nixarchy-branch-guard "$flake"
 
                   if [ -n "$detach" ]; then
                     [ -n "$yes" ] || {
@@ -4755,6 +4769,36 @@ in
                   }
 
                   no_flake_msg="nixarchy: flake directory '$flake' does not exist."$'\n'"Set programs.nixarchy.flake, or export NIXARCHY_FLAKE."
+
+                  if [ -n "$homeplan" ]; then
+                    plan_fail() {
+                      local error=$1
+                      error=''${error:-nixarchy-apply: cannot inspect home.nix}
+                      if [ -n "$json" ]; then
+                        jq -cn --arg e "$error" '{version:1,error:$e}'
+                      fi
+                      printf '%s\n' "$error" >&2
+                      exit 1
+                    }
+                    [ -d "$flake" ] || plan_fail "$no_flake_msg"
+                    pinned=$(mktemp -d 2>&1) || plan_fail "$pinned"
+                    trap 'rm -rf "$pinned"' EXIT
+                    user=$(id -un 2>&1) || plan_fail "$user"
+                    { snapshot_home && classify_home ${homeTemplate} && read_owner && home_decision "$user"; } 2>"$pinned/err" || plan_fail "$(cat "$pinned/err")"
+                    if [ -n "$json" ]; then
+                      jq -cn --arg owner "$owner" --arg caller "$user" \
+                        --arg state "$home_state" --arg action "$home_action" \
+                        --arg renderUser "$render_user" --arg message "$home_message" \
+                        '{version:1,owner:(if $owner == "" then null else $owner end),
+                          caller:$caller,state:$state,action:$action,
+                          renderUser:(if $renderUser == "" then null else $renderUser end),
+                          message:(if $message == "" then null else $message end)}'
+                    else
+                      printf 'home owner: %s; caller: %s; home.nix: %s; apply would: %s\n' \
+                        "''${owner:-none}" "$user" "$home_state" "$home_action"
+                    fi
+                    exit 0
+                  fi
 
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
                   [ -d "$flake" ] || {

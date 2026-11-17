@@ -17,10 +17,11 @@ Approved spec decisions: model both on `pkgs/apps/monologue.nix`
 rules, no custom installPhase, `updateScript` as monologue's); Cards `v0.1.0`
 hash `sha256-tOwGozKCQDBtB5Fm+BrYTIj2gPWniaPH5h898/Q0fsY=`; Checkmate `v0.1.2`
 hash `sha256-/araTInVctB1kdZ70qnGyf8NQ7IaTnLvHAKRFhTGADY=`; both add
-`qt6.qtsvg`; Checkmate adds `xvfb-run` to nativeBuildInputs (its CMake requires
+`qt6.qtsvg`; Checkmate adds `qt6.qtquick3d` and `qt6.qtbase` (Concurrent) as buildInputs, `xvfb-run` to nativeBuildInputs (its CMake requires
 it), `postUnpack` renaming `source` to `checkmate-${version}` so `--version`
 is not `dev`, and `mesa`-backed software GL for tests; `doCheck = true` where
-the sandbox allows, else false with a comment. No ledger rows, default on via
+the sandbox allows (upstream's own setup: `xvfb-run`, `QT_QUICK_BACKEND=rhi`,
+`QSG_RHI_BACKEND=opengl`, `LIBGL_ALWAYS_SOFTWARE=1`), else false with a comment. No ledger rows, default on via
 `preinstall = true` in `data/apps.nix`. Mode A untouched.
 
 ## Steps
@@ -47,7 +48,10 @@ the sandbox allows, else false with a comment. No ledger rows, default on via
 ## Tests
 
 - `nix build .#cards .#checkmate`; smoke: binaries alive under `timeout` with
-  `QT_QPA_PLATFORM=offscreen`; `checkmate --version`.
+  `QT_QPA_PLATFORM=offscreen`; `checkmate --version`. For Checkmate run under
+  `xvfb-run` with the rhi/opengl/software-Mesa env above; the upstream test
+  suite (which loads the real Main.qml and renders) is the rendered-board
+  assertion and is run by hand if `doCheck` is off.
 - Break proof: remove `preinstall = true` from one new row; `options-*` case
   `omarchyApps.on` must fail; restore.
 - `nix fmt -- --ci`, statix, deadnix, `readme-counts.sh`, `review-pins`,

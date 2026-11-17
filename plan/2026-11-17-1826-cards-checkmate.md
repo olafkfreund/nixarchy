@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1826
 spec: spec/2026-11-17-1826-cards-checkmate.md
 coders:

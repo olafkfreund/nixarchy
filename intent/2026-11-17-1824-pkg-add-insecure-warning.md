@@ -39,12 +39,21 @@ what it reports today.
 ## Constraints
 
 - The meaning of "insecure" is the index's (`modules/pkg-index.nix`): `true`
-  from `meta.insecure == true`, or a non-empty list in
-  `meta.knownVulnerabilities`; a throwing meta or a malformed value is "not
-  insecure" and never fails the add. One definition, not a second reading
-  that could disagree with the picker.
-- The probe already evaluates under `tryEval`; a throwing
-  `knownVulnerabilities` must not turn a resolvable package into "no match".
+  when `meta.insecure == true` OR `meta.knownVulnerabilities` is a non-empty
+  list. Each of the two predicates falls back to false on its own when it
+  throws or is malformed (a malformed list does not cancel `insecure = true`),
+  so a throwing `meta.insecure` or `meta.knownVulnerabilities` never fails
+  the add. A whole `meta` that throws keeps today's behaviour (the probe
+  already answers "no match" for it, because of the existing `unfree`,
+  `description` and `broken` reads); this change does not widen or narrow it.
+- The probe's single outer `tryEval` wraps `deepSeq`: a bare read of the new
+  field would turn a resolvable package into "no match". The field is guarded
+  inside the probe and only a boolean is kept in the forced value.
+- Two readings of "insecure" (the picker's and the add path's) must not drift:
+  a check evaluates the same fixture packages through both and compares.
+- Out of scope, as for unfree and broken today: a package added from the
+  other channel (`--other`/`--unstable`), whose row has its own text. The
+  notice order is `[unfree ...]`, `[broken ...]`, then `[insecure ...]`.
 - Output of the unfree and broken notices, and the report columns, do not
   change.
 

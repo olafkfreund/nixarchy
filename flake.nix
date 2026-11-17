@@ -227,7 +227,7 @@
     # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-gltui = {
-      url = "github:olafkfreund/nixarchy-gltui/e2b13c0ccde6febb52e0d8329172a8a125c8703d";
+      url = "github:olafkfreund/nixarchy-gltui/42c67f568e396ca7f7896a1809052cdb681dfc62";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -260,7 +260,7 @@
     # No flake upstream, so nothing to follow; a commit on master, bumped the
     # way that page says.
     nixarchy-herdr = {
-      url = "github:olafkfreund/nixarchy-herdr/7b678da44fb6aa8c4d9508cf6552a260949db89f";
+      url = "github:olafkfreund/nixarchy-herdr/c16db877ca17ede13dea4a7e3b19a55d734fdd96";
       flake = false;
     };
 

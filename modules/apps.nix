@@ -3269,12 +3269,15 @@ in
                             ls = if (q.meta or { }) ? license then
                                    (if builtins.isList q.meta.license then q.meta.license else [ q.meta.license ])
                                  else [ ];
+                            try = x: d: let r = builtins.tryEval x; in if r.success then r.value else d;
+                            m = try (q.meta or { }) { };
                             v = {
                               inherit (q) name;
                               pname = q.pname or \"\";
                               description = q.meta.description or \"\";
                               unfree = !(builtins.all (l: if builtins.isAttrs l then (l.free or true) else true) ls);
                               broken = q.meta.broken or false;
+                              insecure = builtins.isAttrs m && (try ((m.insecure or false) == true) false || try (let kv = m.knownVulnerabilities or null; in builtins.isList kv && kv != [ ]) false);
                             };
                             r = builtins.tryEval
                               (if isPkg
@@ -3360,6 +3363,7 @@ in
                     if [ "$(jq -r .broken <<<"$info")" = true ]; then
                       flags="$flags [broken in nixpkgs -- expect the build to fail]"
                     fi
+                    if [ "$(jq -r .insecure <<<"$info")" = true ]; then flags="$flags [insecure in nixpkgs -- the rebuild will refuse it unless you permit it]"; fi
                     report+=("$attr"$'\t'"added"$'\t'"$(jq -r .name <<<"$info") -- $(jq -r '.description // ""' <<<"$info")$flags")
                   done
 

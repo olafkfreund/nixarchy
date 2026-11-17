@@ -189,7 +189,7 @@ pkgs.runCommand "nixarchy-app-selection"
       | sed 's@< /dev/tty@<<<"query"@' > flathub-function
     grep -q 'flathub_search()' flathub-function || { echo 'Flathub function extraction failed' >&2; exit 1; }
     # The runtime's index is tab-separated, including a curated Flathub ID.
-    printf 'flatpak\torg.example.App\tExample\t\t\n' > index.tsv
+    printf 'flatpak\torg.example.App\tExample\t\t\t\n' > index.tsv
     index=$PWD/index.tsv
     curl() { printf '%s\n' '{"hits":[{"app_id":"org.example.App","name":"Example","summary":"Example"}]}'; }
     fzf() { cat; }

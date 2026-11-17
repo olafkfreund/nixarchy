@@ -1358,6 +1358,52 @@ let
   };
 
   casesD = {
+    homeAppsUserScope = {
+      on =
+        builtins.any (
+          p: pkgs.lib.getName p == "hello"
+        ) homeAppsWorking.home-manager.users.alice.home.packages
+        && !(builtins.any (
+          p: pkgs.lib.getName p == "hello"
+        ) homeAppsWorking.home-manager.users.bob.home.packages);
+      off = mentions "home.nix" (failedAssertions homeAppsWorking);
+    };
+    homeAppsNeedsGlobalPkgs = {
+      on = mentions "home.nix needs home-manager.useGlobalPkgs = true" (
+        failedAssertions (homeAppsConfig {
+          useGlobalPkgs = false;
+        })
+      );
+      off = mentions "home.nix needs home-manager.useGlobalPkgs = true" (
+        failedAssertions homeAppsWorking
+      );
+    };
+    homeAppsNeedsNormalUser = {
+      on = mentions "alice is not a normal user on this machine" (
+        failedAssertions (homeAppsConfig {
+          aliceUser = false;
+        })
+      );
+      off = mentions "alice is not a normal user on this machine" (failedAssertions homeAppsWorking);
+    };
+    homeAppsNeedsOwnConfiguration = {
+      on = mentions "alice has no Home Manager configuration of their own" (
+        failedAssertions (homeAppsConfig {
+          aliceHome = false;
+        })
+      );
+      off = mentions "alice has no Home Manager configuration of their own" (
+        failedAssertions homeAppsWorking
+      );
+    };
+    homeAppsOtherChannel = {
+      on =
+        builtins.any (p: pkgs.lib.getName p == "hello")
+          (homeAppsConfig { otherChannel = true; }).home-manager.users.alice.home.packages;
+      # Unset, the scoped argument is null rather than missing (#1809).
+      off = homeAppsWorking.home-manager.users.alice.home.sessionVariables.NIXARCHY_PKGS_OTHER != "null";
+    };
+
     # ---- nixi, on for everyone, and provably gone when told ----
     #
     # These are the reverse of every other case in this file, and the header's
@@ -3086,6 +3132,86 @@ let
 
   mentions = needle: msgs: builtins.any (m: pkgs.lib.hasInfix needle m) msgs;
 
+  homeAppsText = defaultMachine.environment.etc."nixarchy/home-apps-template.nix".text;
+  homeAppsFile =
+    homeFile:
+    builtins.toFile "nixarchy-apps.nix" (
+      # Both files are created by toFile now; its text cannot carry a store reference.
+      pkgs.lib.replaceStrings
+        [ "@USER@" "@IMPORTS@" "./nixarchy/home.nix" ]
+        [ "alice" "" (builtins.unsafeDiscardStringContext (toString homeFile)) ]
+        homeAppsText
+    );
+  helloHome = builtins.toFile "home-hello.nix" ''
+    { pkgs, pkgsOther, ... }: {
+      home.packages = [ pkgs.hello ];
+      # Records what the scoped argument was, so the null case is read, not assumed.
+      home.sessionVariables.NIXARCHY_PKGS_OTHER = if pkgsOther == null then "null" else "set";
+    }
+  '';
+  otherHelloHome = builtins.toFile "home-other-hello.nix" ''
+    { pkgs, pkgsOther, ... }: { home.packages = [ pkgsOther.hello ]; }
+  '';
+  homeAppsConfig =
+    {
+      useGlobalPkgs ? true,
+      aliceUser ? true,
+      aliceHome ? true,
+      otherChannel ? false,
+    }:
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
+        (homeAppsFile (if otherChannel then otherHelloHome else helloHome))
+        {
+          programs.nixarchy.enable = true;
+          programs.nixarchy.otherChannel.flake = if otherChannel then inputs.nixpkgs.outPath else null;
+          home-manager = {
+            inherit useGlobalPkgs;
+            # A shared module supplies stateVersion, so a user with no configuration
+            # of their own still evaluates and only configuredElsewhere refuses.
+            sharedModules = pkgs.lib.optional (!aliceHome) { home.stateVersion = "25.05"; };
+            users = {
+              bob.home.stateVersion = "25.05";
+            }
+            // pkgs.lib.optionalAttrs aliceHome {
+              alice.home.stateVersion = "25.05";
+            };
+          };
+          users.users = {
+            bob = {
+              isNormalUser = true;
+              home = "/home/bob";
+            };
+            # Not a normal user: a system account, so Home Manager's own user
+            # lookup still resolves and nixarchy's isNormalUser assertion fires.
+            alice =
+              if aliceUser then
+                {
+                  isNormalUser = true;
+                  home = "/home/alice";
+                }
+              else
+                {
+                  isSystemUser = true;
+                  group = "alice";
+                  home = "/home/alice";
+                };
+          };
+          users.groups = pkgs.lib.optionalAttrs (!aliceUser) { alice = { }; };
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+  homeAppsWorking = homeAppsConfig { };
+
   # ---- microvm, whose whole promise is that "off" leaves nothing --------
   #
   # #221 measured `inputs.microvm.nixosModules.host` against `main` before
@@ -4787,7 +4913,7 @@ pkgs.runCommand "nixarchy-options-files"
 
         # ---- the picker's flatpak rows are ONE line each ---------------------
         #
-        # The index is tab-separated, five fields, one row per line. The preview
+        # The index is tab-separated, six fields, one row per line. The preview
         # field is prose and carries its newlines escaped for exactly that
         # reason. Write a real newline into it and the row silently becomes
         # several rows -- which the picker renders without complaint, as
@@ -4795,9 +4921,9 @@ pkgs.runCommand "nixarchy-options-files"
         # during development and nothing but reading the file caught it.
         rows=$(sed -n 's/.*flatpakrows=\(\/nix\/store[^ ]*\).*/\1/p' "$vm/sw/bin/nixarchy-search" | head -1)
         test -n "$rows" || { echo "nixarchy-search names no flatpak rows file" >&2; exit 1; }
-        bad=$(awk -F'\t' 'NF != 5 {print NR": "NF" fields"}' "$rows")
+        bad=$(awk -F'\t' 'NF != 6 {print NR": "NF" fields"}' "$rows")
         if [ -n "$bad" ]; then
-          echo "the picker's flatpak rows are not all five tab-separated fields:" >&2
+          echo "the picker's flatpak rows are not all six tab-separated fields:" >&2
           echo "$bad" >&2
           echo "  a real newline in the preview field splits one row into several" >&2
           exit 1
@@ -5599,6 +5725,18 @@ pkgs.runCommand "nixarchy-options-files"
         chmod u+w "$appfile"
         run() { HOME=$rmhome XDG_CONFIG_HOME=$rmhome/.config PATH="$vm/sw/bin:$PATH" "$@"; }
 
+        printf '%s\n' \
+          '{ pkgs, pkgsOther, ... }:' \
+          '{' \
+          '  home.packages = with pkgs; [  #@pkgs-begin' \
+          '  ];  #@pkgs-end' \
+          '}' > home-template.expected
+        cmp -s home-template.expected "$vm/etc/nixarchy/home-template.nix" || {
+          echo "home-template.nix differs from the approved byte format" >&2
+          exit 1
+        }
+        echo "home-template.nix has the approved byte format"
+
         # An app: enable uncomments the marked row, disable re-comments it.
         appid=$(grep -oE '#@ [a-z0-9_-]+$' "$appfile" | head -1 | cut -d' ' -f2)
         test -n "$appid" || { echo "the apps template has no plain #@ marker to test with" >&2; exit 1; }
@@ -5635,6 +5773,21 @@ pkgs.runCommand "nixarchy-options-files"
           echo "removing the last package left a #@pkg marker behind" >&2; exit 1
         fi
         echo "an added package can be removed, byte for byte"
+
+        cp "$vm/etc/nixarchy/home-template.nix" "$rmhome/.config/nixarchy/home.nix"
+        homefile=$rmhome/.config/nixarchy/home.nix
+        chmod u+w "$homefile"
+        cp "$homefile" home.before
+        cp "$appfile" apps.before
+        run nixarchy-pkg-add --home hello >/dev/null
+        grep -q '#@pkg hello$' "$homefile" && cmp -s apps.before "$appfile" || {
+          echo "pkg-add --home did not write only to home.nix" >&2; exit 1
+        }
+        run nixarchy-pkg-remove --home hello >/dev/null
+        cmp -s home.before "$homefile" && cmp -s apps.before "$appfile" || {
+          echo "pkg add/remove --home is not symmetric, or changed apps.nix" >&2; exit 1
+        }
+        echo "a home package can be removed, byte for byte, without changing apps.nix"
 
         # A batch with a bad name in it (#496). The names resolve in ONE
         # nixpkgs evaluation, and the property that makes that acceptable is

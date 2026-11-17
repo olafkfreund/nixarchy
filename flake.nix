@@ -227,7 +227,7 @@
     # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-gltui = {
-      url = "github:olafkfreund/nixarchy-gltui/8445d254c75450bdce3a9e52a9ecfafa0d164872";
+      url = "github:olafkfreund/nixarchy-gltui/b055ffb3692426aa492b9ace3152264cab03d7fc";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -1835,10 +1835,12 @@
             "apply-imports"
             "apply-staging"
             "home-activation-writes"
+            "home-selection"
             # #1803: check T3 Code palette publication and one-time selection through Home Manager.
             "t3code-theme"
             "language-locale"
             "language-select"
+            "pkg-index"
             "writer-lock"
             # Upstream desktop and installed /etc sources must exist in the package (#1793).
             "media-viewer-desktop"

@@ -4647,10 +4647,118 @@ in
                   fi
                   dest="$base/nixarchy-apps.nix"
 
+                  # Why: modules/AGENTS.md#a-flake-cannot-read-a-file-outside-its-own-tree-so
+                  srcdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
+
+                  select_home_src() {
+                    if [ -f "$pinned/home.nix" ]; then
+                      printf '%s\n' "$pinned/home.nix" || return 1
+                    else
+                      local src="$srcdir/home.nix"
+                      if [ -f "$src" ]; then printf '%s\n' "$src" || return 1; fi
+                    fi
+                    return 0
+                  }
+
+                  snapshot_home() {
+                    home_snap=""
+                    home_state=absent
+                    home_srcmsg="$srcdir/home.nix"
+                    local src
+                    src=$(select_home_src) || return 1
+                    if [ -n "$src" ]; then
+                      home_snap="$pinned/home.snap"
+                      cp "$src" "$home_snap" || return 1
+                    fi
+                  }
+
+                  classify_home() {
+                    home_state=absent
+                    if [ -n "$home_snap" ]; then
+                      if [ ! -f "$home_snap" ]; then
+                        echo "nixarchy-apply: cannot compare home.nix with the seed" >&2
+                        return 1
+                      fi
+                      local rc
+                      if cmp -s "$home_snap" "$1"; then
+                        home_state=seed
+                      else
+                        rc=$?
+                        if [ "$rc" -eq 1 ]; then
+                          home_state=edited
+                        else
+                          echo "nixarchy-apply: cannot compare home.nix with the seed" >&2
+                          return 1
+                        fi
+                      fi
+                    fi
+                  }
+
+                  valid_user() {
+                    [[ $1 =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
+                  }
+
+                  read_owner() {
+                    owner=""
+                    [ -f "$dest" ] || return 0
+                    local candidates exact rc
+                    rc=0
+                    candidates=$(grep -cE '^[[:space:]]*home-manager\.users\.' "$dest" 2>/dev/null) || rc=$?
+                    [ "$rc" -le 1 ] || { echo "nixarchy-apply: cannot read $dest" >&2; return 1; }
+                    rc=0
+                    exact=$(grep -cE '^[[:space:]]*home-manager\.users\."[^"]+"\.imports[[:space:]]*=' "$dest" 2>/dev/null) || rc=$?
+                    [ "$rc" -le 1 ] || { echo "nixarchy-apply: cannot read $dest" >&2; return 1; }
+                    if [ "$candidates" -eq 0 ]; then
+                      return 0
+                    fi
+                    if [ "$candidates" -eq 1 ] && [ "$exact" -eq 1 ]; then
+                      owner=$(sed -nE 's/^[[:space:]]*home-manager\.users\."([^"]+)"\.imports[[:space:]]*=.*/\1/p' "$dest") || return 1
+                      if valid_user "$owner"; then
+                        return 0
+                      fi
+                    fi
+                    owner=""
+                    echo "nixarchy-apply: $dest names several home owners (or an unparseable one); fix it by hand" >&2 || return 1
+                    return 1
+                  }
+
+                  home_decide() {
+                    if [ -z "$1" ]; then
+                      if [ "$3" = edited ]; then printf '%s\n' claim || return 1; else printf '%s\n' keep || return 1; fi
+                    elif [ "$1" = "$2" ]; then
+                      if [ "$3" = absent ]; then printf '%s\n' keep || return 1; else printf '%s\n' copy || return 1; fi
+                    elif [ "$3" = edited ]; then
+                      printf '%s\n' refuse || return 1
+                    else
+                      printf '%s\n' keep || return 1
+                    fi
+                  }
+
+                  home_refusal_text() {
+                    printf '%s' "nixarchy-apply: home.nix belongs to $1; $2 has edited theirs. Ask $1 to apply, or run nixarchy-apply --release-home to give the host up."
+                  }
+
+                  home_decision() {
+                    local user=$1
+                    if ! valid_user "$user"; then
+                      echo "nixarchy-apply: invalid user name: $user" >&2
+                      return 1
+                    fi
+                    home_action=$(home_decide "$owner" "$user" "$home_state") || return 1
+                    render_user=""
+                    home_message=""
+                    case "$home_action" in
+                      claim | copy) render_user="$user" ;;
+                      keep) render_user="$owner" ;;
+                      refuse) home_message=$(home_refusal_text "$owner" "$user") || return 1 ;;
+                    esac
+                  }
+
+                  no_flake_msg="nixarchy: flake directory '$flake' does not exist."$'\n'"Set programs.nixarchy.flake, or export NIXARCHY_FLAKE."
+
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
                   [ -d "$flake" ] || {
-                    echo "nixarchy: flake directory '$flake' does not exist." >&2
-                    echo "Set programs.nixarchy.flake, or export NIXARCHY_FLAKE." >&2
+                    echo "$no_flake_msg" >&2
                     exit 1
                   }
 
@@ -4658,8 +4766,6 @@ in
                   grep -E "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || echo "  (none)"
                   echo
 
-                  # Why: modules/AGENTS.md#a-flake-cannot-read-a-file-outside-its-own-tree-so
-                  srcdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
                   mkdir -p "$base/nixarchy"
 
                   imports=""
@@ -4749,75 +4855,6 @@ in
                       fi
                     done
                   fi
-
-                  select_home_src() {
-                    if [ -f "$pinned/home.nix" ]; then
-                      printf '%s\n' "$pinned/home.nix" || return 1
-                    else
-                      local src="$srcdir/home.nix"
-                      if [ -f "$src" ]; then printf '%s\n' "$src" || return 1; fi
-                    fi
-                    return 0
-                  }
-
-                  snapshot_home() {
-                    home_snap=""
-                    home_state=absent
-                    home_srcmsg="$srcdir/home.nix"
-                    local src
-                    src=$(select_home_src) || return 1
-                    if [ -n "$src" ]; then
-                      home_snap="$pinned/home.snap"
-                      cp "$src" "$home_snap" || return 1
-                    fi
-                  }
-
-                  classify_home() {
-                    home_state=absent
-                    if [ -n "$home_snap" ] && [ -f "$home_snap" ]; then
-                      if cmp -s "$home_snap" "$1"; then
-                        home_state=seed
-                      else
-                        home_state=edited
-                      fi
-                    fi
-                  }
-
-                  valid_user() {
-                    [[ $1 =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
-                  }
-
-                  read_owner() {
-                    owner=""
-                    [ -f "$dest" ] || return 0
-                    local candidates exact
-                    candidates=$(grep -cE '^[[:space:]]*home-manager\.users\.' "$dest" || true)
-                    exact=$(grep -cE '^[[:space:]]*home-manager\.users\."[^"]+"\.imports[[:space:]]*=' "$dest" || true)
-                    if [ "$candidates" -eq 0 ]; then
-                      return 0
-                    fi
-                    if [ "$candidates" -eq 1 ] && [ "$exact" -eq 1 ]; then
-                      owner=$(sed -nE 's/^[[:space:]]*home-manager\.users\."([^"]+)"\.imports[[:space:]]*=.*/\1/p' "$dest") || return 1
-                      if valid_user "$owner"; then
-                        return 0
-                      fi
-                    fi
-                    owner=""
-                    echo "nixarchy-apply: $dest names several home owners (or an unparseable one); fix it by hand" >&2 || return 1
-                    return 1
-                  }
-
-                  home_decide() {
-                    if [ -z "$1" ]; then
-                      if [ "$3" = edited ]; then printf '%s\n' claim || return 1; else printf '%s\n' keep || return 1; fi
-                    elif [ "$1" = "$2" ]; then
-                      if [ "$3" = absent ]; then printf '%s\n' keep || return 1; else printf '%s\n' copy || return 1; fi
-                    elif [ "$3" = edited ]; then
-                      printf '%s\n' refuse || return 1
-                    else
-                      printf '%s\n' keep || return 1
-                    fi
-                  }
 
                   account_exists() {
                     getent passwd "$1" >/dev/null 2>&1 || return $?
@@ -4916,9 +4953,10 @@ in
                   }
 
                   snapshot_home ${homeTemplate} || exit 1
-                  classify_home ${homeTemplate}
+                  classify_home ${homeTemplate} || exit 1
                   user=$(id -un)
                   read_owner || exit 1
+                  render_user=""
                   if [ -n "$release_home" ]; then
                     if [ -z "$owner" ]; then
                       echo "no home owner; nothing to release"
@@ -4929,17 +4967,12 @@ in
                     owner=""
                     home_action=release
                   else
-                    home_action=$(home_decide "$owner" "$user" "$home_state") || exit 1
+                    home_decision "$user" || exit 1
                     if [ "$home_action" = refuse ]; then
-                      echo "nixarchy-apply: home.nix belongs to $owner; $user has edited theirs. Ask $owner to apply, or run nixarchy-apply --release-home to give the host up." >&2
+                      echo "$home_message" >&2
                       exit 1
                     fi
                   fi
-                  render_user=""
-                  case "$home_action" in
-                    claim | copy) render_user="$user" ;;
-                    keep) render_user="$owner" ;;
-                  esac
                   if [ -n "$render_user" ] && ! valid_user "$render_user"; then
                     echo "nixarchy-apply: invalid user name: $render_user" >&2
                     exit 1

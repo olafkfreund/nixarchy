@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/ad99018e37999e659ae43f9c6ac126161ca147bc";
+      url = "github:0xc000022070/zen-browser-flake/ba0680a6756ed68d51e1dab3cd5b41e0b868b0d1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

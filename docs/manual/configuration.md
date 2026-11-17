@@ -538,7 +538,9 @@ An edited file from another user is refused before anything is copied:
 The owner can run `nixarchy-apply --release-home` to remove the import and the
 flake copy, so a later edited apply can claim the host. Anyone can release it
 once the owner's account is confirmed gone; an account lookup failure does not
-count as absence. Release ignores the caller's `home.nix` for that run and
+count as absence. A non-owner can release only when the system reports the
+account does not exist; with a network directory (LDAP, sssd) that is offline,
+the lookup can report that wrongly, so release as the owner or as root. Release ignores the caller's `home.nix` for that run and
 cannot be combined with `--detach`, `--status` or `--log`. A zero-byte
 `home.nix` counts as edited: applying it as the owner copies it and the build
 fails, rather than treating it as an empty module.

@@ -318,6 +318,7 @@ pkgs.runCommand "nixarchy-home-selection"
       replace_calls=$((replace_calls + 1))
       if [ "$replace_calls" -eq 2 ]; then
         [ "$(cat flake/nixarchy/home.nix)" = '# next copy' ] && replace_saw_copy=1
+        real_replace_file "$@"
         return 1
       fi
       real_replace_file "$@"
@@ -351,9 +352,30 @@ pkgs.runCommand "nixarchy-home-selection"
     done
     eval "$(declare -f real_replace_file | sed '1s/real_replace_file/replace_file/')"
 
+    # own-10b: the record write fails after copy and dest were both replaced.
+    mv() {
+      if [ "$#" -eq 2 ] && [ "$2" = "$record" ]; then return 1; fi
+      command mv "$@"
+    }
+    owned_flake alice '# previous owner bytes'
+    mkdir -p "$applied"
+    cp "$dest" dest.before
+    cp flake/nixarchy/home.nix copy.before
+    record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+    printf '%s\n' 'old record' >"$record"
+    cp "$record" record.before
+    printf '%s\n' '# next copy' >"$pinned/home.snap"
+    home_snap=$pinned/home.snap
+    copied=""
+    write_home_pair write rendered.dest >pair.out 2>&1
+    rc=$?
+    [ "$rc" -eq 1 ] && cmp -s dest.before "$dest" && cmp -s copy.before flake/nixarchy/home.nix && cmp -s record.before "$record" || bad own-10b "record failure did not restore copy and dest: $(cat pair.out)"
+    unset -f mv
+
     eval "$(declare -f remove_file | sed '1s/remove_file/real_remove_file/')"
     remove_file() {
       cmp -s rendered.dest "$dest" && remove_saw_dest=1
+      real_remove_file "$@"
       return 1
     }
     owned_flake alice '# previous owner bytes'
@@ -368,6 +390,22 @@ pkgs.runCommand "nixarchy-home-selection"
     rc=$?
     [ "$rc" -eq 1 ] && [ "$remove_saw_dest" -eq 1 ] && cmp -s dest.before "$dest" && cmp -s copy.before flake/nixarchy/home.nix && cmp -s record.before "$record" || bad own-14 "release rollback failed: $(cat pair.out)"
     eval "$(declare -f real_remove_file | sed '1s/real_remove_file/remove_file/')"
+
+    # own-14b: removing the record fails after the copy is already gone.
+    rm() {
+      case "$*" in *"$record"*) return 1 ;; esac
+      command rm "$@"
+    }
+    owned_flake alice '# previous owner bytes'
+    mkdir -p "$applied"
+    cp "$dest" dest.before
+    cp flake/nixarchy/home.nix copy.before
+    record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+    sha256sum <flake/nixarchy/home.nix >"$record"
+    write_home_pair release rendered.dest >pair.out 2>&1
+    rc=$?
+    unset -f rm
+    [ "$rc" -eq 1 ] && cmp -s dest.before "$dest" && cmp -s copy.before flake/nixarchy/home.nix || bad own-14b "record removal failure did not restore copy and dest: $(cat pair.out)"
 
     for action in write release; do
       owned_flake alice '# previous owner bytes'
@@ -403,6 +441,29 @@ pkgs.runCommand "nixarchy-home-selection"
       kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
       [ "$rc" -eq 0 ] && [ -z "$kept" ] && ! grep -qF 'NOTE:' pair.out || bad own-16a "$action backed up a matching record: $(cat pair.out)"
     done
+
+    # own-16c: a copy already equal to the snapshot is not an edit, whatever the record says.
+    owned_flake alice '# next copy'
+    mkdir -p "$applied"
+    record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+    printf '%s\n' 'stale record' >"$record"
+    printf '%s\n' '# next copy' >"$pinned/home.snap"
+    home_snap=$pinned/home.snap
+    copied=""
+    write_home_pair write rendered.dest >pair.out 2>&1
+    rc=$?
+    kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
+    [ "$rc" -eq 0 ] && [ -z "$kept" ] && ! grep -qF 'NOTE:' pair.out || bad own-16c "identical copy raised a false edit note: $(cat pair.out)"
+
+    # own-16d: a differing copy with no record is kept, not overwritten silently.
+    owned_flake alice '# orphan copy'
+    mkdir -p "$applied"
+    printf '%s\n' '# next copy' >"$pinned/home.snap"
+    copied=""
+    write_home_pair write rendered.dest >pair.out 2>&1
+    rc=$?
+    kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
+    [ "$rc" -eq 0 ] && [ -n "$kept" ] && [ "$(cat "$kept")" = '# orphan copy' ] && grep -qF 'NOTE:' pair.out || bad own-16d "unrecorded copy was lost: $(cat pair.out)"
 
     user=$(id -un)
     fresh_flake
@@ -454,6 +515,14 @@ pkgs.runCommand "nixarchy-home-selection"
     rc=$?
     [ "$rc" -ne 0 ] && grep -qF alice own6.out && grep -qF -- '--release-home' own6.out && [ "$(fhash)" = "$before" ] || bad own-6 "non-owner edit was copied before refusal: rc=$rc $(cat own6.out)"
 
+    # own-17: the first-ever claim must leave a file the next user can read.
+    fresh_flake
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own17.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && [ "$(stat -c %a "$generated")" = 644 ] || bad own-17 "first claim mode $(stat -c %a "$generated"): rc=$rc $(cat own17.out)"
+
     for variant in two duplicate mixed unquoted invalid; do
       owned_flake alice '# previous owner bytes'
       reset_files
@@ -467,7 +536,7 @@ pkgs.runCommand "nixarchy-home-selection"
       before=$(fhash)
       NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own7b.out 2>&1
       rc=$?
-      [ "$rc" -ne 0 ] && [ "$(fhash)" = "$before" ] || bad own-7b "$variant changed flake or was accepted: rc=$rc $(cat own7b.out)"
+      [ "$rc" -ne 0 ] && [ "$(fhash)" = "$before" ] && grep -qF 'names several home owners (or an unparseable one)' own7b.out || bad own-7b "$variant changed flake or was accepted: rc=$rc $(cat own7b.out)"
     done
 
     fresh_flake

@@ -4848,7 +4848,9 @@ in
                     rm -f "$pinned/home.bak" "$pinned/dest.bak" || return 1
                     if [ -f "$copy" ]; then cp -p "$copy" "$pinned/home.bak" || return 1; fi
                     if [ -f "$dest" ]; then cp -p "$dest" "$pinned/dest.bak" || return 1; fi
-                    if [ -f "$copy" ] && [ -f "$record" ] && ! sha256sum <"$copy" | cmp -s - "$record"; then
+                    # A copy already equal to the snapshot loses nothing; one with no
+                    # record (orphan or hand-made) is as unrecorded as an edited one.
+                    if [ -f "$copy" ] && { [ "$1" != write ] || ! cmp -s "$copy" "$home_snap"; } && { [ ! -f "$record" ] || ! sha256sum <"$copy" | cmp -s - "$record"; }; then
                       kept="$applied/home.nix.edited-in-flake.$(date +%Y%m%d%H%M%S)" || return 1
                       cp "$copy" "$kept" || return 1
                       echo "NOTE: $copy was edited in the flake since the last apply." || return 1
@@ -5011,6 +5013,8 @@ in
                       echo "}"
                     fi
                   } >"$tmp"
+                  # mktemp makes 0600; a first-ever file must stay readable to the next user.
+                  [ -f "$dest" ] || chmod 0644 "$tmp" || exit 1
                   case "$home_action" in
                     claim | copy)
                       write_home_pair write "$tmp" || { rm -f "$tmp"; exit 1; }

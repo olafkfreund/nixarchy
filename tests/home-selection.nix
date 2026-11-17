@@ -54,6 +54,7 @@ pkgs.runCommand "nixarchy-home-selection"
     nativeBuildInputs = with pkgs; [
       bash
       coreutils
+      getent
       gnugrep
       gnused
       nix
@@ -82,6 +83,18 @@ pkgs.runCommand "nixarchy-home-selection"
       printf '%s\n' '{ pkgs, pkgsOther, ... }:' '{' '  home.packages = with pkgs; [  #@pkgs-begin' '  ];  #@pkgs-end' '}' > "$homefile"
       printf '%s\n' '{ pkgs, ... }:' '{' '  environment.systemPackages = with pkgs; [  #@pkgs-begin' '  ];  #@pkgs-end' '}' > "$appsfile"
     }
+    fresh_flake() {
+      rm -rf flake "$XDG_STATE_HOME/nixarchy/applied"
+      mkdir -p flake
+      printf '%s\n' '{ outputs = _: { }; }' >flake/flake.nix
+    }
+    owned_flake() {
+      fresh_flake
+      mkdir -p flake/nixarchy
+      sed -e "s|@USER@|$1|g" -e 's|@IMPORTS@| ./nixarchy/apps.nix|g' ${homeAppsTemplate} >flake/nixarchy-apps.nix
+      printf '%s\n' "$2" >flake/nixarchy/home.nix
+    }
+    fhash() { find flake -type f | sort | xargs sha256sum | sha256sum; }
     reset_files
     cp "$appsfile" apps.before
     "$pkgadd" --home hello >case1.out 2>&1
@@ -141,8 +154,7 @@ pkgs.runCommand "nixarchy-home-selection"
     nh() { :; }
     nixarchy-branch-guard() { :; }
     export -f nh nixarchy-branch-guard
-    mkdir -p flake
-    printf '%s\n' '{ outputs = _: { }; }' >flake/flake.nix
+    fresh_flake
     reset_files
     rm "$homefile"
     NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >case8plain.out 2>&1
@@ -155,6 +167,7 @@ pkgs.runCommand "nixarchy-home-selection"
       '{' '  imports = [ ./nixarchy/apps.nix ];' '}' >plain.expected
     [ "$rc" -eq 0 ] && cmp -s plain.expected "$generated" || bad 8 "without home: rc=$rc $(cat case8plain.out)"
     reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
     NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >case8home.out 2>&1
     rc=$?
     user=$(id -un)
@@ -169,9 +182,14 @@ pkgs.runCommand "nixarchy-home-selection"
     rc=$?
     [ "$rc" -eq 4 ] && grep -qF 'Nothing was copied and nothing was built' case9.out && cmp -s generated.before "$generated" && cmp -s copied.before flake/nixarchy/home.nix && cmp -s copied-apps.before flake/nixarchy/apps.nix || bad 9 "rc=$rc $(cat case9.out)"
 
-    sed -n '/^select_home_src() {/,/^}/p' "$apply" >select-home-function
-    [ -s select-home-function ] || bad 10 'select_home_src extraction empty'
-    source select-home-function
+    extract() { sed -n "/^$1() {/,/^}/p" "$apply"; }
+    : >apply-functions
+    for function in valid_user select_home_src snapshot_home classify_home read_owner home_decide account_exists release_allowed replace_file remove_file restore_one write_home_pair; do
+      extract "$function" >one-function
+      [ -s one-function ] || bad own-7a "$function extraction empty"
+      cat one-function >>apply-functions
+    done
+    source apply-functions
     pinned=$PWD/pinned
     srcdir=$XDG_CONFIG_HOME/nixarchy
     mkdir -p "$pinned"
@@ -187,16 +205,415 @@ pkgs.runCommand "nixarchy-home-selection"
     rm "$pinned/home.nix"
     selected=$(select_home_src)
     [ -z "$selected" ] || bad 10 "missing selection: $selected"
-    [ "$(grep -cF '$srcdir/home.nix' "$apply")" -eq 1 ] || bad 10 'live source is tested outside select_home_src'
+    live_count=$(grep -cF '$srcdir/home.nix' "$apply" || true)
+    outside_count=$(sed '/^select_home_src() {/,/^}/d; /^snapshot_home() {/,/^}/d' "$apply" | grep -cF '$srcdir/home.nix' || true)
+    [ "$live_count" -ge 1 ] && [ "$outside_count" -eq 0 ] || bad 10 'live home source is named outside the selection and snapshot functions'
 
     # Static, because a PATH stub cannot beat apply's own coreutils: the name check
-    # runs only with a home part, so a user without home.nix is never refused.
-    grep -qF 'if [ -n "$home_src" ] && ! valid_user "$user"; then' "$apply" || bad 11 'the user-name check is not gated on a home part'
-    sed -n '/^valid_user() {/,/^}/p' "$apply" >valid-user-function
-    [ -s valid-user-function ] || bad 11 'valid_user extraction empty'
-    source valid-user-function
+    # runs only when a user name reaches generated Nix.
+    grep -qF 'if [ -n "$render_user" ] && ! valid_user "$render_user"; then' "$apply" || bad 11 'the generated user-name check is not gated on an import'
     for name in alice bob_2; do valid_user "$name" || bad 11 "rejected $name"; done
     for name in Alice 'a b' 'x"y' ""; do valid_user "$name" && bad 11 "accepted [$name]"; done
+
+    dest=$PWD/owner.fixture
+    printf '%s\n' 'home-manager.users."alice".imports = [' >"$dest"
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ "$owner" = alice ] || bad own-7a 'single owner not parsed'
+    printf '%s\n' '    home-manager.users."bob_2".imports = [' >"$dest"
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ "$owner" = bob_2 ] || bad own-7a 'indented owner not parsed'
+    sed -e 's|@USER@|alice|g' -e 's|@IMPORTS@| ./nixarchy/apps.nix|g' ${homeAppsTemplate} >"$dest"
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ "$owner" = alice ] || bad own-7a 'generated owner not parsed exactly once'
+    for variant in two duplicate mixed unquoted invalid empty; do
+      case "$variant" in
+        two) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."bob".imports = [' >"$dest" ;;
+        duplicate) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."alice".imports = [' >"$dest" ;;
+        mixed) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users.bob.imports = [' >"$dest" ;;
+        unquoted) printf '%s\n' 'home-manager.users.alice.imports = [' >"$dest" ;;
+        invalid) printf '%s\n' 'home-manager.users."-bad".imports = [' >"$dest" ;;
+        empty) printf '%s\n' 'home-manager.users."".imports = [' >"$dest" ;;
+      esac
+      owner=stale
+      read_owner 2>owner.err
+      [ "$?" -eq 1 ] && [ -z "$owner" ] && grep -qF "$dest names several home owners" owner.err || bad own-7a "$variant was accepted or owner was retained"
+    done
+    rm "$dest"
+    owner=stale
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ -z "$owner" ] || bad own-7a 'missing owner file was not unowned'
+    printf '%s\n' '{ imports = [ ./nixarchy/apps.nix ]; }' >"$dest"
+    owner=stale
+    read_owner 2>owner.err
+    [ "$?" -eq 0 ] && [ -z "$owner" ] || bad own-7a 'ownerless file was not unowned'
+
+    decision_expected() {
+      got=$(home_decide "$1" "$2" "$3")
+      rc=$?
+      [ "$rc" -eq 0 ] && [ "$got" = "$4" ] || bad own-11 "owner=[$1] caller=$2 state=$3: rc=$rc, got $got, wanted $4"
+    }
+    decision_expected "" alice edited claim
+    decision_expected "" alice seed keep
+    decision_expected "" alice absent keep
+    decision_expected alice alice seed copy
+    decision_expected alice alice edited copy
+    decision_expected alice alice absent keep
+    decision_expected alice bob absent keep
+    decision_expected alice bob seed keep
+    decision_expected alice bob edited refuse
+
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "%s\n" "$*" >> "$GETENT_CALLS"' 'exit "$GETENT_RC"' >stub/getent
+    chmod +x stub/getent
+    export PATH=$PWD/stub:$PATH GETENT_CALLS=$PWD/getent.calls
+    for GETENT_RC in 0 2 127 1; do
+      export GETENT_RC
+      : >"$GETENT_CALLS"
+      release_allowed alice bob 2>release.err
+      rc=$?
+      case "$GETENT_RC" in
+        0) [ "$rc" -eq 1 ] && grep -qF 'home.nix belongs to alice' release.err || bad own-9a 'existing owner was released' ;;
+        2) [ "$rc" -eq 0 ] && [ ! -s release.err ] || bad own-9a 'absent owner was refused' ;;
+        *) [ "$rc" -eq 1 ] && grep -qF "cannot tell whether alice still has an account (getent exited $GETENT_RC)" release.err || bad own-9a "lookup failure $GETENT_RC was allowed" ;;
+      esac
+      [ "$(cat "$GETENT_CALLS")" = 'passwd alice' ] || bad own-9a "getent call for $GETENT_RC was not passwd alice"
+    done
+    : >"$GETENT_CALLS"
+    release_allowed alice alice 2>release.err
+    [ "$?" -eq 0 ] && [ ! -s "$GETENT_CALLS" ] && [ ! -s release.err ] || bad own-9a 'owner release called getent or was refused'
+
+    base=$PWD/flake
+    applied=$XDG_STATE_HOME/nixarchy/applied
+    dest=$base/nixarchy-apps.nix
+    printf '%s\n' '# seed bytes' >home.template
+    printf '%s\n' '# new generated owner' >rendered.dest
+    for selection in live pinned; do
+      owned_flake alice '# previous owner bytes'
+      mkdir -p "$applied"
+      printf '%s\n' '# seed bytes' >"$homefile"
+      if [ "$selection" = pinned ]; then
+        cp home.template "$pinned/home.nix"
+      else
+        rm -f "$pinned/home.nix"
+      fi
+      snapshot_home home.template
+      snap_rc=$?
+      printf '%s\n' '# edited after snapshot' >"$homefile"
+      if [ "$selection" = pinned ]; then printf '%s\n' '# pinned edited after snapshot' >"$pinned/home.nix"; fi
+      classify_home home.template
+      copied=""
+      write_home_pair write rendered.dest >pair.out 2>&1
+      pair_rc=$?
+      [ "$snap_rc" -eq 0 ] && [ "$pair_rc" -eq 0 ] && [ "$home_state" = seed ] && cmp -s home.template flake/nixarchy/home.nix && [ "$copied" = ' home' ] || bad own-12 "$selection snapshot or pair write failed: $(cat pair.out)"
+    done
+    home_snap=""
+    classify_home home.template
+    [ "$home_state" = absent ] || bad own-12 'missing snapshot was not absent'
+    : >"$pinned/home.snap"
+    home_snap=$pinned/home.snap
+    classify_home home.template
+    [ "$home_state" = edited ] || bad own-12 'zero-byte snapshot was not edited'
+
+    eval "$(declare -f replace_file | sed '1s/replace_file/real_replace_file/')"
+    replace_file() {
+      replace_calls=$((replace_calls + 1))
+      if [ "$replace_calls" -eq 2 ]; then
+        [ "$(cat flake/nixarchy/home.nix)" = '# next copy' ] && replace_saw_copy=1
+        real_replace_file "$@"
+        return 1
+      fi
+      real_replace_file "$@"
+    }
+    for previous in yes no; do
+      owned_flake alice '# previous owner bytes'
+      mkdir -p "$applied"
+      cp "$dest" dest.before
+      if [ "$previous" = yes ]; then
+        cp flake/nixarchy/home.nix copy.before
+      else
+        rm flake/nixarchy/home.nix
+      fi
+      record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+      printf '%s\n' 'old record' >"$record"
+      cp "$record" record.before
+      printf '%s\n' '# next copy' >"$pinned/home.snap"
+      home_snap=$pinned/home.snap
+      home_srcmsg=$homefile
+      copied=""
+      replace_calls=0
+      replace_saw_copy=0
+      write_home_pair write rendered.dest >pair.out 2>&1
+      rc=$?
+      [ "$rc" -eq 1 ] && [ "$replace_saw_copy" -eq 1 ] && cmp -s dest.before "$dest" && cmp -s record.before "$record" || bad own-10 "$previous: pair or record was not restored: $(cat pair.out)"
+      if [ "$previous" = yes ]; then
+        cmp -s copy.before flake/nixarchy/home.nix || bad own-10 'previous copy bytes were not restored'
+      else
+        [ ! -e flake/nixarchy/home.nix ] || bad own-10 'new copy was left after failed destination write'
+      fi
+    done
+    eval "$(declare -f real_replace_file | sed '1s/real_replace_file/replace_file/')"
+
+    # own-10b: the record write fails after copy and dest were both replaced.
+    mv() {
+      if [ "$#" -eq 2 ] && [ "$2" = "$record" ]; then return 1; fi
+      command mv "$@"
+    }
+    owned_flake alice '# previous owner bytes'
+    mkdir -p "$applied"
+    cp "$dest" dest.before
+    cp flake/nixarchy/home.nix copy.before
+    record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+    printf '%s\n' 'old record' >"$record"
+    cp "$record" record.before
+    printf '%s\n' '# next copy' >"$pinned/home.snap"
+    home_snap=$pinned/home.snap
+    copied=""
+    write_home_pair write rendered.dest >pair.out 2>&1
+    rc=$?
+    [ "$rc" -eq 1 ] && cmp -s dest.before "$dest" && cmp -s copy.before flake/nixarchy/home.nix && cmp -s record.before "$record" || bad own-10b "record failure did not restore copy and dest: $(cat pair.out)"
+    unset -f mv
+
+    eval "$(declare -f remove_file | sed '1s/remove_file/real_remove_file/')"
+    remove_file() {
+      cmp -s rendered.dest "$dest" && remove_saw_dest=1
+      real_remove_file "$@"
+      return 1
+    }
+    owned_flake alice '# previous owner bytes'
+    mkdir -p "$applied"
+    cp "$dest" dest.before
+    cp flake/nixarchy/home.nix copy.before
+    record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+    sha256sum <flake/nixarchy/home.nix >"$record"
+    cp "$record" record.before
+    remove_saw_dest=0
+    write_home_pair release rendered.dest >pair.out 2>&1
+    rc=$?
+    [ "$rc" -eq 1 ] && [ "$remove_saw_dest" -eq 1 ] && cmp -s dest.before "$dest" && cmp -s copy.before flake/nixarchy/home.nix && cmp -s record.before "$record" || bad own-14 "release rollback failed: $(cat pair.out)"
+    eval "$(declare -f real_remove_file | sed '1s/real_remove_file/remove_file/')"
+
+    # own-14b: removing the record fails after the copy is already gone.
+    rm() {
+      case "$*" in *"$record"*) return 1 ;; esac
+      command rm "$@"
+    }
+    owned_flake alice '# previous owner bytes'
+    mkdir -p "$applied"
+    cp "$dest" dest.before
+    cp flake/nixarchy/home.nix copy.before
+    record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+    sha256sum <flake/nixarchy/home.nix >"$record"
+    write_home_pair release rendered.dest >pair.out 2>&1
+    rc=$?
+    unset -f rm
+    [ "$rc" -eq 1 ] && cmp -s dest.before "$dest" && cmp -s copy.before flake/nixarchy/home.nix || bad own-14b "record removal failure did not restore copy and dest: $(cat pair.out)"
+
+    for action in write release; do
+      owned_flake alice '# previous owner bytes'
+      mkdir -p "$applied"
+      record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+      sha256sum <flake/nixarchy/home.nix >"$record"
+      printf '%s\n' '# edited in flake' >flake/nixarchy/home.nix
+      printf '%s\n' '# next copy' >"$pinned/home.snap"
+      home_snap=$pinned/home.snap
+      home_srcmsg=$homefile
+      copied=""
+      write_home_pair "$action" rendered.dest >pair.out 2>&1
+      rc=$?
+      kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
+      [ "$rc" -eq 0 ] && [ -n "$kept" ] && [ "$(cat "$kept")" = '# edited in flake' ] && grep -qF 'NOTE:' pair.out && grep -qF "$homefile" pair.out || bad own-16a "$action did not retain edited flake bytes: $(cat pair.out)"
+      if [ "$action" = write ]; then
+        cmp -s "$home_snap" flake/nixarchy/home.nix && [ -f "$record" ] || bad own-16a 'write did not refresh the copy and record'
+      else
+        [ ! -e flake/nixarchy/home.nix ] && [ ! -e "$record" ] || bad own-16a 'release left the copy or record'
+      fi
+    done
+    for action in write release; do
+      owned_flake alice '# previous owner bytes'
+      mkdir -p "$applied"
+      record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+      sha256sum <flake/nixarchy/home.nix >"$record"
+      printf '%s\n' '# next copy' >"$pinned/home.snap"
+      home_snap=$pinned/home.snap
+      home_srcmsg=$homefile
+      copied=""
+      write_home_pair "$action" rendered.dest >pair.out 2>&1
+      rc=$?
+      kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
+      [ "$rc" -eq 0 ] && [ -z "$kept" ] && ! grep -qF 'NOTE:' pair.out || bad own-16a "$action backed up a matching record: $(cat pair.out)"
+    done
+
+    # own-16c: a copy already equal to the snapshot is not an edit, whatever the record says.
+    owned_flake alice '# next copy'
+    mkdir -p "$applied"
+    record="$applied/$(printf '%s' "$base/nixarchy/home.nix" | sha256sum | cut -c1-16)"
+    printf '%s\n' 'stale record' >"$record"
+    printf '%s\n' '# next copy' >"$pinned/home.snap"
+    home_snap=$pinned/home.snap
+    copied=""
+    write_home_pair write rendered.dest >pair.out 2>&1
+    rc=$?
+    kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
+    [ "$rc" -eq 0 ] && [ -z "$kept" ] && ! grep -qF 'NOTE:' pair.out || bad own-16c "identical copy raised a false edit note: $(cat pair.out)"
+
+    # own-16d: a differing copy with no record is kept, not overwritten silently.
+    owned_flake alice '# orphan copy'
+    mkdir -p "$applied"
+    printf '%s\n' '# next copy' >"$pinned/home.snap"
+    copied=""
+    write_home_pair write rendered.dest >pair.out 2>&1
+    rc=$?
+    kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
+    [ "$rc" -eq 0 ] && [ -n "$kept" ] && [ "$(cat "$kept")" = '# orphan copy' ] && grep -qF 'NOTE:' pair.out || bad own-16d "unrecorded copy was lost: $(cat pair.out)"
+
+    user=$(id -un)
+    fresh_flake
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own1.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF "home-manager.users.\"$user\".imports" "$generated" && cmp -s "$homefile" flake/nixarchy/home.nix || bad own-1 "unowned edited home did not claim: rc=$rc $(cat own1.out)"
+
+    fresh_flake
+    reset_files
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own2.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && cmp -s plain.expected "$generated" && ! grep -qF 'home-manager.users' "$generated" && [ ! -e flake/nixarchy/home.nix ] || bad own-2 "unowned seed claimed: rc=$rc $(cat own2.out)"
+
+    owned_flake "$user" '# previous owner bytes'
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own3edited.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && cmp -s "$homefile" flake/nixarchy/home.nix || bad own-3 "owner edit not copied: rc=$rc $(cat own3edited.out)"
+    reset_files
+    ! cmp -s "$homefile" flake/nixarchy/home.nix || bad own-3 'pre-seed copy was already seed'
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own3seed.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && cmp -s "$homefile" flake/nixarchy/home.nix || bad own-3 "owner seed not copied: rc=$rc $(cat own3seed.out)"
+
+    owned_flake alice '# previous owner bytes'
+    reset_files
+    rm "$homefile"
+    cp flake/nixarchy/home.nix copy.before
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own4.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF 'home-manager.users."alice".imports' "$generated" && cmp -s copy.before flake/nixarchy/home.nix || bad own-4 "non-owner absent home changed owner: rc=$rc $(cat own4.out)"
+
+    owned_flake alice '# previous owner bytes'
+    reset_files
+    cp flake/nixarchy/home.nix copy.before
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own5.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF 'home-manager.users."alice".imports' "$generated" && cmp -s copy.before flake/nixarchy/home.nix || bad own-5 "non-owner seed changed owner: rc=$rc $(cat own5.out)"
+
+    owned_flake alice '# previous owner bytes'
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    printf '%s\n' '# stale apps bytes' >flake/nixarchy/apps.nix
+    before=$(fhash)
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own6.out 2>&1
+    rc=$?
+    [ "$rc" -ne 0 ] && grep -qF alice own6.out && grep -qF -- '--release-home' own6.out && [ "$(fhash)" = "$before" ] || bad own-6 "non-owner edit was copied before refusal: rc=$rc $(cat own6.out)"
+
+    # own-17: the first-ever claim must leave a file the next user can read.
+    fresh_flake
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own17.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && [ "$(stat -c %a "$generated")" = 644 ] || bad own-17 "first claim mode $(stat -c %a "$generated"): rc=$rc $(cat own17.out)"
+
+    for variant in two duplicate mixed unquoted invalid; do
+      owned_flake alice '# previous owner bytes'
+      reset_files
+      case "$variant" in
+        two) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."bob".imports = [' >"$generated" ;;
+        duplicate) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."alice".imports = [' >"$generated" ;;
+        mixed) printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users.bob.imports = [' >"$generated" ;;
+        unquoted) printf '%s\n' 'home-manager.users.alice.imports = [' >"$generated" ;;
+        invalid) printf '%s\n' 'home-manager.users."-bad".imports = [' >"$generated" ;;
+      esac
+      before=$(fhash)
+      NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own7b.out 2>&1
+      rc=$?
+      [ "$rc" -ne 0 ] && [ "$(fhash)" = "$before" ] && grep -qF 'names several home owners (or an unparseable one)' own7b.out || bad own-7b "$variant changed flake or was accepted: rc=$rc $(cat own7b.out)"
+    done
+
+    fresh_flake
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own16b-first.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] || bad own-16b "initial owner apply failed: rc=$rc $(cat own16b-first.out)"
+    printf '%s\n' '# edited in flake' >flake/nixarchy/home.nix
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own16b-second.out 2>&1
+    rc=$?
+    kept=$(find "$applied" -maxdepth 1 -name 'home.nix.edited-in-flake.*' -print -quit)
+    [ "$rc" -eq 0 ] && cmp -s "$homefile" flake/nixarchy/home.nix && [ -n "$kept" ] && [ "$(cat "$kept")" = '# edited in flake' ] || bad own-16b "flake edit not retained: rc=$rc $(cat own16b-second.out)"
+
+    owned_flake "$user" '# previous owner bytes'
+    reset_files
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own8-release.out 2>own8-release.err
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF "released home.nix from $user" own8-release.out && cmp -s plain.expected "$generated" && [ ! -e flake/nixarchy/home.nix ] || bad own-8 "owner release failed: rc=$rc $(cat own8-release.out own8-release.err)"
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >own8-claim.out 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF "home-manager.users.\"$user\".imports" "$generated" && cmp -s "$homefile" flake/nixarchy/home.nix || bad own-8 "claim after release failed: rc=$rc $(cat own8-claim.out)"
+    before=$(fhash)
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home --expect-sha256 home=$(printf %064d 0) >own8-pin.out 2>&1
+    rc=$?
+    [ "$rc" -eq 4 ] && [ "$(fhash)" = "$before" ] || bad own-8 "release ignored a mismatched home pin: rc=$rc $(cat own8-pin.out)"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own8-empty.out 2>&1
+    rc=$?
+    before=$(fhash)
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own8-empty-again.out 2>&1
+    empty_rc=$?
+    [ "$rc" -eq 0 ] && [ "$empty_rc" -eq 0 ] && grep -qF 'no home owner; nothing to release' own8-empty-again.out && [ "$(fhash)" = "$before" ] || bad own-8 "empty owner was not a no-op: rc=$empty_rc $(cat own8-empty-again.out)"
+
+    getent_real=${pkgs.getent}/bin/getent
+    "$getent_real" passwd nobody >/dev/null 2>&1 || bad own-9b 'precondition failed: nobody account is missing'
+    [ "$user" != nobody ] || bad own-9b 'precondition failed: caller is nobody'
+    owned_flake nobody '# previous owner bytes'
+    reset_files
+    before=$(fhash)
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own9b-refused.out 2>own9b-refused.err
+    rc=$?
+    [ "$rc" -eq 1 ] && grep -qF 'home.nix belongs to nobody' own9b-refused.err && [ "$(fhash)" = "$before" ] || bad own-9b "existing account released: rc=$rc $(cat own9b-refused.out own9b-refused.err)"
+    "$getent_real" passwd gone-1817 >/dev/null 2>&1
+    [ "$?" -eq 2 ] || bad own-9b 'precondition failed: gone-1817 account exists or lookup failed'
+    owned_flake gone-1817 '# previous owner bytes'
+    reset_files
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own9b-allowed.out 2>own9b-allowed.err
+    rc=$?
+    [ "$rc" -eq 0 ] && grep -qF 'released home.nix from gone-1817' own9b-allowed.out && cmp -s plain.expected "$generated" && [ ! -e flake/nixarchy/home.nix ] || bad own-9b "absent account release failed: rc=$rc $(cat own9b-allowed.out own9b-allowed.err)"
+
+    owned_flake "$user" '# previous owner bytes'
+    reset_files
+    sed -i '/#@pkgs-end/i\    hello  #@pkg hello' "$homefile"
+    printf '%s\n' '# changed apps' >>"$appsfile"
+    for part in services advanced flatsnap; do
+      printf '%s\n' "# $part source" >"$XDG_CONFIG_HOME/nixarchy/$part.nix"
+    done
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home >own13.out 2>&1
+    rc=$?
+    copied_parts=1
+    for part in apps services advanced flatsnap; do
+      cmp -s "$XDG_CONFIG_HOME/nixarchy/$part.nix" "flake/nixarchy/$part.nix" || copied_parts=0
+    done
+    [ "$rc" -eq 0 ] && [ "$copied_parts" -eq 1 ] && [ ! -e flake/nixarchy/home.nix ] && ! grep -qF 'home-manager.users' "$generated" && grep -qF 'released home.nix from' own13.out || bad own-13 "release copied or claimed the wrong parts: rc=$rc $(cat own13.out)"
+
+    owned_flake "$user" '# previous owner bytes'
+    reset_files
+    before=$(fhash)
+    for flag in --detach --status --log; do
+      NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview --release-home "$flag" >own15.out 2>own15.err
+      rc=$?
+      [ "$rc" -eq 2 ] && grep -qF -- '--release-home cannot be combined' own15.err && [ "$(fhash)" = "$before" ] || bad own-15 "$flag was accepted or changed the flake: rc=$rc $(cat own15.out own15.err)"
+    done
+    reject_line=$(grep -nF 'nixarchy-apply: --release-home cannot be combined' "$apply" | head -1 | cut -d: -f1)
+    unit_line=$(grep -nF 'systemd-run --user --unit=nixarchy-rebuild' "$apply" | head -1 | cut -d: -f1)
+    [ -n "$reject_line" ] && [ -n "$unit_line" ] && [ "$reject_line" -lt "$unit_line" ] || bad own-15 'release flag rejection is after the detach unit start'
 
     [ "$fails" -eq 0 ] || { echo "$fails case(s) failed"; exit 1; }
     touch "$out"

@@ -4397,6 +4397,7 @@ in
                   (pkgs.callPackage ../pkgs/branch-guard.nix { })
                   pkgs.coreutils
                   pkgs.diffutils
+                  pkgs.getent
                   pkgs.gnugrep
                   pkgs.git
                   pkgs.gnused
@@ -4422,13 +4423,14 @@ in
                 text = ''
                   # The two answers as flags, for a caller with no terminal (#765).
                   # Anything else exits 2: an unknown flag must never mean "switch".
-                  yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation=""
+                  yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation="" release_home=""
                   expect=()
                   while [ $# -gt 0 ]; do
                     case "$1" in
                       --yes) yes=1 ;;
                       --no-preview) nopreview=1 ;;
                       --detach) detach=1 ;;
+                      --release-home) release_home=1 ;;
                       --status) status=1 ;;
                       --json) json=1 ;;
                       --log) wantlog=1 ;;
@@ -4452,6 +4454,7 @@ in
                       *)
                         echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
                         echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
+                        echo "       nixarchy-apply --release-home [--yes] [--no-preview]" >&2
                         echo "       nixarchy-apply --status [--json]" >&2
                         echo "       nixarchy-apply --log [--follow] [--invocation <id>]" >&2
                         echo "" >&2
@@ -4461,6 +4464,11 @@ in
                     esac
                     shift
                   done
+
+                  if [ -n "$release_home" ] && { [ -n "$detach" ] || [ -n "$status" ] || [ -n "$wantlog" ]; }; then
+                    echo "nixarchy-apply: --release-home cannot be combined with --detach, --status or --log" >&2
+                    exit 2
+                  fi
 
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
@@ -4673,18 +4681,18 @@ in
                     flock 9
                   fi
 
-                  copy_into_flake() {
+                  replace_file() {
                     local src=$1 dst=$2 tmp
                     # In the flake root, outside the `nixarchy` path staged below,
                     # so a run killed mid-copy leaves nothing for git add to take.
-                    tmp=$(mktemp "$base/.nixarchy-copy.XXXXXX")
-                    cp "$src" "$tmp" || { rm -f "$tmp"; return 1; }
+                    tmp=$(mktemp "$base/.nixarchy-copy.XXXXXX") || return 1
+                    cp "$src" "$tmp" || { rm -f "$tmp" || :; return 1; }
                     if [ -f "$dst" ]; then
-                      chmod --reference="$dst" "$tmp" || { rm -f "$tmp"; return 1; }
+                      chmod --reference="$dst" "$tmp" || { rm -f "$tmp" || :; return 1; }
                     else
-                      chmod --reference="$src" "$tmp" || { rm -f "$tmp"; return 1; }
+                      chmod --reference="$src" "$tmp" || { rm -f "$tmp" || :; return 1; }
                     fi
-                    mv "$tmp" "$dst" || { rm -f "$tmp"; return 1; }
+                    mv "$tmp" "$dst" || { rm -f "$tmp" || :; return 1; }
                   }
                   # flatsnap: written by the nixarchy-flatsnap plugin (#904). Like the
                   # others it is copied only when it exists, so a machine without
@@ -4744,36 +4752,207 @@ in
 
                   select_home_src() {
                     if [ -f "$pinned/home.nix" ]; then
-                      printf '%s\n' "$pinned/home.nix"
+                      printf '%s\n' "$pinned/home.nix" || return 1
                     else
                       local src="$srcdir/home.nix"
-                      [ -f "$src" ] && printf '%s\n' "$src"
+                      if [ -f "$src" ]; then printf '%s\n' "$src" || return 1; fi
                     fi
                     return 0
+                  }
+
+                  snapshot_home() {
+                    home_snap=""
+                    home_state=absent
+                    home_srcmsg="$srcdir/home.nix"
+                    local src
+                    src=$(select_home_src) || return 1
+                    if [ -n "$src" ]; then
+                      home_snap="$pinned/home.snap"
+                      cp "$src" "$home_snap" || return 1
+                    fi
+                  }
+
+                  classify_home() {
+                    home_state=absent
+                    if [ -n "$home_snap" ] && [ -f "$home_snap" ]; then
+                      if cmp -s "$home_snap" "$1"; then
+                        home_state=seed
+                      else
+                        home_state=edited
+                      fi
+                    fi
                   }
 
                   valid_user() {
                     [[ $1 =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
                   }
 
-                  home_src=$(select_home_src)
-                  # The name goes into generated Nix only with a home part, so only then is it checked.
+                  read_owner() {
+                    owner=""
+                    [ -f "$dest" ] || return 0
+                    local candidates exact
+                    candidates=$(grep -cE '^[[:space:]]*home-manager\.users\.' "$dest" || true)
+                    exact=$(grep -cE '^[[:space:]]*home-manager\.users\."[^"]+"\.imports[[:space:]]*=' "$dest" || true)
+                    if [ "$candidates" -eq 0 ]; then
+                      return 0
+                    fi
+                    if [ "$candidates" -eq 1 ] && [ "$exact" -eq 1 ]; then
+                      owner=$(sed -nE 's/^[[:space:]]*home-manager\.users\."([^"]+)"\.imports[[:space:]]*=.*/\1/p' "$dest") || return 1
+                      if valid_user "$owner"; then
+                        return 0
+                      fi
+                    fi
+                    owner=""
+                    echo "nixarchy-apply: $dest names several home owners (or an unparseable one); fix it by hand" >&2 || return 1
+                    return 1
+                  }
+
+                  home_decide() {
+                    if [ -z "$1" ]; then
+                      if [ "$3" = edited ]; then printf '%s\n' claim || return 1; else printf '%s\n' keep || return 1; fi
+                    elif [ "$1" = "$2" ]; then
+                      if [ "$3" = absent ]; then printf '%s\n' keep || return 1; else printf '%s\n' copy || return 1; fi
+                    elif [ "$3" = edited ]; then
+                      printf '%s\n' refuse || return 1
+                    else
+                      printf '%s\n' keep || return 1
+                    fi
+                  }
+
+                  account_exists() {
+                    getent passwd "$1" >/dev/null 2>&1 || return $?
+                  }
+
+                  release_allowed() {
+                    [ "$1" = "$2" ] && return 0
+                    local rc=0
+                    account_exists "$1" || rc=$?
+                    case "$rc" in
+                      0) echo "nixarchy-apply: home.nix belongs to $1, who still has an account; only $1 can release it" >&2 || return 1 ;;
+                      2) return 0 ;;
+                      *) echo "nixarchy-apply: cannot tell whether $1 still has an account (getent exited $rc); not releasing" >&2 || return 1 ;;
+                    esac
+                    return 1
+                  }
+
+                  remove_file() {
+                    rm -f -- "$1" || return 1
+                  }
+
+                  restore_one() {
+                    if [ -f "$1" ]; then
+                      cp -p "$1" "$2" || return 1
+                    else
+                      rm -f -- "$2" || return 1
+                    fi
+                  }
+
+                  write_home_pair() {
+                    local copy="$base/nixarchy/home.nix" record kept tmp changed=0
+                    record="$applied/$(printf '%s' "$copy" | sha256sum | cut -c1-16)" || return 1
+                    rm -f "$pinned/home.bak" "$pinned/dest.bak" || return 1
+                    if [ -f "$copy" ]; then cp -p "$copy" "$pinned/home.bak" || return 1; fi
+                    if [ -f "$dest" ]; then cp -p "$dest" "$pinned/dest.bak" || return 1; fi
+                    # A copy already equal to the snapshot loses nothing; one with no
+                    # record (orphan or hand-made) is as unrecorded as an edited one.
+                    if [ -f "$copy" ] && { [ "$1" != write ] || ! cmp -s "$copy" "$home_snap"; } && { [ ! -f "$record" ] || ! sha256sum <"$copy" | cmp -s - "$record"; }; then
+                      kept="$applied/home.nix.edited-in-flake.$(date +%Y%m%d%H%M%S)" || return 1
+                      cp "$copy" "$kept" || return 1
+                      echo "NOTE: $copy was edited in the flake since the last apply." || return 1
+                      echo "  Your version is kept at $kept -- move the change into" || return 1
+                      echo "  $home_srcmsg, which is the file apply copies from." || return 1
+                    fi
+                    if [ "$1" = write ]; then
+                      if [ ! -f "$copy" ] || ! cmp -s "$copy" "$home_snap"; then
+                        replace_file "$home_snap" "$copy" || {
+                          restore_one "$pinned/home.bak" "$copy" || :
+                          restore_one "$pinned/dest.bak" "$dest" || :
+                          return 1
+                        }
+                        changed=1
+                      fi
+                      replace_file "$2" "$dest" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      tmp=$(mktemp "$applied/.home-record.XXXXXX") || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      sha256sum <"$copy" >"$tmp" || {
+                        rm -f "$tmp" || :
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      mv "$tmp" "$record" || {
+                        rm -f "$tmp" || :
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      if [ "$changed" -eq 1 ]; then copied="$copied home"; fi
+                    elif [ "$1" = release ]; then
+                      replace_file "$2" "$dest" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      remove_file "$copy" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                      rm -f "$record" || {
+                        restore_one "$pinned/home.bak" "$copy" || :
+                        restore_one "$pinned/dest.bak" "$dest" || :
+                        return 1
+                      }
+                    else
+                      return 1
+                    fi
+                  }
+
+                  snapshot_home ${homeTemplate} || exit 1
+                  classify_home ${homeTemplate}
                   user=$(id -un)
-                  if [ -n "$home_src" ] && ! valid_user "$user"; then
-                    echo "nixarchy-apply: invalid user name: $user" >&2
+                  read_owner || exit 1
+                  if [ -n "$release_home" ]; then
+                    if [ -z "$owner" ]; then
+                      echo "no home owner; nothing to release"
+                      exit 0
+                    fi
+                    release_allowed "$owner" "$user" || exit 1
+                    released=$owner
+                    owner=""
+                    home_action=release
+                  else
+                    home_action=$(home_decide "$owner" "$user" "$home_state") || exit 1
+                    if [ "$home_action" = refuse ]; then
+                      echo "nixarchy-apply: home.nix belongs to $owner; $user has edited theirs. Ask $owner to apply, or run nixarchy-apply --release-home to give the host up." >&2
+                      exit 1
+                    fi
+                  fi
+                  render_user=""
+                  case "$home_action" in
+                    claim | copy) render_user="$user" ;;
+                    keep) render_user="$owner" ;;
+                  esac
+                  if [ -n "$render_user" ] && ! valid_user "$render_user"; then
+                    echo "nixarchy-apply: invalid user name: $render_user" >&2
                     exit 1
                   fi
 
-                  for part in apps services advanced flatsnap home; do
+                  for part in apps services advanced flatsnap; do
                     # The snapshot, for a part the caller pinned: the bytes that
                     # were hashed above, not whatever is on disk now (#986).
                     # `srcmsg` is what a MESSAGE names, always the user's own
                     # file -- telling somebody to edit a temp directory would be
                     # worse than the race this fixes.
                     srcmsg="$srcdir/$part.nix"
-                    if [ "$part" = home ]; then
-                      src="$home_src"
-                    elif [ -f "$pinned/$part.nix" ]; then
+                    if [ -f "$pinned/$part.nix" ]; then
                       src="$pinned/$part.nix"
                     else
                       src="$srcmsg"
@@ -4781,9 +4960,7 @@ in
                     [ -f "$src" ] || continue
 
                     dst="$base/nixarchy/$part.nix"
-                    if [ "$part" != home ]; then
-                      imports="$imports ./nixarchy/$part.nix"
-                    fi
+                    imports="$imports ./nixarchy/$part.nix"
                     record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
                     if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
                       sha256sum <"$dst" >"$record"
@@ -4796,7 +4973,7 @@ in
                       echo "  Your version is kept at $kept -- move the change into"
                       echo "  $srcmsg, which is the file apply copies from."
                     fi
-                    copy_into_flake "$src" "$dst"
+                    replace_file "$src" "$dst"
                     sha256sum <"$dst" >"$record"
                     copied="$copied $part"
                   done
@@ -4818,7 +4995,7 @@ in
                         sha256sum <"$dst" >"$record"
                         continue
                       fi
-                      copy_into_flake "$src" "$dst"
+                      replace_file "$src" "$dst"
                       record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
                       sha256sum <"$dst" >"$record"
                       copied="$copied packages/$(basename "$src")"
@@ -4830,8 +5007,8 @@ in
                   # importing a path that is not there fails to evaluate.
                   tmp=$(mktemp "$dest.XXXXXX")
                   {
-                    if [ -n "$home_src" ]; then
-                      sed -e "s|@USER@|$user|g" -e "s|@IMPORTS@|$imports|g" ${homeAppsTemplate}
+                    if [ -n "$render_user" ]; then
+                      sed -e "s|@USER@|$render_user|g" -e "s|@IMPORTS@|$imports|g" ${homeAppsTemplate}
                     else
                       echo "# Generated by nixarchy-apply. Do not edit -- your files"
                       echo "# are ~/.config/nixarchy/{apps,services,advanced,flatsnap}.nix and"
@@ -4841,12 +5018,27 @@ in
                       echo "}"
                     fi
                   } >"$tmp"
-                  if [ -f "$dest" ]; then
-                    chmod --reference="$dest" "$tmp"
-                  else
-                    chmod 0644 "$tmp"
-                  fi
-                  mv "$tmp" "$dest"
+                  # mktemp makes 0600; a first-ever file must stay readable to the next user.
+                  [ -f "$dest" ] || chmod 0644 "$tmp" || exit 1
+                  case "$home_action" in
+                    claim | copy)
+                      write_home_pair write "$tmp" || { rm -f "$tmp"; exit 1; }
+                      rm -f "$tmp"
+                      ;;
+                    release)
+                      write_home_pair release "$tmp" || { rm -f "$tmp"; exit 1; }
+                      rm -f "$tmp"
+                      echo "released home.nix from $released"
+                      ;;
+                    *)
+                      if [ -f "$dest" ]; then
+                        chmod --reference="$dest" "$tmp"
+                      else
+                        chmod 0644 "$tmp"
+                      fi
+                      mv "$tmp" "$dest"
+                      ;;
+                  esac
 
                   if [ -n "$copied" ]; then
                     echo "copied ->$copied"

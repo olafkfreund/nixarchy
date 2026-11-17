@@ -524,6 +524,27 @@ rebuild runs to completion, and **nothing is ever installed**. `apply` now says
 so loudly rather than leaving you to work it out from an app that never
 appears.
 
+The same generated `nixarchy-apps.nix` names the one user whose
+`nixarchy/home.nix` is imported on this host. `programs.nixarchy.user` does not
+change that owner. When nobody owns it, applying an edited
+`~/.config/nixarchy/home.nix` claims it for the caller; the untouched seed does
+not. The owner can apply their file again, including the empty seeded module
+to remove their Home Manager package selections while keeping ownership.
+Another user's absent or untouched file leaves the owner's selection in place.
+An edited file from another user is refused before anything is copied:
+
+    nixarchy-apply: home.nix belongs to alice; bob has edited theirs. Ask alice to apply, or run nixarchy-apply --release-home to give the host up.
+
+The owner can run `nixarchy-apply --release-home` to remove the import and the
+flake copy, so a later edited apply can claim the host. Anyone can release it
+once the owner's account is confirmed gone; an account lookup failure does not
+count as absence. A non-owner can release only when the system reports the
+account does not exist; with a network directory (LDAP, sssd) that is offline,
+the lookup can report that wrongly, so release as the owner or as root. Release ignores the caller's `home.nix` for that run and
+cannot be combined with `--detach`, `--status` or `--log`. A zero-byte
+`home.nix` counts as edited: applying it as the owner copies it and the build
+fails, rather than treating it as an empty module.
+
 ## Rebuilding refuses a branch you did not choose to deploy
 
 Installing an app from the menu, the bar's rebuild button, `omarchy update`

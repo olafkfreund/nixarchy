@@ -21,7 +21,11 @@ installPhase is needed: both CMakeLists carry `install()` rules.
   `xvfb-run` joins nativeBuildInputs. Its version comes from the source
   directory name `checkmate-<version>`; fetchFromGitHub unpacks to `source`, so
   a `postUnpack` renames it, otherwise `--version` reports `dev`.
-- `doCheck = false`: the suites need a display; the launch smoke replaces them.
+- Both add `qt6.qtsvg` (upstream's window icons need Qt's SVG engine).
+- `doCheck = true` where the sandbox allows it: Cards' tests run offscreen;
+  Checkmate's need `xvfb-run` and software GL (`mesa`). If the sandbox cannot
+  run them, `doCheck = false` with the reason in a comment, and the launch
+  smoke below stands in.
 - Both carry the `updateScript` writeShellApplication of monologue.
 
 Wiring, one row per place `monologue` appears:
@@ -58,8 +62,10 @@ the env; `omarchyApps` options case covers the default set.
 
 ## Verification
 
-- `nix build .#nixarchy-apps.cards .#nixarchy-apps.checkmate` (package tier).
-- Launch smoke offscreen (`QT_QPA_PLATFORM=offscreen`, `checkmate --version`).
+- `nix build .#cards .#checkmate` (package tier; the flake exports them individually).
+- Launch smoke: each binary started under `QT_QPA_PLATFORM=offscreen` (Checkmate with
+  `QT_QUICK_BACKEND=software`) under `timeout`, alive after a few seconds; plus
+  `checkmate --version`, which alone never constructs QGuiApplication.
 - `options-*` shards with cards/checkmate in `omarchyAppPnames`; break proof:
   drop `preinstall = true` from a row and watch `omarchyApps.on` fail.
 - `review-pins`, `app-selection`, statix, deadnix, nix fmt, and every target

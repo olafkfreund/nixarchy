@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1826
 intent: intent/2026-11-17-1826-cards-checkmate.md
 ---

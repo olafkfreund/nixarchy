@@ -60,3 +60,13 @@ the sandbox allows (upstream's own setup: `xvfb-run`, `QT_QUICK_BACKEND=rhi`,
 ## Rollback
 
 Revert the commits; no data or state is touched.
+
+## Deviations (step 1, found building)
+
+Both recipes run upstream's suites (`doCheck = true`). The sandbox needed three
+test-only additions, none of which touch the installed files: `postPatch` swaps the
+tests' fake-hyprctl `#!/bin/bash` shebang for the store bash; `preCheck` sets
+`HOME`, a fonts conf and `QML2_IMPORT_PATH` (the suite loads Main.qml from the
+build tree, before the Qt wrapper exists); Checkmate adds software Mesa
+(`LD_LIBRARY_PATH`, `LIBGL_DRIVERS_PATH`, EGL vendor file). The launch smoke
+(offscreen, alive after 8 s) and `checkmate --version` also passed.

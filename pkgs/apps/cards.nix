@@ -4,6 +4,8 @@
   fetchFromGitHub,
   cmake,
   qt6,
+  makeFontsConf,
+  bash,
   nix-update,
   writeShellApplication,
 }:
@@ -30,6 +32,20 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   doCheck = true;
+
+  # The suite writes a fake hyprctl with a /bin/bash shebang, absent in the sandbox.
+  postPatch = ''
+    substituteInPlace tests/cards_tests.cpp \
+      --replace-fail '#!/bin/bash' '#!${lib.getExe bash}'
+  '';
+
+  # The suite loads the real Main.qml from the build tree, which the Qt wrapper
+  # has not wrapped yet; fontconfig wants a writable cache.
+  preCheck = ''
+    export HOME=$TMPDIR
+    export FONTCONFIG_FILE=${makeFontsConf { fontDirectories = [ ]; }}
+    export QML2_IMPORT_PATH=${qt6.qtdeclarative}/${qt6.qtbase.qtQmlPrefix}
+  '';
 
   passthru.updateScript = writeShellApplication {
     name = "update-cards";

@@ -4,6 +4,10 @@
   fetchFromGitHub,
   cmake,
   qt6,
+  makeFontsConf,
+  mesa,
+  libglvnd,
+  bash,
   xvfb-run,
   nix-update,
   writeShellApplication,
@@ -37,8 +41,28 @@ stdenv.mkDerivation (finalAttrs: {
     qt6.qtsvg
   ];
 
-  # The rendering test needs a software GL setup that the lead will verify.
-  doCheck = false;
+  # The suite writes a fake hyprctl with a /bin/bash shebang, absent in the sandbox.
+  postPatch = ''
+    substituteInPlace tests/checkmate_tests.cpp \
+      --replace-fail '#!/bin/bash' '#!${lib.getExe bash}'
+  '';
+
+  # The suite renders the real Main.qml under xvfb-run with software GL.
+  doCheck = true;
+  nativeCheckInputs = [ mesa ];
+  preCheck = ''
+    export HOME=$TMPDIR
+    export FONTCONFIG_FILE=${makeFontsConf { fontDirectories = [ ]; }}
+    export QML2_IMPORT_PATH=${qt6.qtdeclarative}/${qt6.qtbase.qtQmlPrefix}:${qt6.qtquick3d}/${qt6.qtbase.qtQmlPrefix}
+    export LD_LIBRARY_PATH=${
+      lib.makeLibraryPath [
+        libglvnd
+        mesa
+      ]
+    }
+    export LIBGL_DRIVERS_PATH=${mesa}/lib/dri
+    export __EGL_VENDOR_LIBRARY_FILENAMES=${mesa}/share/glvnd/egl_vendor.d/50_mesa.json
+  '';
 
   passthru.updateScript = writeShellApplication {
     name = "update-checkmate";

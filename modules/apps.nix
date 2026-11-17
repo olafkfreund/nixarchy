@@ -294,7 +294,7 @@ let
       lib.mapAttrsToList (name: fp: ''
         flatpak	${name}	${fp.label} -- flatpak, from ${
           if fp ? remote then fp.remote.name else "Flathub"
-        }		FLATPAK  ${name}\n\n${fp.label}\n${fp.note}\n\nDeclared, not reproducible: the id travels to your next machine, the version does not. Enabling this writes a line in your services selection:\n  programs.nixarchy.flatpaks.apps.${name}.enable = true;
+        }		FLATPAK  ${name}\n\n${fp.label}\n${fp.note}\n\nDeclared, not reproducible: the id travels to your next machine, the version does not. Enabling this writes a line in your services selection:\n  programs.nixarchy.flatpaks.apps.${name}.enable = true;''\t
       '') flatpakCatalogue
     )
     # The way out of the catalogue. A row rather than a flag, because a flag
@@ -306,11 +306,11 @@ let
     # picker renders them without complaint.
     + "flatpak	flathub	Search all of Flathub for something not listed here (needs a network)		"
     + "SEARCH FLATHUB\\n\\nAsks flathub.org for anything, not just what nixarchy curates.\\n\\n"
-    + "This is the only row here that needs a network, and the only one that can offer an app nobody has checked. A hit that is in nixarchy's catalogue is enabled the normal way; anything else prints a line for you to paste, because writing an unchecked app id into your configuration is not this tool's call to make.\n"
+    + "This is the only row here that needs a network, and the only one that can offer an app nobody has checked. A hit that is in nixarchy's catalogue is enabled the normal way; anything else prints a line for you to paste, because writing an unchecked app id into your configuration is not this tool's call to make.\t\n"
   );
 
   # The tier below the Flathub row: software in no repository at all (#581).
-  # Same five-field shape, whole row on one line, preview newlines escaped --
+  # Same six-field shape, whole row on one line, preview newlines escaped --
   # the same rules the flathub row above documents. One static row, so
   # `nixarchy pkg new` is findable from the picker at all. Findable is the
   # honest word: the picker is a single fzf call, so this row appears only
@@ -320,7 +320,7 @@ let
   # docs/manual/other-packages.md states the limitation.
   pkgNewIndexRow = pkgs.writeText "nixarchy-pkg-new-row.tsv" (
     "new	pkg-new	Missing from nixpkgs? Draft a new package from a source URL		"
-    + "NOT IN NIXPKGS\\n\\nWhen nixpkgs, the app list and Flathub all miss, this drafts a derivation from the software's own source URL (e.g. a GitHub repo) with nix-init, builds it once, and keeps the draft either way.\\n\\nPicking this asks for the URL, then runs:\\n  nixarchy pkg new <url>\\n\\nNeeds a network. The result is a draft for you to review, not a finished package.\n"
+    + "NOT IN NIXPKGS\\n\\nWhen nixpkgs, the app list and Flathub all miss, this drafts a derivation from the software's own source URL (e.g. a GitHub repo) with nix-init, builds it once, and keeps the draft either way.\\n\\nPicking this asks for the URL, then runs:\\n  nixarchy pkg new <url>\\n\\nNeeds a network. The result is a draft for you to review, not a finished package.\t\n"
   );
 
   flatpakRow =
@@ -3648,11 +3648,12 @@ in
                   reindex=0
                   [ "''${1:-}" = "--reindex" ] && { reindex=1; shift; }
 
-                  # One index, five tab-separated fields: kind, name, one-line summary,
+                  # One index, six tab-separated fields: kind, name, one-line summary,
                   # a kind-specific fourth (an option's type; a package's flags, e.g.
-                  # "unfree broken curated:firefox"; empty otherwise), and the preview
-                  # text with its newlines escaped. The preview is carried in the line
-                  # rather than looked up on selection because fzf runs the preview
+                  # "unfree broken curated:firefox"; empty otherwise), the preview
+                  # text with its newlines escaped, and a package's version (empty
+                  # otherwise). The preview is carried in the line rather than looked
+                  # up on selection because fzf runs the preview
                   # command on every keystroke, and a jq pass over 19 MB of package
                   # metadata is not something to do sixty times a second.
                   build_index() {
@@ -3668,7 +3669,7 @@ in
                       print "app", $1, $2 " (" $3 ")", "",
                         "OMARCHY APP  " $1 "\\n\\n" $2 "\\n" $3 \
                         note "\\n\\nEnabling this writes a line in your app selection:\\n  " \
-                        $1 ".enable = true;" foot
+                        $1 ".enable = true;" foot, ""
                     }' "$appindex" > "$tmp"
 
                     # Empty when this system builds no manual, in which case the
@@ -3689,7 +3690,8 @@ in
                             + (if $v.example == null then "" else "\nexample:  " + val($v.example) end)
                             + "\n\n" + ($v.description // "(undocumented)")
                             + "\n\ndeclared in:\n  " + (($v.declarations // []) | join("\n  "))
-                          )
+                          ),
+                          ""
                         ] | @tsv' "$optionsjson" >> "$tmp"
                     else
                       echo "  no option index: documentation.nixos.enable is off on this" >&2
@@ -3714,20 +3716,23 @@ in
                             + (if .unfree then "  [unfree]" else "" end)
                             + (if .broken then "  [broken]" else "" end)
                           ),
-                          ( (if .unfree then "unfree " else "" end)
-                            + (if .broken then "broken" else "" end)
-                            | sub(" $"; "")
+                          ( [ (if .unfree then "unfree" else empty end),
+                              (if .broken then "broken" else empty end),
+                              (if .insecure then "insecure" else empty end)
+                            ] | join(" ")
                           ),
                           ( "NIXPKGS PACKAGE  " + .attr
                             + "\n\nversion:  " + (if .version == "" then "?" else .version end)
                             + "\nlicence:  " + (if .license == "" then "unknown" else .license end)
                             + (if .homepage == "" then "" else "\nhomepage: " + .homepage end)
                             + (if .broken then "\n\nMarked BROKEN in nixpkgs: expect the build to fail." else "" end)
+                            + (if .insecure then "\n\nMarked INSECURE in nixpkgs." else "" end)
                             + "\n\n" + (if .description == "" then "(no description)" else .description end)
                             + "\n\nAdding this writes it into your app selection:\n  "
                             + "environment.systemPackages = with pkgs; [ " + .attr + " ];"
                             + "\n\nctrl-t tries it now, without installing."
-                          )
+                          ),
+                          .version
                         ] | @tsv' >> "$tmp"; then
                       # Said, not swallowed: out of memory looked like the script
                       # simply stopping after "indexing nixpkgs".
@@ -3754,7 +3759,7 @@ in
                     mv "$tmp2" "$tmp"
 
                     # Curated flatpaks and the Flathub entry point. A plain cat:
-                    # these rows are already in the index's five-field shape, and
+                    # these rows are already in the index's six-field shape, and
                     # they are local, so building the index still needs no network.
                     cat "$flatpakrows" >> "$tmp"
 

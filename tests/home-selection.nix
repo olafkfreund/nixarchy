@@ -39,6 +39,7 @@ let
   homeAppsTemplate =
     pkgs.writeText "home-apps-template.nix"
       (configWith { }).environment.etc."nixarchy/home-apps-template.nix".text;
+  homeTemplate = (configWith { }).environment.etc."nixarchy/home-template.nix".source;
   variantBin =
     config: name:
     let
@@ -184,7 +185,7 @@ pkgs.runCommand "nixarchy-home-selection"
 
     extract() { sed -n "/^$1() {/,/^}/p" "$apply"; }
     : >apply-functions
-    for function in valid_user select_home_src snapshot_home classify_home read_owner home_decide account_exists release_allowed replace_file remove_file restore_one write_home_pair; do
+    for function in valid_user select_home_src snapshot_home classify_home read_owner home_decide home_refusal_text home_decision account_exists release_allowed replace_file remove_file restore_one write_home_pair; do
       extract "$function" >one-function
       [ -s one-function ] || bad own-7a "$function extraction empty"
       cat one-function >>apply-functions
@@ -614,6 +615,122 @@ pkgs.runCommand "nixarchy-home-selection"
     reject_line=$(grep -nF 'nixarchy-apply: --release-home cannot be combined' "$apply" | head -1 | cut -d: -f1)
     unit_line=$(grep -nF 'systemd-run --user --unit=nixarchy-rebuild' "$apply" | head -1 | cut -d: -f1)
     [ -n "$reject_line" ] && [ -n "$unit_line" ] && [ "$reject_line" -lt "$unit_line" ] || bad own-15 'release flag rejection is after the detach unit start'
+
+    # The id failure path cannot be stubbed: apply's coreutils precede PATH stubs.
+    [ "$user" != alice ] || bad plan-pre 'caller alice would equal the other-owner fixture'
+    plan_listing() {
+      local root
+      for root in flake "$XDG_CONFIG_HOME" "$XDG_STATE_HOME"; do
+        [ ! -e "$root" ] || find "$root" -printf '%y %p\n'
+      done | sort
+      for root in flake "$XDG_CONFIG_HOME" "$XDG_STATE_HOME"; do
+        [ ! -e "$root" ] || find "$root" -type f -print0
+      done | sort -z | xargs -0 -r sha256sum
+    }
+    plan_run() {
+      local label=$1 before after
+      shift
+      before=$(plan_listing)
+      NIXARCHY_FLAKE=''${plan_flake:-$PWD/flake} "$apply" "$@" >plan.out 2>plan.err
+      plan_rc=$?
+      after=$(plan_listing)
+      [ "$before" = "$after" ] && [ ! -e "$XDG_STATE_HOME/nixarchy" ] || bad "$label" 'plan changed the flake, config, or state tree'
+    }
+    plan_error() {
+      local label=$1 message
+      message=$(${pkgs.jq}/bin/jq -er 'if type == "object" and (.version == 1) and (keys == ["error", "version"]) and (.error | type == "string") then .error else empty end' plan.out)
+      [ "$plan_rc" -eq 1 ] && [ -n "$message" ] && [ "$(cat plan.err)" = "$message" ] || bad "$label" "invalid error result: rc=$plan_rc $(cat plan.out plan.err)"
+    }
+    rm -rf "$XDG_STATE_HOME/nixarchy"
+    for owner_kind in none self other; do
+      case "$owner_kind" in
+        none) fresh_flake; owner_json=null ;;
+        self) owned_flake "$user" '# previous owner bytes'; owner_json="\"$user\"" ;;
+        other) owned_flake alice '# previous owner bytes'; owner_json='"alice"' ;;
+      esac
+      for state in seed edited absent; do
+        case "$state" in
+          seed) cat ${homeTemplate} >"$homefile" ;;
+          edited) printf '%s\n' '# edited home' >"$homefile" ;;
+          absent) rm -f "$homefile" ;;
+        esac
+        case "$owner_kind/$state" in
+          none/edited) action=claim; render="\"$user\"" ;;
+          none/*) action=keep; render=null ;;
+          self/absent) action=keep; render="\"$user\"" ;;
+          self/*) action=copy; render="\"$user\"" ;;
+          other/edited) action=refuse; render=null ;;
+          other/*) action=keep; render='"alice"' ;;
+        esac
+        message=null
+        if [ "$action" = refuse ]; then
+          refusal="nixarchy-apply: home.nix belongs to alice; $user has edited theirs. Ask alice to apply, or run nixarchy-apply --release-home to give the host up."
+          message="\"$refusal\""
+        fi
+        expected="{\"version\":1,\"owner\":$owner_json,\"caller\":\"$user\",\"state\":\"$state\",\"action\":\"$action\",\"renderUser\":$render,\"message\":$message}"
+        plan_run "plan-a-$owner_kind-$state" --home-plan --json
+        [ "$plan_rc" -eq 0 ] && [ "$(cat plan.out)" = "$expected" ] && [ ! -s plan.err ] &&
+          ${pkgs.jq}/bin/jq -e '(.version | type) == "number" and (.caller | type) == "string" and (.state | type) == "string" and (.action | type) == "string" and ((.owner | type) == "string" or (.owner | type) == "null") and ((.renderUser | type) == "string" or (.renderUser | type) == "null") and ((.message | type) == "string" or (.message | type) == "null")' plan.out >/dev/null ||
+          bad "plan-a-$owner_kind-$state" "wrong JSON: rc=$plan_rc $(cat plan.out plan.err)"
+      done
+    done
+
+    plan_run plan-b --home-plan
+    [ "$plan_rc" -eq 0 ] && [ "$(cat plan.out)" = "home owner: alice; caller: $user; home.nix: absent; apply would: keep" ] && [ ! -s plan.err ] || bad plan-b "wrong plain plan: rc=$plan_rc $(cat plan.out plan.err)"
+
+    printf '%s\n' 'home-manager.users."alice".imports = [' 'home-manager.users."bob".imports = [' >flake/nixarchy-apps.nix
+    plan_run plan-c --home-plan --json
+    plan_error plan-c
+    [[ $(cat plan.err) == *'several home owners'* ]] || bad plan-c 'multiple owners were not identified'
+
+    for flag in --yes --status --detach --release-home --invocation --expect-sha256; do
+      plan_run "plan-d-$flag" --home-plan "$flag"
+      [ "$plan_rc" -eq 2 ] && [ ! -s plan.out ] && grep -qF 'usage: nixarchy-apply' plan.err || bad "plan-d-$flag" "accepted incompatible flag: rc=$plan_rc $(cat plan.out plan.err)"
+    done
+    plan_flake=$PWD/missing-flake
+    plan_run plan-d-flake --home-plan --json
+    plan_error plan-d-flake
+    [[ $(cat plan.err) == *'flake directory'*'does not exist'* ]] || bad plan-d-flake 'missing flake was not identified'
+    unset plan_flake
+    owned_flake "$user" '# previous owner bytes'
+    cat ${homeTemplate} >"$homefile"
+    rm -f "$appsfile"
+    plan_run plan-d-no-apps --home-plan --json
+    [ "$plan_rc" -eq 0 ] && [ "$(cat plan.out)" = "{\"version\":1,\"owner\":\"$user\",\"caller\":\"$user\",\"state\":\"seed\",\"action\":\"copy\",\"renderUser\":\"$user\",\"message\":null}" ] || bad plan-d-no-apps "apps.nix was required: rc=$plan_rc $(cat plan.out plan.err)"
+
+    home_snap=$homefile
+    classify_home "$PWD/missing-seed" 2>plan-function.err
+    [ "$?" -eq 1 ] && grep -qF 'cannot compare home.nix with the seed' plan-function.err || bad plan-f-seed 'missing seed was accepted'
+    owner="" home_state=absent
+    home_decision Bad.User 2>plan-function.err
+    [ "$?" -eq 1 ] && grep -qF 'invalid user name: Bad.User' plan-function.err || bad plan-f-caller 'invalid caller was accepted'
+    dest=$PWD/owner.fixture
+    printf '%s\n' 'home-manager.users."alice".imports = [' >"$dest"
+    grep() { return 2; }
+    read_owner 2>plan-function.err
+    read_rc=$?
+    unset -f grep
+    [ "$read_rc" -eq 1 ] && [ "$(cat plan-function.err)" = "nixarchy-apply: cannot read $dest" ] || bad plan-f-owner 'grep failure was accepted'
+
+    plan_flake=$PWD/flake
+    TMPDIR=$PWD/missing-tmp plan_run plan-g-tmp --home-plan --json
+    plan_error plan-g-tmp
+    chmod 000 "$homefile"
+    if [ -r "$homefile" ]; then
+      bad plan-g-unreadable 'precondition failed: caller can read mode-000 home.nix'
+    else
+      plan_run plan-g-unreadable --home-plan --json
+      plan_error plan-g-unreadable
+    fi
+    chmod 644 "$homefile"
+
+    owned_flake alice '# previous owner bytes'
+    reset_files
+    printf '%s\n' '# edited home' >"$homefile"
+    plan_run plan-h --home-plan --json
+    [ "$plan_rc" -eq 0 ] && [ "$(cat plan.out)" = "{\"version\":1,\"owner\":\"alice\",\"caller\":\"$user\",\"state\":\"edited\",\"action\":\"refuse\",\"renderUser\":null,\"message\":\"$refusal\"}" ] || bad plan-h "plan refusal text changed: rc=$plan_rc $(cat plan.out plan.err)"
+    NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >plan-apply.out 2>plan-apply.err
+    [ "$?" -eq 1 ] && [ "$(cat plan-apply.err)" = "$refusal" ] || bad plan-h "apply refusal text changed: $(cat plan-apply.out plan-apply.err)"
 
     [ "$fails" -eq 0 ] || { echo "$fails case(s) failed"; exit 1; }
     touch "$out"

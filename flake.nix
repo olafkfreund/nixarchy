@@ -206,7 +206,7 @@
     # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-pkg = {
-      url = "github:olafkfreund/nixarchy-pkg/ca78449395738f3c5fd8ef22cf26c9589706da10";
+      url = "github:olafkfreund/nixarchy-pkg/d2d2d7c4f1e7f5b9edc9f866205c92033a8527c0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

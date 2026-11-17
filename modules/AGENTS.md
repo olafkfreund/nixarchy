@@ -1639,6 +1639,14 @@ propagate every fallible command with `|| return 1` or explicit cleanup:
 calling a function in `if`, `&&`, `||` or `$(...)` disables `errexit` inside it,
 so `x=$(f) || exit 1` alone cannot catch an earlier failure in `f`.
 
+`nixarchy-apply --home-plan [--json]` shares `home_decision` and
+`home_refusal_text` with apply: their definitions live above the lock, but
+apply's calls stay under it. The plan takes no lock and writes nothing beyond
+its private temporary directory. Its JSON is the contract consumed by
+`nixarchy-pkg` (olafkfreund/nixarchy-pkg#103); the answer is advisory because
+apply decides again under its lock. Do not treat every non-zero `cmp` as
+"edited": an unreadable seed must be an error.
+
 <a id="the-command-each-app-puts-on-path-so-the-menu-can-"></a>
 
 ### The command each app puts on PATH, so the menu can tell "you already…

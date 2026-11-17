@@ -2537,7 +2537,12 @@ pkgs.testers.runNixOSTest {
                # Omarchy's own Chrome CRXs with keys from Omarchy's 1Password
                # vault. No menu row or user path reaches it; Chrome's extras
                # are a follow-up to #1760.
-               "omarchy-dev-pack-chrome-extensions"]
+               "omarchy-dev-pack-chrome-extensions",
+               # quattro (#1823): writes the Snapdragon UKI's device-tree list,
+               # defaulting to the aarch64 systemd-stub-omarchy under /usr. Its
+               # callers are the Arch Qualcomm installer and a migration that
+               # exits unless omarchy-hw-aarch64-qualcomm; x86_64 reaches neither.
+               "omarchy-update-qualcomm-device-trees"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

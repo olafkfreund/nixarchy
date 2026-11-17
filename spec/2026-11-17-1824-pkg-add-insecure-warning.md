@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1824
 intent: intent/2026-11-17-1824-pkg-add-insecure-warning.md
 ---

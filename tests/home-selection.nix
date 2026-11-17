@@ -39,6 +39,8 @@ let
   homeAppsTemplate =
     pkgs.writeText "home-apps-template.nix"
       (configWith { }).environment.etc."nixarchy/home-apps-template.nix".text;
+  # The pinned nixarchy-pkg's copy of the template (#100); absent in a pin that predates it.
+  pluginFixture = "${inputs.nixarchy-pkg}/tests/fixtures/home-apps-template.nix";
   homeTemplate = (configWith { }).environment.etc."nixarchy/home-template.nix".source;
   variantBin =
     config: name:
@@ -55,6 +57,7 @@ pkgs.runCommand "nixarchy-home-selection"
     nativeBuildInputs = with pkgs; [
       bash
       coreutils
+      diffutils
       getent
       gnugrep
       gnused
@@ -174,6 +177,18 @@ pkgs.runCommand "nixarchy-home-selection"
     user=$(id -un)
     sed -e "s|@USER@|$user|g" -e 's|@IMPORTS@| ./nixarchy/apps.nix|g' ${homeAppsTemplate} >home.expected
     [ "$rc" -eq 0 ] && cmp -s "$homefile" flake/nixarchy/home.nix && cmp -s home.expected "$generated" || bad 8 "with home: rc=$rc $(cat case8home.out)"
+
+    ${
+      if builtins.pathExists pluginFixture then
+        ''
+          cmp -s ${homeAppsTemplate} ${pluginFixture} \
+            || bad "home template drift" "nixarchy's home template differs from the nixarchy-pkg fixture ($(diff ${homeAppsTemplate} ${pluginFixture} | head -20))"
+        ''
+      else
+        ''
+          echo "skip: the pinned nixarchy-pkg predates tests/fixtures/home-apps-template.nix"
+        ''
+    }
 
     cp "$generated" generated.before
     cp flake/nixarchy/home.nix copied.before

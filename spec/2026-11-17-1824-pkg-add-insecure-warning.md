@@ -16,15 +16,19 @@ All code is in `nixarchy-pkg-add` (`modules/apps.nix`); the test is in
    `broken`, with the index's definition (`row` in `modules/pkg-index.nix`),
    each predicate guarded on its own so the existing outer `tryEval` around
    `deepSeq v v` never sees a throw from it:
+   In `probe`'s `let`, beside `ls` (NOT inside the `v = { ... }` set):
    ```
    try = x: d: let r = builtins.tryEval x; in if r.success then r.value else d;
    m = try (q.meta or { }) { };
+   ```
+   and in `v`, beside `broken`:
+   ```
    insecure = builtins.isAttrs m && (
      try ((m.insecure or false) == true) false
      || try (let kv = m.knownVulnerabilities or null;
              in builtins.isList kv && kv != [ ]) false);
    ```
-   `try` and `m` are new `let` bindings in `probe`, beside `ls`. Only a boolean
+   (`try`'s local `r` shadows `probe`'s `r` harmlessly.) Only a boolean
    enters `v`, so `deepSeq` cannot force the list's elements. The probe sits in
    a bash double-quoted string inside a Nix `''` string: the new text contains
    no `$`, backtick, backslash-quote beyond the existing `\"` convention, and
@@ -70,29 +74,48 @@ All code is in `nixarchy-pkg-add` (`modules/apps.nix`); the test is in
 ## Verification
 
 In `tests/pkg-index.nix` (cheap tier), with the same fixture nixpkgs as the
-index: bake a copy of the `nixarchy-pkg-add` script whose `nixpkgs=` line
-points at the fixture (the test already greps baked lines out of
-`nixarchy-search`; same technique), run it against a throwaway
-`~/.config/nixarchy/apps.nix` (the `#@pkgs-begin`/`#@pkgs-end` block from
-`tests/home-selection.nix`'s `reset_files`) with
-`NIX_STATE_DIR`/`HOME`/`XDG_*` private, adding every fixture attribute that
-the index lists, one run each (`fixCurated` redirects to an app and
-`sub.child` needs the dotted path: include `sub.child`, skip `fixCurated`;
-`fixThrowMeta` reports "no match", as today).
+index (one definition of the fixtures):
 
-1. The set of attributes whose report row carries `[insecure in nixpkgs` equals
-   the index's `insecure == true` set from `walk.json` minus `fixCurated` and
-   `fixNoVersion` if the add path cannot add it (decide by running; any other
-   difference is a failure). This is the drift check against the picker.
-2. `fixAll` carries `[unfree` then `[broken` then `[insecure` in that order;
-   `fixClean` carries none and its row is byte-identical to what the unmodified
-   script prints (compare to a row produced by the pre-change script text
-   with the probe line removed, or assert the exact current row).
-3. Throwing fixtures (`fixThrowVuln`, `fixThrowElem`, `fixInsecureThrowVuln`,
-   `fixThrowInsecureList`) are added (rc 0, `added`), never "no match".
-4. Break proof (CLAUDE.md s1): delete the flags-paragraph line, run, watch
-   case 1 fail; read `meta.insecure` bare in the probe, watch case 3 fail.
-   Output in the PR.
+- Setup. Copy `nixarchy-pkg-add` from `testLib.vmPackage "nixarchy-pkg-add"`
+  to a writable file and `sed` its baked `nixpkgs=` line to the fixture path;
+  assert with `grep -qF "nixpkgs=${fixture}"` that the rewrite landed (an
+  unrewritten script would silently run the real nixpkgs). No `--home`: the
+  system-scope file is `$XDG_CONFIG_HOME/nixarchy/apps.nix`, as in
+  `tests/app-selection.nix`. Private `HOME`, `XDG_CONFIG_HOME`,
+  `XDG_STATE_HOME`, `NIX_STATE_DIR`, `NIX_LOG_DIR`. Before every run, rewrite
+  that file to the empty marker block (`{ pkgs, ... }:` / `{` /
+  `  environment.systemPackages = with pkgs; [  #@pkgs-begin` /
+  `  ];  #@pkgs-end` / `}`), because a second add of the same name reports
+  "already in". Each run is a plain command with its rc captured (`|| rc=$?`),
+  since the check runs under `set -eo pipefail` and `fixThrowMeta` exits
+  non-zero with "no match".
+- Attributes: every `.attr` in `walk.json` except `fixCurated` (it redirects to
+  an app through the VM's baked curated table, which is not the fixture's).
+  That includes `sub.child` and `fixNoVersion` (the probe never reads
+  `version`; `fixNoVersion` has a `name`). `fixThrowMeta` is expected to
+  report "no match" and rc != 0, as today; assert exactly that.
+
+Cases:
+
+1. Drift check: write the attrs whose report row contains `[insecure in
+   nixpkgs` to a file, write the index's `insecure == true` attrs from
+   `walk.json` minus `fixCurated` to another, assert the first is non-empty
+   and the two are equal (files compared with `diff`, never process
+   substitution, so a failing producer is not swallowed).
+2. `fixAll` carries `[unfree`, then `[broken`, then `[insecure` in that order
+   on its row. `fixClean`'s row ends exactly in `fixClean-1.0 -- clean package`
+   (no bracket anywhere). No self-comparison against a mutated copy of the
+   script.
+3. `fixThrowVuln`, `fixThrowElem`, `fixThrowInsecureList`, `fixInsecureThrowVuln`
+   all report `added`, rc 0 (never "no match"); of these, `fixThrowVuln` and
+   `fixThrowElem` and `fixThrowInsecureList` must NOT carry the notice except
+   `fixThrowInsecureList`/`fixInsecureThrowVuln`, which the index also marks
+   (their expected value is whatever case 1's walk set says).
+4. Break proofs (CLAUDE.md s1), each shown landed by `git diff`, output in the PR:
+   (i) delete the flags-paragraph line: case 1 fails. (ii) read
+   `q.meta.insecure or false` bare in the probe: case 3 fails on
+   `fixThrowInsecureList`. (iii) remove the `try` around the
+   `knownVulnerabilities` read: case 3 fails on `fixThrowVuln`.
 5. Build `app-selection`, `home-selection`, `pkg-index`, `pkg-new`, statix,
    deadnix, `nix fmt`, and the final full generated set once, with the
    options shards if the gates allow.

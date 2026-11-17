@@ -1014,6 +1014,31 @@ hand-made commit with `github-actions[bot]`'s identity reads as disposable).
 Keep `from_candidate=true` for starting from `edge-candidate` after resolving a
 merge conflict by hand.
 
+**A carry is checked under both pins, so check it locally under both.**
+Edge's `main-pin` job builds every cheap check again under `main`'s tag pin.
+#1823's carry re-pinned three `data/skill-parity.nix` sections to quattro's
+text. Every check passed locally under quattro, and the carry still went red
+in CI, because the tag still words those sections the old way. The fix was
+`tag_upstream` on each row. Before pushing a carry, run the generated checks
+a second time in a scratch tree set to `main`'s pin. Do it the way
+`omarchy-edge.yml`'s "Restore main's Omarchy pin" step does: copy both pin
+copies from `origin/main`'s `flake.nix`, then `nix flake update omarchy`.
+
+**A `main` change to a derived count conflicts edge's next merge of `main`.**
+Packaging two apps on `main` changed the app counts in the README and four
+manual pages. Edge words them for quattro, so `prepare` stopped with
+`merge-conflict`. Resolve it the way the error says, on a branch off
+`edge-candidate`: take either side, run `readme-counts.sh --fix` (it needs a
+`result` link to the quattro `omarchy` build), and push to `edge-candidate`.
+Then dispatch with `from_candidate=true`.
+
+**Do not dispatch edge while a run is in flight.** The runs share one
+concurrency group, so a newer dispatch cancels the running one ("Canceling
+since a higher priority waiting request for omarchy-edge exists"). On
+2026-11-17 that cancelled two runs that were well into `verify`. Check
+`gh run list -w omarchy-edge.yml -L 1` first. If the running one already
+contains your carry (`git merge-base --is-ancestor`), let it finish.
+
 ## 9. Territory, and the failure no single PR can see
 
 When several agents work this repo at once, each PR should name the files it

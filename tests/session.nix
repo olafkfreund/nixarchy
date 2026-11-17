@@ -2389,7 +2389,11 @@ pkgs.testers.runNixOSTest {
                # Upstream's Limine default-kernel switcher (#1423). Its one
                # caller, Update > Kernel, shows only when /usr/lib/modules/*/
                # pkgbase lists two kernels, and NixOS has no such files.
-               "omarchy-kernel"]
+               "omarchy-kernel",
+               # Snapdragon UKI device-tree lists (#1837): /usr/lib/systemd-stub-omarchy
+               # is the Arch ARM stub's default, and its callers are limine's
+               # pre-build hook and the Arch installer, neither of which runs here.
+               "omarchy-update-qualcomm-device-trees"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

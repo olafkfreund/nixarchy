@@ -38,7 +38,8 @@ on:
   workflow_dispatch:
 
 # One at a time. These are long, they want the whole machine, and two installs
-# competing for the same pool is how a disk fills.
+# competing for the same pool is how a disk fills. The group serialises nightly
+# runs, not the jobs within a run.
 concurrency:
   group: nightly
   cancel-in-progress: false
@@ -85,9 +86,11 @@ jobs:
     # fits one install-class VM, and this check carries the same 85-minute
     # globalTimeout as checks.install so the driver loses the race to the
     # job and a hang is a reported failure, not a `cancelled`. Same runner
-    # pool; the runner serialises the two jobs, which is the point -- two
-    # install VMs sharing one disk is what pushed checks.install to 63
-    # minutes on 2026-09-03.
+    # pool, but four p620 runners share these labels, so this job and
+    # `install` start in the same second on different runners; only
+    # `install-iso-net`'s `needs: [install]` orders anything. Two install VMs
+    # sharing one disk is what pushed checks.install to 63 minutes on
+    # 2026-09-03.
     #
     # Nightly rather than per-PR, measured: install-check.yml already runs
     # two install-class VMs concurrently inside its 90-minute budget on the
@@ -140,8 +143,12 @@ jobs:
   install-iso-net:
     name: install from the network ISO
     runs-on: [self-hosted, nixos, kvm, big]
-    # One of two chains, so at most TWO install-class jobs share p620 at a
-    # time (#935). The workflow-level `concurrency: nightly` stops two nightly
+    # The intended cap is TWO install-class jobs on p620 at a time (#935), not
+    # what runs: `install`, `install-encrypted`, `keyboard-boot` and `microvm`
+    # have no `needs` and are eligible to start together (runner availability
+    # decides), `install-iso-net` waits for `install` (below), and
+    # `keyboard-boot` and `microvm` are in no chain. Measuring in #1858. The
+    # workflow-level `concurrency: nightly` stops two nightly
     # RUNS overlapping and does nothing about jobs inside one -- all five
     # install-class jobs started at 03:10:14 on 2026-09-24 and
     # install-encrypted was starved to its 90-minute cap, finishing its steps

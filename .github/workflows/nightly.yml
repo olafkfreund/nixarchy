@@ -676,6 +676,18 @@ jobs:
           DIGEST: ${{ needs.digest.outputs.text }}
           DIGEST_RESULT: ${{ needs.digest.result }}
         run: |
+          # GitHub rejects an issue body or comment over 65536 characters, and a
+          # digest can be larger (#1856). Cut at a line boundary, in bytes.
+          fit() {
+            local LC_ALL=C note="(cut to fit GitHub's limit; the run log has the rest)" x
+            if [ "${#1}" -le 60000 ]; then
+              printf '%s' "$1"
+            else
+              x=${1:0:$((60000 - ${#note} - 1))}
+              x=${x%$'\n'*}
+              printf '%s\n%s' "$x" "$note"
+            fi
+          }
           # WHICH nightly broke. The title is the issue's identity -- it is what
           # the dedupe below searches on -- so a cache failure filed under "the
           # install checks are failing" would both hide itself and reopen the
@@ -760,9 +772,11 @@ jobs:
           milestone="Keeping the lights on"
           if [ -n "$existing" ]; then
             gh issue edit "$existing" --milestone "$milestone"
-            gh issue comment "$existing" --body "Still failing ($what): $RUN
+            comment="Still failing ($what): $RUN
 
           $DIGEST"
+            gh issue comment "$existing" --body "$(fit "$comment")"
           else
+            body=$(fit "$body")
             gh issue create --title "$title" "${labels[@]}" --milestone "$milestone" --body "$body"
           fi

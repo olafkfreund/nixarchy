@@ -56,7 +56,9 @@ pkgs.runCommand "nixarchy-nix-update-archive"
     done
 
     export HOME=$TMPDIR/home XDG_CACHE_HOME=$TMPDIR/cache
-    export NIX_REMOTE="local?root=$TMPDIR/root"
+    # Its own store directory, not a chroot one: a diverted store (`local?root=`)
+    # forces a nested sandbox, which hosted runners cannot create.
+    export NIX_REMOTE="local?store=$TMPDIR/root/store&state=$TMPDIR/root/state&log=$TMPDIR/root/log"
     export NIX_CONFIG=$(printf '%s\n' \
       'experimental-features = nix-command flakes' \
       'sandbox = false' \

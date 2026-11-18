@@ -115,7 +115,10 @@ here depends on the scratch directory they were built in.
      1. A member whose script runs `nix-update` but yields no path fails too;
      only `once` and `hey-cli`, which do not run it, are skipped.
    - **Store.** `export HOME=$TMPDIR/home XDG_CACHE_HOME=$TMPDIR/cache`,
-     `NIX_REMOTE="local?root=$TMPDIR/root"`, and `NIX_CONFIG` with
+     `NIX_REMOTE="local?store=$TMPDIR/root/store&state=$TMPDIR/root/state&log=$TMPDIR/root/log"`
+     (deviation, found on CI: a `local?root=` store is diverted, and nix
+     builds into one only inside a nested sandbox, which hosted runners
+     cannot create; its own store directory needs none), and `NIX_CONFIG` with
      `experimental-features = nix-command flakes`, `sandbox = false` and an
      empty `substituters =`, written with `printf`, not a heredoc (§5).
    - **Fixture**, written with `printf '%s\n'` (each `${` escaped as

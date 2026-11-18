@@ -50,6 +50,15 @@ if [[ ${1:-} == "--install" ]]; then
   shift
 fi
 
+# --installed <agent> answers with its exit status only, as upstream's does:
+# quattro's launcher migration asks it (#1847).
+checking=false
+if [[ ${1:-} == "--installed" ]]; then
+  checking=true
+  shift
+  (($# == 1)) || exit 1
+fi
+
 if (($# == 0)); then
   if [[ -f $agent_file ]]; then
     read -r agent <"$agent_file"
@@ -150,6 +159,10 @@ fi
 # than against a package database: what matters is whether omarchy-agent will
 # find it, and that is the same question.
 agent_cmd=$agent
+if [[ $checking == true ]]; then
+  PATH=$(omarchy-agent-real-path) command -v "$agent_cmd" &>/dev/null
+  exit
+fi
 if PATH=$(omarchy-agent-real-path) command -v "$agent_cmd" &>/dev/null; then
   record
   exec omarchy-agent

@@ -773,6 +773,20 @@ case_1672() {
   same_tree "$before/.config/nvim" "$nvim" || fail '1672.symlink: Neovim config changed'
   same_tree "$before/owned-plugins" "$HOME/owned-plugins" || fail '1672.symlink: link target changed'
 }
+case_1847() {
+  # A machine without the local-model engine (opt-in here) must not stop at the
+  # launchers migration: every later migration still runs (#1847).
+  local ids id
+  case=1847
+  ids=$(applicable 1794839007 1794931275 1794938310)
+  if skip_empty $ids; then return 0; fi
+  setup 1847 "$FIXTURE_C"
+  ! command -v omarchy-local-ai > /dev/null || fail '1847: the fixture has omarchy-local-ai on PATH'
+  run_ids $ids > "$work/1847.out" || fail '1847: the runner failed'
+  for id in $ids; do
+    [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1847: marker missing for $id"
+  done
+}
 case_runner_stop() {
   local list_dir=$work/runner-list
   case=runner-stop
@@ -1029,5 +1043,6 @@ case_1794165002
 case_1794330979
 case_1794341736
 case_1792902457
+case_1847
 case_runner_stop
 printf '%s\n' 'user migrations: all cases passed'

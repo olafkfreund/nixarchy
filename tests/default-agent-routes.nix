@@ -56,6 +56,8 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
     rc=0
     if [ "$mode" = plain ]; then
       ${pkgs.bash}/bin/bash "$source_script" "$id" > "$out_file" 2>&1 </dev/null || rc=$?
+    elif [ "$mode" = installed ]; then
+      ${pkgs.bash}/bin/bash "$source_script" --installed "$id" > "$out_file" 2>&1 </dev/null || rc=$?
     else
       ${pkgs.bash}/bin/bash "$source_script" --install "$id" > "$out_file" 2>&1 </dev/null || rc=$?
     fi
@@ -198,6 +200,15 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   has "$log" "launched $TMPDIR/real/bin/kimi" 'present agent'
   lacks "$log" 'launcher' 'present agent'
   [ "$(cat "$agent_file")" = kimi ] || fail "present agent was not recorded"
+
+  # --installed answers by exit status and does nothing else (#1847).
+  run_case kimi installed "$TMPDIR/real/bin"
+  [ "$rc" -eq 0 ] || fail "--installed on a present agent: exited $rc"
+  empty "$log" '--installed on a present agent'
+  [ ! -e "$agent_file" ] || fail "--installed recorded a default"
+  run_case pi installed "$TMPDIR/mise-bin"
+  [ "$rc" -eq 1 ] || fail "--installed on an absent agent: exited $rc"
+  empty "$log" '--installed on an absent agent'
 
   PKG_ADD_RC=1
   run_case pi --install "$TMPDIR/mise-bin" "$script" claude

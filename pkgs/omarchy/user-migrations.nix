@@ -59,6 +59,13 @@ runCommand "nixarchy-user-migrations"
           cp "${tree}/migrations/$id.sh" "$script"
           chmod u+w "$script"
           case $id in
+            1794839007)
+              # The local-model engine is opt-in here (services.agent-local); without it the
+              # launchers script exits 1, and a failed migration stops every later one (#1847).
+              substituteInPlace "$script" --replace-fail 'omarchy-agent-local-launchers' \
+                'command -v omarchy-local-ai >/dev/null || exit 0
+              omarchy-agent-local-launchers'
+              ;;
             1786719479)
               block=$(sed -n '/^if omarchy-cmd-missing agy &&/,/^fi$/p' "$script")
               [[ $block == *'omarchy-mise-install antigravity-cli agy'* ]] || exit 1

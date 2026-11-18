@@ -386,8 +386,8 @@
   "1794839007" = {
     edge = "only";
     decision = "ported";
-    run = "upstream";
-    reason = "runs omarchy-agent-local-launchers once, so local models set up before launchers existed get theirs in ~/.local/share/applications; the command works on nixarchy as on Arch";
+    run = "edited";
+    reason = "runs omarchy-agent-local-launchers once, so local models set up before launchers existed get theirs in ~/.local/share/applications; edited to skip a machine without omarchy-local-ai, which is opt-in here (services.agent-local) where Arch ships it everywhere: the launchers script exits 1 without it, and a failed migration stops every later one (#1847)";
   };
   "1794839103" = {
     edge = "only";
@@ -398,7 +398,7 @@
     edge = "only";
     decision = "ported";
     run = "upstream";
-    reason = "gives each agent harness already installed its own launcher in ~/.local/share/applications through omarchy-agent-launcher, then redraws the icon set; it works on nixarchy as on Arch";
+    reason = "gives each agent harness already installed its own launcher in ~/.local/share/applications through omarchy-agent-launcher, then redraws the icon set; it asks omarchy-default-agent --installed, which nixarchy's replacement answers by its exit status as upstream's does (#1847)";
   };
   "1794938310" = {
     edge = "only";

@@ -307,6 +307,9 @@ jobs:
     # four at a time (905s to 406s cold on p620); this is the margin.
     timeout-minutes: 60
     steps:
+      - name: Record when the job started
+        run: echo "JOB_T0=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: The gate did not succeed, so this check cannot pass
         if: needs.gate.result != 'success'
         run: |

@@ -227,7 +227,7 @@
     # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-gltui = {
-      url = "github:olafkfreund/nixarchy-gltui/823472f99beafcfc187df78d99b222f09ce29245";
+      url = "github:olafkfreund/nixarchy-gltui/fe0d6d087ade54b7d9f8955eca75063dbc2821da";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

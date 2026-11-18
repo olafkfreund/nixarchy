@@ -8,11 +8,18 @@ case $1 in
     attr=${attr%.drvPath}
     awk -v a="$attr" '$1 == a { printf "%s", $2; found = 1 } END { exit !found }' "$STUB_COMMON/drvs" ;;
   log)
-    base=${2##*/}
-    for d in "$STUB_CASE" "$STUB_COMMON"; do
-      if [ -f "$d/log/$base" ]; then cat "$d/log/$base"; exit 0; fi
+    for arg in "$@"; do
+      if [[ $arg == *substituters* ]]; then local_only=1; fi
     done
-    echo "error: no log for $2" >&2
+    base=${!#}; base=${base##*/}
+    for d in "$STUB_CASE/log" "$STUB_CASE/old-log" "$STUB_COMMON/log"; do
+      if [ -f "$d/$base" ]; then cat "$d/$base"; exit 0; fi
+    done
+    if [ "${local_only:-0}" -ne 1 ] && [ -f "$STUB_CASE/remote-log/$base" ]; then
+      cat "$STUB_CASE/remote-log/$base"
+      exit 0
+    fi
+    echo "error: no log for $base" >&2
     exit 1 ;;
   *) exit 2 ;;
 esac

@@ -1,0 +1,11 @@
+set -e
+mkdir -p closure log
+target=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-vm-test-run-nixarchy-install.drv
+printf '%s\n' "$target" > "closure/${target##*/}"
+for i in {1..300}; do
+  printf -v hash '%032x' "$i"
+  printf -v name '%s-many-root-%03d.drv' "$hash" "$i"
+  printf '/nix/store/%s\n' "$name" >> "closure/${target##*/}"
+  printf 'error: root %03d failed\n' "$i" > "log/$name"
+done
+printf '%s\n' 'error: first root failure excerpt' > "log/00000000000000000000000000000001-many-root-001.drv"

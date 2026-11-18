@@ -2512,6 +2512,9 @@
           nightly-digest = import ./tests/nightly-digest.nix {
             pkgs = pkgsFor.${system};
           };
+          nightly-report-fit = import ./tests/nightly-report-fit.nix {
+            pkgs = pkgsFor.${system};
+          };
           # #1719: commit-independent.sh refuses a shallow clone.
           # See tests/commit-independent-shallow.nix.
           commit-independent-shallow = import ./tests/commit-independent-shallow.nix {

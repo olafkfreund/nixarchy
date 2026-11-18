@@ -29,13 +29,41 @@ pkgs.runCommand "nixarchy-nightly-digest"
     patchShebangs bin work/.github/scripts
     export PATH="$root/bin:$PATH"
 
-    fail() { echo "FAIL: $*" >&2; exit 1; }
+    failures=()
+    fail() { failures+=("$*"); }
     # run <case> [VAR=value ...]: the digest text lands in text-<case>.txt,
     # parsed from the GITHUB_OUTPUT file the case set, never from stdout.
     run() {
       c=$1; shift
+      case_dir="$TMPDIR/case-$c"
+      cp -r ${./nightly-digest}/cases/$c "$case_dir"
+      chmod -R u+w "$case_dir"
+      if [ -f "$case_dir/gen" ]; then (cd "$case_dir" && bash gen); fi
+      log_dir="$TMPDIR/nixlog-$c"
+      mkdir -p "$log_dir/drvs"
+      for log in "$case_dir"/log/* "$case_dir"/old-log/* ${./nightly-digest}/common/log/*; do
+        [ -f "$log" ] || continue
+        base=''${log##*/}
+        if [[ $log == */common/log/* ]]; then
+          found=0
+          for closure in "$case_dir"/closure/* ${./nightly-digest}/common/closure/*; do
+            [ -f "$closure" ] || continue
+            if grep -qxF "/nix/store/$base" "$closure"; then found=1; break; fi
+          done
+          [ "$found" -eq 1 ] || continue
+        fi
+        prefix=''${base:0:2}
+        mkdir -p "$log_dir/drvs/$prefix"
+        cp "$log" "$log_dir/drvs/$prefix/''${base:2}"
+        if [[ $log == */old-log/* ]]; then
+          touch -d '2026-11-17T12:00:00Z' "$log_dir/drvs/$prefix/''${base:2}"
+        else
+          touch -d '2026-11-18T12:30:00Z' "$log_dir/drvs/$prefix/''${base:2}"
+        fi
+      done
       : > "$root/out-$c.txt"
-      (cd work && env STUB_CASE=${./nightly-digest}/cases/$c STUB_COMMON=${./nightly-digest}/common \
+      : > "text-$c.txt"
+      (cd work && env STUB_CASE="$case_dir" STUB_COMMON=${./nightly-digest}/common NIX_LOG_DIR="$log_dir" \
         GITHUB_OUTPUT="$root/out-$c.txt" GH_REPO=o/r RUN_ID=1 "$@" \
         bash .github/scripts/nightly-digest.sh > "$root/stdout-$c.txt") \
         || fail "$c: the digest exited non-zero"
@@ -90,9 +118,9 @@ pkgs.runCommand "nixarchy-nightly-digest"
     [ "$(sed -n 1p text-c6-gh-fails.txt | cut -c1-19)" = 'digest unavailable:' ] \
       || { cat text-c6-gh-fails.txt >&2; fail "c6-gh-fails: text must start with digest unavailable:"; }
 
-    run c7-cap DIGEST_MAX=2000
+    run c7-cap DIGEST_MAX=4096
     size=$(wc -c < text-c7-cap.txt)
-    if [ "$size" -gt 2000 ]; then fail "c7-cap: $size characters, over DIGEST_MAX=2000"; fi
+    if [ "$size" -gt 4096 ]; then fail "c7-cap: $size bytes, over DIGEST_MAX=4096"; fi
     [ "$(grep -c '^### ' text-c7-cap.txt)" = 4 ] || { cat text-c7-cap.txt >&2; fail "c7-cap: expected all four headers"; }
     has c7-cap '(excerpt truncated)'
 
@@ -112,6 +140,32 @@ pkgs.runCommand "nixarchy-nightly-digest"
     lacks c10-redaction 'ghp_'
     lacks c10-redaction 's3cr3t'
     lacks c10-redaction 'CACHIX_AUTH_TOKEN'
+
+    run c11-many-roots DIGEST_MAX=4096
+    size=$(wc -c < text-c11-many-roots.txt)
+    [ "$size" -le 4096 ] || fail "c11-many-roots: $size bytes, over DIGEST_MAX=4096"
+    while IFS= read -r name; do
+      has c11-many-roots "### $name:"
+    done < <(jq -r '.jobs[].name' "$TMPDIR/case-c11-many-roots/jobs.json")
+    has c11-many-roots 'first root failure excerpt'
+    has c11-many-roots 'more derivations not shown'
+
+    run c12-remote-and-old
+    has c12-remote-and-old 'real-local-failure'
+    lacks c12-remote-and-old 'remote-only-'
+    lacks c12-remote-and-old 'old-only-'
+
+    run c13-bytes LC_ALL=C.UTF-8 DIGEST_MAX=4096
+    size=$(wc -c < text-c13-bytes.txt)
+    [ "$size" -le 4096 ] || fail "c13-bytes: $size bytes, over DIGEST_MAX=4096"
+
+    run c14-fallback-old
+    has c14-fallback-old 'earlier build failure excerpt'
+    has c14-fallback-old '(log from outside this job'"'"'s run: may be an earlier build)'
+
+    for c in c1-traceback c2-timeout c3-iso-size c4-canary c5-empty-log c6-gh-fails c7-cap c8-dependency c9-cancelled c10-redaction c11-many-roots c12-remote-and-old c13-bytes c14-fallback-old; do
+      lacks "$c" 'this is a bug in nightly-digest.sh'
+    done
 
     # Wiring: the real nightly.yml hands the digest to report, through env only.
     wf=work/.github/workflows/nightly.yml
@@ -133,6 +187,10 @@ pkgs.runCommand "nixarchy-nightly-digest"
     want "no run: contains needs.digest.outputs" 0 \
       '[.jobs[].steps[] | select(.run) | select(.run | contains("needs.digest.outputs"))] | length'
 
-    echo "nightly-digest: ten cases name the job, step and failing log, and every run exits 0"
+    if [ "''${#failures[@]}" -gt 0 ]; then
+      printf 'FAIL: %s\n' "''${failures[@]}" >&2
+      exit 1
+    fi
+    echo "nightly-digest: fourteen cases name the job, step and failing log, and every run exits 0"
     touch $out
   ''

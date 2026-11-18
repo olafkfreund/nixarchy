@@ -1,0 +1,8 @@
+set -e
+mkdir -p closure log
+target=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-vm-test-run-nixarchy-install.drv
+root=00000000000000000000000000000001-utf8-root.drv
+printf '%s\n/nix/store/%s\n' "$target" "$root" > "closure/${target##*/}"
+printf 'error: ' > "log/$root"
+for i in {1..1500}; do printf '€' >> "log/$root"; done
+printf '\n' >> "log/$root"

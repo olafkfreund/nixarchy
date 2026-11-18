@@ -866,17 +866,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794993585,
-        "narHash": "sha256-MWdFwd+EJHjOCMVS6GRWmoVAwq1gOluQ4JqHX4Lq7Yo=",
+        "lastModified": 1795013883,
+        "narHash": "sha256-Sn78GAoMZKV7GRW9Ai+o05wMQC9kYeM+3IcdAvgAPLI=",
         "owner": "olafkfreund",
         "repo": "nixarchy-gltui",
-        "rev": "823472f99beafcfc187df78d99b222f09ce29245",
+        "rev": "10fc86ab68ac136f9c47896354704c1585fa6ff0",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-gltui",
-        "rev": "823472f99beafcfc187df78d99b222f09ce29245",
+        "rev": "10fc86ab68ac136f9c47896354704c1585fa6ff0",
         "type": "github"
       }
     },

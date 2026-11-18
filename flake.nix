@@ -2815,6 +2815,7 @@
               builtins.unsafeDiscardStringContext self.packages.${system}.update.drvPath
             );
           } "touch $out";
+          nix-update-archive = import ./tests/nix-update-archive.nix { pkgs = pkgsFor.${system}; };
 
           # Hyprland loads its GPU drivers into its own process, so they must
           # share its glibc -- evaluation only, no boot. See

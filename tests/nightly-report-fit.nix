@@ -16,29 +16,7 @@ pkgs.runCommand "nixarchy-nightly-report-fit"
         fail() { failures+=("$*"); }
         yq -r '.jobs.report.steps[] | select(.name == "Open or update an issue") | .run' \
           ${../.github/workflows/nightly.yml} > step.sh
-        python3 -c '
-    import pathlib
-    import re
-
-    pattern = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
-    source = pathlib.Path("step.sh").read_text()
-    fixed = {"github.server_url": "https://github.test", "github.repository": "o/r", "github.run_id": "123"}
-
-    def replace(match):
-        expr = match.group(1)
-        if expr == "contains(needs.*.result, " + chr(39) + "cancelled" + chr(39) + ")":
-            return "true"
-        if re.fullmatch(r"needs\.[A-Za-z0-9_-]+\.result", expr):
-            return "cancelled" if expr == "needs.keyboard-boot.result" else "success"
-        if expr in fixed:
-            return fixed[expr]
-        raise ValueError("unhandled GitHub expression: " + expr)
-
-    rendered = pattern.sub(replace, source)
-    if pattern.search(rendered):
-        raise ValueError("unreplaced GitHub expression")
-    pathlib.Path("rendered.sh").write_text(rendered)
-    ' 
+        python3 ${./nightly-report-fit/render.py}
         mkdir bin
         printf '%s\n' \
           '#!${pkgs.bash}/bin/bash' \

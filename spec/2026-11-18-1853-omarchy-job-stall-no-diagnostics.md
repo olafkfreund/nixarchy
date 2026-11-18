@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1853
 intent: intent/2026-11-18-1853-omarchy-job-stall-no-diagnostics.md
 ---
@@ -112,6 +112,9 @@ not copied: a sampler loop is killed with the job and orphans its own `sleep`
 (`nightly.yml:511`). One snapshot at one moment is enough.
 
 ## Decisions for approval
+
+**Resolved at approval (owner, 2026-11-18):** decisions 1-4 as recommended, and decision 6 the **smaller** size: `run` mode only, no `watch`, no post to #1853, no permission change. The design sections on `watch` and reporting stay below as the recorded larger option.
+
 
 1. **Diagnostics are required, not only a shorter stall.** Recommend yes. A bound
    alone leaves the next recurrence as unexplained as these two.

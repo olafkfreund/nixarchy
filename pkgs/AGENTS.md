@@ -1565,3 +1565,12 @@ into a sourced `quattro-user-files.sh`, which the phase's size budget forced
   or not. A GVariant compare (`"'Yaru"*`) written inside one broke the whole
   build with `syntax error near unexpected token '('`. Strip the quotes from
   the value first (`tr -d \\047`) rather than matching them.
+
+## nix-update is patched for the updaters only (#1851)
+
+`nix-update-archive.patch` makes `get_flake_store_path` run `nix flake archive`
+before `nix flake metadata`, because nix 2.35 reports a dirty tree's store path
+without writing it. REPORTED upstream as Mic92/nix-update#693; a carried patch
+until that lands, then delete it and the `newScope` in `nixarchy-apps`. Only
+`nixarchy-apps` is built with it: `final.nix-update` is untouched. Why:
+`docs/internals/flake.md#nix-run-update-rewrites-the-pinned-versions-and-ha`.

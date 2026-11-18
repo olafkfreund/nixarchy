@@ -1213,6 +1213,18 @@ nix-update writes the version before it computes the hashes, which
 has the same shape. Only files the updater newly dirtied are
 restored, so a local `nix run .#update` keeps a user's own edits.
 
+nix-update is carried with `pkgs/nix-update-archive.patch` (#1851). nix 2.35's
+`flake metadata` reports a dirty tree's store path without writing it, so
+nix-update's prefetch after editing `version` read a path that did not exist
+and failed with "failed to retrieve hash". The patch runs `nix flake archive`
+first, which writes it. Only the nixarchy-apps updaters get the patched copy:
+the overlay's `nix-update` is untouched, so a Mode A user's `pkgs` is not
+affected. This replaces the `nix flake archive` pre-copy in the `update` app
+(#1775), which covered only the tree as it stood before the first bump.
+Reported as Mic92/nix-update#693; delete the patch and the `newScope` in
+`nixarchy-apps` once the patch stops applying. `checks.nix-update-archive`
+runs a real bump with the updaters' own binary.
+
 <a id="a-vm-that-installs-onto-a-blank-disk-with-a-networ"></a>
 ### A VM that installs onto a blank disk, WITH a network -- which
 

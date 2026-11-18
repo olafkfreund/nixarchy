@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1858
 intent: intent/2026-11-18-1858-nightly-vm-host-sequencing.md
 ---

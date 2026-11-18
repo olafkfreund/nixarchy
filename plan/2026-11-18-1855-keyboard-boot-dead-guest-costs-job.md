@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1855
 spec: spec/2026-11-18-1855-keyboard-boot-dead-guest-costs-job.md
 coders:

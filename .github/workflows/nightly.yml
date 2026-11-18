@@ -55,7 +55,7 @@ jobs:
       # nix already on it and the store already warm, which is most of why it
       # is fast enough to do this nightly.
       - name: Install onto a blank disk and boot the result
-        run: nix build .#checks.x86_64-linux.install --print-build-logs
+        run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.install --print-build-logs
 
       # installer-vm is a runnable script, not a check, so nothing has ever
       # built it -- and it sat broken for weeks because of that: its writable
@@ -102,7 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install with encryption, boot through the LUKS prompt
-        run: nix build .#checks.x86_64-linux.install-encrypted --print-build-logs
+        run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.install-encrypted --print-build-logs
 
       - name: Report the install duration
         if: always()
@@ -119,7 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Boot German and Russian keyboard layouts
-        run: nix build .#checks.x86_64-linux.keyboard-boot --print-build-logs
+        run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.keyboard-boot --print-build-logs
 
   microvm:
     name: boot a MicroVM on the -tcg runner
@@ -135,7 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Boot a MicroVM on the -tcg runner
-        run: nix build .#checks.x86_64-linux.microvm-boot --print-build-logs
+        run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.microvm-boot --print-build-logs
 
   install-iso-net:
     name: install from the network ISO
@@ -191,7 +191,7 @@ jobs:
 
       # This probes a substituter and fetches the closure it does not carry.
       - name: Install from the NETWORK ISO, fetching the closure
-        run: nix build .#checks.x86_64-linux.install-iso-net --print-build-logs
+        run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.install-iso-net --print-build-logs
 
   # A failure at 03:00 that nobody sees until someone opens the Actions tab is
   # a failure that costs a day. This turns one into an issue.

@@ -938,7 +938,7 @@
   "omarchy-device-gpu-hybrid" = {
     edge = "only";
     class = "vendor";
-    reason = "Vendored unchanged (quattro; the old omarchy-toggle-hybrid-gpu moved here). Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only.";
+    reason = "Vendored unchanged (quattro; the old omarchy-toggle-hybrid-gpu moved here). Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Since quattro c6945de it also stages through /usr/bin/mktemp, install and mv and writes a sleep hook to /usr/lib/systemd/system-sleep. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only; both menu rows that run it are dimmed (modules/apps.nix).";
     allow = "etc-write systemctl-system";
   };
   "omarchy-device-keyboard-toprow" = {

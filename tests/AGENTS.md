@@ -2242,6 +2242,13 @@ on 26.05, and the test script is type-checked.
   `readme-counts.sh` to verify root-failure names from the log without
   duplicating `omarchy`, `failed=` on early exits, and `README.md` restored when
   `readme-counts.sh --fix` refuses.
+- **`checks.nightly-digest`** drives `.github/scripts/nightly-digest.sh` against
+  a stub `nix` that serves a case's local `log/`, `old-log/` (a file whose mtime
+  falls outside the job's window) and `remote-log/` (only when substituters are
+  not disabled), so root selection is tested against all three (#1856). The cap
+  is in bytes, and every job heading is always kept.
+  `checks.nightly-report-fit` runs the report step's real `run:` from
+  `nightly.yml`, with its `${{ }}` expressions substituted and a `gh` stub.
 
 **What neither check reaches:** `omarchy-edge.yml`'s wiring is asserted only by
 variable name in the `report` step (and whether a timed-out job keeps its step

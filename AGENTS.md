@@ -413,6 +413,13 @@ Two other ways a check stops checking, both found in one week:
   `cancelled` (§6): #1457's `omarchy` job hit its limit with
   `checks.bus-mcp` already failed inside it, so read the log for failed builds
   before calling a timeout slowness.
+- **`nix log <drv>` also asks your substituters, and cache.nixos.org serves
+  logs of its own builds**, so "output not in the store, and `nix log` returns
+  text" matched every build-time dependency the machine had substituted past:
+  the nightly digest named 1,899 derivations for one timed-out VM check, and
+  the report could not file its issue (#1856). Even local logs are mostly of
+  builds whose outputs were collected (168 of 169 on that night), so filter by
+  the log file's mtime against the job's window.
 
 ## 5. Git and flake mechanics that bite
 

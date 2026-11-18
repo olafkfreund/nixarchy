@@ -10,6 +10,7 @@ pkgs.runCommand "nixarchy-stall-watch"
       gnugrep
       gawk
       findutils
+      bzip2
       python3
     ];
   }
@@ -66,6 +67,13 @@ pkgs.runCommand "nixarchy-stall-watch"
     [ "$(cat D.rc)" = 124 ] || fail "D: exit $(cat D.rc), wanted 124"
     grep -qF '== process forest ==' D.out || fail 'D: no process forest'
     grep -qF '== disk/mem ==' D.out || fail 'D: no disk/mem'
+
+    # Nix compresses builder logs by default, so the snapshot must decode them.
+    mkdir -p logs/drvs/ab
+    printf '%s\n' 'stall-watch-k-marker' | bzip2 > logs/drvs/ab/cdef-k.drv.bz2
+    NIX_LOG_DIR=$PWD/logs run K 2 sleep 600
+    [ "$(cat K.rc)" = 124 ] || fail "K: exit $(cat K.rc), wanted 124"
+    grep -qxF 'stall-watch-k-marker' K.out || fail 'K: the compressed builder log was not decoded'
 
     [ -r /proc/locks ] || fail 'F: /proc/locks unreadable'
     flock -F f.lock sleep 600 &

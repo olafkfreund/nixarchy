@@ -32,7 +32,7 @@ snapshot() {
   echo '== nix-daemon journal =='
   timeout 10 journalctl -u nix-daemon -n 50 --no-pager 2>&1 || true
   echo '== recent builder logs =='
-  timeout 10 bash -c 'find /nix/var/log/nix/drvs -type f -printf "%T@ %p\n" | sort -nr | head -10 | cut -d" " -f2- | while read -r f; do echo "--- $f"; tail -n 10 "$f"; done' 2>&1 || true
+  timeout 10 bash -c 'find "${NIX_LOG_DIR:-/nix/var/log/nix}/drvs" -type f -printf "%T@ %p\n" | sort -nr | head -10 | cut -d" " -f2- | while read -r f; do echo "--- $f"; case $f in *.bz2) bzcat -- "$f" | tail -n 10 ;; *) tail -n 10 -- "$f" ;; esac; done' 2>&1 || true
   echo '== log tail =='
   timeout 10 tail -n 30 -- "$log" 2>&1 || true
   echo '::endgroup::'

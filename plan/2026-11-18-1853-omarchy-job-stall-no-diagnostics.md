@@ -281,3 +281,10 @@ the bare `nix build` at `build.yml:1231`. No state, secrets or permissions
 change, so a revert is complete. If step 28 false-cancels healthy runs on cold
 stores, raise `1500` in `build.yml` (a CI-gate change, human merge) rather than
 removing the wrapper.
+
+## Deviation after review (Codex on #1860)
+
+Nix compresses builder logs by default (`compress-build-log`), so the snapshot's
+`== recent builder logs ==` section decodes `*.bz2` with `bzcat` before tailing, and
+reads the directory from `NIX_LOG_DIR` (default `/nix/var/log/nix`, Nix's own
+variable) so `tests/stall-watch.nix` case K can feed it a compressed fixture.

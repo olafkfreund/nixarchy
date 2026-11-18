@@ -23,7 +23,7 @@ New file `pkgs/nix-update-archive.patch`. It adds one call to
             ["nix", "flake", "archive"],
             cwd=import_path,
             capture_output=True,
-            check=True,
+            check=False,
         )
 ```
 
@@ -37,6 +37,12 @@ not swap a word, which corrects the intent's guess.
 A patch file, rather than `substituteInPlace`: it fails the build with a
 readable reject if upstream changes those lines (the intent's
 `--replace-fail` constraint), and it is what goes upstream unchanged.
+
+`check=False`, not `True`: if archiving fails (say an input that cannot be
+fetched), `metadata` still runs and answers exactly as it did before the
+patch, so a failed archive degrades to today's behaviour rather than
+skipping `metadata` and falling back to evaluating the raw working
+directory. Codex's review found the `check=True` draft did the latter.
 
 Cost: `nix flake archive` also copies the flake's inputs, which are already
 in the store after the first evaluation. 1.5 s warm on this repository.
@@ -59,10 +65,17 @@ nixarchy-apps =
 ```
 
 Every `final.callPackage ./pkgs/apps/…` inside the set becomes
-`callPackage ./pkgs/apps/…`. No package file changes.
+`callPackage ./pkgs/apps/…`. No package file changes. Of the set's
+updaters, 15 call nix-update; `once` and `hey-cli` have their own and are
+unaffected (the intent's "18" counted files that mention nix-update, not
+updaters).
 
-Measured on checkmate: through `newScope`, `outPath` is identical and only
-`updateScript` differs. `final.nix-update`, the one a Mode A user's `pkgs`
+Measured: through `newScope`, every one of the 20 package files in the set
+keeps its `outPath` (Codex evaluated all 20, with titlebars' explicit
+Hyprland argument; I checked checkmate), and exactly the 15 nix-update
+updateScripts change. nixpkgs defines `callPackage = pkgs.newScope { }`
+(`pkgs/top-level/splice.nix:120-124`), so the scope is the same one with
+`nix-update` replaced. `final.nix-update`, the one a Mode A user's `pkgs`
 carries, is untouched: the patched copy exists only as an argument inside
 this scope.
 
@@ -75,26 +88,46 @@ too, because nothing else in the app removes the need for it (to be
 re-checked in the plan by grepping the script for `nix `, and dropped if
 nothing calls it).
 
-### 4. A check that runs nix-update's own function
+### 4. A check that runs a real version-and-hash update with the updaters' own nix-update
 
-New `tests/nix-update-archive.nix`, wired as `checks.nix-update-archive`. In
-a `runCommand`, with a private store (`NIX_REMOTE=local?root=$TMPDIR/root`)
-so it needs no daemon and no network:
+New `tests/nix-update-archive.nix`, wired as `checks.nix-update-archive`,
+taking `nixarchy-apps` from the flake's own `pkgsFor`. A `runCommand`, with a
+private store (`NIX_REMOTE=local?root=$TMPDIR/root`, `sandbox = false`, no
+substituters), so it needs no daemon and no network:
 
-1. make a git flake with no inputs, commit it, then edit `flake.nix` the way
-   nix-update edits a package file;
-2. call `get_flake_store_path` from the nix-update that `nixarchy-apps`
-   passes to its updaters, taken from `nixarchy-apps.checkmate.updateScript`'s
-   scope (or by the same `overrideAttrs`, exported once so check and scope
-   cannot drift), with that package's own interpreter;
-3. fail unless the reported path exists in the private store **and** holds
-   the edited file.
+1. **Use the updaters' binary, not a copy.** At build time, read the
+   nix-update path out of `checkmate.updateScript`'s script (it is a build
+   input, so it and its nix-update are in the sandbox), and assert that every
+   other nix-update updateScript in `nixarchy-apps` names the same path. A
+   scope that stops passing the patched copy to any updater fails here,
+   naming the updater.
+2. **A real bump, offline.** A git flake whose package `demo` has
+   `version = "1.0"` and a `src` that is a fixed-output derivation built by
+   `/bin/sh` writing its version, with a placeholder hash. So a version
+   change needs a new hash exactly as a real release does.
+3. `nix flake archive` the clean tree first, as #1775 does and as CI's store
+   effectively has, then run `nix-update --flake demo --version 2.0` with
+   that binary.
+4. Fail unless `flake.nix` then holds `"2.0"` **and** a hash that is not the
+   placeholder.
 
-Prototyped: against stock nix-update 1.16.0 it fails with `FAIL:
-/nix/store/lp9x…-source was reported and never written`, and with the patch
-it passes. It is evaluation plus a short Python build, the cheap tier. A new
-`checks.<name>` is run on pull requests by `generated-checks.sh` with no
-workflow edit (§4).
+Prototyped (with the patch applied by hand, before the wiring step):
+
+```
+stock:   nix_update.errors.UpdateError: failed to retrieve hash when trying to update demo.src
+         error: opening file "/nix/store/x56j…-source": No such file or directory
+         FAIL: version and hash not both updated
+patched: Update 1.0 -> 2.0 … ok   (outputHash rewritten to sha256-1Sbr…)
+```
+
+The stock failure is CI's error, at the same point (the post-edit prefetch),
+which is what makes it the right failure rather than any failure. Without
+step 3 the stock run fails earlier, at its first evaluation, for a related
+but different reason; the check keeps step 3 so it describes the real case.
+
+Cost: evaluation, the patched nix-update's Python build, one tiny
+fixed-output build. Cheap tier. A new `checks.<name>` is run on pull requests
+by `generated-checks.sh` with no workflow edit (§4; `generated-checks.sh:123`).
 
 ### 5. Docs
 
@@ -130,16 +163,19 @@ alone.
 
 ## Risks
 
-- **`nix flake archive` fails where `metadata` did not**, for example a
-  network fetch of an input that is not in the store. The `check=True`
-  raises, `get_flake_store_path` catches `CalledProcessError` and returns
-  `None`, and nix-update falls back to evaluating the working directory
-  directly. That degrades to the old behaviour rather than to a new
-  failure. On the hosted runner every input is fetched by the job's first
-  evaluation anyway.
+- **`nix flake archive` fails where `metadata` did not**, for example an
+  input that cannot be fetched. With `check=False` the failure is ignored and
+  `metadata` runs as before, so the outcome is today's: the path may be
+  missing and the updater fails the same way it does now, and the `update`
+  app reverts it and carries on (#1537). No new failure mode. On the hosted
+  runner every input is fetched by the job's first evaluation anyway.
+- **`archive` copies every flake input into the store** on each updater
+  call. Measured at 1.5 s warm here; on a cold store it is the fetch the
+  job's evaluation does anyway.
 - **The patched nix-update is not in any binary cache**, so `update.yml`
-  builds it (a small Python package, seconds) on each run. It is not added
-  to the cachix allowlist: nobody downloads it but that one job.
+  and the pull-request run of `checks.nix-update-archive` both build it (a
+  small Python package, seconds). It stays off the cachix allowlist: the
+  check's proof is pushed as usual, and nobody else downloads the package.
 - **A future nixpkgs ships a fixed or changed nix-update.** The patch then
   fails to apply and `update.yml` goes red at build time, naming the patch,
   which is the intended signal to delete it.
@@ -148,9 +184,15 @@ alone.
 
 ## Verification
 
-1. §1 proof for the new check: build `checks.nix-update-archive` with the
-   patch removed from the scope and watch it fail with "reported and never
-   written", restore it and watch it pass. Both outputs go in the PR.
+1. §1 proof for the new check, two breaks, each landed and confirmed with
+   `git diff` before building (§1, "a break that stays green may be a break
+   that never applied"):
+   - remove the patch from the scope's override: the check fails with
+     `failed to retrieve hash … opening file`;
+   - leave the patch, but call checkmate with `final.callPackage`: the
+     wiring step fails, naming checkmate.
+
+   Restore, and it passes. All three outputs go in the PR.
 2. Mode A: in the same tree (§5), compare `outPath` of every
    `nixarchy-apps` member before and after the scope change; all equal.
    Compare `pkgs.nix-update.outPath` from the overlay with nixpkgs' own;

@@ -9,16 +9,16 @@
  ---
  
  # Building an Omarchy App
-@@ -22,7 +22,7 @@ Omarchy's own apps are dead simple on purpose: one window, one job, driven from
+@@ -24,7 +24,7 @@
  
- Ask what the app should do if it isn't clear, and settle the one job it does. Pick a short lowercase name (`tally`, `pomo`); it is the binary, the package, the `.desktop` file, the icon, and the Wayland app id all at once. Create the project in `~/Work/<name>` unless the user says otherwise, and `git init` it.
+ Start every app from the scaffold, never by retyping the templates: in the empty project directory, run `scaffold <name> "<Display Name>"` from this skill's directory. It writes every file in `templates.md` with the name filled in, the LICENSE, and `git init`, then builds and runs the tests, which pass. The starter is a working counter app: change it into the app one piece at a time (the backend's state and actions, then `Main.qml`, then the tests), running `bin/test` after each piece so it stays green. Read the template for a file in `templates.md` only when you change that file. Before laying out a window with more than one thing in it (a list and a detail pane, modes, a dialog), read `patterns.md`: a working two-pane window and the layout traps it avoids.
  
 -Everything an app needs is part of Omarchy: `cmake`, `make`, a C++ compiler, Qt's base, declarative, multimedia, SVG, and Wayland modules, and `ffmpeg`. If `cmake` is missing, install the set with `omarchy-pkg-add base-devel cmake qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland ffmpeg`.
 +Everything an app needs is available through its own dev shell: `cmake`, `make`, a C++ compiler, Qt's base, declarative, multimedia, SVG, and Wayland modules, and `ffmpeg` when the app uses it. Enter the shell with `nix develop` (`templates.md` has the `flake.nix`); nothing is installed system-wide.
  
  ## Shape
  
-@@ -30,7 +30,8 @@ Everything an app needs is part of Omarchy: `cmake`, `make`, a C++ compiler, Qt'
+@@ -32,7 +32,8 @@
  CMakeLists.txt               src/ as a library, the app, the tests, warnings, install rules
  bin/build                    shared: cmake into build/
  bin/test                     shared: builds, then runs ctest offscreen
@@ -28,7 +28,7 @@
  src/main.cpp                 app setup; hands C++ objects to QML
  src/backend.{h,cpp}          the app's state and work, as a QObject
  src/theme.{h,cpp}            the Omarchy palette, light or dark, and Hyprland's rounding
-@@ -43,7 +44,7 @@ share/<name>.desktop  share/<name>.svg
+@@ -45,7 +46,7 @@
  README.md  LICENSE  .gitignore
  ```
  
@@ -37,25 +37,30 @@
  
  ## How the pieces split
  
-@@ -79,7 +80,7 @@ README.md  LICENSE  .gitignore
+@@ -81,11 +82,11 @@
  - **The catalogs.** `en.json` lists exactly the strings the sources translate, and every other catalog translates only what `en.json` has, with the same placeholders and an `other` plural form. They catch the string someone added without a catalog entry.
  - **The real window.** Load `qrc:/Main.qml` with the real `Theme`, `Translator`, and `Backend` (or a QML fake backend, as Monologue's `tests/ui_tests.cpp` does once the backend needs devices), drive it with `QTest` keys and clicks, and fail on any QML warning the engine reports. Give it a `Translator` reading a temp language file, or a desktop set to Danish fails the English assertions.
+ 
+-QML only reports a property that doesn't exist (`padding` on a `Rectangle`, `wrapMode` misspelled) when it loads, so check every QML file you change before building: `/usr/lib/qt6/bin/qmllint --unqualified disable src/*.qml`. Fix each warning it prints; they are real errors, except `Member "layoutDirection" not found on type "QQmlApplication"`, which the starter itself gets and which works. To find out how a Qt API behaves, try it in a test case under `tests/` and run `bin/test`, never in a scratch file compiled by hand, which lacks the include paths CMake supplies.
++QML only reports a property that doesn't exist (`padding` on a `Rectangle`, `wrapMode` misspelled) when it loads, so check every QML file you change before building: `qmllint --unqualified disable src/*.qml`. Fix each warning it prints; they are real errors, except `Member "layoutDirection" not found on type "QQmlApplication"`, which the starter itself gets and which works. To find out how a Qt API behaves, try it in a test case under `tests/` and run `bin/test`, never in a scratch file compiled by hand, which lacks the include paths CMake supplies.
+ 
+ Tests can't tell a cramped or clipped layout from a good one, so look at the window after every change to `Main.qml`, in each of its modes: `omarchy agent look app -- ./build/<name>` has the app draw itself offscreen (the template's `main.cpp` does this when `OMARCHY_LOOK_SCREENSHOT` is set) and prints the image's path and what the app logged, and `--keys "Space 3"` presses those keys through the window's `Shortcut`s first. `--theme catppuccin-latte` and `--language da` show it in another theme or language without changing the user's. Open the image and fix anything cut off, overlapping, empty, or hard to read before moving on. Never run the app itself from your shell: its window never closes, and the command never returns.
  
 -A test binary that isn't registered with `add_test` never runs, and `ctest` with nothing to run passes, so register each one. A test that needs a tool CI may lack fails without it rather than skipping, or a green run proves nothing. Whatever a test needs beyond the app's own dependencies (a font, a codec, a tool) is a `checkdepends` in the app's recipe in omarchy-pkgs, which is where CI reads it from: the CI container has no fonts at all until one is listed.
 +A test binary that isn't registered with `add_test` never runs, and `ctest` with nothing to run passes, so register each one. A test that needs a tool CI may lack fails without it rather than skipping, or a green run proves nothing. Whatever a test needs beyond the app's own dependencies (a font, a codec, a tool) goes into `nativeCheckInputs` in `package.nix`; the dev shell takes its inputs from the package with `inputsFrom`, so `package.nix` is the one list and CI reads it from there.
  
  ## Loop
  
-@@ -87,7 +88,7 @@ A test binary that isn't registered with `add_test` never runs, and `ctest` with
+@@ -93,7 +94,7 @@
  2. `bin/test` after each change. Its arguments go to `ctest`, so `bin/test -V` shows every Qt test function as it runs. Warnings are on for the whole project; keep the build free of them.
- 3. Look at it. Take a screenshot with `omarchy capture screenshot fullscreen save` and check the window against the theme, on a light theme as well as a dark one, before calling it done. Switch the language once (`omarchy language da`) and look again: longer words must not clip, and nothing should still be in English. Try a right-to-left language too, and open every dialog and popup, not only the window.
- 4. Drive the real QML offscreen when a change is about interaction. A small harness in the scratchpad that loads `qrc:/Main.qml` with `QT_QPA_PLATFORM=offscreen`, sends mouse and key events, and saves `window->grabWindow()` shows what the user would see without touching their desktop. Set `QT_FORCE_STDERR_LOGGING=1`, or QML warnings go to the journal instead of the terminal. What it proves worth keeping moves into the tests.
+ 3. Look at it with `omarchy agent look app` before calling it done: on the user's theme, on a light theme as well as a dark one (`--theme catppuccin-latte`), in Danish (`--language da`), where longer words must not clip and nothing should still be in English, and in a right-to-left language (`--language ar`). Open every dialog and popup with `--keys`, not only the window.
+ 4. Drive the window in the test when a change is about interaction: the starter's window test loads `qrc:/Main.qml` offscreen and sends it keys and clicks with `QTest`, which also types into fields, where `--keys` only reaches `Shortcut`s. Set `QT_FORCE_STDERR_LOGGING=1` when running a test binary by hand, or QML warnings go to the journal instead of the terminal.
 -5. `cmake --install build --prefix ~/.local` installs the binary, the `.desktop` entry, and the icon for this user, so the app appears in the Omarchy app launcher (`Super + Space`) before it is packaged. Run it again after every change the user should see there. Once the package is installed, remove the local copy with `xargs rm < build/install_manifest.txt`, or its `.desktop` entry keeps shadowing the package's.
 +5. `nix run` builds the package and runs it. To see it in the Omarchy app launcher (`Super + Space`), add the flake to the system configuration and rebuild, which installs the binary, the `.desktop` entry, and the icon. Rebuild again after every change the user should see there.
  
  ## Qt Quick traps
  
-@@ -113,6 +114,4 @@ A test binary that isn't registered with `add_test` never runs, and `ctest` with
+@@ -119,6 +120,4 @@
  ## README and release
  
  - The README opens with a screenshot of the app doing its job. Grab it from the offscreen harness, with the default accent so it doesn't depend on the current theme, and with made-up content: never the user's name, signature, files, or other personal data.
@@ -79,7 +84,7 @@
  
  ```cmake
  cmake_minimum_required(VERSION 3.21)
-@@ -42,8 +42,7 @@ target_link_libraries(<name>_tests PRIVATE <name>_core Qt6::Test)
+@@ -42,8 +42,7 @@
  add_test(NAME <name>_tests COMMAND <name>_tests)
  set_tests_properties(<name>_tests PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)
  
@@ -89,7 +94,25 @@
  include(GNUInstallDirs)
  install(TARGETS <name> RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
  install(FILES share/<name>.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-@@ -80,7 +79,7 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir "$root/build" --output-on-failure --n
+@@ -56,7 +55,7 @@
+ Shared.
+ 
+ ```bash
+-#!/bin/bash
++#!/usr/bin/env bash
+ set -euo pipefail
+ 
+ root="$(cd "$(dirname "$0")/.." && pwd)"
+@@ -69,7 +68,7 @@
+ Shared.
+ 
+ ```bash
+-#!/bin/bash
++#!/usr/bin/env bash
+ set -euo pipefail
+ 
+ # Arguments go to ctest, so `bin/test -V` shows every Qt test function as it runs.
+@@ -80,7 +79,7 @@
  
  ## `.github/workflows/test.yml`
  
@@ -98,7 +121,7 @@
  
  ```yaml
  name: Test
-@@ -97,40 +96,39 @@ jobs:
+@@ -97,40 +96,39 @@
    test:
      name: Build and test
      runs-on: ubuntu-latest
@@ -115,10 +138,6 @@
 +      - uses: cachix/install-nix-action@v31
 +      - run: nix build -L
 +```
-+
-+## `flake.nix`
-+
-+The dev shell is for `nix develop`, then `bin/build` and `bin/test`. The package is what `nix run` builds and what a configuration installs.
  
 -      - name: Install the package's dependencies
 -        # The package lives in omarchy-pkgs, so its PKGBUILD is the one list of what the app needs and CI reads it rather than keeping a copy.
@@ -137,16 +156,18 @@
 -          chown -R tester .
 -          sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
 -          locale-gen
--
++## `flake.nix`
+ 
 -      - name: Build
 -        run: su tester -c bin/build
--
--      - name: Test
--        run: su tester -c 'LANG=en_US.UTF-8 dbus-run-session -- bin/test'
++The dev shell is for `nix develop`, then `bin/build` and `bin/test`. The package is what `nix run` builds and what a configuration installs.
++
 +```nix
 +{
 +  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-+
+ 
+-      - name: Test
+-        run: su tester -c 'LANG=en_US.UTF-8 dbus-run-session -- bin/test'
 +  outputs = { self, nixpkgs }:
 +    let
 +      forAllSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ];
@@ -169,7 +190,7 @@
  ```
  
  ## `src/main.cpp`
-@@ -933,7 +931,7 @@ int lines(const QString &path) {
+@@ -978,7 +976,7 @@
  // A hyprctl that answers with response.json beside it and counts its calls.
  QString fakeHyprctl(const QString &directory) {
      const QString command = directory + "/hyprctl";
@@ -178,7 +199,7 @@
                         + "/response.json'\n");
      QFile::setPermissions(command, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
      return command;
-@@ -1303,6 +1301,62 @@ QTEST_MAIN(<Name>Tests)
+@@ -1350,6 +1348,62 @@
  #include "<name>_tests.moc"
  ```
  
@@ -241,7 +262,7 @@
  ## `share/<name>.desktop`
  
  ```ini
-@@ -1333,58 +1387,9 @@ The icon is a single square SVG. Start from a rounded square in the accent and d
+@@ -1382,58 +1436,9 @@
  
  ```text
  /build/
@@ -301,3 +322,21 @@
 -  }
 -}
 -```
+--- a/default/agents/skills/omarchy-app/scaffold
++++ b/default/agents/skills/omarchy-app/scaffold
+@@ -106,13 +106,14 @@
+ 
+ if not os.path.isdir(".git"):
+     subprocess.run(["git", "init", "-q"], check=False)
++subprocess.run(["git", "add", "-A"], check=True)
+ 
+ print(f"Wrote {len(written)} files for {name} ({display}):")
+ for path in sorted(written):
+     print("  " + path)
+ 
+ if "--no-build" not in sys.argv:
+-    result = subprocess.run(["bin/test"], capture_output=True, text=True)
++    result = subprocess.run(["nix", "develop", "--command", "bin/test"], capture_output=True, text=True)
+     lines = (result.stdout + result.stderr).strip().splitlines()
+     # The errors first: a build's last lines are often warnings that came after.
+     errors = [line for line in lines if re.search(r"\berror\b|FAIL", line)]

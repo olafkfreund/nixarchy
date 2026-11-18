@@ -25,6 +25,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "apply %s\n" "$(cat "$agent_file")" >> "$log"' > "$TMPDIR/stubs/nixarchy-apply"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "launched %s\n" "$(command -v "$WANT")" >> "$log"' 'exit 0' > "$TMPDIR/stubs/omarchy-agent"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "launcher %s\n" "$*" >> "$log"' > "$TMPDIR/stubs/omarchy-launch-floating-terminal-with-presentation"
+  printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "harness-entry %s\n" "$*" >> "$log"' > "$TMPDIR/stubs/omarchy-agent-launcher"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo mise >> "$log"' > "$TMPDIR/mise-bin/mise"
   chmod +x "$TMPDIR"/stubs/* "$TMPDIR/mise-bin/mise"
   # The package patches this shebang at install. A sandbox has no /usr/bin/env.
@@ -198,6 +199,8 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   done
   run_case kimi plain "$TMPDIR/real/bin"
   has "$log" "launched $TMPDIR/real/bin/kimi" 'present agent'
+  # #1847: a selected harness gets quattro's launcher of its own, as upstream's selection does.
+  "$grep_bin" -Fxq -- "harness-entry kimi" "$log" || fail "present agent: no omarchy-agent-launcher kimi"
   lacks "$log" 'launcher' 'present agent'
   [ "$(cat "$agent_file")" = kimi ] || fail "present agent was not recorded"
 

@@ -113,6 +113,8 @@ record() {
   printf '%s\n' "$agent" >"$agent_file"
   # #1760: the harness reads shared instructions from its first session; v4.5.0 has no such command.
   if command -v omarchy-agent-instructions >/dev/null 2>&1; then omarchy-agent-instructions "$agent" >/dev/null || true; fi
+  # #1847: quattro gives a selected harness its own launcher; v4.5.0 has no such command.
+  if command -v omarchy-agent-launcher >/dev/null 2>&1; then omarchy-agent-launcher "$agent" || true; fi
 }
 
 # gum confirm has three answers, not two: 0 is yes, 1 is no, 130 is a quit --

@@ -2507,6 +2507,10 @@
           failure-digest = import ./tests/failure-digest.nix {
             pkgs = pkgsFor.${system};
           };
+          # #1853: a bounded build step leaves a stall snapshot and kills its group.
+          stall-watch = import ./tests/stall-watch.nix {
+            pkgs = pkgsFor.${system};
+          };
           # #1711: a failed nightly's issue carries the failing log's excerpt.
           # See tests/nightly-digest.nix.
           nightly-digest = import ./tests/nightly-digest.nix {

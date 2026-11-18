@@ -25,7 +25,7 @@ sample() {
 
 sample
 (
-  trap 'kill "$s" 2>/dev/null; exit 0' TERM
+  trap 'kill "$s" 2>/dev/null; wait "$s" 2>/dev/null; exit 0' TERM
   while :; do
     sleep "$i" & s=$!
     wait "$s"

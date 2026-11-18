@@ -259,3 +259,10 @@ Runner PATH contents, `pgrep` and `sleep` on a runner, whether a self-hosted run
 stray children at job end, p620 load on any past night. The line numbers above were
 checked against current main in this worktree (`nightly.yml` 40-44, 58, 87-90, 105, 122,
 138, 143-148, 161, 194, 506-515; `flake.nix` 2519-2522; `vm-host-free.sh` 1-12).
+
+## Deviation after review (Codex on #1861)
+
+The sampler's TERM trap now waits for the `sleep` it kills before exiting, so
+the wrapper never returns with that child still in the process table (a zombie
+answers `kill -0`, which case 5 reads as an orphaned sleep). The race is not
+deterministic, so no break proof makes it fail on demand.

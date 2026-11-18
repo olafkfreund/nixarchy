@@ -21,8 +21,11 @@ pkgs.runCommand "nixarchy-stall-watch"
     run() {
       local name=$1 seconds=$2 rc=0
       shift 2
-      GITHUB_STEP_SUMMARY=$PWD/$name.summary bash ./stall-watch.sh run "$seconds" "$name.log" -- "$@" > "$name.out" 2>&1 || rc=$?
+      # The outer timeout bounds a case whose kill broke: it fails in a minute, not ten.
+      SECONDS=0
+      GITHUB_STEP_SUMMARY=$PWD/$name.summary timeout -k 5 60 bash ./stall-watch.sh run "$seconds" "$name.log" -- "$@" > "$name.out" 2>&1 || rc=$?
       echo "$rc" > "$name.rc"
+      echo "$SECONDS" > "$name.secs"
     }
 
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo $$ > a.pid' 'exec sleep 600' > a.sh
@@ -33,6 +36,7 @@ pkgs.runCommand "nixarchy-stall-watch"
     [ "$(cat A.rc)" = 124 ] || fail "A: exit $(cat A.rc), wanted 124"
     grep -qF '== process forest ==' A.summary || fail "A: no '== process forest ==' in summary"
     ! kill -0 "$(cat a.pid)" 2>/dev/null || fail 'A: sleep 600 still running'
+    [ "$(cat A.secs)" -lt 30 ] || fail "A: took $(cat A.secs) s, so the group was not killed at the deadline"
 
     run B 30 true
     [ "$(cat B.rc)" = 0 ] || fail "B: exit $(cat B.rc), wanted 0"

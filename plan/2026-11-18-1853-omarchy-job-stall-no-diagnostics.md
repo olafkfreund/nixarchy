@@ -254,7 +254,11 @@ landed, build, capture the red output, restore, build green.
 2. Change the deadline branch's `exit 124` to `exit 0`. Expect `FAIL: A: exit 0, wanted 124`.
 3. Replace the status capture so `rc` is taken from `tee` (`set +o pipefail`
    inside the `bash -c`). Expect `FAIL: C: exit 0, wanted 3`.
-4. Remove the process-group kill. Expect `FAIL: A: sleep 600 still running`.
+4. Remove the process-group kill. Expect `FAIL: A: took 60 s, so the group was not killed at the deadline`.
+   Deviation (measured): without the kill the wrapper's `wait` blocks until
+   `sleep 600` ends, so `A: sleep 600 still running` could never fire and the
+   case passed after ten minutes. Every case now runs under an outer
+   `timeout -k 5 60`, and A asserts it finished within 30 s.
 6. Remove the `stall-watch.sh run` call from step 28 in `build.yml`. Expect
    `FAIL: I: step 28 does not call stall-watch.sh`.
 7. Drop the `== /proc/locks ==` section. Expect `FAIL: F: no '->' waiter line in /proc/locks section`.

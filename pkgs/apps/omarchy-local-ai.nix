@@ -9,21 +9,24 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omarchy-local-ai";
-  version = "0.6.4";
+  version = "0.6.8";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omarchy-local-ai";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-XmAF1DnjmvDxTjzJRKeVttx5NzV7FPILKGw9N+xx8PI=";
+    hash = "sha256-W3psu7TrnXhRjZaDYYWhjvwIW0LjTSDvmmttpCS4KIU=";
   };
 
   nativeBuildInputs = [ python3 ];
 
   # Before the tests too: engine-test.sh runs the source tree's entry script
   # through a symlink, and #!/usr/bin/python3 does not exist in the sandbox.
+  # 0.6.8's engine-test.sh also writes stub scripts whose #!/bin/bash sits in a
+  # Python string, where patchShebangs cannot reach it.
   postPatch = ''
     patchShebangs omarchy-local-ai tests
+    substituteInPlace tests/engine-test.sh --replace-fail '"#!/bin/bash\n' '"#!${stdenv.shell}\n'
   '';
 
   # The entry script finds agent_local.py and the catalog through
@@ -50,7 +53,12 @@ stdenv.mkDerivation (finalAttrs: {
   installCheckPhase = ''
     runHook preInstallCheck
 
-    bash tests/engine-test.sh
+    # 0.6.8's pair_remove test runs `podman rm -f` unstubbed and ignores its
+    # status, so a podman that fails stands in for the engine the sandbox lacks.
+    mkdir -p "$TMPDIR/stub-bin"
+    printf '#!%s\nexit 1\n' ${stdenv.shell} > "$TMPDIR/stub-bin/podman"
+    chmod +x "$TMPDIR/stub-bin/podman"
+    PATH=$TMPDIR/stub-bin:$PATH bash tests/engine-test.sh
     export HOME=$(mktemp -d) PYTHONDONTWRITEBYTECODE=1
     $out/bin/omarchy-local-ai validate $out/share/omarchy-local-ai
 

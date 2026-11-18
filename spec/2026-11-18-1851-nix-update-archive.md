@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1851
 intent: intent/2026-11-18-1851-nix-update-archive.md
 ---

@@ -58,6 +58,15 @@ All edits are in `tests/keyboard-boot.nix` (line numbers from main at 6cfa2688).
    - → verify: both exit 0, `--print-build-logs` shows `Reached target Multi-User System` matched in `first_boot` for `de` and `ru` and in both `encrypted_boot` calls. If it instead reports `multi-user not reached within 900 s` or 120 s silence on a healthy guest, that is the Plymouth risk: apply decision 4's fallback and update this plan in the same commit.
    - Traps: §6 VM tier.
 
+Deviation (measured in step 2): the pre-fix before-state did not run to the cap.
+With the guest stopped at once, the driver's `connect()` gave up at 301.5 s with
+`RuntimeError: Shell did not start in time`, because the backdoor never sent a
+byte (10 x 30 s select). Its unbounded part is the `recv` loop after the first
+byte, which a stop at t=0 cannot reach. So the contrast is a 301 s failure with
+no guest evidence (before) against a 251.66 s `BootHang` with register dumps
+(after), and the 11-18 hang is attributed to the `recv` half by inference only.
+`tests/AGENTS.md`'s "no limit" sentence is corrected in the same commit.
+
 ## Tests (by §6 tier)
 
 - Cheap, one at a time under `flock /mnt/data/vmtest/codex-build.lock`: `nix fmt -- --ci`, statix, deadnix on the file; `nix eval --raw .#checks.x86_64-linux.keyboard-boot.drvPath`; the generated checks list (`.github/scripts/generated-checks.sh`) needs no edit because `keyboard-boot` stays in `nightly_only`, but AGENTS.md:799 still requires building every target it prints (plus claimed checks whose files are touched) before the push, by §6 tier (cache hits where CI already built them); list them in the PR and name any not run; also build `checks.grep-q-pipefail` only if a shell edit appears (none planned).

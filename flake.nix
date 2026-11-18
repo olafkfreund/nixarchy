@@ -2524,6 +2524,10 @@
           commit-independent-shallow = import ./tests/commit-independent-shallow.nix {
             pkgs = pkgsFor.${system};
           };
+          # #1858: the nightly VM-host sampler preserves job status and stops its sleep.
+          vm-host-sample = import ./tests/vm-host-sample.nix {
+            pkgs = pkgsFor.${system};
+          };
           panel-loaders = import ./tests/panel-loaders.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

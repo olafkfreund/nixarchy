@@ -236,8 +236,8 @@ excerpt_chunk() {
   if (( ${#content} < ${#excerpt} + 1 )); then
     while (( ${#content} + ${#marker} + 8 > budget )) && [ -n "$content" ]; do
       content=${content%$'\n'}
-      content=${content%$'\n'*}
-      if [ -n "$content" ]; then content+=$'\n'; fi
+      # Drop the last line; with no earlier line left, nothing remains.
+      if [[ $content == *$'\n'* ]]; then content=${content%$'\n'*}$'\n'; else content=""; fi
     done
     (( ${#marker} + 8 <= budget )) || return 1
     content+=$marker

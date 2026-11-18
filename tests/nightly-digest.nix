@@ -163,6 +163,19 @@ pkgs.runCommand "nixarchy-nightly-digest"
     has c14-fallback-old 'earlier build failure excerpt'
     has c14-fallback-old '(log from outside this job'"'"'s run: may be an earlier build)'
 
+    # A one-line excerpt whose truncation marker does not fit must not loop:
+    # excerpt_chunk once spun forever here (Codex's review). Called directly,
+    # because no fixture reaches that exact budget reliably.
+    sed -n '/^excerpt_chunk() {/,/^}/p' work/.github/scripts/nightly-digest.sh > work/excerpt_chunk.sh
+    [ -s work/excerpt_chunk.sh ] || fail "excerpt_chunk: not found in nightly-digest.sh"
+    printf '%s\n' \
+      'set -u; . ./work/excerpt_chunk.sh' \
+      'excerpt_chunk "$(printf "%s\n%s" 12345678901234567890 "a second line that will not fit")" 40 || true' \
+      'printf "%s" "$chunk"' > work/excerpt_case.sh
+    if ! timeout 10 bash work/excerpt_case.sh > work/excerpt_out.txt; then
+      fail "excerpt_chunk: did not return within 10 s for a one-line excerpt at budget 40"
+    fi
+
     for c in c1-traceback c2-timeout c3-iso-size c4-canary c5-empty-log c6-gh-fails c7-cap c8-dependency c9-cancelled c10-redaction c11-many-roots c12-remote-and-old c13-bytes c14-fallback-old; do
       lacks "$c" 'this is a bug in nightly-digest.sh'
     done
@@ -191,6 +204,6 @@ pkgs.runCommand "nixarchy-nightly-digest"
       printf 'FAIL: %s\n' "''${failures[@]}" >&2
       exit 1
     fi
-    echo "nightly-digest: fourteen cases name the job, step and failing log, and every run exits 0"
+    echo "nightly-digest: fourteen cases name the job, step and failing log, every run exits 0, and excerpt_chunk returns"
     touch $out
   ''

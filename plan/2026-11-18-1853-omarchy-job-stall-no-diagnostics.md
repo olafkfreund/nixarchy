@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1853
 spec: spec/2026-11-18-1853-omarchy-job-stall-no-diagnostics.md
 coders:

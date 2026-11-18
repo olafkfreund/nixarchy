@@ -4,7 +4,7 @@
 }:
 pkgs.testers.runNixOSTest {
   name = "nixarchy-keyboard-boot";
-  globalTimeout = 115 * 60;
+  globalTimeout = 60 * 60;
 
   nodes =
     let
@@ -74,7 +74,8 @@ pkgs.testers.runNixOSTest {
 
   testScript =
     { nodes, ... }:
-    ''
+    builtins.readFile ./vm-cleanup.py
+    + ''
       # Runs on the machine's first boot, whose session is what a real one gets. The root this
       # formats has no Nix database, so Home Manager fails on it and seeds no Omarchy config.
       def encrypted_boot(machine, system, passphrase, keys, physical=True):
@@ -94,6 +95,8 @@ pkgs.testers.runNixOSTest {
           # A wrong passphrase re-prompts for ever, and wait_for_unit blocks on the shell before its
           # own timeout starts. The root device appears only once the disk is unlocked.
           machine.wait_for_console_text("Reached target Initrd Root Device", timeout=300)
+          # wait_for_unit's backdoor wait has no limit; this fails a frozen guest in minutes (#1855).
+          wait_for_multi_user(machine)
           machine.wait_for_unit("display-manager.service")
           machine.wait_until_succeeds("loginctl list-sessions | grep greeter >/dev/null")
           machine.succeed("test -b /dev/mapper/cryptroot")
@@ -118,6 +121,8 @@ pkgs.testers.runNixOSTest {
 
       def first_boot(machine):
           machine.start()
+          # A starved guest froze here on 11-18 and the driver waited out the job cap (#1855).
+          wait_for_multi_user(machine)
           machine.wait_for_unit("multi-user.target")
           # A VM's first boot can start it before the user exists, as tests/session.nix found.
           machine.succeed("systemctl restart home-manager-omarchy.service")

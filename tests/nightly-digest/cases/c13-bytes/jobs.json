@@ -1,0 +1,1 @@
+{"jobs":[{"id":1,"name":"install onto a blank disk","conclusion":"failure","started_at":"2026-11-18T12:00:00Z","completed_at":"2026-11-18T13:00:00Z","steps":[{"name":"Install onto a blank disk and boot the result","conclusion":"failure"}]}]}

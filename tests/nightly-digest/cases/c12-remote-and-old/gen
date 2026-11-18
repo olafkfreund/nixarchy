@@ -1,0 +1,19 @@
+set -e
+mkdir -p closure log remote-log old-log
+target=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-vm-test-run-nixarchy-install.drv
+printf '%s\n' "$target" > "closure/${target##*/}"
+for i in {1..71}; do
+  printf -v hash '%032x' "$i"
+  if [ "$i" -eq 1 ]; then
+    name="$hash-real-local-failure.drv"
+    dir=log
+  elif [ "$i" -le 51 ]; then
+    name="$hash-remote-only-$i.drv"
+    dir=remote-log
+  else
+    name="$hash-old-only-$i.drv"
+    dir=old-log
+  fi
+  printf '/nix/store/%s\n' "$name" >> "closure/${target##*/}"
+  printf 'error: %s failed\n' "$name" > "$dir/$name"
+done

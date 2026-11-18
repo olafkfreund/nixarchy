@@ -1,1 +1,1 @@
-{"jobs":[{"id":1,"name":"what a user's flake update gets","conclusion":"failure","steps":[{"name":"Set up job","conclusion":"success"},{"name":"Their machine still evaluates","conclusion":"failure"},{"name":"Complete job","conclusion":"success"}]}]}
+{"jobs":[{"id":1,"name":"what a user's flake update gets","conclusion":"failure","steps":[{"name":"Set up job","conclusion":"success"},{"name":"Their machine still evaluates","conclusion":"failure"},{"name":"Complete job","conclusion":"success"}],"started_at":"2026-11-18T12:00:00Z","completed_at":"2026-11-18T13:00:00Z"}]}

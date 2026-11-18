@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1855
 intent: intent/2026-11-18-1855-keyboard-boot-dead-guest-costs-job.md
 ---
@@ -20,6 +20,9 @@ The job cap (`nightly.yml:118`) is **not** changed. The "Provisional until the s
 To import the helper, follow `tests/boot-hang-detect.nix:13`: `testScript = { nodes, ... }: builtins.readFile ./vm-cleanup.py + '' ... ''`. `keyboard-boot` does not need `with-vm-cleanup.nix`'s `reap_owned_vms` wrapper: that exists for tests that create their own machines (`create_owned_machine`), and these are declared nodes. Not verified: whether a `BootHang` raised mid-test leaves qemu children behind under `runNixOSTest`'s own teardown; `boot-hang-detect.nix:41-42` terminates its frozen guest by hand, so check the failing run leaves no `qemu` behind.
 
 ## Decisions for approval
+
+**Resolved at approval (owner, 2026-11-18):** decisions 1-4 as recommended; decision 5 narrowed to guest evidence only, without the `/proc/loadavg` addition. Host contention goes to the follow-up named in decision 1.
+
 
 1. **Scope (intent open question 1).** Recommendation: a bounded, diagnosed failure of `keyboard-boot` itself. That stands on the evidence (guest dead at 333 s, job silent for 1h41m). Alternative: also change how the nightly schedules self-hosted VM jobs. Rejected for this issue because contention is only a hypothesis here (p620 load at 03:19-03:25 was never measured), and it is a CI-gate change (§11). A separate follow-up issue would be "nightly: put `keyboard-boot` (and other self-hosted VM jobs) behind the same host-free sequencing as the install chain (`needs:` or `vm-host-free.sh`)". I do not file it.
 2. **Helper placement.** Recommendation: call `wait_for_multi_user` inline in `first_boot` and `encrypted_boot`. Alternative: copy the 120 s silence loop locally. Rejected: duplicates a helper with its own check (`boot-hang-detect`).

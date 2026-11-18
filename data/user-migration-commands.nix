@@ -3,6 +3,11 @@
 # follows one level of calls when `follow = true`, and `edge` ("only" | "absent") says when a row
 # is needed on one pin only. See pkgs/AGENTS.md#user-file-migrations-1610.
 {
+  "omarchy-agent-local-launchers" = {
+    edge = "only";
+    follow = true;
+    reason = "writes one .desktop file and a vendor-logo SVG icon under ~/.local/share for each local model that is set up, and removes those of models taken away";
+  };
   "omarchy-audio-tuning" = {
     follow = true;
     reason = "writes ~/.config/pipewire/omarchy-speaker-tuning.conf and ~/.config/systemd/user/omarchy-speaker-tuning.service";

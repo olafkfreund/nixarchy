@@ -383,10 +383,28 @@
     decision = "not-needed";
     reason = "installs Checkmate with omarchy-pkg-add, which is the package list's job here and Checkmate is not packaged yet (#1826); the icon redraw serves only the newly installed app, and omarchy-theme-set-icons runs again on every theme switch";
   };
+  "1794839007" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "runs omarchy-agent-local-launchers once, so local models set up before launchers existed get theirs in ~/.local/share/applications; the command works on nixarchy as on Arch";
+  };
   "1794839103" = {
     edge = "only";
     decision = "not-needed";
     reason = "installs Cards with omarchy-pkg-add, which is the package list's job here and Cards is not packaged yet (#1826); the icon redraw serves only the newly installed app, and omarchy-theme-set-icons runs again on every theme switch";
+  };
+  "1794931275" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "gives each agent harness already installed its own launcher in ~/.local/share/applications through omarchy-agent-launcher, then redraws the icon set; it works on nixarchy as on Arch";
+  };
+  "1794938310" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "appends `[update] version_check = false` to ~/.config/herdr/config.toml when the file exists, is not a symlink at any level and has no [update] table. It holds here: nixpkgs' herdr 0.9.5 leaves the check on, recognises a /nix/store binary and tells the user to \"update through Nix\", a notice they cannot act on outside a rebuild. Its python3 (tomllib) is in Omarchy's runtimeDeps, on the session PATH the migration hook keeps";
   };
   predates = [
     "1780057136"

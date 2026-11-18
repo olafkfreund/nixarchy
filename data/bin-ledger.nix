@@ -754,8 +754,9 @@
     allow = "systemctl-user";
   };
   "omarchy-toggle-hybrid-gpu" = {
+    edge = "absent";
     class = "vendor";
-    reason = "Vendored unchanged. Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only.";
+    reason = "Vendored unchanged on the tag pin. Quattro ships it as a one-line alias of omarchy-device-gpu-hybrid, which gets the row there. Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only.";
     allow = "etc-write systemctl-system";
   };
   "omarchy-update" = {
@@ -934,10 +935,16 @@
     reason = "Vendored unchanged (#1423, quattro be54892). Switches the kernel Limine boots by default, through /etc/default/limine and an initramfs rebuild: Arch-only. Its one caller, the Update > Kernel menu row, shows only when `omarchy-kernel list` prints more than one kernel, and that list reads /usr/lib/modules/*/pkgbase, which NixOS does not have -- so the row never appears and nothing reaches `set`.";
     allow = "initrd-boot";
   };
-  "omarchy-keyboard-toprow" = {
+  "omarchy-device-gpu-hybrid" = {
     edge = "only";
     class = "vendor";
-    reason = "Vendored unchanged (#1552, quattro a69b19f). Writes /etc/modprobe.d/omarchy-toprow.conf for hid_apple, hid_asus and asus_wmi, sets hid_apple's live fnmode, and reruns limine-mkinitcpio, which NixOS does not have, so a run on a machine with one of those drivers stops at the boot-image rebuild. No menu row calls it; upstream's other caller is install/hardware/fix-fkeys.sh, which nixarchy does not run. The declarative equivalent is boot.extraModprobeConfig.";
+    reason = "Vendored unchanged (quattro; the old omarchy-toggle-hybrid-gpu moved here). Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only.";
+    allow = "etc-write systemctl-system";
+  };
+  "omarchy-device-keyboard-toprow" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged (#1552; renamed from omarchy-keyboard-toprow in quattro c6945de, which also handles a read-only sysfs). Writes /etc/modprobe.d/omarchy-toprow.conf for hid_apple, hid_asus and asus_wmi, sets hid_apple's live fnmode, and reruns limine-mkinitcpio, which NixOS does not have, so a run on a machine with one of those drivers stops at the boot-image rebuild. The declarative equivalent is boot.extraModprobeConfig.";
     allow = "initrd-boot modprobe";
   };
   "omarchy-remove-ai-ollama" = {

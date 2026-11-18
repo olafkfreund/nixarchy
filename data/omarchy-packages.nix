@@ -691,6 +691,10 @@
   "qmk-hid" = {
     skip = "Keyboard firmware tool; not shipped.";
   };
+  "raspberry-pi-4-bluetooth-firmware" = {
+    edge = "only";
+    skip = "Raspberry Pi 4 hardware (aarch64); this port targets x86_64.";
+  };
   "rdma-core" = {
     skip = "GB10 (aarch64) only.";
   };

@@ -13,7 +13,7 @@ menus rewired to Nix instead of pacman.
 **[Roadmap](#roadmap)** ·
 **[Discussions](https://github.com/olafkfreund/nixarchy/discussions)**
 
-Omarchy 4.x is not a dotfiles repo, it's an application: **606 shell commands**,
+Omarchy 4.x is not a dotfiles repo, it's an application: **617 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
@@ -405,7 +405,7 @@ package.path = home.."/.local/state/?.lua;"..home.."/.config/?.lua;"
 ```
 
 Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
-the Lua defaults all follow. Only **44 of 602 scripts** actually run
+the Lua defaults all follow. Only **44 of 613 scripts** actually run
 `pacman`/`yay` — that's the entire distro-coupling surface.
 
 Nine of those are replaced outright, in `pkgs/omarchy/nix-bin/`: package
@@ -434,7 +434,7 @@ nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
 work and the exit status, terminal and signals stay the command's own.
 
-**Upstream's 606 commands keep upstream's name, deliberately.** `omarchy theme
+**Upstream's 617 commands keep upstream's name, deliberately.** `omarchy theme
 set` is the same script here as on Arch — a bug in it is a bug to report there,
 and renaming it would say otherwise. It would also cost the property this repo
 is built on: tracking a release is a source bump because nixarchy replaces 19
@@ -471,7 +471,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 606 subcommands, `omarchy commands --check` green |
+| `omarchy` CLI | all 617 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **Install ▸ Packages** | the same catalogue in a panel ([nixarchy-pkg](https://github.com/olafkfreund/nixarchy-pkg)): search, add, draft and apply without a terminal. **On by default**, Super+Alt+N on a new install; `programs.nixarchy.defaultPlugins.pkg = false` removes it |
@@ -486,7 +486,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Runtime themes** | the active palette across supported apps without a rebuild ([omatheme](https://github.com/olafkfreund/nixarchy-omatheme)). **On by default** |
 | **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **On by default**, and it asks a human before it takes control, and it can work in a window you are not using without moving your cursor — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
 | **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
-| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 606 |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 617 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
 | 79 apps in the selection | 51 from nixpkgs, 7 as NixOS modules, 15 built here, 6 with no equivalent |
@@ -526,7 +526,7 @@ this repo replaced with one that deliberately refuses. Shipping them unchanged m
 an agent confidently doing imperative things the next rebuild wipes, which is the
 one failure mode that looks like success.
 
-So eighteen skills ship here instead, with eight Nix skills beside them:
+So nineteen skills ship here instead, with eight Nix skills beside them:
 
 | skill | owns |
 |---|---|
@@ -547,6 +547,7 @@ So eighteen skills ship here instead, with eight Nix skills beside them:
 | **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
 | **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
 | **`omarchy-app`** | Upstream's, new in 4.5: scaffolds a C++ and Qt Quick app that follows the Omarchy theme. Nixarchy rewrites its packaging half, so the app gets a `flake.nix` and `package.nix`, runs with `nix run`, and installs by adding the flake to your configuration |
+| **`web-game`** | Upstream's, new in quattro: a browser game or 3D toy as one HTML file with three.js, a game loop that survives slow frames, its polish, and a check in a headless browser |
 | **`ai-mirror`** | Testing an app or driving a desktop with ai-mirror. It asks first: a disposable microVM from the `nixarchy-desktop` template, or this host's real desktop with a human-granted control. Then it runs that path end to end, with `mirror-vm` driving the guest over vsock |
 
 What each skill corrects, how **Menu ▸ Trigger ▸ Ask** routes to them, and

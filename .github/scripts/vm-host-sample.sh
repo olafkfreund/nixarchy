@@ -10,15 +10,24 @@ shift 2
 proc=${VM_HOST_PROC:-/proc}
 start=$SECONDS
 
+avg10() { # "some avg10=" from /proc/pressure/$1, or ?
+  local kind v
+  { while read -r kind v _; do
+    if [ "$kind" = some ]; then printf '%s' "${v#avg10=}"; return; fi
+  done < "$proc/pressure/$1"; } 2>/dev/null
+  printf '?'
+}
+
 sample() {
   load=$( { read -r a b c _ < "$proc/loadavg" && printf '%s %s %s' "$a" "$b" "$c"; } 2>/dev/null) || load='?'
   mem=$( { while read -r key value _; do
     if [ "$key" = MemAvailable: ]; then printf '%s' "$((value / 1024))"; break; fi
   done < "$proc/meminfo"; } 2>/dev/null) || mem='?'
   [ -n "$mem" ] || mem='?'
-  qemu=$(pgrep -c qemu-system 2>/dev/null) || :
-  [ -n "$qemu" ] || qemu='?'
-  line="vm-host: t=$((SECONDS - start)) load=$load mem_avail=${mem}M qemu=$qemu job=${GITHUB_JOB:-?}"
+  # Not a qemu count: the runner's ProtectProc=invisible hides other users' processes, so it
+  # read ? every night (#1858). Host-wide pressure is visible, and is what starves a guest.
+  cpu=$(avg10 cpu) io=$(avg10 io)
+  line="vm-host: t=$((SECONDS - start)) load=$load mem_avail=${mem}M cpu=$cpu io=$io job=${GITHUB_JOB:-?}"
   printf '%s\n' "$line"
   printf '%s\n' "$line" >> "${GITHUB_STEP_SUMMARY:-/dev/null}" 2>/dev/null || :
 }

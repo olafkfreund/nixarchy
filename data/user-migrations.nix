@@ -463,6 +463,11 @@
     "1791935188"
     "1792334754"
   ];
+  "1794988405" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "runs omarchy-agent-skills-link once; modules/home.nix runs nixarchy-skills-relink (pkgs/skills-relink.nix) on every activation (#888), which links every shipped skill";
+  };
   "1795023056" = {
     edge = "only";
     decision = "not-needed";
@@ -472,6 +477,11 @@
     edge = "only";
     decision = "not-needed";
     reason = "copies Game Vibes.desktop into ~/.local/share/applications for existing installs; this port installs it system-wide as omarchy-Game Vibes.desktop, so a copy would list Game Vibes twice (#1847)";
+  };
+  "1795093910" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "runs omarchy-agent-skills-link for the renamed omarchy-make-* skills; nixarchy-skills-relink on every activation links the new names and removes links into a store skills tree that is gone (#888, #1847)";
   };
   "1795099916" = {
     edge = "only";

@@ -781,7 +781,7 @@ seconds-long checks. So:
 | local build | when it may run |
 |---|---|
 | cheap: `runCommand`, static, evaluation-only, and their break proofs | any time, **one at a time** under `flock /mnt/data/vmtest/codex-build.lock` |
-| a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12, and no `install check` `install` job or `omarchy-edge` `verify` job in flight (#1365). Other in-flight CI does not block it |
+| a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 48, and no `install check` `install` job or `omarchy-edge` `verify` job in flight (#1365). Other in-flight CI does not block it |
 | a VM check, or an options case shard or `options-files` (`options-shards` is cheap) | at most two at once, with no p620 system build and no self-hosted runner busy: `gh api repos/olafkfreund/nixarchy/actions/runners -q '[.runners[]\|select(.busy)]\|length'` prints `0`. Ask again when the slot is taken, not only before waiting for it, and read an API failure as busy |
 
 "Is a p620 build running" has a trap of its own. `pgrep -f
@@ -790,6 +790,14 @@ seconds-long checks. So:
 waiting, so it never reaches zero. Anchor it:
 `pgrep -fc '^(nix build|nh os build|nixos-rebuild).*p620'`. Print what a gate
 matches (`pgrep -af`) once before trusting it.
+
+**The load limit was 12, and it measured the wrong thing (owner, 2026-11-19).**
+On a 128-thread host, 12 is 9% of the threads. On 2026-11-19 it held local
+package builds for hours at loads of 13 to 15 while CPU and memory pressure
+(`/proc/pressure`) read zero; the load came from k3s, the desktop and other
+agents' builds, none of which a guest notices. The stalls this tier exists for
+came from VM jobs overlapping (#1365 below), which `vm-host-free.sh` guards,
+not from load. 48 still leaves most of the machine to the guests.
 
 **The load gate alone admitted a stall (#1365).** On 2026-10-21 a `main`
 install froze for five minutes (`clocksource: Watchdog … read timed out`) and

@@ -203,17 +203,31 @@ jobs:
             sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/$old_url|" flake.nix
             sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$old_ver\"|" flake.nix
             git restore --source="$base" -- flake.lock
-            # README's derived counts follow edge's pin too (#1537), so they
-            # conflict the same way; edge-build.sh rewrites them after.
-            git restore --source="$base" -- README.md
-            git add flake.nix flake.lock README.md
+            git add flake.nix flake.lock
             git diff --cached --quiet || git commit -q -m "Edge: unpin Omarchy before merging main"
           fi
 
           # A merge, never a rebase: edge only fast-forwards, and a rebase would
           # rewrite commits users' locks already name.
+          files=""
           if ! git merge --no-edit origin/main; then
             files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            # README's derived counts follow edge's pin (#1537), so they conflict
+            # whenever main moves one. Restoring the whole file before the merge
+            # also dropped a carry's own rows (#1874): take edge's side of each
+            # conflicting hunk only; edge-build.sh rewrites the counts after.
+            if [ "$files" = "README.md " ] &&
+              git show :1:README.md > "$RUNNER_TEMP/readme.base" &&
+              git show :3:README.md > "$RUNNER_TEMP/readme.main" &&
+              git show :2:README.md > README.md &&
+              git merge-file --ours README.md "$RUNNER_TEMP/readme.base" "$RUNNER_TEMP/readme.main" &&
+              git add README.md && git commit -q --no-edit; then
+              files=""
+            else
+              files=${files:-"(no unmerged path: the merge failed some other way)"}
+            fi
+          fi
+          if [ -n "${files:-}" ]; then
             echo "::error::merging main into edge conflicts in: $files"
             echo "::error::the next run starts from origin/edge again, so it will conflict again."
             echo "::error::resolve the merge on a branch off edge, push that branch to edge-candidate,"

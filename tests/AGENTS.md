@@ -2301,6 +2301,15 @@ non-US encrypted install.
 
 **`wait_for_unit`'s `timeout` doesn't cover a guest that never boots.** It first connects to the VM's backdoor shell (`connect()` in the nixpkgs test driver), and its own `timeout` has not started yet. That wait is in two halves. Until the guest's backdoor sends anything, it gives up after 10 × 30 s with `Shell did not start in time`, and that error carries no guest evidence. Once the backdoor has sent its first byte, it `recv`s until `Spawning backdoor root shell...` with no limit, so a guest that freezes in between runs to `globalTimeout`. The nightly `keyboard-boot` hang on 2026-11-18 lasted 1h41m, which fits the second half, though that job's log was deleted before anyone could check (#1855). `wait_for_multi_user` (`vm-cleanup.py`) bounds both halves from the console, and its failure carries register dumps. `keyboard-boot` waits for a console line first, because `wait_for_console_text` does keep its limit.
 
+**A prompt that echoes without a newline cannot be waited for (#1876).** The test driver
+reads the serial console a line at a time, so the LUKS prompt's `*` echo reaches
+`wait_for_console_text` only once a later message ends the line. A retry loop that waited
+for the echo saw nothing and reported every attempt as lost keys. What the race needs is the
+guest's keyboard: the prompt can appear before `input: AT Translated Set 2 keyboard`, and keys
+sent then are dropped. The check polls `get_console_log()` for both strings, which `start()`
+resets each boot. A lookahead regex for the pair in `wait_for_console_text` took 206 s, the
+rescan cost described above.
+
 **`builtins.appendContext` with a `.drv` key can pass here and fail in CI.** It requires that derivation to be in the store already. This machine has it from earlier evaluations and a fresh hosted runner doesn't, which reads as `path '…weston.ini.drv' is required, but there is no substituter that can build it`. To pull a path out of a string, use `lib.splitString`, which keeps the context.
 
 <a id="factory-reset"></a>

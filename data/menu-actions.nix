@@ -8,6 +8,14 @@
     reason = "unreached: omarchy-agent-make starts the default agent through omarchy-agent, which calls omarchy-agent-local only for status and overlay, never share (the branch that sets up sshd); the OpenClaw user unit starts only when OpenClaw is the default agent, as for the agent.harness rows";
     edge = "only";
   };
+  "agent.make.game" = {
+    reason = "unreached: omarchy-agent-make starts the default agent through omarchy-agent, which calls omarchy-agent-local only for status and overlay, never share (the branch that sets up sshd); the OpenClaw user unit starts only when OpenClaw is the default agent, as for the agent.harness rows";
+    edge = "only";
+  };
+  "setup.git" = {
+    reason = "session: restarts the user's XCompose unit after writing the git identity into ~/.XCompose (quattro 2eb7eb3 moved the row from setup.config.git)";
+    edge = "only";
+  };
   "agent.make.plugin" = {
     reason = "unreached: omarchy-agent-make starts the default agent through omarchy-agent, which calls omarchy-agent-local only for status and overlay, never share (the branch that sets up sshd); the OpenClaw user unit starts only when OpenClaw is the default agent, as for the agent.harness rows";
     edge = "only";
@@ -130,8 +138,10 @@
   "install.style.font.victor" = "session: restarts the user's shell unit";
   "install.style.theme" =
     "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
-  "learn.keybindings" =
-    "unreached: omarchy-menu-keybindings runs omarchy-language with no argument, which only prints the language; its shell restart is the set branch";
+  "learn.keybindings" = {
+    reason = "unreached: omarchy-menu-keybindings runs omarchy-language with no argument, which only prints the language; its shell restart is the set branch";
+    edge = "absent";
+  };
   "remove.development.elixir.phoenix" = "hidden: there is nothing to remove (#1625)";
   "remove.gaming.battlenet" =
     "owned: deletes its own prefix; GE-Proton and umu only after a confirm; pkg-drop is inert here (decision 10)";
@@ -140,8 +150,10 @@
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
   "remove.service.ssh-agent" =
     "session: disables the user's gcr-ssh-agent socket and removes its own environment.d file";
-  "setup.config.git" =
-    "session: restarts the user's XCompose unit after writing the git identity into ~/.XCompose";
+  "setup.config.git" = {
+    reason = "session: restarts the user's XCompose unit after writing the git identity into ~/.XCompose";
+    edge = "absent";
+  };
   "setup.config.xcompose" = "session: restarts the user's XCompose unit";
   "setup.default.agent.agy" = {
     reason = "session: the OpenClaw branch starts a user unit; other agents never take it";

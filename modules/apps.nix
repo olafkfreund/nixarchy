@@ -823,12 +823,6 @@ let
         "setup.security.passwordless-sudo" = {
           when = "false";
         };
-        # quattro's Setup > Direct Boot writes a Limine entry for EFI direct
-        # boot. NixOS owns the bootloader (boot.loader.*), so it is hidden (#1278).
-        "setup.direct-boot" = {
-          when = "false";
-        };
-
         # The Arch wiki is the wrong manual on a NixOS host. All three wear
         # nf-linux-nixos (U+F1105), the snowflake -- the icon and label are
         # stated explicitly because the generator only carries upstream's
@@ -890,6 +884,10 @@ let
           action = "omarchy-launch-floating-terminal-with-presentation 'omarchy-plugin-add'";
           description = "Install a plugin from its Git URL, without the audit";
         };
+      }
+      // lib.optionalAttrs (!lib.hasPrefix "edge-" cfg.package.version) {
+        # The tag still has Direct Boot; hide its Arch bootloader action.
+        "setup.direct-boot".when = "false";
       }
       // lib.optionalAttrs devenvEnabled {
         # The Dev environments panel (#802). The helper rather than a bare
@@ -1025,13 +1023,6 @@ let
           action = "true";
           description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";
         };
-        "setup.direct-boot" = {
-          # quattro's `when` tests a path naming omarchy-dgx-spark, which checks.options reads as a missing command.
-          when = "true";
-          disabled = "true";
-          action = "true";
-          description = "Not available on NixOS — needs efibootmgr and an Omarchy UKI. NixOS writes its own boot entries on every rebuild";
-        };
         "install.ai.hermes" = {
           disabled = "true";
           action = "true";
@@ -1071,6 +1062,15 @@ let
       }
       # Snapshots need the `home` snapper config omarchy-snapshot drives;
       # only the installer sets one, so Mode A gets no rows that only refuse (#1303).
+      // lib.optionalAttrs (cfg.enable && !lib.hasPrefix "edge-" cfg.package.version) {
+        # Upstream removed Direct Boot on edge; the tag still needs its unsafe action dimmed.
+        "setup.direct-boot" = {
+          when = "true";
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — needs efibootmgr and an Omarchy UKI. NixOS writes its own boot entries on every rebuild";
+        };
+      }
       // lib.optionalAttrs (config.services.snapper.configs ? home) {
         # Explicit `parent`: MenuModel.js's default parent for this id is
         # "system.recovery.snapshot" (its own id with the last segment

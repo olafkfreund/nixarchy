@@ -1268,6 +1268,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                         else
                           "'├── post-update.d/          # At the end of `omarchy update`, after privileged work'"
                       } '├── post-update.d/          # During `omarchy update`, i.e. after nixos-rebuild switch'
+                    # quattro 2eb7eb3's paragraph describes Arch's update order (mise, AUR, pacman).
+                    ${lib.optionalString isEdge ''
+                      substituteInPlace $skills/nixarchy/hooks.md \
+                        --replace-fail "Both package hooks run as your user with your PATH. \`post-update\` runs inside \`omarchy update\`'s sudo authorization, so a hook that invokes \`sudo\` does not prompt again; it comes after the system packages, migrations and service restarts, and before mise tools, AUR packages and the boot-file check. \`pre-refresh-pacman\` runs inside \`omarchy refresh pacman\` (which channel switches and \`omarchy reinstall\` use, not \`omarchy update\`), right after it writes the new package config with sudo and before the package transaction, so custom repositories and \`IgnorePkg\` entries shape that transaction." "Both package hooks run as your user with your PATH. \`post-update\` runs during \`omarchy update\`, after \`nixos-rebuild switch\` and the migrations. \`pre-refresh-pacman\` never runs here: \`omarchy refresh pacman\` is Arch only."
+                    ''}
 
                     # The crash skill is upstream's and mostly distro-neutral; three claims
                     # are not. Arch'"'"'s debuginfod does not serve nixpkgs builds, "recent

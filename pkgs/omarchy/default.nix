@@ -1230,12 +1230,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # Paths. $OMARCHY_PATH is exported for every one of these readers, and
                     # hardcoding a store hash into documentation would be wrong at the next
                     # bump anyway.
+                    # quattro 2eb7eb3 moved making a theme into the omarchy-make-theme skill.
+                    ${lib.optionalString isEdge ''
+                      substituteInPlace $skills/omarchy-make-theme/SKILL.md \
+                        --replace-fail '(dark or light) from `/usr/share/omarchy/themes/` and change' '(dark or light) from `$OMARCHY_PATH/themes/` and change'
+                    ''}
                     substituteInPlace $skills/nixarchy/theming.md \
-                      --replace-fail ${
-                        if isEdge then
-                          "'(dark or light) from `/usr/share/omarchy/themes/` and change' '(dark or light) from `$OMARCHY_PATH/themes/` and change'"
-                        else
-                          "'2. See how an existing theme is done via `/usr/share/omarchy/themes/catppuccin`.' '2. See how an existing theme is done via `$OMARCHY_PATH/themes/catppuccin`.'"
+                      ${
+                        lib.optionalString (!isEdge)
+                          "--replace-fail '2. See how an existing theme is done via `/usr/share/omarchy/themes/catppuccin`.' '2. See how an existing theme is done via `$OMARCHY_PATH/themes/catppuccin`.'"
                       } \
                       --replace-fail 'Never edit stock themes under `/usr/share/omarchy/themes/` — changes are lost' 'Stock themes live under `$OMARCHY_PATH/themes/` — a read-only store path, so' \
                       --replace-fail 'on update. Two safe options:' 'editing one is not possible. Two safe options:' \

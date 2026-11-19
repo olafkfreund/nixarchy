@@ -873,7 +873,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 # recorded for the next rebuild, never generated at runtime, and the
                 # script stops before LANG or the interface changes. The menu shows
                 # no stderr, hence the notification.
-                substituteInPlace $out/share/omarchy/bin/omarchy-language \
+                # quattro 2eb7eb3 moved both into a helper omarchy-language and
+                # omarchy-region source; v4.5.0 still has them in omarchy-language.
+                locale_helper=$out/share/omarchy/bin/omarchy-language
+                if [ -e $out/share/omarchy/bin/omarchy-locale-session ]; then
+                  locale_helper=$out/share/omarchy/bin/omarchy-locale-session
+                fi
+                substituteInPlace "$locale_helper" \
                   --replace-fail 'generator=/usr/bin/omarchy-locale-generate' \
                   'generator=$OMARCHY_PATH/bin/omarchy-locale-generate' \
                   --replace-fail 'generate_locale() {' 'generate_locale() {

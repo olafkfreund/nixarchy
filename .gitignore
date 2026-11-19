@@ -21,3 +21,6 @@ demo-record-*.*/
 
 # Python bytecode; one was committed by mistake into the ai-mirror skill (#1580)
 __pycache__/
+
+# Claude Code runtime state, not configuration.
+.claude/scheduled_tasks.lock

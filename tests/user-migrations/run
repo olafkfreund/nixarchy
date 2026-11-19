@@ -174,8 +174,10 @@ case_1674() {
     [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "1674: marker missing for $id"
   done
   [[ ! -e $OMARCHY_MIGRATION_STATE/1791123731.sh ]] || fail '1674: declined example ran'
-  if [[ " $ids " == *' 1788281348 '* ]]; then
+  if [[ " $ids " == *' 1788281348 '* && -d $OMARCHY_PATH/themes/catppuccin/backgrounds/intros ]]; then
     [[ $(<"$XDG_STATE_HOME/omarchy/background-intro.session-id") == fixture-session ]] || fail '1674: intro session was not recorded'
+  else
+    [[ ! -e $XDG_STATE_HOME/omarchy/background-intro.session-id ]] || fail '1674: intro recorded without a packaged video'
   fi
   webp=$staged/1-totoro.webp
   if [[ " $ids " == *' 1791470456 '* ]]; then
@@ -196,7 +198,7 @@ case_1674() {
   fi
   [[ $(<"$XDG_CONFIG_HOME/hypr/looknfeel.lua") == '-- existing look and feel' ]] || fail '1674: declined example changed looknfeel'
   : > "$work/1674.expected-calls"
-  if [[ " $ids " == *' 1788281348 '* ]]; then printf '%s\n' 'omarchy-theme-refresh ' >> "$work/1674.expected-calls"; fi
+  if [[ " $ids " == *' 1788281348 '* && -d $OMARCHY_PATH/themes/catppuccin/backgrounds/intros ]]; then printf '%s\n' 'omarchy-theme-refresh ' >> "$work/1674.expected-calls"; fi
   if [[ " $ids " == *' 1791470456 '* ]]; then printf '%s\n' "omarchy-shell background set $webp" >> "$work/1674.expected-calls"; fi
   diff -u "$work/1674.expected-calls" "$HOME/calls.log" || fail '1674: unexpected session calls'
 

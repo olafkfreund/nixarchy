@@ -1250,7 +1250,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # sees the name mentioned upstream should find out here that it is dead.
                     substituteInPlace $skills/nixarchy/hooks.md \
                       --replace-fail '├── pre-refresh-pacman.d/   # After `omarchy refresh pacman` re-syncs the package config, before it updates packages' '├── pre-refresh-pacman.d/   # Arch only — never runs on NixOS' \
-                      --replace-fail '├── post-update.d/          # At the end of `omarchy update`, after privileged work' '├── post-update.d/          # During `omarchy update`, i.e. after nixos-rebuild switch'
+                      --replace-fail ${
+                        if isEdge then
+                          "'├── post-update.d/          # Late in `omarchy update`, after packages, migrations and service restarts'"
+                        else
+                          "'├── post-update.d/          # At the end of `omarchy update`, after privileged work'"
+                      } '├── post-update.d/          # During `omarchy update`, i.e. after nixos-rebuild switch'
 
                     # The crash skill is upstream's and mostly distro-neutral; three claims
                     # are not. Arch'"'"'s debuginfod does not serve nixpkgs builds, "recent

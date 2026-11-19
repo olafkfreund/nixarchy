@@ -968,6 +968,16 @@
     class = "patch";
     reason = "Upstream uncomments /etc/locale.gen and runs locale-gen as root. NixOS builds locales with the system (i18n.extraLocales), so this refuses and names nixarchy-language-select (#1289).";
   };
+  "omarchy-locale-session" = {
+    edge = "only";
+    class = "patch";
+    reason = "Quattro 2eb7eb3 moved omarchy-language's locale generation here, for it and omarchy-region to source. The same #1289 patch follows it: a locale the system has not built is recorded with nixarchy-language-select for the next rebuild, never generated as root at runtime.";
+  };
+  "omarchy-agent-skills-link" = {
+    edge = "only";
+    class = "patch";
+    reason = "Links Omarchy's skills into each harness's directory. ~/.codex/skills is left out, as omarchy-provision-user's list was (#1847): Codex also reads ~/.agents/skills and does not merge same-named skills, so it showed every skill twice.";
+  };
   "omarchy-language" = {
     class = "patch";
     reason = "Patched (#1278 edge): its Python helper runs with nixpkgs' python3. A locale the system has not built is recorded with nixarchy-language-select for the next rebuild, and the switch stops before LANG changes, instead of running locale-gen as root (#1289).";

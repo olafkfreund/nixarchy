@@ -378,21 +378,11 @@
     edge = "only";
     reason = "adds FileChooser=folio;gtk to the user's hyprland-portals.conf only where no chooser is chosen (#1793)";
   };
-  "1794827288" = {
-    edge = "only";
-    decision = "not-needed";
-    reason = "installs Checkmate with omarchy-pkg-add, which is the package list's job here and Checkmate is not packaged yet (#1826); the icon redraw serves only the newly installed app, and omarchy-theme-set-icons runs again on every theme switch";
-  };
   "1794839007" = {
     edge = "only";
     decision = "ported";
     run = "edited";
     reason = "runs omarchy-agent-local-launchers once, so local models set up before launchers existed get theirs in ~/.local/share/applications; edited to skip a machine without omarchy-local-ai, which is opt-in here (services.agent-local) where Arch ships it everywhere: the launchers script exits 1 without it, and a failed migration stops every later one (#1847)";
-  };
-  "1794839103" = {
-    edge = "only";
-    decision = "not-needed";
-    reason = "installs Cards with omarchy-pkg-add, which is the package list's job here and Cards is not packaged yet (#1826); the icon redraw serves only the newly installed app, and omarchy-theme-set-icons runs again on every theme switch";
   };
   "1794931275" = {
     edge = "only";
@@ -473,4 +463,19 @@
     "1791935188"
     "1792334754"
   ];
+  "1795023056" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "installs Fantasi with omarchy-pkg-add, which is the package list's job here, and Fantasi is not packaged (#1847)";
+  };
+  "1795080474" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "copies Game Vibes.desktop into ~/.local/share/applications for existing installs; this port installs it system-wide as omarchy-Game Vibes.desktop, so a copy would list Game Vibes twice (#1847)";
+  };
+  "1795099916" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "gated on omarchy-hw-aarch64-qualcomm (Snapdragon aarch64), which this port does not target";
+  };
 }

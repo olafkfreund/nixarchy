@@ -3,6 +3,11 @@
 # follows one level of calls when `follow = true`, and `edge` ("only" | "absent") says when a row
 # is needed on one pin only. See pkgs/AGENTS.md#user-file-migrations-1610.
 {
+  "omarchy-agent-skills-link" = {
+    edge = "only";
+    follow = true;
+    reason = "links each skill Omarchy ships into the agent harnesses' skill directories under ~/.agents, ~/.claude, ~/.pi, ~/.gemini and ~/.hermes, and removes links to skills the tree no longer has";
+  };
   "omarchy-agent-local-launchers" = {
     edge = "only";
     follow = true;

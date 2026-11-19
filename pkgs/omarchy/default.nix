@@ -1421,11 +1421,18 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # too and does not merge same-named skills, so upstream's list made it
                     # show every skill twice. Matches the relink loop in modules/home.nix;
                     # --replace-fail so an upstream change here breaks the build, not Codex.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
-                      --replace-fail '~/.claude/skills ~/.codex/skills ~/.pi/agent/skills' \
-                        '~/.claude/skills ~/.pi/agent/skills' \
-                      --replace-fail 'ln -sfn "$skill" ~/.codex/skills/"$name"' \
-                        ': # nixarchy: not ~/.codex/skills; Codex reads ~/.agents/skills'
+                    # quattro 2eb7eb3 moved the linking into omarchy-agent-skills-link.
+                    if [ -e $out/share/omarchy/bin/omarchy-agent-skills-link ]; then
+                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-skills-link \
+                        --replace-fail 'dirs=(~/.agents/skills ~/.claude/skills ~/.codex/skills ~/.pi/agent/skills' \
+                          'dirs=(~/.agents/skills ~/.claude/skills ~/.pi/agent/skills'
+                    else
+                      substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+                        --replace-fail '~/.claude/skills ~/.codex/skills ~/.pi/agent/skills' \
+                          '~/.claude/skills ~/.pi/agent/skills' \
+                        --replace-fail 'ln -sfn "$skill" ~/.codex/skills/"$name"' \
+                          ': # nixarchy: not ~/.codex/skills; Codex reads ~/.agents/skills'
+                    fi
 
                     # Why: pkgs/AGENTS.md#chromium-browserdesktop-is-renamed-on-three-more-paths-that-name-it
                     for f in ${

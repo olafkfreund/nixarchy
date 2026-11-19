@@ -466,7 +466,7 @@
   "1794988405" = {
     edge = "only";
     decision = "not-needed";
-    reason = "runs omarchy-agent-skills-link once; modules/home.nix runs nixarchy-skills-relink (pkgs/skills-relink.nix) on every activation (#888), which links every shipped skill";
+    reason = "runs omarchy-agent-skills-link once; modules/home.nix runs nixarchy-skills-relink (pkgs/skills-relink.nix) on every activation (#888), which links every shipped skill into .agents, .claude, .pi and, where they exist, Gemini and Hermes (#1847)";
   };
   "1795023056" = {
     edge = "only";

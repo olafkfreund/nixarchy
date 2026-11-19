@@ -885,8 +885,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                   --replace-fail 'generate_locale() {' 'generate_locale() {
                   local code=$1 locale=$2 msg
                   locale_generated "$locale" && return
-                  nixarchy-language-select "$code" >/dev/null
-                  msg="$(name_for "$code") needs its locale built into the system. It is recorded in your configuration: apply it (Install > Apply changes, or nixarchy-apply), then choose it again."
+                  if [[ ''${0##*/} == omarchy-language ]]; then
+                    nixarchy-language-select "$code" >/dev/null
+                    msg="$(name_for "$code") needs its locale built into the system. It is recorded in your configuration: apply it (Install > Apply changes, or nixarchy-apply), then choose it again."
+                  else
+                    msg="$locale is not built into this system. Add \"$locale/UTF-8\" to i18n.extraLocales in your configuration, apply it, then choose it again."
+                  fi
                   echo "$msg" >&2
                   omarchy-notification-send "Language" "$msg" >/dev/null 2>&1 || true
                   return 1

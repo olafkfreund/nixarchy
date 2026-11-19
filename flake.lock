@@ -866,17 +866,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794949374,
-        "narHash": "sha256-+C/nMeLNcCJ6rXaplzrkjZ2PVXmM2N9yPxbkWmCyaAw=",
+        "lastModified": 1795047470,
+        "narHash": "sha256-lAyPKRgtYdDQo5B7JIwBabhCp8LX2risXYdQBYrK0Hg=",
         "owner": "olafkfreund",
         "repo": "nixarchy-gltui",
-        "rev": "0bca0e07e043211552beda227f0205fcbf5d04fa",
+        "rev": "21bfde5b5fcf5f1380628484cfab686a905b8153",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-gltui",
-        "rev": "0bca0e07e043211552beda227f0205fcbf5d04fa",
+        "rev": "21bfde5b5fcf5f1380628484cfab686a905b8153",
         "type": "github"
       }
     },
@@ -1200,11 +1200,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1794537146,
-        "narHash": "sha256-Wpz/7x/YWnDIBu7yj6ixe8j6fIMsidd9Y+o1PqPF3iM=",
+        "lastModified": 1794750194,
+        "narHash": "sha256-c6ZxSsG1c2luSrbESFfp9Jq2pSVhGst2to4aIzt2Nes=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d5cc6833999746cffdfe0598f7bc801a57b887a9",
+        "rev": "1a08097fc1ed85575db39763b2c4a5d8970a37ba",
         "type": "github"
       },
       "original": {

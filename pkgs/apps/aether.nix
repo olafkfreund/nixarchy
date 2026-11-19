@@ -17,13 +17,13 @@
 }:
 let
   pname = "aether";
-  version = "4.32.0";
+  version = "4.33.0";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "aether";
     tag = "v${version}";
-    hash = "sha256-Ntu2KRcEPyC4SvlFxW8PgdvijqH8OjljF60UuCvnWzg=";
+    hash = "sha256-L72Zlxjer5b52+QCIoE5GSRadBEeBFFXw4estcHDZaQ=";
   };
 
   # The Svelte frontend, built on its own and handed to the Go build finished.

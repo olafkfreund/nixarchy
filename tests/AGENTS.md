@@ -2242,6 +2242,13 @@ on 26.05, and the test script is type-checked.
   `readme-counts.sh` to verify root-failure names from the log without
   duplicating `omarchy`, `failed=` on early exits, and `README.md` restored when
   `readme-counts.sh --fix` refuses.
+- **`checks.nightly-digest`** drives `.github/scripts/nightly-digest.sh` against
+  a stub `nix` that serves a case's local `log/`, `old-log/` (a file whose mtime
+  falls outside the job's window) and `remote-log/` (only when substituters are
+  not disabled), so root selection is tested against all three (#1856). The cap
+  is in bytes, and every job heading is always kept.
+  `checks.nightly-report-fit` runs the report step's real `run:` from
+  `nightly.yml`, with its `${{ }}` expressions substituted and a `gh` stub.
 
 **What neither check reaches:** `omarchy-edge.yml`'s wiring is asserted only by
 variable name in the `report` step (and whether a timed-out job keeps its step
@@ -2292,7 +2299,7 @@ unlocking `omarchy-shell lock` on `de`. What no VM here can reach is a
 than QEMU's `send_chars` qcodes) and **Plymouth on a real KMS driver** on a
 non-US encrypted install.
 
-**`wait_for_unit`'s `timeout` doesn't cover a guest that never boots.** It first waits for the VM's shell, with no limit, so a machine stuck at a LUKS prompt runs to `globalTimeout`. `keyboard-boot` waits for a console line first, because `wait_for_console_text` does keep its limit.
+**`wait_for_unit`'s `timeout` doesn't cover a guest that never boots.** It first connects to the VM's backdoor shell (`connect()` in the nixpkgs test driver), and its own `timeout` has not started yet. That wait is in two halves. Until the guest's backdoor sends anything, it gives up after 10 × 30 s with `Shell did not start in time`, and that error carries no guest evidence. Once the backdoor has sent its first byte, it `recv`s until `Spawning backdoor root shell...` with no limit, so a guest that freezes in between runs to `globalTimeout`. The nightly `keyboard-boot` hang on 2026-11-18 lasted 1h41m, which fits the second half, though that job's log was deleted before anyone could check (#1855). `wait_for_multi_user` (`vm-cleanup.py`) bounds both halves from the console, and its failure carries register dumps. `keyboard-boot` waits for a console line first, because `wait_for_console_text` does keep its limit.
 
 **`builtins.appendContext` with a `.drv` key can pass here and fail in CI.** It requires that derivation to be in the store already. This machine has it from earlier evaluations and a fresh hosted runner doesn't, which reads as `path '…weston.ini.drv' is required, but there is no substituter that can build it`. To pull a path out of a string, use `lib.splitString`, which keeps the context.
 

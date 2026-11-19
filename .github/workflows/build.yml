@@ -307,6 +307,9 @@ jobs:
     # four at a time (905s to 406s cold on p620); this is the margin.
     timeout-minutes: 60
     steps:
+      - name: Record when the job started
+        run: echo "JOB_T0=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: The gate did not succeed, so this check cannot pass
         if: needs.gate.result != 'success'
         run: |
@@ -1228,7 +1231,8 @@ jobs:
       - name: Verify the generated menu defaults and app template
         if: needs.gate.outputs.relevant == 'true'
         run: |
-          nix build .#nixosConfigurations.vm.config.system.build.toplevel \
+          .github/scripts/stall-watch.sh run 1500 "$RUNNER_TEMP/step28.log" -- \
+            nix build .#nixosConfigurations.vm.config.system.build.toplevel \
             --print-build-logs -o result-sys
 
           # Omarchy's menu parser returns [] on a JSON error rather than

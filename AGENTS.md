@@ -413,6 +413,13 @@ Two other ways a check stops checking, both found in one week:
   `cancelled` (§6): #1457's `omarchy` job hit its limit with
   `checks.bus-mcp` already failed inside it, so read the log for failed builds
   before calling a timeout slowness.
+- **`nix log <drv>` also asks your substituters, and cache.nixos.org serves
+  logs of its own builds**, so "output not in the store, and `nix log` returns
+  text" matched every build-time dependency the machine had substituted past:
+  the nightly digest named 1,899 derivations for one timed-out VM check, and
+  the report could not file its issue (#1856). Even local logs are mostly of
+  builds whose outputs were collected (168 of 169 on that night), so filter by
+  the log file's mtime against the job's window.
 
 ## 5. Git and flake mechanics that bite
 
@@ -567,6 +574,16 @@ Two other ways a check stops checking, both found in one week:
   `local` removes nothing: by exit the local is gone, and `rm -f ""` succeeds
   silently. The planned fix for #1079 was written that way. Point the trap at
   a global, or expand the path when the trap is set.
+- **Under nix 2.35, `nix flake metadata` reports a dirty tree's store path
+  without writing it.** `nix flake archive` returns the same path and does
+  write it. nix-update relied on the first to copy the tree after editing a
+  version, so every real bump failed with `opening file "/nix/store/…-source":
+  No such file or directory` (#1851). The first fix (#1775) archived before
+  each updater and looked green for four nights, because nothing upstream
+  released anything and an updater with nothing to bump never takes the
+  broken path. A job that had no work to do proves nothing about the work:
+  test the path with a fixture that forces it, as `checks.nix-update-archive`
+  does.
 
 ## 6. How to run the checks, and what each one costs
 

@@ -14,13 +14,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "checkmate";
-  version = "0.1.2";
+  version = "0.1.3";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "checkmate";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-/araTInVctB1kdZ70qnGyf8NQ7IaTnLvHAKRFhTGADY=";
+    hash = "sha256-w0IcvuzA9CoZfTBOS424+CaVCa5VZ4PSOGIhbr6fkzI=";
   };
 
   postUnpack = ''

@@ -1638,3 +1638,12 @@ that installed copy. That is an upstream candidate and is not patched here.
 
 Chrome itself is unfree, so no check builds or runs it; `checks.chrome-policy`
 and `checks.coexistence` verify the packaged files, CRXs and `/etc` entries.
+
+## nix-update is patched for the updaters only (#1851)
+
+`nix-update-archive.patch` makes `get_flake_store_path` run `nix flake archive`
+before `nix flake metadata`, because nix 2.35 reports a dirty tree's store path
+without writing it. REPORTED upstream as Mic92/nix-update#693; a carried patch
+until that lands, then delete it and the `newScope` in `nixarchy-apps`. Only
+`nixarchy-apps` is built with it: `final.nix-update` is untouched. Why:
+`docs/internals/flake.md#nix-run-update-rewrites-the-pinned-versions-and-ha`.

@@ -227,7 +227,7 @@
     # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-gltui = {
-      url = "github:olafkfreund/nixarchy-gltui/0bca0e07e043211552beda227f0205fcbf5d04fa";
+      url = "github:olafkfreund/nixarchy-gltui/21bfde5b5fcf5f1380628484cfab686a905b8153";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -1225,82 +1225,91 @@
         # Apps Omarchy offers that nixpkgs does not carry. Packaged here so a
         # NixOS user gets the same menu Arch users do, rather than a menu with
         # holes in it.
-        nixarchy-apps = {
-          once = final.callPackage ./pkgs/apps/once.nix { };
-          superwhisper = final.callPackage ./pkgs/apps/superwhisper.nix { };
+        # Why: docs/internals/flake.md#nix-run-update-rewrites-the-pinned-versions-and-ha
+        nixarchy-apps =
+          let
+            callPackage = final.newScope {
+              nix-update = final.nix-update.overrideAttrs (o: {
+                patches = (o.patches or [ ]) ++ [ ./pkgs/nix-update-archive.patch ];
+              });
+            };
+          in
+          {
+            once = callPackage ./pkgs/apps/once.nix { };
+            superwhisper = callPackage ./pkgs/apps/superwhisper.nix { };
 
-          # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
-          # simply follow nixpkgs the way most apps here do.
-          hey-cli = final.callPackage ./pkgs/apps/hey-cli.nix { };
+            # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
+            # simply follow nixpkgs the way most apps here do.
+            hey-cli = callPackage ./pkgs/apps/hey-cli.nix { };
 
-          # Why: docs/internals/flake.md#not-built-here-upstreams-own-flake-re-exported-int
-          zen-browser = zen-browser.packages.${final.stdenv.hostPlatform.system}.default;
+            # Why: docs/internals/flake.md#not-built-here-upstreams-own-flake-re-exported-int
+            zen-browser = zen-browser.packages.${final.stdenv.hostPlatform.system}.default;
 
-          # The four applications Omarchy writes itself. nixpkgs has none of
-          # them, which is why modules/nixos.nix cannot reproduce upstream's
-          # preinstall set; these close that gap.
-          omawrite = final.callPackage ./pkgs/apps/omawrite.nix { };
-          omacalc = final.callPackage ./pkgs/apps/omacalc.nix { };
-          omacut = final.callPackage ./pkgs/apps/omacut.nix { };
-          omasnap = final.callPackage ./pkgs/apps/omasnap.nix { };
+            # The four applications Omarchy writes itself. nixpkgs has none of
+            # them, which is why modules/nixos.nix cannot reproduce upstream's
+            # preinstall set; these close that gap.
+            omawrite = callPackage ./pkgs/apps/omawrite.nix { };
+            omacalc = callPackage ./pkgs/apps/omacalc.nix { };
+            omacut = callPackage ./pkgs/apps/omacut.nix { };
+            omasnap = callPackage ./pkgs/apps/omasnap.nix { };
 
-          # Omarchy 4.5's other default apps (#1572). On by default through
-          # programs.nixarchy.omarchyApps.enable.
-          hype = final.callPackage ./pkgs/apps/hype.nix { };
-          monologue = final.callPackage ./pkgs/apps/monologue.nix { };
-          cards = final.callPackage ./pkgs/apps/cards.nix { };
-          checkmate = final.callPackage ./pkgs/apps/checkmate.nix { };
-          omarchy-local-ai = final.callPackage ./pkgs/apps/omarchy-local-ai.nix { };
-          signed = final.callPackage ./pkgs/apps/signed.nix { };
-          disktree = final.callPackage ./pkgs/apps/disktree.nix { };
-          # Against the flake's Hyprland, the one Omarchy's session runs; final.hyprland
-          # is nixpkgs' and fails the plugin's commit check. The module builds its own (#1572).
-          omarchy-hyprland-titlebars = final.callPackage ./pkgs/apps/omarchy-hyprland-titlebars.nix {
-            inherit
-              (final.hyprlandPlugins.override {
-                inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
-              })
-              mkHyprlandPlugin
-              ;
+            # Omarchy 4.5's other default apps (#1572). On by default through
+            # programs.nixarchy.omarchyApps.enable.
+            hype = callPackage ./pkgs/apps/hype.nix { };
+            monologue = callPackage ./pkgs/apps/monologue.nix { };
+            cards = callPackage ./pkgs/apps/cards.nix { };
+            checkmate = callPackage ./pkgs/apps/checkmate.nix { };
+            omarchy-local-ai = callPackage ./pkgs/apps/omarchy-local-ai.nix { };
+            signed = callPackage ./pkgs/apps/signed.nix { };
+            disktree = callPackage ./pkgs/apps/disktree.nix { };
+            # Against the flake's Hyprland, the one Omarchy's session runs; final.hyprland
+            # is nixpkgs' and fails the plugin's commit check. The module builds its own (#1572).
+            omarchy-hyprland-titlebars = callPackage ./pkgs/apps/omarchy-hyprland-titlebars.nix {
+              inherit
+                (final.hyprlandPlugins.override {
+                  inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
+                })
+                mkHyprlandPlugin
+                ;
+            };
+
+            # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
+            # and the lock screen's video feed. Not in nixpkgs. #1153.
+            owe = callPackage ./pkgs/apps/owe.nix { };
+            folio = callPackage ./pkgs/apps/folio.nix { };
+            omaview = callPackage ./pkgs/apps/omaview.nix { };
+            plain = callPackage ./pkgs/apps/plain.nix { };
+
+            # The fourth, and the only one that is not a small script or a Qt
+            # program: a Wails app, so a Go module set AND an npm tree to pin.
+            aether = callPackage ./pkgs/apps/aether.nix { };
+
+            # Not one of Omarchy's preinstalls -- a terminal-effects toy from the
+            # same authors, packaged because it was asked for.
+            ttfx = callPackage ./pkgs/apps/ttfx.nix { };
+            omarchy-speedtest = callPackage ./pkgs/apps/omarchy-speedtest.nix { };
+            omarchy-screensaver = callPackage ./pkgs/apps/omarchy-screensaver.nix { };
+
+            # Why: docs/internals/flake.md#nixpkgs-retroarch-is-retroarch-with-cores-built-wi
+            retroarch = final.retroarch.withCores (
+              cores:
+              map (n: cores.${n}) [
+                "bsnes" # SNES
+                "mesen" # NES
+                "gambatte" # Game Boy / Color
+                "mgba" # Game Boy Advance
+                "blastem" # Mega Drive / Genesis
+                "beetle-pce-fast" # PC Engine
+                "beetle-psx-hw" # PlayStation
+                "parallel-n64" # Nintendo 64
+                "desmume" # Nintendo DS
+                "flycast" # Dreamcast
+                "ppsspp" # PSP
+                "puae" # Amiga
+                "vice-x64" # Commodore 64
+              ]
+            );
           };
-
-          # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
-          # and the lock screen's video feed. Not in nixpkgs. #1153.
-          owe = final.callPackage ./pkgs/apps/owe.nix { };
-          folio = final.callPackage ./pkgs/apps/folio.nix { };
-          omaview = final.callPackage ./pkgs/apps/omaview.nix { };
-          plain = final.callPackage ./pkgs/apps/plain.nix { };
-
-          # The fourth, and the only one that is not a small script or a Qt
-          # program: a Wails app, so a Go module set AND an npm tree to pin.
-          aether = final.callPackage ./pkgs/apps/aether.nix { };
-
-          # Not one of Omarchy's preinstalls -- a terminal-effects toy from the
-          # same authors, packaged because it was asked for.
-          ttfx = final.callPackage ./pkgs/apps/ttfx.nix { };
-          omarchy-speedtest = final.callPackage ./pkgs/apps/omarchy-speedtest.nix { };
-          omarchy-screensaver = final.callPackage ./pkgs/apps/omarchy-screensaver.nix { };
-
-          # Why: docs/internals/flake.md#nixpkgs-retroarch-is-retroarch-with-cores-built-wi
-          retroarch = final.retroarch.withCores (
-            cores:
-            map (n: cores.${n}) [
-              "bsnes" # SNES
-              "mesen" # NES
-              "gambatte" # Game Boy / Color
-              "mgba" # Game Boy Advance
-              "blastem" # Mega Drive / Genesis
-              "beetle-pce-fast" # PC Engine
-              "beetle-psx-hw" # PlayStation
-              "parallel-n64" # Nintendo 64
-              "desmume" # Nintendo DS
-              "flycast" # Dreamcast
-              "ppsspp" # PSP
-              "puae" # Amiga
-              "vice-x64" # Commodore 64
-            ]
-          );
-        };
 
         # Omarchy's Neovim configuration. A separate derivation rather than
         # part of the omarchy package: it is seeded into a directory the user
@@ -1649,7 +1658,6 @@
               runtimeInputs = with pkgsFor.${system}; [
                 git
                 gnugrep
-                nix
               ];
               # A failed updater can leave half a bump that still builds, so
               # whatever it changed goes back to HEAD (#1537).
@@ -1658,9 +1666,6 @@
                 run() {
                   local before after f
                   before=$(git diff --name-only) || return 1
-                  # nix-update's nix (2.35) evaluates the tree at a store path it never
-                  # copies, so copy it first: every landed bump makes a new one (#1758).
-                  nix flake archive . >/dev/null || return 1
                   "$1" && return 0
                   after=$(git diff --name-only) || return 1
                   while IFS= read -r f; do
@@ -2531,14 +2536,25 @@
           failure-digest = import ./tests/failure-digest.nix {
             pkgs = pkgsFor.${system};
           };
+          # #1853: a bounded build step leaves a stall snapshot and kills its group.
+          stall-watch = import ./tests/stall-watch.nix {
+            pkgs = pkgsFor.${system};
+          };
           # #1711: a failed nightly's issue carries the failing log's excerpt.
           # See tests/nightly-digest.nix.
           nightly-digest = import ./tests/nightly-digest.nix {
             pkgs = pkgsFor.${system};
           };
+          nightly-report-fit = import ./tests/nightly-report-fit.nix {
+            pkgs = pkgsFor.${system};
+          };
           # #1719: commit-independent.sh refuses a shallow clone.
           # See tests/commit-independent-shallow.nix.
           commit-independent-shallow = import ./tests/commit-independent-shallow.nix {
+            pkgs = pkgsFor.${system};
+          };
+          # #1858: the nightly VM-host sampler preserves job status and stops its sleep.
+          vm-host-sample = import ./tests/vm-host-sample.nix {
             pkgs = pkgsFor.${system};
           };
           panel-loaders = import ./tests/panel-loaders.nix {
@@ -2852,6 +2868,7 @@
               builtins.unsafeDiscardStringContext self.packages.${system}.update.drvPath
             );
           } "touch $out";
+          nix-update-archive = import ./tests/nix-update-archive.nix { pkgs = pkgsFor.${system}; };
 
           # Hyprland loads its GPU drivers into its own process, so they must
           # share its glibc -- evaluation only, no boot. See

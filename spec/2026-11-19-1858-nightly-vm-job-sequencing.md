@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1858
 intent: intent/2026-11-19-1858-nightly-vm-job-sequencing.md
 ---

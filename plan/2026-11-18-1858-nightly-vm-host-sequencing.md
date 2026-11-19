@@ -266,3 +266,14 @@ The sampler's TERM trap now waits for the `sleep` it kills before exiting, so
 the wrapper never returns with that child still in the process table (a zombie
 answers `kill -0`, which case 5 reads as an orphaned sleep). The race is not
 deterministic, so no break proof makes it fail on demand.
+
+## Deviation (2026-11-19): pressure instead of a qemu count
+
+The first nightly with the sampler (run 44449120419) logged `qemu=?` on every line. The
+runner units set `ProtectProc=invisible`, which hides other users' processes, and their PATH
+carries no `pgrep`; the guests run as `nixbld` users, so no in-runner count can see them.
+The field could not vary, so it is replaced by `cpu=<avg10> io=<avg10>`, the `some` line of
+`/proc/pressure/{cpu,io}`, which is host-wide and readable. Pressure is the starvation the
+issue is about; which VM jobs overlap is still read from each line's `job=` and the run
+timestamps. Test case 1 now pins every field against a fixed `VM_HOST_PROC`; cases 3 and 7
+lose their `pgrep` stubs, and case 7 goes with the count.

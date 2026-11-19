@@ -87,9 +87,10 @@ jobs:
     # globalTimeout as checks.install so the driver loses the race to the
     # job and a hang is a reported failure, not a `cancelled`. Same runner
     # pool, but four p620 runners share these labels, so this job and
-    # `install` start in the same second on different runners; only
-    # `install-iso-net`'s `needs: [install]` orders anything. Two install VMs
-    # sharing one disk is what pushed checks.install to 63 minutes on
+    # `install` start in the same second on different runners. Two `needs`
+    # chains keep install-class guests to two at once: `install` ->
+    # `install-iso-net`, and this job -> `keyboard-boot` (#1858). Two install
+    # VMs sharing one disk is what pushed checks.install to 63 minutes on
     # 2026-09-03.
     #
     # Nightly rather than per-PR, measured: install-check.yml already runs
@@ -117,6 +118,10 @@ jobs:
   keyboard-boot:
     name: type through LUKS, greeter and lock screen
     runs-on: [self-hosted, nixos, kvm, big]
+    # Second install-class chain, after install-encrypted (#1858). `if:
+    # always()` for the same reason as `install-iso-net` below.
+    needs: [install-encrypted]
+    if: always()
     # Provisional until the supervisor's first measured run sets this margin.
     timeout-minutes: 120
     steps:
@@ -143,11 +148,11 @@ jobs:
   install-iso-net:
     name: install from the network ISO
     runs-on: [self-hosted, nixos, kvm, big]
-    # The intended cap is TWO install-class jobs on p620 at a time (#935), not
-    # what runs: `install`, `install-encrypted`, `keyboard-boot` and `microvm`
-    # have no `needs` and are eligible to start together (runner availability
-    # decides), `install-iso-net` waits for `install` (below), and
-    # `keyboard-boot` and `microvm` are in no chain. Measuring in #1858. The
+    # The cap is TWO install-class jobs on p620 at a time (#935), held by two
+    # `needs` chains: `install` -> this job, and `install-encrypted` ->
+    # `keyboard-boot` (#1858). `microvm` stays unchained: no disk install, and
+    # its guest boots in about two minutes. With all four VM jobs overlapping,
+    # run 44449120419 (2026-11-19) peaked at a 1-minute load of 54.8. The
     # workflow-level `concurrency: nightly` stops two nightly
     # RUNS overlapping and does nothing about jobs inside one -- all five
     # install-class jobs started at 03:10:14 on 2026-09-24 and

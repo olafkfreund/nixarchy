@@ -968,6 +968,11 @@
     class = "patch";
     reason = "Upstream uncomments /etc/locale.gen and runs locale-gen as root. NixOS builds locales with the system (i18n.extraLocales), so this refuses and names nixarchy-language-select (#1289).";
   };
+  "omarchy-region" = {
+    edge = "only";
+    class = "patch";
+    reason = "Setup > Region > Formats, new in quattro. Sources omarchy-locale-session by its $OMARCHY_PATH path rather than from PATH, as omarchy-language does here (#1847).";
+  };
   "omarchy-locale-session" = {
     edge = "only";
     class = "patch";

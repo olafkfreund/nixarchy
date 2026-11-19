@@ -2547,7 +2547,11 @@ pkgs.testers.runNixOSTest {
                # with /usr/bin/mktemp, install and mv, and writes its sleep hook
                # under /usr/lib/systemd/system-sleep. Both menu rows that run it
                # are dimmed to `true` (modules/apps.nix), so nothing reaches it.
-               "omarchy-device-gpu-hybrid"]
+               "omarchy-device-gpu-hybrid",
+               # quattro 2eb7eb3 (#1847): OMARCHY_PACKAGED_THEMES_PATH defaults to
+               # /usr/share/omarchy/themes, read only behind a -d test for the theme
+               # video packages, which this port skips (data/omarchy-packages.nix).
+               "omarchy-theme-set"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

@@ -99,6 +99,11 @@
     reason = "an action, not a package: omarchy-icons-install clones an icon set's git repository into ~/.config/omarchy/icons.";
     edge = "only";
   };
+  # New in quattro 2eb7eb3 (#1847), with Game Vibes.
+  "install.gaming.vibes" = {
+    reason = "an action, not a package: omarchy-games-vibes-install clones a web game's git repository into ~/Games/vibes.";
+    edge = "only";
+  };
   "install.ai.perplexity" =
     "dimmed with a reason (#1320): a pacman package nixpkgs does not carry, not a web app";
 }

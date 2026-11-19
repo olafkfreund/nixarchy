@@ -1208,6 +1208,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     skills=$out/share/omarchy/default/agents/skills
 
+                    # Quattro 2eb7eb3 renamed plugins.md to shell.md, and our SKILL.md links
+                    # plugins.md. Its new apps.md and system.md teach pacman, the AUR and
+                    # passwordless sudo, and nothing of ours links them: an Arch-shaped guide is
+                    # worse than none, so they stay out until they are ported (#1847).
+                    if [ -e $skills/nixarchy/shell.md ] && [ ! -e $skills/nixarchy/plugins.md ]; then
+                      ln -s shell.md $skills/nixarchy/plugins.md
+                    fi
+                    rm -f $skills/nixarchy/apps.md $skills/nixarchy/system.md
+
                     # cp --no-preserve=mode above drops the executable bit.
                     chmod +x $skills/ai-mirror/mirror-vm
 

@@ -145,7 +145,11 @@ def problems(manifest, upstream, mine, edge=True):
             f"or a reason."
         )
 
+    # edge = "only" is a section only the edge pin has, edge = "absent" one only the tag
+    # has, the convention the other ledgers use: neither is stale on the other pin (#1847).
     for key in sorted(set(manifest) - set(upstream)):
+        if manifest[key].get("edge") == ("absent" if edge else "only"):
+            continue
         found.append(
             f"stale: data/skill-parity.nix classifies {key!r} and upstream's "
             f"SKILL.md no longer has it.\n"
@@ -155,6 +159,13 @@ def problems(manifest, upstream, mine, edge=True):
 
     for key in sorted(set(manifest) & set(upstream)):
         row = manifest[key]
+        if row.get("edge") == ("absent" if edge else "only"):
+            found.append(
+                f"pinned to the wrong side: {key!r} is marked edge = {row['edge']!r}, "
+                f"and this pin has it.\n"
+                f"    Drop the edge field, or classify it for this pin too."
+            )
+            continue
         klass = row.get("class")
         anchor = row.get("anchor")
         reason = row.get("reason")

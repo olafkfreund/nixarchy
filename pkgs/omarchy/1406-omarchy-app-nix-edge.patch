@@ -1,8 +1,26 @@
---- a/default/agents/skills/omarchy-app/SKILL.md
-+++ b/default/agents/skills/omarchy-app/SKILL.md
+--- a/default/agents/skills/omarchy-make-app/scaffold
++++ b/default/agents/skills/omarchy-make-app/scaffold
+@@ -106,13 +106,14 @@
+ 
+ if not os.path.isdir(".git"):
+     subprocess.run(["git", "init", "-q"], check=False)
++subprocess.run(["git", "add", "-A"], check=True)
+ 
+ print(f"Wrote {len(written)} files for {name} ({display}):")
+ for path in sorted(written):
+     print("  " + path)
+ 
+ if "--no-build" not in sys.argv:
+-    result = subprocess.run(["bin/test"], capture_output=True, text=True)
++    result = subprocess.run(["nix", "develop", "--command", "bin/test"], capture_output=True, text=True)
+     lines = (result.stdout + result.stderr).strip().splitlines()
+     # The errors first: a build's last lines are often warnings that came after.
+     errors = [line for line in lines if re.search(r"\berror\b|FAIL", line)]
+--- a/default/agents/skills/omarchy-make-app/SKILL.md
++++ b/default/agents/skills/omarchy-make-app/SKILL.md
 @@ -1,7 +1,7 @@
  ---
- name: omarchy-app
+ name: omarchy-make-app
  description: >
 -  Build a new desktop app for Omarchy the way Omarchy's own apps are built (Omacut, Monologue, Hype, Signed, Folio, Plain, Omawrite, Omacalc): C++ and Qt Quick, built with CMake into a single binary, following the Omarchy theme and language live, tested offscreen on every push, and packaged in omarchy-pkgs so it shows up in the app launcher. Use when asked to make, build, or scaffold an app, tool, utility, or GUI program for the desktop. Triggers: new app, make me an app, desktop app, GUI, Qt, QML, Qt Quick, C++ app, CMake, app launcher entry, PKGBUILD for my app.
 +  Build a new desktop app for Omarchy the way Omarchy's own apps are built (Omacut, Monologue, Hype, Signed, Folio, Plain, Omawrite, Omacalc): C++ and Qt Quick, built with CMake into a single binary, following the Omarchy theme and language live, tested offscreen on every push, and installed as a Nix flake so it runs with `nix run` and shows up in the app launcher. Use when asked to make, build, or scaffold an app, tool, utility, or GUI program for the desktop. Triggers: new app, make me an app, desktop app, GUI, Qt, QML, Qt Quick, C++ app, CMake, app launcher entry, flake.nix for my app.
@@ -68,11 +86,11 @@
 -- That recipe is the app's one list of dependencies: the app's CI reads `depends`, `makedepends`, and `checkdepends` from it rather than keeping a copy. Until the recipe has landed, CI fails at installing them and `bin/test` is the check. A new dependency, a test-only one included, goes into the recipe along with the code that needs it.
 -- Only once that package is published can Omarchy install it: `install/omarchy-base.packages`, the preinstall scripts, and a migration for existing machines.
 +- To ship, tag `v<version>` and make a GitHub release. Anyone then adds the repository to their configuration as a flake input and installs `inputs.<name>.packages.${system}.default`; there is no package list to join.
---- a/default/agents/skills/omarchy-app/templates.md
-+++ b/default/agents/skills/omarchy-app/templates.md
+--- a/default/agents/skills/omarchy-make-app/templates.md
++++ b/default/agents/skills/omarchy-make-app/templates.md
 @@ -2,11 +2,11 @@
  
- Read this when starting an app from the omarchy-app skill. Replace `<name>` with the app's name and `<Name>` with its display name. These come from Omacut, Monologue, and the other Omarchy apps (MIT, David Heinemeier Hansson); keep that attribution in the LICENSE of any app that copies them.
+ Read this when starting an app from the omarchy-make-app skill. Replace `<name>` with the app's name and `<Name>` with its display name. These come from Omacut, Monologue, and the other Omarchy apps (MIT, David Heinemeier Hansson); keep that attribution in the LICENSE of any app that copies them.
  
 -The files marked **shared** are identical in every Omarchy app, byte for byte: copy them as they are, with nothing to replace, and put what is particular to the app in `CMakeLists.txt` and its recipe in omarchy-pkgs instead. A fix to one goes here first, then to every app.
 +The files marked **shared** are identical in every Omarchy app, byte for byte: copy them as they are, with nothing to replace, and put what is particular to the app in `CMakeLists.txt` and `package.nix` instead. A fix to one goes here first, then to every app.
@@ -322,21 +340,3 @@
 -  }
 -}
 -```
---- a/default/agents/skills/omarchy-app/scaffold
-+++ b/default/agents/skills/omarchy-app/scaffold
-@@ -106,13 +106,14 @@
- 
- if not os.path.isdir(".git"):
-     subprocess.run(["git", "init", "-q"], check=False)
-+subprocess.run(["git", "add", "-A"], check=True)
- 
- print(f"Wrote {len(written)} files for {name} ({display}):")
- for path in sorted(written):
-     print("  " + path)
- 
- if "--no-build" not in sys.argv:
--    result = subprocess.run(["bin/test"], capture_output=True, text=True)
-+    result = subprocess.run(["nix", "develop", "--command", "bin/test"], capture_output=True, text=True)
-     lines = (result.stdout + result.stderr).strip().splitlines()
-     # The errors first: a build's last lines are often warnings that came after.
-     errors = [line for line in lines if re.search(r"\berror\b|FAIL", line)]

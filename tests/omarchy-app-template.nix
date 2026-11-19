@@ -44,8 +44,11 @@ let
         nativeBuildInputs = [ pkgs.python3 ];
       }
       ''
+        # quattro 2eb7eb3 renamed the skill omarchy-make-app; v4.5.0 calls it omarchy-app.
+        skill=${omarchy}/share/omarchy/default/agents/skills/omarchy-make-app
+        [ -d "$skill" ] || skill=${omarchy}/share/omarchy/default/agents/skills/omarchy-app
         python3 -I ${./omarchy-app-template.py} ${lib.optionalString isEdge "--edge"} \
-          ${omarchy}/share/omarchy/default/agents/skills/omarchy-app/templates.md $out ${name}
+          "$skill/templates.md" $out ${name}
       '';
 
   package = (pkgs.callPackage (builtins.toFile "package.nix" packageNix) { }).overrideAttrs (_: {

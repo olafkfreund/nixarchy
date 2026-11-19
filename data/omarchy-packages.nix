@@ -48,14 +48,6 @@
   "btrfs-progs" = {
     nix = "btrfs-progs";
   };
-  "cards" = {
-    edge = "only";
-    nix = "nixarchy-apps.cards";
-  };
-  "checkmate" = {
-    edge = "only";
-    nix = "nixarchy-apps.checkmate";
-  };
   "chromium" = {
     edge = "absent";
     nix = "chromium";
@@ -896,5 +888,21 @@
   "xorg-xsetroot" = {
     skip = "X11 tool; the session is Wayland.";
     edge = "absent";
+  };
+  "fantasi" = {
+    edge = "only";
+    skip = "Omarchy's local-model image maker (omacom/fantasi, C++), new in quattro 2eb7eb3 and not packaged yet; its install migration is not-needed until it is (#1847)";
+  };
+  "ghostscript" = {
+    edge = "only";
+    skip = "added to quattro 2eb7eb3's base list with no caller in bin/, default/ or shell/; left out until something here needs it (#1847)";
+  };
+  "omarchy-themes-intros" = {
+    edge = "only";
+    skip = "intro videos for the stock themes; omarchy-theme-set copies them only when the packaged directory exists, so themes switch without them. Not packaged yet (#1847)";
+  };
+  "omarchy-themes-loops" = {
+    edge = "only";
+    skip = "background loops for OWE; omarchy-theme-set copies them only when the packaged directory exists, so themes switch without them. Not packaged yet (#1847)";
   };
 }

@@ -48,7 +48,7 @@
     upstream = "2a25cb15a898";
     tag_upstream = "85358cfcd451";
     anchor = "reporting Nixarchy and Omarchy bugs";
-    reason = "Same six guides, one line changed: contributing.md here routes a bug between this port and upstream first, rather than assuming every bug is Omarchy's. Quattro 2eb7eb3 renames plugins.md to shell.md and adds apps.md and system.md, which assume Arch and are left out here; the four omarchy-make-* skills and omarchy-contribute are separate skills (#1847).";
+    reason = "Same six guides, one line changed: contributing.md here routes a bug between this port and upstream first, rather than assuming every bug is Omarchy's. Quattro 2eb7eb3 renames plugins.md to shell.md and adds apps.md and system.md, which assume Arch and are left out here; the four omarchy-make-* skills and omarchy-contribute are separate skills (#1847, #1882).";
   };
 
   "## Critical Safety Rules" = {
@@ -70,7 +70,7 @@
     upstream = "2e1d666f4723";
     tag_upstream = "087c2f1646b5";
     anchor = "Two config systems coexist and the boundary matters";
-    reason = "The component table gains the flake as the base OS row and the generated menu, and the section states the boundary that has no upstream equivalent: ~/.config is yours and imperative, the flake half is declarative and needs a rebuild. Quattro 2eb7eb3 names the dock and OSD as part of the shell, foot as the default terminal, UWSM's env.d, and the default apps; not carried here yet (#1847).";
+    reason = "The component table gains the flake as the base OS row and the generated menu, and the section states the boundary that has no upstream equivalent: ~/.config is yours and imperative, the flake half is declarative and needs a rebuild. Quattro 2eb7eb3 names the dock and OSD as part of the shell, foot as the default terminal, UWSM's env.d, and the default apps; not carried here yet (#1847, #1882).";
   };
 
   "## Command Discovery" = {
@@ -86,7 +86,7 @@
     upstream = "f960d4c003ee";
     tag_upstream = "ac64c63b62d2";
     anchor = "Run `omarchy --help` for the full list. The most common groups:";
-    reason = "The table is upstream's with three purpose cells rewritten; each of those is its own row below, so this row covers the table's frame rather than its contents. Quattro 2eb7eb3 adds twelve groups (default, font/icons, dock, hyprland, display, device, remove, webapp/tui, language/region, powerprofiles, agent, snapshot), not listed here yet (#1847).";
+    reason = "The table is upstream's with three purpose cells rewritten; each of those is its own row below, so this row covers the table's frame rather than its contents. Quattro 2eb7eb3 adds twelve groups (default, font/icons, dock, hyprland, display, device, remove, webapp/tui, language/region, powerprofiles, agent, snapshot), not listed here yet (#1847, #1882).";
   };
 
   "group: omarchy refresh" = {
@@ -106,7 +106,7 @@
     upstream = "cb2a5f3ebc93";
     tag_upstream = "ce587d348b8d";
     anchor = "| `omarchy toggle` | Toggle feature on/off |";
-    reason = "Quattro 2eb7eb3 changes its example to `omarchy toggle idle`; the group is the same (#1847).";
+    reason = "Quattro 2eb7eb3 changes its example to `omarchy toggle idle`; the group is the same (#1847, #1882).";
   };
 
   "group: omarchy theme" = {
@@ -114,7 +114,7 @@
     upstream = "a849bcce0afa";
     tag_upstream = "5192b6f42133";
     anchor = "| `omarchy theme` | Theme management |";
-    reason = "Quattro 2eb7eb3 rewords it to 'Theme and background'; the group and its command are the same (#1847).";
+    reason = "Quattro 2eb7eb3 rewords it to 'Theme and background'; the group and its command are the same (#1847, #1882).";
   };
 
   "group: omarchy bar" = {
@@ -155,7 +155,7 @@
     upstream = "b1c53310a4be";
     tag_upstream = "25b0b6e33af6";
     anchor = "| `omarchy capture` | Screenshots and recordings |";
-    reason = "Quattro 2eb7eb3 rewords it to cover OCR and QR; the group and its command are the same (#1847).";
+    reason = "Quattro 2eb7eb3 rewords it to cover OCR and QR; the group and its command are the same (#1847, #1882).";
   };
 
   "group: omarchy reminder" = {
@@ -190,7 +190,7 @@
     upstream = "48644f18eb53";
     tag_upstream = "dddbfc7f586a";
     anchor = "The Omarchy shell (bar, notifications, plugins, idle) is configured in";
-    reason = "Quattro 2eb7eb3 adds tmux, shell aliases, uwsm env.d and mimeapps rows, not carried here yet (#1847).";
+    reason = "Quattro 2eb7eb3 adds tmux, shell aliases, uwsm env.d and mimeapps rows, not carried here yet (#1847, #1882).";
   };
 
   "### Terminals" = {
@@ -204,7 +204,7 @@
     upstream = "84d7f4ed43b1";
     tag_upstream = "ad42e6e43311";
     anchor = "Note that `/etc` on NixOS is generated from the system configuration.";
-    reason = "The table is upstream's. The paragraph after it is new: one of its rows points into /etc, which on NixOS may be a store symlink, and editing it is the mistake that looks like it worked. Quattro 2eb7eb3 adds tmux, shell aliases, desktop environment variables and mimeapps rows, not carried here yet (#1847).";
+    reason = "The table is upstream's. The paragraph after it is new: one of its rows points into /etc, which on NixOS may be a store symlink, and editing it is the mistake that looks like it worked. Quattro 2eb7eb3 adds tmux, shell aliases, desktop environment variables and mimeapps rows, not carried here yet (#1847, #1882).";
   };
 
   "## Safe Customization Patterns" = {
@@ -231,7 +231,7 @@
     upstream = "45c566024503";
     tag_upstream = "0e08895d8c64";
     anchor = "omarchy update                  # nix flake update + nixos-rebuild switch";
-    reason = "The command list is upstream's; the comment on `omarchy update` names what it runs here, for the same reason the command-group row does. Quattro 2eb7eb3 adds `omarchy system logout` and `firmware`, and splits reinstall into `reinstall configs` and the full one; not carried here yet (#1847).";
+    reason = "The command list is upstream's; the comment on `omarchy update` names what it runs here, for the same reason the command-group row does. Quattro 2eb7eb3 adds `omarchy system logout` and `firmware`, and splits reinstall into `reinstall configs` and the full one; not carried here yet (#1847, #1882).";
   };
 
   "## Troubleshooting" = {
@@ -239,7 +239,7 @@
     upstream = "30f46f1f336f";
     tag_upstream = "f1b9b329a7d8";
     anchor = "**`omarchy reinstall` exists but cannot finish here.**";
-    reason = "Upstream's debug and refresh commands are kept. What is added is the one command that is present and cannot complete: `omarchy reinstall` starts with a pacman transaction the shim refuses, and an agent needs to know that before it recommends it. Quattro 2eb7eb3 rewords the reinstall commands; the one this port adds, that `omarchy reinstall` cannot finish here, still holds (#1847).";
+    reason = "Upstream's debug and refresh commands are kept. What is added is the one command that is present and cannot complete: `omarchy reinstall` starts with a pacman transaction the shim refuses, and an agent needs to know that before it recommends it. Quattro 2eb7eb3 rewords the reinstall commands; the one this port adds, that `omarchy reinstall` cannot finish here, still holds (#1847, #1882).";
   };
 
   "## Decision Framework" = {
@@ -247,7 +247,7 @@
     upstream = "225d90a0c8b8";
     tag_upstream = "4cbd9cd66fc8";
     anchor = "Use the `nixos` skill.** Do not run `omarchy pkg add` expecting an install";
-    reason = "Upstream's numbered ladder gains the question this port exists to answer: a package install, or anything outside ~/.config, leaves this skill entirely. Quattro 2eb7eb3 adds steps for default apps and environment variables and points shell code at shell.md, not carried here yet (#1847).";
+    reason = "Upstream's numbered ladder gains the question this port exists to answer: a package install, or anything outside ~/.config, leaves this skill entirely. Quattro 2eb7eb3 adds steps for default apps and environment variables and points shell code at shell.md, not carried here yet (#1847, #1882).";
   };
 
   "### Reminder Requests" = {
@@ -268,48 +268,48 @@
     upstream = "47238d122cf6";
     tag_upstream = "fd34bada703c";
     anchor = "\"My change disappeared after a reboot\"";
-    reason = "Upstream's examples are kept where the answer is the same command. Three are replaced by the two mistakes that only happen here -- asking this skill to install something, and an imperative change that does not survive a reboot -- because an example is how an agent learns the boundary. Upstream's monitor example now names `omarchy hyprland monitor resolution`, which the tag does not ship, so this one keeps the monitors.lua edit that works on both. Quattro 2eb7eb3 adds ten examples (default browser, terminal, web apps, bar, idle, keyboard layout, env vars, text size) and sends bug reports to omarchy-contribute; not carried here yet (#1847).";
+    reason = "Upstream's examples are kept where the answer is the same command. Three are replaced by the two mistakes that only happen here -- asking this skill to install something, and an imperative change that does not survive a reboot -- because an example is how an agent learns the boundary. Upstream's monitor example now names `omarchy hyprland monitor resolution`, which the tag does not ship, so this one keeps the monitors.lua edit that works on both. Quattro 2eb7eb3 adds ten examples (default browser, terminal, web apps, bar, idle, keyboard layout, env vars, text size) and sends bug reports to omarchy-contribute; not carried here yet (#1847, #1882).";
   };
 
   "group: omarchy agent" = {
     edge = "only";
     class = "omitted";
     upstream = "0c343da3f199";
-    reason = "New in quattro 2eb7eb3 (coding agents, accounts and local models). The commands ship; this skill does not list the group yet (#1847).";
+    reason = "New in quattro 2eb7eb3 (coding agents, accounts and local models). The commands ship; this skill does not list the group yet (#1847, #1882).";
   };
 
   "group: omarchy default" = {
     edge = "only";
     class = "omitted";
     upstream = "8008b5f3e179";
-    reason = "New in quattro 2eb7eb3 (default browser, terminal, editor, dictation and agent). The commands ship; this skill does not list the group yet (#1847).";
+    reason = "New in quattro 2eb7eb3 (default browser, terminal, editor, dictation and agent). The commands ship; this skill does not list the group yet (#1847, #1882).";
   };
 
   "group: omarchy device" = {
     edge = "only";
     class = "omitted";
     upstream = "57c394790b73";
-    reason = "New in quattro 2eb7eb3 (touchpad, touchscreen and keyboard top row). The commands ship; this skill does not list the group yet (#1847).";
+    reason = "New in quattro 2eb7eb3 (touchpad, touchscreen and keyboard top row). The commands ship; this skill does not list the group yet (#1847, #1882).";
   };
 
   "group: omarchy display" = {
     edge = "only";
     class = "omitted";
     upstream = "df22eb721f18";
-    reason = "New in quattro 2eb7eb3 (text scaling everywhere). The commands ship; this skill does not list the group yet (#1847).";
+    reason = "New in quattro 2eb7eb3 (text scaling everywhere). The commands ship; this skill does not list the group yet (#1847, #1882).";
   };
 
   "group: omarchy hyprland" = {
     edge = "only";
     class = "omitted";
     upstream = "772ff24a69ef";
-    reason = "New in quattro 2eb7eb3 (windows, monitors and layouts). The commands ship; this skill does not list the group yet (#1847).";
+    reason = "New in quattro 2eb7eb3 (windows, monitors and layouts). The commands ship; this skill does not list the group yet (#1847, #1882).";
   };
 
   "group: omarchy powerprofiles" = {
     edge = "only";
     class = "omitted";
     upstream = "a9e55875cd65";
-    reason = "New in quattro 2eb7eb3 (power profile per power source). The commands ship; this skill does not list the group yet (#1847).";
+    reason = "New in quattro 2eb7eb3 (power profile per power source). The commands ship; this skill does not list the group yet (#1847, #1882).";
   };
 }

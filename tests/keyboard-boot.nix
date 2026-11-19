@@ -87,10 +87,22 @@ pkgs.testers.runNixOSTest {
           machine.succeed("sync")
           machine.crash()
           machine.start()
-          machine.wait_for_console_text("Please enter passphrase for disk cryptroot", timeout=240)
+          prompt = "Please enter passphrase for disk cryptroot"
           if physical:
+              # The prompt can beat the keyboard's driver, and keys sent then are lost (#1876), so
+              # wait for both, in either order. start() resets the log, so it holds this boot only.
+              # Substring polls, not a lookahead regex: that took 206 s (tests/AGENTS.md, rescan).
+              keyboard = "input: AT Translated Set 2 keyboard"
+              for _ in range(240):
+                  log = machine.get_console_log()
+                  if prompt in log and keyboard in log:
+                      break
+                  time.sleep(1)
+              else:
+                  raise Exception(f"no passphrase prompt and keyboard within 240 s: {log[-2000:]}")
               machine.send_chars(keys + "\n")
           else:
+              machine.wait_for_console_text(prompt, timeout=240)
               machine.send_console(keys + "\n")
           # A wrong passphrase re-prompts for ever, and wait_for_unit blocks on the shell before its
           # own timeout starts. The root device appears only once the disk is unlocked.
@@ -134,6 +146,11 @@ pkgs.testers.runNixOSTest {
       de.wait_until_succeeds("journalctl -b -u display-manager --no-pager | grep 'Authentication for user .*omarchy.* successful' >/dev/null")
       # Not pgrep: it matches the session's preloader, seconds before the socket exists.
       de.wait_until_succeeds(session_cmd("hyprctl monitors >/dev/null"))
+      # Omarchy repeats a key held 250 ms, so a key release the host delivers late typed
+      # zzzzzzzzzy here (#1876). The test is about the layout, not about repeat.
+      de.succeed(session_cmd('hyprctl eval "hl.config({ input = { repeat_rate = 0 } })"'))
+      rate = de.succeed(session_cmd("hyprctl -j getoption input:repeat_rate"))
+      assert '"int": 0' in rate, f"repeat still on: {rate}"
       de.succeed(session_cmd('hyprctl dispatch "hl.dsp.exec_cmd(\\"foot -e ${pkgs.writeShellScript "keyboard-capture" "cat >/tmp/typed"}\\")"'))
       # Typing before the terminal has focus sends the keys nowhere.
       de.wait_until_succeeds("test -e /tmp/typed", timeout=60)

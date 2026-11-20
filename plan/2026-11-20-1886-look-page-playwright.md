@@ -32,3 +32,14 @@ the generated set under both pins as the carry already does.
 ## Rollback
 
 Revert the commit; the mise-allow row comes back with it.
+
+## Record
+
+- Step 1, §1: with only the mise-allow row dropped, `checks.mise-free` failed
+  (`tree/bin/omarchy-agent-look-page:66: playwright=$(mise where playwright 2>/dev/null)`
+  and four more lines). With the patch, it passes. The built script has no
+  `mise` (`grep -c mise` = 0) and runs `playwright-core-1.64.1` on `nodejs-24.22.2`.
+- Step 2, on p620 against a `file://` page that logs one console error:
+  `screenshot: …/look-DDzvCk.png`, `console errors:` / `deliberate error`,
+  exit 1 (the script's documented exit for a page with errors). The
+  screenshot shows the page.

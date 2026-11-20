@@ -43,16 +43,6 @@
       "done < <(jq -r '.[].name' <<<\"\${MISE_INSTALLED_TOOLS:-[]}\" 2>/dev/null)"
     ];
   };
-  "tree/bin/omarchy-agent-look-page" = {
-    edge = "only";
-    reason = "Playwright via mise on first use; with no mise here both lookups and the install fail quietly and the script exits 1 with its own message";
-    lines = [
-      "playwright=$(mise where playwright 2>/dev/null)"
-      "mise install node playwright >/dev/null 2>&1"
-      "echo \"Playwright isn't installed and couldn't be: run mise install node playwright\" >&2"
-      "timeout $(( after / 1000 + 60 )) mise exec node -- node - \\"
-    ];
-  };
   "tree/bin/omarchy-default-agent" = {
     reason = "#1622's stale-PATH step: looks for mise, runs none";
     lines = [

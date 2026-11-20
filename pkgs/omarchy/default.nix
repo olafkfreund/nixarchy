@@ -79,6 +79,8 @@
   uwsm,
   foot,
   chromium,
+  nodejs,
+  playwright-driver,
   nautilus,
   folio,
   omaview,
@@ -542,6 +544,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     if [ -e $out/share/omarchy/bin/omarchy-agent-local ]; then
                       substituteInPlace $out/share/omarchy/bin/omarchy-agent-local \
                         --replace-fail "$(cat ${./agent-local-use.upstream.sh})" "$(cat ${./agent-local-preflight.sh})"
+                    fi
+
+                    # Look page takes Node and Playwright from mise on first use; no mise
+                    # here, so both come from nixpkgs (#1886). Quattro only.
+                    if [ -e $out/share/omarchy/bin/omarchy-agent-look-page ]; then
+                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-look-page \
+                        --replace-fail "$(cat ${./look-page-playwright.upstream.sh})" 'playwright=${playwright-driver}' \
+                        --replace-fail '"$playwright/node_modules/playwright"' '"$playwright"' \
+                        --replace-fail 'mise exec node -- node -' '${nodejs}/bin/node -'
                     fi
 
                     # CARRIED (#1370): nixpkgs wraps kitty (and may wrap ghostty), so the running

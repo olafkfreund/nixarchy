@@ -488,4 +488,9 @@
     decision = "not-needed";
     reason = "gated on omarchy-hw-aarch64-qualcomm (Snapdragon aarch64), which this port does not target";
   };
+  "1795113315" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "restages the current theme when its packaged background loops exist; omarchy-themes-loops is not packaged here (data/omarchy-packages.nix), so the loops directory it tests for never exists (#1896)";
+  };
 }

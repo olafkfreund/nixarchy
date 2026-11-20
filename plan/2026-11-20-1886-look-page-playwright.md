@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1886
 spec: spec/2026-11-20-1886-look-page-playwright.md
 coders:

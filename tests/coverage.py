@@ -30,6 +30,14 @@ unmapped = sorted(rows - known)
 # Only Install rows can go stale here: an app may map a row elsewhere in the
 # menu (quattro moved dictation to setup.default.dictation, #1278).
 stale = sorted(k for k in known - rows if k.startswith("install."))
+# An edge-only app row an older edge pin lacks (a refused candidate's fallback)
+# is dropped from the menu there, so it is reported, not fatal (#1896).
+# shortcut: on the newest pin too, a row upstream later drops is only reported;
+# it fails once main adopts the pin and the row loses its edge marker.
+pending = sorted(set(stale) & set(os.environ.get("edgeOnly", "").split()))
+stale = [k for k in stale if k not in pending]
+if pending:
+    print("edge-only rows this pin's menu does not have yet: " + " ".join(pending))
 
 if unmapped:
     sys.exit(

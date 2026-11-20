@@ -4048,6 +4048,14 @@ pkgs.runCommand "nixarchy-options-files"
     # command check pointed at the package's menu could never see one of them.
     treeMenu = "${inputs.self.nixosConfigurations.vm.config.programs.nixarchy.tree}/default/omarchy/omarchy-menu.jsonc";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
+    # #1896: an edge-only row an older edge pin (a fallback build) may not ship yet.
+    edgeOnly = pkgs.lib.concatStringsSep " " (
+      pkgs.lib.mapAttrsToList (_: a: a.menuId) (
+        pkgs.lib.filterAttrs (_: a: a ? menuId && (a.edge or null) == "only" && activeRow a) (
+          import ../data/apps.nix
+        )
+      )
+    );
     oursBinaries = pkgs.lib.concatStringsSep " " oursBinaries;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;

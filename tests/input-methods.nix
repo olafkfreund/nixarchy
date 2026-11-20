@@ -246,16 +246,22 @@ let
         process = subprocess.Popen([interpreter, tree + "/share/omarchy/default/input-methods/indicator.py"],
                                    stdin=subprocess.DEVNULL, stdout=stream, stderr=stream)
       try:
+        # Wait for mozc, not the first line: indicator.py prints an empty state while the daemon is not answering yet (#1896).
+        def holds_mozc(line):
+          try:
+            return "mozc" in json.loads(line)["methods"]
+          except ValueError:
+            return False
         for _ in range(100):
-          if output.exists() and output.stat().st_size:
+          if any(holds_mozc(line) for line in output.read_text().splitlines()):
             break
           if process.poll() is not None:
             break
           time.sleep(0.1)
         lines = output.read_text().splitlines()
         require(bool(lines), "indicator.py emitted no JSON; output: " + output.read_text())
-        require("mozc" in json.loads(lines[0])["methods"],
-                "first indicator JSON line is missing mozc: " + lines[0])
+        require(any(holds_mozc(line) for line in lines),
+                "no indicator JSON line holds mozc: " + lines[-1])
       finally:
         process.terminate()
         process.wait(timeout=10)

@@ -493,4 +493,14 @@
     decision = "not-needed";
     reason = "restages the current theme when its packaged background loops exist; omarchy-themes-loops is not packaged here (data/omarchy-packages.nix), so the loops directory it tests for never exists (#1896)";
   };
+  "1795181196" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "runs omarchy-agent-skills-link for the omarchy-diagnose-crash rename; nixarchy-skills-relink on every activation links the new name and removes links into a store skills tree that is gone (#888, #1896)";
+  };
+  "1795191169" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "installs Flowtunes with omarchy-pkg-add, which is the package list's job here, and Flowtunes is not packaged (#1896)";
+  };
 }

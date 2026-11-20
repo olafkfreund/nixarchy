@@ -895,6 +895,10 @@
     edge = "only";
     skip = "Omarchy's local-model image maker (omacom/fantasi, C++), new in quattro 2eb7eb3 and not packaged yet; its install migration is not-needed until it is (#1847)";
   };
+  "flowtunes" = {
+    edge = "only";
+    skip = "Omarchy's endless genre-music player (omacom/flowtunes), new in quattro e4635a4's base list and not packaged yet; its install migration is not-needed until it is (#1896)";
+  };
   "ghostscript" = {
     edge = "only";
     skip = "added to quattro 2eb7eb3's base list with no caller in bin/, default/ or shell/; left out until something here needs it (#1847)";

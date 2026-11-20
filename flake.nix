@@ -227,14 +227,14 @@
     # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-gltui = {
-      url = "github:olafkfreund/nixarchy-gltui/c71049a469a10e993f71887b3c82d1835e3a1a66";
+      url = "github:olafkfreund/nixarchy-gltui/81be1989835bab8131341673e3efed4e23693789";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Why: docs/internals/flake.md#the-github-actions-panel-on-by-default-772
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-ghtui = {
-      url = "github:olafkfreund/nixarchy-ghtui/7b6f6f5acfe93f422b20b7e300650f3a7ec2d4ac";
+      url = "github:olafkfreund/nixarchy-ghtui/53b1b0acaeb82d6ac513ce79950b915a60486da7";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

@@ -1144,22 +1144,26 @@ let
           (
             name: app:
             lib.nameValuePair app.menuId (
-              if app ? unavailable then
-                {
-                  disabled = "true";
-                  # summon would run upstream's action otherwise (omacom/omarchy#15742)
-                  action = "true";
-                  description = "Not available on NixOS — ${app.unavailable}";
-                }
-              else
-                {
-                  action = "nixarchy-app-enable ${name}";
-                  # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
-                  disabled =
-                    "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
-                    + " || command -v ${appBinary name app} >/dev/null 2>&1";
-                  description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
-                }
+              # An edge-only row an older edge pin (a fallback build) may not ship yet: drop it there (#1896).
+              lib.optionalAttrs ((app.edge or null) == "only") { ifUpstream = true; }
+              // (
+                if app ? unavailable then
+                  {
+                    disabled = "true";
+                    # summon would run upstream's action otherwise (omacom/omarchy#15742)
+                    action = "true";
+                    description = "Not available on NixOS — ${app.unavailable}";
+                  }
+                else
+                  {
+                    action = "nixarchy-app-enable ${name}";
+                    # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
+                    disabled =
+                      "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
+                      + " || command -v ${appBinary name app} >/dev/null 2>&1";
+                    description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
+                  }
+              )
             )
           )
           (
@@ -1257,6 +1261,7 @@ let
 
         upstream = json.loads(strip_jsonc(open(upstream_path).read()))
         overrides = json.load(open(spec_path))
+        optional = {k for k, v in overrides.items() if v.pop("ifUpstream", False)}
         arch_map = json.load(open(archmap_path))
 
         # Upstream's `omarchy-pkg-*` guards, which the menu answers from the PATH (#1301).
@@ -1355,6 +1360,8 @@ let
         missing = []
         for row_id, override in overrides.items():
             base = upstream.get(row_id)
+            if base is None and row_id in optional:
+                continue
             if base is None and not {"label", "icon"} & set(override):
                 # A row we target that upstream no longer ships, and we have no
                 # name of our own for it -- worth failing on rather than

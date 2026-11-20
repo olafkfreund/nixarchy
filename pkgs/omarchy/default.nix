@@ -1290,7 +1290,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # are not. Arch'"'"'s debuginfod does not serve nixpkgs builds, "recent
                     # package updates" has a far better answer here than mtimes, and a bug
                     # report has two possible destinations rather than one.
-                    substituteInPlace $skills/diagnose-crash/SKILL.md \
+                    # quattro e4635a4 renamed it omarchy-diagnose-crash; an older edge pin (a fallback) still ships diagnose-crash.
+                    crash=$skills/omarchy-diagnose-crash
+                    [ -d "$crash" ] || crash=$skills/diagnose-crash
+                    substituteInPlace "$crash/SKILL.md" \
                       --replace-fail 'This is Arch, which runs a public debuginfod server:' 'No public debuginfod serves nixpkgs builds. Symbols resolve only if this machine runs `nixseparatedebuginfod` (which serves the whole store on 127.0.0.1:1949 and exports `DEBUGINFOD_URLS` itself) or the package was built with `separateDebugInfo`. Run it anyway — gdb degrades to an unsymbolized stack rather than failing:' \
                       --replace-fail 'DEBUGINFOD_URLS="https://debuginfod.archlinux.org" \' 'DEBUGINFOD_URLS="''${DEBUGINFOD_URLS:-}" \' \
                       --replace-fail '- **Recent package updates.** A crash that starts right after an update points at' '- **Recent system generations.** A crash that starts right after a rebuild points at' \

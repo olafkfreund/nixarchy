@@ -157,6 +157,11 @@
     reason = "Upstream's `use` installs the omarchy-local-ai package with omarchy-pkg-add, which does not exist here. Replaced by a preflight that names programs.nixarchy.services.agent-local when Podman, the unlimited memlock limit, or an NVIDIA CDI spec is missing (#1577).";
     allow = "systemctl-user";
   };
+  "omarchy-agent-look-page" = {
+    edge = "only";
+    class = "patch";
+    reason = "Upstream installs Node and Playwright through mise on first use, and there is no mise here. Node and playwright-core come from nixpkgs; the browser is still Chrome or Chromium from PATH (#1886).";
+  };
   "omarchy-install-ai-chatgpt" = {
     class = "patch";
     reason = "The install command launches /usr/bin/chatgpt, which is absent on NixOS; launch the installed command from PATH.";

@@ -108,7 +108,13 @@ let
     {
       imports = [
         "''${modulesPath}/testing/test-instrumentation.nix"
-        { boot.kernelParams = [ "sysrq_always_enabled" ]; }
+        {
+          boot.kernelParams = [
+            "sysrq_always_enabled"
+            # Why: tests/AGENTS.md#lapic-notscdeadline (#1889)
+            "lapic=notscdeadline"
+          ];
+        }
       ];
       ${extraInstrumentationText}
     }

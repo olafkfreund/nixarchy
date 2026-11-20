@@ -943,6 +943,23 @@ let
       off = oweOffHome.systemd.user.services ? owed;
     };
 
+    # owed starts the way upstream's unit does (nixos_config#3147): the whole
+    # command, so broken quoting fails here, plus KillMode = mixed.
+    owedPrepareIntro =
+      let
+        svc = home: home.systemd.user.services.owed.Service or { };
+        matches =
+          home:
+          builtins.match
+            "/nix/store/[^ ]+/bin/bash -c 'exec /nix/store/[^ ]+/bin/owed --prepare-intro \"[$][(]/nix/store/[^ ]+/bin/omarchy-theme-bg-boot-intro --resolve-startup 2>/dev/null[)]\"'"
+            (toString ((svc home).ExecStart or "")) != null
+          && ((svc home).KillMode or "") == "mixed";
+      in
+      {
+        on = matches defaultHomeOn;
+        off = matches oweOffHome;
+      };
+
     # Mode A, not just owe.enable = false: owe.enable defaults to true on its
     # own, so a home reading it without also reading osConfig's
     # programs.nixarchy.enable would turn owed on for a machine where

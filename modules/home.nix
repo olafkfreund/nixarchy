@@ -1531,7 +1531,15 @@ in
           After = [ "graphical-session.target" ];
         };
         Service = {
-          ExecStart = "${owe}/bin/owed";
+          # As upstream's systemd/owed.service: --prepare-intro decodes the
+          # login intro offscreen and leaves the still with the shell until
+          # the shell asks, so the clip is not spent while owed waits on a
+          # starting shell (olafkfreund/nixos_config#3147). An empty
+          # resolve (intros or animations off) keeps ordinary startup.
+          ExecStart = "${pkgs.bash}/bin/bash -c 'exec ${owe}/bin/owed --prepare-intro \"$(${omarchyPath}/bin/omarchy-theme-bg-boot-intro --resolve-startup 2>/dev/null)\"'";
+          # Only owed gets the stop signal, so it can hand the background
+          # back to the shell before it stops the renderer itself.
+          KillMode = "mixed";
           Restart = "on-failure";
           RestartSec = 2;
           Environment = [

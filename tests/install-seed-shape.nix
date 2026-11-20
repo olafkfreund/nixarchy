@@ -130,7 +130,7 @@ let
         inherit instrumented;
         inherit (seed) etcInstrumentation;
       };
-      vm =
+      vmConfig =
         (inputs.nixpkgs.lib.nixosSystem {
           system = pkgs.stdenv.hostPlatform.system;
           specialArgs = {
@@ -145,11 +145,17 @@ let
             inputs.disko.nixosModules.disko
             "${dir}/hosts/installed"
           ];
-        }).config.system.path.drvPath;
+        }).config;
+      vm = vmConfig.system.path.drvPath;
+      # #1889: the test-only timer workaround is on the instrumented target
+      # and never in what the installer writes for a user.
+      lapic = builtins.elem "lapic=notscdeadline" vmConfig.boot.kernelParams;
     in
     {
       name = target.name + pkgs.lib.optionalString instrumented "-instrumented";
       equal = seedDrv == vm;
+      lapicOk = lapic == instrumented;
+      inherit lapic;
       # unsafeDiscardStringContext: these are printed, not built. Keeping
       # the context would make REALISING this check's own derivation force
       # a build of system.path for all twelve systems -- the opposite of
@@ -173,6 +179,10 @@ pkgs.runCommand "nixarchy-install-seed-shape" { } ''
       echo "equal   ${r.name}"
     else
       echo "DIFFERS ${r.name} seed=${r.seedDrv} vm=${r.vmDrv}"
+      fails=$((fails + 1))
+    fi
+    if [ ${if r.lapicOk then "1" else "0"} -eq 0 ]; then
+      echo "LAPIC   ${r.name} lapic=notscdeadline present=${pkgs.lib.boolToString r.lapic}"
       fails=$((fails + 1))
     fi
   '') results}

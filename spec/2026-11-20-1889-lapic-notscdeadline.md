@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1889
 intent: intent/2026-11-20-1889-lapic-notscdeadline.md
 ---

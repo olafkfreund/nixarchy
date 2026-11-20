@@ -1602,10 +1602,15 @@ pkgs.testers.runNixOSTest {
     # The names matter as much as the links: an agent keys on the directory
     # name, so `omarchy` still being here would mean the rename never reached
     # the only place it is read.
+    # quattro e4635a4 renamed diagnose-crash to omarchy-diagnose-crash; take the
+    # name from the script that opens it, so the link it needs is the one asserted.
+    crash_skill = machine.succeed(
+        "grep -oE 'agents/skills/(omarchy-)?diagnose-crash/SKILL.md' "
+        "$(readlink -f /run/current-system/sw/bin/omarchy-agent-crash)").split("/")[2]
     skills = ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
               "nixos-services", "nixos-secrets", "nixos-performance",
               "nixos-security", "nixos-doctor", "nixos-config-repo",
-              "devenv", "diagnose-crash", "ai-mirror"]
+              "devenv", crash_skill, "ai-mirror"]
     for home in [".agents/skills", ".claude/skills", ".pi/agent/skills"]:
         for skill in skills:
             machine.succeed(f"test -L /home/omarchy/{home}/{skill}")
@@ -1760,10 +1765,8 @@ pkgs.testers.runNixOSTest {
     print("config-repo nudge marks itself done on an already-published config")
 
     # bin/omarchy-agent-crash reads this path literally, so the rename must
-    # never reach it.
-    machine.succeed(
-        "grep -q 'agents/skills/diagnose-crash/SKILL.md' "
-        "$(readlink -f /run/current-system/sw/bin/omarchy-agent-crash)")
+    # never reach it: the skill it names has to be one the agents are given.
+    machine.succeed(f"test -f /home/omarchy/.agents/skills/{crash_skill}/SKILL.md")
 
     # btop.conf asks for a theme literally named "current"; without the link
     # btop starts with no theme at all.

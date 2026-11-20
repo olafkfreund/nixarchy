@@ -468,6 +468,10 @@
     # other three track upstream within days.
   };
   antigravity = {
+    # The marker gates the menu row only: quattro added install.ai.antigravity (#1896), the tag has none.
+    edge = "only";
+    menuId = "install.ai.antigravity";
+    arch = "antigravity";
     label = "Antigravity";
     category = "AI";
     attr = "antigravity";

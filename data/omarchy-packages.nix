@@ -834,6 +834,8 @@
     skip = "Not packaged here.";
   };
   "ttf-ia-writer" = {
+    # Quattro ff6533e stopped installing the iA Writer fonts (#1896); the tag still lists them.
+    edge = "absent";
     skip = "Not packaged here.";
   };
   "tzupdate" = {

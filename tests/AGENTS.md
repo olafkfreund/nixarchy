@@ -842,6 +842,31 @@ the healthy guest only and case C fails on `NMI poke unanswered`.
 device, the abandoned-join guard, a rejected poke being shown, `t` skipped after a
 `state:D` line, the 3000-line cut and `abandoned` ending `t`'s wait.
 
+<a id="lapic-notscdeadline"></a>
+### The installed target boots with `lapic=notscdeadline` (#1889)
+
+About 0.7% of install-class builds on p620 (4 of 573, 2026-11-04 to 11-20)
+hung the installed target 4.5-6.8 s into its second boot. The two hangs with
+full dumps agree: every vCPU halted with nothing pending, the LAPIC timer in
+TSC-deadline mode, a 100 ms sleep still asleep 145 s later, and cross-CPU
+calls timing out, while an NMI and a keyboard sysrq still arrived. So the
+lost wakeups are the ones that go through the local APIC, which on p620
+(`kvm_amd`, AVIC off) KVM emulates. The installer guests (6.18 kernel) never
+hung; the targets run 7.x.
+
+`etcInstrumentation` in `tests/lib/installed-target.nix` therefore adds
+`lapic=notscdeadline`, so the target's timer uses one-shot mode instead of the
+TSC-deadline MSR. It is test-only: the param is in the instrumentation file
+the test copies in, not in anything the installer writes.
+`checks.install-seed-shape` asserts both halves, on the host the real template
+renders: present when instrumented, absent otherwise (`LAPIC <case>` lines).
+
+This is a mitigation that cannot be proven green: a 0.7% hang cannot be
+forced, so a passing run says nothing. The nightly install chain is the
+sampler. A `BootHang` with this signature on a target whose `/proc/cmdline`
+carries the param reopens #1889, and the next variables to try are the
+target's kernel (6.18, as the installer) and the host's AVIC.
+
 ## A test file in tests/ is not a check, and the coverage gate cannot see that
 
 `tests/shell-ipc-resolve.nix` shipped with #963 and `flake.nix` named it

@@ -87,6 +87,19 @@
       + "The row runs upstream's installer unchanged, and the app runs through nix-ld (untested).";
     edge = "only";
   };
+  # New in quattro efcf615 (#1896), with regions.
+  "install.service.dingtalk" = {
+    reason =
+      "DingTalk, offered only on a machine installed for mainland China (omarchy-region-cn), which nixarchy never is; "
+      + "nixpkgs has no dingtalk, so the row would end at omarchy-pkg-add's refusal naming the search.";
+    edge = "only";
+  };
+  "install.service.wechat" = {
+    reason =
+      "WeChat (x86_64): upstream installs the AUR wechat-bin. nixpkgs' wechat is unfree and not mapped here yet, "
+      + "so the row ends at omarchy-pkg-add's refusal naming the search; mapping it is a data/apps.nix row.";
+    edge = "only";
+  };
   # New in quattro 36b70f1 (#1760), once Chrome became upstream's default.
   "install.browser.chromium" = {
     reason =

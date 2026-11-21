@@ -4055,6 +4055,11 @@ pkgs.runCommand "nixarchy-options-files"
           import ../data/apps.nix
         )
       )
+      ++ builtins.attrNames (
+        pkgs.lib.filterAttrs (_: e: builtins.isAttrs e && (e.edge or null) == "only" && activeRow e) (
+          import ../data/menu-exceptions.nix
+        )
+      )
     );
     oursBinaries = pkgs.lib.concatStringsSep " " oursBinaries;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;

@@ -285,8 +285,10 @@
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.zed" =
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
-  "setup.network.dns.alidns" =
-    "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
+  "setup.network.dns.alidns" = {
+    reason = "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
+    edge = "only";
+  };
   "setup.network.dns.cloudflare" =
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.network.dns.custom" =

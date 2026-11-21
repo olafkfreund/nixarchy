@@ -877,12 +877,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 # recorded for the next rebuild, never generated at runtime, and the
                 # script stops before LANG or the interface changes. The menu shows
                 # no stderr, hence the notification.
-                # quattro 2eb7eb3 moved both into a helper omarchy-language and
-                # omarchy-region source; v4.5.0 still has them in omarchy-language.
+                # quattro 2eb7eb3 moved both into a helper that omarchy-language and
+                # the formats command (omarchy-region, omarchy-region-formats from
+                # quattro efcf615) source; v4.5.0 still has them in omarchy-language.
                 locale_helper=$out/share/omarchy/bin/omarchy-language
                 if [ -e $out/share/omarchy/bin/omarchy-locale-session ]; then
                   locale_helper=$out/share/omarchy/bin/omarchy-locale-session
-                  substituteInPlace $out/share/omarchy/bin/omarchy-language $out/share/omarchy/bin/omarchy-region \
+                  sourcing=$(grep -lx 'source omarchy-locale-session' $out/share/omarchy/bin/*)
+                  # Both the language and a formats command must be patched.
+                  [ "$(wc -l <<<"$sourcing")" -ge 2 ] || { echo "omarchy-locale-session: expected two callers, got: $sourcing" >&2; exit 1; }
+                  substituteInPlace $sourcing \
                     --replace-fail 'source omarchy-locale-session' 'source "$OMARCHY_PATH/bin/omarchy-locale-session"'
                 fi
                 substituteInPlace "$locale_helper" \
@@ -1386,9 +1390,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     done
 
                     # The one place a shipped entry is named rather than merely launched.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
-                      --replace-fail 'xdg-mime default HEY.desktop' \
-                        'xdg-mime default omarchy-HEY.desktop'
+                    # quattro efcf615 dropped HEY's mailto default; the tag still sets it.
+                    if grep -q 'HEY.desktop' $out/share/omarchy/bin/omarchy-provision-user; then
+                      substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+                        --replace-fail 'xdg-mime default HEY.desktop' \
+                          'xdg-mime default omarchy-HEY.desktop'
+                    fi
 
                     ${lib.optionalString isEdge ''
                       sharedMimeInfo=${shared-mime-info}

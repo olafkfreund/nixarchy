@@ -30,11 +30,15 @@ browser_chosen() {
 }
 if ! store_owned "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" && ! browser_chosen; then
   env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser chromium-browser.desktop
-fi' \
-  --replace-fail 'xdg-mime default omarchy-HEY.desktop x-scheme-handler/mailto' \
-    'if ! store_owned "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list"; then
+fi'
+# quattro efcf615 dropped HEY's mailto default; older edge pins still set it.
+if grep -q 'HEY.desktop' $out/share/omarchy/bin/omarchy-provision-user; then
+  substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+    --replace-fail 'xdg-mime default omarchy-HEY.desktop x-scheme-handler/mailto' \
+      'if ! store_owned "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list"; then
   xdg-mime default omarchy-HEY.desktop x-scheme-handler/mailto
 fi'
+fi
 
 substituteInPlace $out/share/omarchy/bin/omarchy-agent-instructions \
   --replace-fail 'canonical="$HOME/.agents/AGENTS.md"' \

@@ -516,9 +516,18 @@ if [ -z "$skill_names" ]; then
   echo "::error::skill-rows: no SKILL.md in the built tree -- refusing" >&2
   fail=1
 fi
+# A row may name a renamed skill under both pins' names, `new` / `old` (#1896).
+has_row() { grep -qE "^\| (\*\*)?(\`[a-z0-9-]+\` / )*\`$1\`" "$2"; }
+row_case=$(mktemp)
+printf '%s\n' '| **`omarchy-x` / `x`** | renamed |' >"$row_case"
+if ! has_row omarchy-x "$row_case" || ! has_row x "$row_case" || has_row y "$row_case"; then
+  echo "::error::skill-rows: the row matcher's self-check failed -- refusing" >&2
+  fail=1
+fi
+rm -f "$row_case"
 for f in "$readme" "$root/docs/manual/ai.md"; do
   for s in $skill_names; do
-    if ! grep -qE "^\| (\*\*)?\`$s\`" "$f"; then
+    if ! has_row "$s" "$f"; then
       echo "::error::skill-rows: $(basename "$f") has no table row for \`$s\`" >&2
       fail=1
     fi

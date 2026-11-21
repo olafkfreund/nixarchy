@@ -58,7 +58,7 @@ twenty-two skills instead of upstream's few, and eight Nix skills beside them:
 | `nixos-gaming` | Steam and Proton, the 32-bit graphics stack, controllers, gamescope, RetroArch and the launchers |
 | `nixos-fleet` | one flake and several machines: the `hosts/<name>/` layout, sharing without coupling, pulling on a timer, deploying with `--target-host` |
 | `devenv` | per-project environments: `devenv.nix`, the lockfile, and whether a tool belongs to the project or the machine |
-| `omarchy-diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
+| `omarchy-diagnose-crash` / `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
 | `omarchy-app` | scaffolding a C++ and Qt Quick desktop app that follows the Omarchy theme (upstream's, new in 4.5; nixarchy rewrites its packaging half so the app is built with Nix: `nix develop`, `nix run`, and a flake you add to your configuration) |
 | `omarchy-make-app` | `omarchy-app` under its quattro name, with the same Nix rewrite of its packaging half |
 | `omarchy-make-game` | a browser game or 3D toy as one HTML file with three.js, played from Game Vibes (upstream's, new in quattro; was `web-game`) |
@@ -189,7 +189,7 @@ a rebuild instead, and it ranks the routes: `nixarchy-app-enable <id>` then
 `nixos-rebuild switch` for anything else; `nix shell nixpkgs#<pkg>` for a
 throwaway try that is not meant to be a change to the machine.
 
-`omarchy-diagnose-crash` keeps upstream's name because `omarchy-agent-crash` reads that path
+`omarchy-diagnose-crash` (`diagnose-crash` on the tag) keeps upstream's name because `omarchy-agent-crash` reads that path
 literally. Its body is upstream's with three corrections: there is no public
 debuginfod serving nixpkgs builds, so symbols only resolve if the machine runs
 `nixseparatedebuginfod`; "what changed recently" is answered by

@@ -323,26 +323,26 @@
 
   "systemd/system/systemd-hibernate.service.d/10-omarchy-sddm-recover.conf" = {
     edge = "only";
-    class = "divergent";
-    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+    class = "native";
+    reason = "systemd.services.systemd-hibernate.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
   };
 
   "systemd/system/systemd-hybrid-sleep.service.d/10-omarchy-sddm-recover.conf" = {
     edge = "only";
-    class = "divergent";
-    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+    class = "native";
+    reason = "systemd.services.systemd-hybrid-sleep.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
   };
 
   "systemd/system/systemd-suspend-then-hibernate.service.d/10-omarchy-sddm-recover.conf" = {
     edge = "only";
-    class = "divergent";
-    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+    class = "native";
+    reason = "systemd.services.systemd-suspend-then-hibernate.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
   };
 
   "systemd/system/systemd-suspend.service.d/10-omarchy-sddm-recover.conf" = {
     edge = "only";
-    class = "divergent";
-    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+    class = "native";
+    reason = "systemd.services.systemd-suspend.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
   };
 
   "systemd/system/user@.service.d/10-faster-shutdown.conf" = {

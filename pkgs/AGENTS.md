@@ -1667,3 +1667,9 @@ is shipped; the tag ships neither.
 A guard of the form `[ -e old-name ] && patch` is what let the rename through
 silently: at ebd2974 the old file was gone, the patch skipped, and only the
 bin ledger noticed `omarchy-models` still calling pacman.
+
+`omarchy-system-sddm-recover` (#1905) names `sddm.service`, which NixOS does
+not have: SDDM runs as `display-manager.service`, so the script would exit 0 on
+every resume. The patch renames both calls. The tag and edge before ebd2974 ship
+neither the script nor its sleep drop-ins; drop-ins without the script fail the
+build, since that is a rename the hook in `modules/nixos.nix` would miss.

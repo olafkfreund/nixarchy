@@ -2035,6 +2035,8 @@
             # The standalone Home Manager profile: the package plus every runtime
             # dependency, built with collisions refused (#1485).
             "runtime-profile"
+            # Quattro's after-sleep SDDM recovery, patched to display-manager.service (#1905).
+            "sddm-recover"
             "session-journal-race"
             # A WebP loads through the plugin path the shell is launched with (#1284).
             "shell-image-formats"

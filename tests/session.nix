@@ -599,6 +599,51 @@ pkgs.testers.runNixOSTest {
     # happened.
     machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")
 
+    # Quattro's after-sleep SDDM recovery (#1905), run the way systemd runs it,
+    # while the greeter holds seat0: it must decide to leave SDDM alone. A
+    # command its wrapper cannot resolve, or a wrong seat test, restarts SDDM,
+    # which on a real machine ends the desktop session on every resume.
+    with subtest("sleep units recover a stranded greeter (#1905)"):
+        recover_units = ["systemd-suspend", "systemd-hibernate",
+                         "systemd-hybrid-sleep", "systemd-suspend-then-hibernate"]
+        recover_shipped = machine.succeed(
+            "test -e /run/current-system/sw/share/omarchy/bin/omarchy-system-sddm-recover"
+            " && echo yes || echo no").strip() == "yes"
+        recover_paths = set()
+        for u in recover_units:
+            show = machine.succeed(f"systemctl show -p ExecStopPost --value {u}.service")
+            entries = [e for e in show.split("}") if "omarchy-sddm-recover" in e]
+            if not recover_shipped:
+                assert not entries, f"{u} runs the SDDM recovery on a pin without the script: {show}"
+                continue
+            assert entries, f"{u} does not run the SDDM recovery after sleep: {show!r}"
+            assert "ignore_errors=yes" in entries[0], (
+                f"{u}'s SDDM recovery lost its '-' prefix, so its failure fails the sleep unit: {entries[0]}")
+            recover_paths.add(entries[0].split("path=", 1)[1].split()[0])
+        if recover_shipped:
+            assert len(recover_paths) == 1, f"the sleep units run different hooks: {recover_paths}"
+            hook = recover_paths.pop()
+            # Reach the seat decision, not one of the script's early exits.
+            machine.succeed("systemctl is-active --quiet display-manager.service")
+            machine.succeed(
+                "s=$(loginctl list-sessions --no-legend) && "
+                "awk '$4 ~ /^seat/ { f=1 } END { exit !f }' <<<\"$s\"")
+            before = machine.succeed(
+                "systemctl show -p InvocationID --value display-manager.service").strip()
+            out = machine.succeed(
+                f"systemd-run --quiet --wait --pipe --collect {hook} 2>/tmp/recover.err; "
+                "echo rc=$?; cat /tmp/recover.err")
+            assert out.strip() == "rc=0", f"the SDDM recovery hook did not run cleanly: {out}"
+            # The restart is queued with --no-block, after the hook has exited.
+            machine.wait_until_succeeds(
+                "! systemctl list-jobs --no-legend | grep -q display-manager.service", timeout=30)
+            after = machine.succeed(
+                "systemctl show -p InvocationID --value display-manager.service").strip()
+            machine.succeed("systemctl is-active --quiet display-manager.service")
+            assert before == after, (
+                "the SDDM recovery restarted the display manager while the greeter held "
+                f"seat0 ({before} -> {after}); after a real resume that ends the session")
+
     # A blank greeter would still accept the password and log in, so assert
     # something was actually drawn. This theme OCRs badly -- a few characters
     # is all that comes back -- so the check is "not blank", not the wording.

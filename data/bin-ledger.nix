@@ -872,6 +872,11 @@
     class = "patch";
     reason = "Synchronize the desktop environment after each supervised shell launch, including automatic relaunches.";
   };
+  "omarchy-system-sddm-recover" = {
+    edge = "only";
+    class = "patch";
+    reason = "Upstream asks for and restarts sddm.service, which NixOS does not have: SDDM runs as display-manager.service, so unpatched it exits 0 on every resume. Both calls name display-manager.service; modules/nixos.nix runs it after sleep (#1905).";
+  };
   "omarchy-system-sleep-monitor" = {
     class = "patch";
     reason = "Use the packaged lock helper and re-execute the monitor itself instead of following an inherited tree across rebuilds.";

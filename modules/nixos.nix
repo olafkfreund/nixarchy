@@ -35,6 +35,25 @@ let
     else
       { };
 
+  # Quattro's after-sleep SDDM recovery (#1905). Absent under the tag and older
+  # edge pins. The wrapper's own PATH, not the sleep unit's: an unresolved awk
+  # reads as "no seat" and the script would restart SDDM, ending the session.
+  hasSddmRecover = builtins.pathExists "${inputs.omarchy}/bin/omarchy-system-sddm-recover";
+  sddmRecover = pkgs.writeShellApplication {
+    name = "omarchy-sddm-recover";
+    runtimeInputs = [
+      config.systemd.package
+      pkgs.gawk
+    ];
+    inheritPath = false;
+    text = ''
+      for c in systemctl loginctl awk; do
+        command -v "$c" >/dev/null || { echo "omarchy-sddm-recover: $c not found" >&2; exit 1; }
+      done
+      exec ${cfg.package}/bin/omarchy-system-sddm-recover "$@"
+    '';
+  };
+
   # Hyprland's own nixpkgs pin, so its GPU drivers share its glibc. See the
   # hardware.graphics block below.
   hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
@@ -2003,7 +2022,25 @@ in
       # mkIf on an attrsOf entry still defines a unit with no ExecStart.
       // lib.optionalAttrs config.services.fprintd.enable {
         fprintd.serviceConfig.TimeoutStopSec = lib.mkDefault "3s";
-      };
+      }
+      # Quattro's systemd/system/<unit>.service.d/10-omarchy-sddm-recover.conf: runs
+      # after each sleep, even a failed one. No unit PATH, so systemd-sleep's is untouched.
+      //
+        lib.optionalAttrs
+          (cfg.displayManager && config.services.displayManager.sddm.enable && hasSddmRecover)
+          (
+            lib.genAttrs
+              [
+                "systemd-suspend"
+                "systemd-hibernate"
+                "systemd-hybrid-sleep"
+                "systemd-suspend-then-hibernate"
+              ]
+              (_: {
+                enableDefaultPath = lib.mkDefault false;
+                serviceConfig.ExecStopPost = [ "-${sddmRecover}/bin/omarchy-sddm-recover" ];
+              })
+          );
 
       # omarchy-theme-set-browser writes {"BrowserThemeColor": ...} into each
       # browser's policy directory on every theme switch, and skips any that

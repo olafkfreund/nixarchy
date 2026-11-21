@@ -40,3 +40,14 @@ if [ -e "$hn" ]; then
   substituteInPlace "$hn" --replace-fail 'name=${1:-}' "$(cat "$4")" \
     --replace-fail 'sudo hostnamectl set-hostname "$name"' ': # nixarchy: networking.hostName, never hostnamectl (#1896)'
 fi
+
+# Upstream names sddm.service; on NixOS SDDM is display-manager.service (#1905).
+f=$out/share/omarchy/bin/omarchy-system-sddm-recover
+# Absent under the tag and edge before ebd2974; drop-ins without it mean a rename.
+if [ ! -e "$f" ] && [ -e $out/share/omarchy/etc/systemd/system/systemd-suspend.service.d/10-omarchy-sddm-recover.conf ]; then
+  echo "omarchy-system-sddm-recover: the sleep drop-ins ship but the script does not" >&2
+  exit 1
+fi
+[ ! -e "$f" ] || substituteInPlace "$f" \
+  --replace-fail 'is-active --quiet sddm.service' 'is-active --quiet display-manager.service' \
+  --replace-fail 'restart --no-block sddm.service' 'restart --no-block display-manager.service'

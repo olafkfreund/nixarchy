@@ -2194,6 +2194,47 @@ let
       off = (configWith { displayManager = false; }).services.displayManager.sddm.enable;
     };
 
+    # Quattro's after-sleep SDDM recovery on the four sleep units (#1905). The
+    # two configBeside fixtures decouple the gates, which displayManager moves
+    # in lockstep: a user's own SDDM, and nixarchy's option with SDDM forced off.
+    sddmRecover =
+      let
+        units = [
+          "systemd-suspend"
+          "systemd-hibernate"
+          "systemd-hybrid-sleep"
+          "systemd-suspend-then-hibernate"
+        ];
+        hasScript = builtins.pathExists "${inputs.omarchy}/bin/omarchy-system-sddm-recover";
+        hooked =
+          c:
+          builtins.filter (
+            u:
+            builtins.any (pkgs.lib.hasInfix "omarchy-sddm-recover") (
+              pkgs.lib.toList ((c.systemd.services.${u} or { }).serviceConfig.ExecStopPost or [ ])
+            )
+          ) units;
+      in
+      {
+        on =
+          hooked (configWith {
+            displayManager = true;
+          }) == (if hasScript then units else [ ])
+          &&
+            hooked (configBeside {
+              programs.nixarchy.displayManager = false;
+              services.displayManager.sddm.enable = true;
+            }) == [ ]
+          &&
+            hooked (configBeside {
+              services.displayManager.sddm.enable = pkgs.lib.mkForce false;
+            }) == [ ];
+        off =
+          hooked (configWith {
+            displayManager = false;
+          }) != [ ];
+      };
+
     binaryCaches = {
       on =
         builtins.elem "https://nixarchy.cachix.org"

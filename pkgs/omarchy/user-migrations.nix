@@ -62,9 +62,14 @@ runCommand "nixarchy-user-migrations"
             1794839007)
               # The local-model engine is opt-in here (services.agent-local); without it the
               # launchers script exits 1, and a failed migration stops every later one (#1847).
-              substituteInPlace "$script" --replace-fail 'omarchy-agent-local-launchers' \
-                'command -v omarchy-local-ai >/dev/null || exit 0
+              # Quattro ebd2974 adopted the skip (omarchy-cmd-present omarchy-local-ai).
+              if grep -q '^omarchy-agent-local-launchers$' "$script"; then
+                substituteInPlace "$script" --replace-fail 'omarchy-agent-local-launchers' \
+                  'command -v omarchy-local-ai >/dev/null || exit 0
               omarchy-agent-local-launchers'
+              else
+                grep -q 'if omarchy-cmd-present omarchy-local-ai; then' "$script" || exit 1
+              fi
               ;;
             1786719479)
               block=$(sed -n '/^if omarchy-cmd-missing agy &&/,/^fi$/p' "$script")

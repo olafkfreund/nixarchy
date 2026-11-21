@@ -321,6 +321,30 @@
     reason = "Mounts binfmt_misc eagerly before systemd-binfmt runs. Not ported: no boot-time binfmt deferral has been seen here, and the pair needs overrideStrategy = \"asDropin\" units, so it is not a line or two. Tracked in #1386.";
   };
 
+  "systemd/system/systemd-hibernate.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+  };
+
+  "systemd/system/systemd-hybrid-sleep.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+  };
+
+  "systemd/system/systemd-suspend-then-hibernate.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+  };
+
+  "systemd/system/systemd-suspend.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "ExecStopPost runs /usr/bin/omarchy-system-sddm-recover after sleep, restarting SDDM when no local-seat session survived a mid-freeze UnitAllocationFailed. Not ported: the path is not on NixOS and the hook needs an override of the NixOS sleep unit; no stranded greeter after sleep has been seen here (#1896).";
+  };
+
   "systemd/system/user@.service.d/10-faster-shutdown.conf" = {
     class = "native";
     reason = "TimeoutStopSec=5s on the user manager, the per-user half of the faster shutdown, so logout and power-off do not wait on a stuck user service. modules/nixos.nix sets it on systemd.services.\"user@\" at mkDefault.";

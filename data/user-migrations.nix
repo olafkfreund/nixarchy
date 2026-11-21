@@ -503,4 +503,16 @@
     decision = "not-needed";
     reason = "installs Flowtunes with omarchy-pkg-add, which is the package list's job here, and Flowtunes is not packaged (#1896)";
   };
+  "1795200237" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "puts the omarchy.local-models bar entry before omarchy.agents in ~/.config/omarchy/shell.json with jq, only where the agents entry is and the local models one is not. It holds here: the plugin ships in the tree, and its icon shows only on a machine that can run a model (#1896)";
+  };
+  "1795263097" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "marks the first-update setup task done under ~/.local/state/omarchy/done/, so the bar's update icon watches Omarchy only; a marker is harmless on a machine whose updates are rebuilds (#1896)";
+  };
 }

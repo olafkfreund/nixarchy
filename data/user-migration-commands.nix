@@ -13,6 +13,11 @@
     follow = true;
     reason = "writes one .desktop file and a vendor-logo SVG icon under ~/.local/share for each local model that is set up, and removes those of models taken away";
   };
+  "omarchy-models-launchers" = {
+    edge = "only";
+    follow = true;
+    reason = "omarchy-agent-local-launchers, renamed in quattro ebd2974: writes one .desktop file and a vendor-logo SVG icon under ~/.local/share for each local model that is set up, and removes those of models taken away";
+  };
   "omarchy-audio-tuning" = {
     follow = true;
     reason = "writes ~/.config/pipewire/omarchy-speaker-tuning.conf and ~/.config/systemd/user/omarchy-speaker-tuning.service";
@@ -25,6 +30,11 @@
     edge = "only";
     follow = true;
     reason = "rewrites ~/.config/mimeapps.list and copies omarchy-launch-editor.desktop into ~/.local/share/applications";
+  };
+  "omarchy-done" = {
+    edge = "only";
+    follow = true;
+    reason = "checks or touches a setup marker under ~/.local/state/omarchy/done/";
   };
   "omarchy-hook-install" = {
     follow = true;

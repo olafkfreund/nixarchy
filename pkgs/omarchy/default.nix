@@ -539,14 +539,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                         --replace-fail "  \"\$download\" --appimage-extract 'usr/share/icons/hicolor/*/apps/t3code.png' >/dev/null" ""
                     fi
 
-                    # The local model runner installs podman with pacman on first use. Here
-                    # the module provides it; check that before any download (#1577). Edge only:
-                    # main's tag has no omarchy-agent-local.
-                    if [ -e $out/share/omarchy/bin/omarchy-agent-local ]; then
-                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-local \
-                        --replace-fail "$(cat ${./agent-local-use.upstream.sh})" "$(cat ${./agent-local-preflight.sh})"
-                    fi
-
                     # Look page takes Node and Playwright from mise on first use; no mise
                     # here, so both come from nixpkgs (#1886). Quattro only.
                     if [ -e $out/share/omarchy/bin/omarchy-agent-look-page ]; then
@@ -1454,17 +1446,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       })" 'exec nixarchy-default-install editor "$selection" "$editor"' \
                       --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
 
-                    # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
-                    # quattro 3df6c5d+ dropped the update probe from wifi.sh; any checkupdates left fails.
-                    wifi=$out/share/omarchy/install/user/first-run/wifi.sh
-                    if grep -qF 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' "$wifi"; then
-                      substituteInPlace "$wifi" \
-                        --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
-                    elif grep -q checkupdates "$wifi"; then
-                      echo "wifi.sh: checkupdates appears in a form this patch does not know" >&2
-                      exit 1
-                    fi
-
                     install -Dm755 ${./superwhisper-first-run.sh} \
                       $out/share/omarchy/install/user/first-run/superwhisper.sh
 
@@ -1609,24 +1590,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'echo -e "\e[32mRemoving FIDO2 device from authentication.\n\e[0m"' \
                         "$(cat ${./1304-guidance-remove-fido2.sh})"
 
-                    # Why: quattro a91badb (#12833) installs "''${packages[@]}" after a TOD-owner
-                    # check; older pins and the tag name the packages inline. Each branch fails loudly.
-                    fp=$out/share/omarchy/bin/omarchy-setup-security-fingerprint
-                    if grep -qF 'if omarchy-pkg-missing "''${packages[@]}"; then' "$fp"; then
-                      substituteInPlace "$fp" \
-                        --replace-fail 'libfprint_owner=$(pacman -Qqo /usr/lib/libfprint-2.so.2 2>/dev/null || true)' \
-                          'libfprint_owner=' \
-                        --replace-fail 'if omarchy-pkg-missing "''${packages[@]}"; then' \
-                          'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
-                        --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 -- "''${packages[@]}"' \
-                          "$(cat ${./1304-guidance-setup-fingerprint.sh})"
-                    else
-                      substituteInPlace "$fp" \
-                        --replace-fail 'if omarchy-pkg-missing libfprint-git fprintd usbutils; then' \
-                          'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
-                        --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 -- libfprint-git fprintd usbutils' \
-                          "$(cat ${./1304-guidance-setup-fingerprint.sh})"
-                    fi
+                    # fingerprint setup, first-run wifi and the local model runner (#1577, #1623, #1896)
+                    source ${./quattro-script-ports.sh} ${./1304-guidance-setup-fingerprint.sh} ${./agent-local-use.upstream.sh} ${./agent-local-preflight.sh}
 
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-timezone \
                       --replace-fail 'sudo timedatectl set-timezone "$timezone"' \

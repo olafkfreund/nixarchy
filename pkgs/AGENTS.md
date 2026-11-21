@@ -1647,3 +1647,23 @@ without writing it. REPORTED upstream as Mic92/nix-update#693; a carried patch
 until that lands, then delete it and the `newScope` in `nixarchy-apps`. Only
 `nixarchy-apps` is built with it: `final.nix-update` is untouched. Why:
 `docs/internals/flake.md#nix-run-update-rewrites-the-pinned-versions-and-ha`.
+
+<a id="quattro-script-ports"></a>
+## Script patches that span three pins (#1896)
+
+`pkgs/omarchy/quattro-script-ports.sh` patches the fingerprint setup, first-run
+`wifi.sh` and the local model runner. It is sourced, not inlined, because the
+install phase sits at its size budget (`checks.install-phase-budget`).
+
+Each patch must hold under three pins at once: `main`'s tag, the current
+quattro, and an older quattro that edge falls back to when a candidate is
+refused. So a patch picks its branch by the text it finds, and every branch
+uses `--replace-fail`. The one exception is `wifi.sh`, whose update probe
+quattro removed: with no probe there is nothing to patch, and any other
+`checkupdates` line fails the build. The runner loop takes whichever of
+`omarchy-models` (quattro ebd2974+) and `omarchy-agent-local` (older edge)
+is shipped; the tag ships neither.
+
+A guard of the form `[ -e old-name ] && patch` is what let the rename through
+silently: at ebd2974 the old file was gone, the patch skipped, and only the
+bin ledger noticed `omarchy-models` still calling pacman.

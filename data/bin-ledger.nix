@@ -457,6 +457,12 @@
     class = "new";
     reason = "Not in upstream. Run on every activation: removes upstream's exact generated mise launchers from ~/.local/bin, because mise is gone and they can only fail and shadow their replacement, and records what mise left (#707, #1625).";
   };
+  "omarchy-models" = {
+    edge = "only";
+    class = "patch";
+    reason = "omarchy-agent-local, renamed in quattro ebd2974. Upstream's `use` installs Podman with pacman or omarchy-pkg-add, which do not exist here. Replaced by the same preflight, naming programs.nixarchy.services.agent-local when Podman, the unlimited memlock limit, or an NVIDIA CDI spec is missing (#1577, #1896).";
+    allow = "systemctl-user";
+  };
   "omarchy-network-speedtest" = {
     class = "patch";
     reason = "Its default client path, /usr/lib/omarchy/speedtest from Arch's omarchy-speedtest package, is the store path of pkgs/apps/omarchy-speedtest.nix. OMARCHY_SPEEDTEST_BINARY still overrides it (#1485).";

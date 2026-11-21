@@ -73,7 +73,15 @@ else
     {
       shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
       claimed = lib.concatStringsSep "\n" (lib.attrNames manifest);
-      passAsFile = [ "claimed" ];
+      # An edge-only row an older quattro pin lacks is reported, not failed,
+      # so edge's fallback build of that pin passes (#1896).
+      edgeOnly = lib.concatStringsSep "\n" (
+        lib.attrNames (lib.filterAttrs (_: r: isEdge && r.edge or "" == "only") manifest)
+      );
+      passAsFile = [
+        "claimed"
+        "edgeOnly"
+      ];
 
       # Upstream ships 40. A floor rather than the exact count, so adding a
       # classified file is a manifest edit and not two.
@@ -88,6 +96,11 @@ else
 
       find -L "$overlay" -type f -printf '%P\n' | sort >shipped.list
       sort <"$claimedPath" >claimed.list
+      sort <"$edgeOnlyPath" | comm -23 - shipped.list >pending.list
+      if [ -s pending.list ]; then
+        echo "edge-only rows this pin does not have yet: $(tr '\n' ' ' <pending.list)"
+        comm -23 claimed.list pending.list >claimed.kept && mv claimed.kept claimed.list
+      fi
 
       found=$(wc -l <shipped.list)
       if [ "$found" -lt "$floor" ]; then

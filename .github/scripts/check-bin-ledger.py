@@ -516,6 +516,16 @@ def main():
     derived, upstream, shipped = derive(upstream_bin, shipped_bin, args.nix_bin)
     matched = scan(shipped_bin, shipped)
 
+    # An edge-only row for a command an older quattro pin lacks is reported,
+    # not failed, so edge's fallback build of that pin still passes (#1896).
+    if args.edge:
+        pending = sorted(n for n, r in ledger.items()
+                         if r.get("edge") == "only" and n not in shipped)
+        if pending:
+            print("edge-only rows this pin does not have yet: " + " ".join(pending))
+        for n in pending:
+            del ledger[n]
+
     if args.seed:
         rows = seed(ledger, derived, matched)
         print(f"# {len(rows)} rows need writing. reason = FIXME will not pass.")

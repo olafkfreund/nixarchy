@@ -12,8 +12,11 @@ let
 in
 pkgs.runCommand "nixarchy-agent-local-detach" { inherit isEdge; } ''
   set -euo pipefail
-  script=${omarchy}/bin/omarchy-agent-local
-  # main's tag ships no omarchy-agent-local (#1752); when it does, drop this branch.
+  # Quattro ebd2974 renamed omarchy-agent-local to omarchy-models (#1896).
+  name=omarchy-models
+  [ -e ${omarchy}/bin/$name ] || name=omarchy-agent-local
+  script=${omarchy}/bin/$name
+  # main's tag ships neither (#1752); when it does, drop this branch.
   if [ -z "$isEdge" ]; then
     [ ! -e "$script" ] || { echo "the tag now ships $script: drop the pin gate (#1752)" >&2; exit 1; }
     touch $out
@@ -41,15 +44,15 @@ pkgs.runCommand "nixarchy-agent-local-detach" { inherit isEdge; } ''
     reset
     run_without $args || fail "$args: the failing detached run exited instead of opening a terminal"
     logged=$(<"$work/launcher.log")
-    [ "$logged" = "omarchy-agent-local 'use' 'm'" ] || fail "$args: launcher got [$logged]"
+    [ "$logged" = "$name 'use' 'm'" ] || fail "$args: launcher got [$logged]"
     [ ! -s "$work/local-ai.log" ] || fail "$args: reached omarchy-local-ai"
   done
 
   reset
   run_without use --detach "a b" || fail "quoted: the failing detached run exited instead of opening a terminal"
   logged=$(<"$work/launcher.log")
-  [ "$logged" = "omarchy-agent-local 'use' 'a b'" ] || fail "quoted: launcher got [$logged]"
-  eval "set -- ''${logged#omarchy-agent-local }"
+  [ "$logged" = "$name 'use' 'a b'" ] || fail "quoted: launcher got [$logged]"
+  eval "set -- ''${logged#"$name" }"
   [ "$#" = 2 ] && [ "$1" = use ] && [ "$2" = "a b" ] || fail "re-parse gave $# args, second [$2]"
 
   reset

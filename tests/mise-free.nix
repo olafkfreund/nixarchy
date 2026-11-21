@@ -21,9 +21,7 @@ let
   active = lib.filterAttrs (
     _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
   ) allRows;
-  allow = pkgs.writeText "mise-allow.json" (
-    builtins.toJSON (lib.mapAttrs (_: r: removeAttrs r [ "edge" ]) active)
-  );
+  allow = pkgs.writeText "mise-allow.json" (builtins.toJSON active);
 in
 assert lib.assertMsg (badMarker == [ ])
   "data/mise-allow.nix: edge must be \"only\" or \"absent\": ${lib.concatStringsSep ", " badMarker}";

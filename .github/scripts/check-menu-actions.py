@@ -128,6 +128,8 @@ def main():
     if errors:
         print("\n".join("menu-actions: " + e for e in errors), file=sys.stderr)
         return 1
+    edge_only = {rid for rid, value in entries.items()
+                 if isinstance(value, dict) and value["edge"] == "only"}
     entries = {
         rid: value["reason"] if isinstance(value, dict) else value
         for rid, value in entries.items()
@@ -147,6 +149,9 @@ def main():
             when = "<no such row>" if row is None else str(row.get("when", "<no when>"))
             if when.strip() != "false":
                 errors.append(f"{rid} is listed hidden but its when is {when!r}")
+        elif rid not in flagged and rid in edge_only and rid not in menu:
+            # An older edge pin (edge's fallback) lacks a newer pin's row (#1896).
+            print(f"menu-actions: edge-only entry this pin's menu does not have yet: {rid}")
         elif rid not in flagged:
             errors.append(f"entry for {rid}, which reaches no hazard: stale")
     if errors:

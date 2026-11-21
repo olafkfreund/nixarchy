@@ -25,9 +25,14 @@ runCommand "nixarchy-user-migrations"
     set -euo pipefail
     mkdir -p "$out/scripts"
     : > "$out/list"
-    jq -r 'del(.predates) | to_entries[] | select((.value.decision | IN("ported", "partial")) and .value.run != "bar") | [.key, .value.run] | @tsv' ${ledger} | sort > rows
-    while IFS=$'\t' read -r id run; do
+    jq -r 'del(.predates) | to_entries[] | select((.value.decision | IN("ported", "partial")) and .value.run != "bar") | [.key, .value.run, (.value.edge // "-")] | @tsv' ${ledger} | sort > rows
+    while IFS=$'\t' read -r id run edge; do
       [[ $id =~ ^[0-9]+$ && -n $run ]] || { echo "invalid migration row: $id" >&2; exit 1; }
+      # An older edge pin (edge's fallback) lacks a newer pin's migrations (#1896).
+      if [[ $edge == only && ! -f ${tree}/migrations/$id.sh ]]; then
+        echo "edge-only migration this pin does not have yet: $id"
+        continue
+      fi
       case $run in
         upstream)
           script=${tree}/migrations/$id.sh

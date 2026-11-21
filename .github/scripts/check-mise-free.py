@@ -61,9 +61,11 @@ def scan(roots, allow):
     found = {path: set() for path in allow}
     problems = []
     walked = 0
+    present = set()
     for label, root in roots:
         for key, path in files(label, root):
             walked += 1
+            present.add(key)
             try:
                 with path.open("rb") as stream:
                     if b"\0" in stream.read(8192):
@@ -83,6 +85,10 @@ def scan(roots, allow):
     for key, row in allow.items():
         if not row.get("reason"):
             problems.append(f"{key}: missing reason")
+        # An older edge pin (edge's fallback) lacks a newer pin's file (#1896).
+        if row.get("edge") == "only" and key not in present:
+            print(f"edge-only row this pin does not have yet: {key}")
+            continue
         for line in row.get("lines", []):
             if line not in found[key]:
                 problems.append(f"stale: {key}: {line}")

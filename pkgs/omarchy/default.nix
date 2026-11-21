@@ -1455,8 +1455,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
 
                     # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
-                    substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
-                      --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
+                    # quattro 3df6c5d+ dropped the update probe from wifi.sh; any checkupdates left fails.
+                    wifi=$out/share/omarchy/install/user/first-run/wifi.sh
+                    if grep -qF 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' "$wifi"; then
+                      substituteInPlace "$wifi" \
+                        --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
+                    elif grep -q checkupdates "$wifi"; then
+                      echo "wifi.sh: checkupdates appears in a form this patch does not know" >&2
+                      exit 1
+                    fi
 
                     install -Dm755 ${./superwhisper-first-run.sh} \
                       $out/share/omarchy/install/user/first-run/superwhisper.sh
@@ -1602,11 +1609,24 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'echo -e "\e[32mRemoving FIDO2 device from authentication.\n\e[0m"' \
                         "$(cat ${./1304-guidance-remove-fido2.sh})"
 
-                    substituteInPlace $out/share/omarchy/bin/omarchy-setup-security-fingerprint \
-                      --replace-fail 'if omarchy-pkg-missing libfprint-git fprintd usbutils; then' \
-                        'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
-                      --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 -- libfprint-git fprintd usbutils' \
-                        "$(cat ${./1304-guidance-setup-fingerprint.sh})"
+                    # Why: quattro a91badb (#12833) installs "''${packages[@]}" after a TOD-owner
+                    # check; older pins and the tag name the packages inline. Each branch fails loudly.
+                    fp=$out/share/omarchy/bin/omarchy-setup-security-fingerprint
+                    if grep -qF 'if omarchy-pkg-missing "''${packages[@]}"; then' "$fp"; then
+                      substituteInPlace "$fp" \
+                        --replace-fail 'libfprint_owner=$(pacman -Qqo /usr/lib/libfprint-2.so.2 2>/dev/null || true)' \
+                          'libfprint_owner=' \
+                        --replace-fail 'if omarchy-pkg-missing "''${packages[@]}"; then' \
+                          'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
+                        --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 -- "''${packages[@]}"' \
+                          "$(cat ${./1304-guidance-setup-fingerprint.sh})"
+                    else
+                      substituteInPlace "$fp" \
+                        --replace-fail 'if omarchy-pkg-missing libfprint-git fprintd usbutils; then' \
+                          'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
+                        --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 -- libfprint-git fprintd usbutils' \
+                          "$(cat ${./1304-guidance-setup-fingerprint.sh})"
+                    fi
 
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-timezone \
                       --replace-fail 'sudo timedatectl set-timezone "$timezone"' \

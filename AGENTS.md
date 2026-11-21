@@ -1048,6 +1048,11 @@ in CI, because the tag still words those sections the old way. The fix was
 a second time in a scratch tree set to `main`'s pin. Do it the way
 `omarchy-edge.yml`'s "Restore main's Omarchy pin" step does: copy both pin
 copies from `origin/main`'s `flake.nix`, then `nix flake update omarchy`.
+That job boots no VM checks, so an edge-only subtest in a VM check such as
+`session` is checked under the tag by nobody. #1485's screensaver subtest
+failed every tag-pin `session` run unseen until #1896 ran one by hand. Guard
+such a subtest on the pin, and run `session` in the main-pin tree before
+pushing.
 
 **A `main` change to a derived count conflicts edge's next merge of `main`.**
 Packaging two apps on `main` changed the app counts in the README and four

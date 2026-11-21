@@ -636,7 +636,8 @@ pkgs.testers.runNixOSTest {
             assert out.strip() == "rc=0", f"the SDDM recovery hook did not run cleanly: {out}"
             # The restart is queued with --no-block, after the hook has exited.
             machine.wait_until_succeeds(
-                "! systemctl list-jobs --no-legend | grep -q display-manager.service", timeout=30)
+                "j=$(systemctl list-jobs --no-legend) && [[ $j != *display-manager.service* ]]",
+                timeout=30)
             after = machine.succeed(
                 "systemctl show -p InvocationID --value display-manager.service").strip()
             machine.succeed("systemctl is-active --quiet display-manager.service")

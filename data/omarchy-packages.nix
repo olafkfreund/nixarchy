@@ -690,6 +690,10 @@
   "rdma-core" = {
     skip = "GB10 (aarch64) only.";
   };
+  "samsung-galaxy-book4-edge-14-support" = {
+    edge = "only";
+    skip = "Samsung Galaxy Book4 Edge 14 (Snapdragon) board package; aarch64 hardware, not targeted.";
+  };
   "sof-firmware" = {
     module = "hardware.enableRedistributableFirmware"; # nixos/modules/hardware/all-firmware.nix lists it
   };

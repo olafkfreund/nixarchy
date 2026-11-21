@@ -55,9 +55,14 @@ pkgs.runCommand "nixarchy-omarchy-package-ledger"
   {
     nativeBuildInputs = [ pkgs.jq ];
     ledgerNames = builtins.toJSON (lib.attrNames ledger);
+    # #1896: an edge-only row an older edge pin (a fallback build) may not list yet.
+    edgeOnlyNames = builtins.toJSON (
+      lib.attrNames (lib.filterAttrs (_: r: r.edge or "" == "only") ledger)
+    );
     resolvedJson = builtins.toJSON resolved;
     passAsFile = [
       "ledgerNames"
+      "edgeOnlyNames"
       "resolvedJson"
     ];
   }
@@ -71,7 +76,13 @@ pkgs.runCommand "nixarchy-omarchy-package-ledger"
     jq -r '.[]' "$ledgerNamesPath" | sort -u > have
     jq -r 'to_entries[] | select(.value == false) | .key' "$resolvedJsonPath" | sort -u > unresolvable
     comm -23 wanted have > unclassified
-    comm -13 wanted have > stale
+    comm -13 wanted have > stale-all
+    jq -r '.[]' "$edgeOnlyNamesPath" | sort -u > edge-only
+    comm -12 stale-all edge-only > pending
+    comm -23 stale-all edge-only > stale
+    if [ -s pending ]; then
+      echo "edge-only rows this pin does not have yet: $(tr '\n' ' ' < pending)"
+    fi
 
     fail=0
     report() {

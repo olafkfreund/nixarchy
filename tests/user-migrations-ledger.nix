@@ -108,7 +108,14 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
       select((.value.edge // "") as $e | ($e == "only" and ($edge | not) or $e == "absent" and $edge) | not))' ${commandsLedger} >active-commands
     jq -r 'keys[]' active-commands >active-command-names
     missing_commands=$(comm -23 needed-commands active-command-names)
-    extra_commands=$(comm -13 needed-commands active-command-names)
+    # #1896: an edge-only row an older edge pin (a fallback build) may not need yet is reported, not fatal.
+    jq -r 'to_entries[] | select(.value.edge == "only") | .key' active-commands | sort >edge-only-commands
+    comm -13 needed-commands active-command-names >extra-commands
+    pending_commands=$(comm -12 extra-commands edge-only-commands)
+    extra_commands=$(comm -23 extra-commands edge-only-commands)
+    if [ -n "$pending_commands" ]; then
+      echo "edge-only command rows this pin does not have yet:" $pending_commands
+    fi
     if [ -n "$missing_commands" ]; then
       echo "commands a migration runs with no row in data/user-migration-commands.nix:" >&2
       printf '  %s\n' $missing_commands >&2
@@ -127,7 +134,13 @@ pkgs.runCommand "nixarchy-user-migrations-ledger"
     done <command-callers
     sort -u triage -o triage
     missing=$(comm -23 triage active)
-    extra=$(comm -13 triage active)
+    jq -r 'to_entries[] | select(.value.edge == "only") | .key' active-ledger | sort >edge-only-rows
+    comm -13 triage active >extra-rows
+    pending=$(comm -12 extra-rows edge-only-rows)
+    extra=$(comm -23 extra-rows edge-only-rows)
+    if [ -n "$pending" ]; then
+      echo "edge-only rows this pin does not have yet:" $pending
+    fi
     if [ -n "$missing" ]; then
       echo "migrations that touch user files with no row in data/user-migrations.nix:" >&2
       printf '  %s\n' $missing >&2

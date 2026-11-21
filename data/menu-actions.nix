@@ -295,8 +295,6 @@
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.network.dns.google" =
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
-  "setup.network.hostname" =
-    "guidance: exits 1 before hostnamectl, naming networking.hostName (#1896, checks.menu-guidance)";
   "setup.security.fido2" =
     "unreached: names omarchy-remove-security-fido2 in its guidance text and never runs it";
   "setup.security.fingerprint" = "guidance: exits 1 before omarchy-apply-lock";

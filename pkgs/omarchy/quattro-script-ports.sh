@@ -37,5 +37,6 @@ done
 # here is networking.hostName, so it says so before asking for a name (#1896).
 hn=$out/share/omarchy/bin/omarchy-setup-hostname
 if [ -e "$hn" ]; then
-  substituteInPlace "$hn" --replace-fail 'name=${1:-}' "$(cat "$4")"
+  substituteInPlace "$hn" --replace-fail 'name=${1:-}' "$(cat "$4")" \
+    --replace-fail 'sudo hostnamectl set-hostname "$name"' ': # nixarchy: networking.hostName, never hostnamectl (#1896)'
 fi

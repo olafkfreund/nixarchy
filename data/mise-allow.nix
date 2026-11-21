@@ -36,6 +36,13 @@
       "return b\"mise use\" in head or b\"mise x \" in head"
     ];
   };
+  "tree/default/regions/cn/environment.conf" = {
+    edge = "only";
+    reason = "mainland China's package mirrors, which install/config/region.sh copies into /etc/environment.d; nixarchy runs no install/config step and omarchy-region reads no /etc/omarchy/region here, so it is never installed (#1896)";
+    lines = [
+      "MISE_NODE_MIRROR_URL=https://npmmirror.com/mirrors/node/"
+    ];
+  };
   "tree/bin/omarchy-agent-integrate-herdr" = {
     edge = "only";
     reason = "reads an environment variable mise would set; empty here, and it runs nothing";

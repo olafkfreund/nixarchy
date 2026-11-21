@@ -52,7 +52,9 @@
 # groups. `edge_allow` applies only to an edge pin; `tag_allow` applies only to
 # a non-edge pin. `edge = "only"` keeps a whole row only on edge, while
 # `edge = "absent"` keeps it only off edge. Every field is checked before a row
-# is filtered; unknown fields and non-string values are errors.
+# is filtered; unknown fields and non-string values are errors. `adopted` names
+# the quattro commit that ships the file unchanged: on an edge pin where it
+# derives `vendor` the row is dropped, and older pins still check it.
 #
 # The patterns over-match on purpose -- `cp /etc/skel/. ~/` reads /etc and
 # still counts -- because a false positive costs one row saying so, and a false
@@ -278,6 +280,11 @@
     class = "vendor";
     reason = "Vendored unchanged. The other half of omarchy-dev-link: rewrites /etc/omarchy.conf back to the default target with `sudo tee`, and is wrong here for the same reason.";
     allow = "etc-write";
+  };
+  "omarchy-setup-hostname" = {
+    edge = "only";
+    class = "patch";
+    reason = "Setup > Network > Hostname, new in quattro efcf615. Upstream renames the machine with hostnamectl; here the hostname is networking.hostName, so it exits 1 with that route before asking for a name or calling hostnamectl (#1896).";
   };
   "omarchy-dns" = {
     class = "patch";
@@ -982,7 +989,13 @@
   "omarchy-region" = {
     edge = "only";
     class = "patch";
-    reason = "Setup > Region > Formats, new in quattro. Sources omarchy-locale-session by its $OMARCHY_PATH path rather than from PATH, as omarchy-language does here (#1847).";
+    adopted = "efcf615";
+    reason = "Setup > Region > Formats, new in quattro. Sources omarchy-locale-session by its $OMARCHY_PATH path rather than from PATH, as omarchy-language does here (#1847). Quattro efcf615 moved the formats to omarchy-region-formats, and this now only reports the install region.";
+  };
+  "omarchy-region-formats" = {
+    edge = "only";
+    class = "patch";
+    reason = "omarchy-region's formats half, moved here in quattro efcf615. Sources omarchy-locale-session by its $OMARCHY_PATH path rather than from PATH, as omarchy-language does here (#1847, #1896).";
   };
   "omarchy-locale-session" = {
     edge = "only";

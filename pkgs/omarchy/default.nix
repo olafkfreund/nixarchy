@@ -1598,7 +1598,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                         "$(cat ${./1304-guidance-remove-fido2.sh})"
 
                     # fingerprint setup, first-run wifi and the local model runner (#1577, #1623, #1896)
-                    source ${./quattro-script-ports.sh} ${./1304-guidance-setup-fingerprint.sh} ${./agent-local-use.upstream.sh} ${./agent-local-preflight.sh}
+                    source ${./quattro-script-ports.sh} ${./1304-guidance-setup-fingerprint.sh} ${./agent-local-use.upstream.sh} ${./agent-local-preflight.sh} ${./1896-guidance-hostname.sh}
 
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-timezone \
                       --replace-fail 'sudo timedatectl set-timezone "$timezone"' \

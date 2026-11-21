@@ -285,6 +285,8 @@
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.zed" =
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
+  "setup.network.dns.alidns" =
+    "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.network.dns.cloudflare" =
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.network.dns.custom" =
@@ -293,6 +295,8 @@
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.network.dns.google" =
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
+  "setup.network.hostname" =
+    "guidance: exits 1 before hostnamectl, naming networking.hostName (#1896, checks.menu-guidance)";
   "setup.security.fido2" =
     "unreached: names omarchy-remove-security-fido2 in its guidance text and never runs it";
   "setup.security.fingerprint" = "guidance: exits 1 before omarchy-apply-lock";

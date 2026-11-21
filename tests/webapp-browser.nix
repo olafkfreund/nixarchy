@@ -67,8 +67,10 @@ pkgs.runCommand "nixarchy-webapp-browser"
       if isEdge then
         ''
           provision=$package/bin/omarchy-provision-user
-          awk '/^\. .*nixarchy-store-owned\.sh$/ { copying=1 } copying { print; if (/^[[:space:]]*xdg-mime default omarchy-HEY.desktop/) mailto=1; else if (mailto && /^[[:space:]]*fi$/) exit }' "$provision" > "$root/provision-block"
-          grep -q 'xdg-mime default omarchy-HEY.desktop' "$root/provision-block" || { echo 'FAILED provisioning: patched block missing' >&2; exit 1; }
+          awk '/^\. .*nixarchy-store-owned\.sh$/ { copying=1 } copying { if (browser && !hey) { if (/^if ! store_owned/) hey=1; else exit } print; if (/default-web-browser chromium-browser/) seen=1; else if (seen && !browser && /^fi$/) browser=1; else if (hey && /^fi$/) exit }' "$provision" > "$root/provision-block"
+          grep -q 'default-web-browser chromium-browser.desktop' "$root/provision-block" || { echo 'FAILED provisioning: patched block missing' >&2; exit 1; }
+          # The mailto default is in the block exactly when the pin sets one.
+          [[ $(grep -c 'omarchy-HEY.desktop' "$root/provision-block") == $(grep -c 'HEY.desktop' "$provision") ]] || { echo 'FAILED provisioning: HEY block cut' >&2; exit 1; }
           export XDG_CONFIG_HOME=$root/config XDG_CONFIG_DIRS=$root/system-config XDG_CURRENT_DESKTOP= BROWSER=
           mkdir -p "$XDG_CONFIG_HOME" "$XDG_CONFIG_DIRS"
           [[ $(env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings get default-web-browser) == firefox.desktop ]] || {

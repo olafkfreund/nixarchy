@@ -50,7 +50,7 @@ pkgs.runCommand "nixarchy-menu-guidance"
     }
 
     rec=$TMPDIR/rec
-    for w in sudo pkexec nmcli tee usermod gpasswd systemctl pacman omarchy-pkg-drop rm; do
+    for w in sudo pkexec hostnamectl nmcli tee usermod gpasswd systemctl pacman omarchy-pkg-drop rm; do
       mk "$rec" "$w" 0 record
     done
     # timedatectl records only a set-*; a list answers from the pick.
@@ -87,6 +87,10 @@ pkgs.runCommand "nixarchy-menu-guidance"
     mk "$TMPDIR/s-gum" gum 0
     run_case "dns Cloudflare" "$TMPDIR/s-gum" out 'networking.nameservers' omarchy-dns Cloudflare
     run_case "dns Custom" "$TMPDIR/s-gum" out 'networking.nameservers' omarchy-dns Custom
+    # edge-only: quattro efcf615 added Setup > Network > Hostname.
+    if [ -e "$bin/omarchy-setup-hostname" ]; then
+      run_case "setup hostname" "$TMPDIR/s-gum" out 'networking.hostName' omarchy-setup-hostname workshop
+    fi
 
     mk "$TMPDIR/s-sd-set" gum 0
     mk "$TMPDIR/s-sd-set" omarchy-sudo-docker 0

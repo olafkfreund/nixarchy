@@ -147,8 +147,9 @@ pkgs.runCommand "nixarchy-home-links-quattro"
         run_unchanged "config-dir-editor-explicit" bash "$OMARCHY_PATH/bin/omarchy-cmd-editor-mimetypes"
 
         # 6. Same store-linked XDG_CONFIG_HOME with no browser line: extracted browser lines of omarchy-provision-user.
-        awk '/^\. .*nixarchy-store-owned\.sh$/ { copying=1 } copying { print; if (/^[[:space:]]*xdg-mime default omarchy-HEY\.desktop/) mailto=1; else if (mailto && /^[[:space:]]*fi$/) exit }' "$OMARCHY_PATH/bin/omarchy-provision-user" > "$TMPDIR/provision-block"
-        grep -q 'xdg-mime default omarchy-HEY.desktop' "$TMPDIR/provision-block" || fail "config-dir-provision-browser" "patched block missing"
+        awk '/^\. .*nixarchy-store-owned\.sh$/ { copying=1 } copying { if (browser && !hey) { if (/^if ! store_owned/) hey=1; else exit } print; if (/default-web-browser chromium-browser/) seen=1; else if (seen && !browser && /^fi$/) browser=1; else if (hey && /^fi$/) exit }' "$OMARCHY_PATH/bin/omarchy-provision-user" > "$TMPDIR/provision-block"
+        grep -q 'default-web-browser chromium-browser.desktop' "$TMPDIR/provision-block" || fail "config-dir-provision-browser" "patched block missing"
+        [[ $(grep -c 'omarchy-HEY.desktop' "$TMPDIR/provision-block") == $(grep -c 'HEY.desktop' "$OMARCHY_PATH/bin/omarchy-provision-user") ]] || fail "config-dir-provision-browser" "HEY block cut"
         reset_home
         rmdir "$XDG_CONFIG_HOME"
         ln -s ${configDir} "$XDG_CONFIG_HOME"

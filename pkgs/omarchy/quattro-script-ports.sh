@@ -1,5 +1,5 @@
 # Sourced from omarchy's installPhase: $1 fingerprint guidance, $2 upstream
-# agent-local `use` block, $3 our preflight. Each patch knows every text a pin
+# agent-local `use` block, $3 our preflight, $4 hostname guidance. Each patch knows every text a pin
 # can carry (the tag, older edge pins, the current one) and fails loudly on any
 # other, because a skipped patch reads as a working script.
 # Why: pkgs/AGENTS.md#quattro-script-ports
@@ -32,3 +32,10 @@ for name in omarchy-models omarchy-agent-local; do
   [ "$name" = omarchy-agent-local ] || use=${use/The agents panel starts/The local models panel starts}
   substituteInPlace "$f" --replace-fail "$use" "$(sed "s/omarchy-agent-local/$name/g" "$3")"
 done
+
+# quattro efcf615's Setup > Network > Hostname runs hostnamectl; the hostname
+# here is networking.hostName, so it says so before asking for a name (#1896).
+hn=$out/share/omarchy/bin/omarchy-setup-hostname
+if [ -e "$hn" ]; then
+  substituteInPlace "$hn" --replace-fail 'name=${1:-}' "$(cat "$4")"
+fi

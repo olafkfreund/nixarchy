@@ -478,7 +478,7 @@ def main():
                         break
                     die(f"{name}: invalid field syntax near {row_body[position:].strip()[:60]!r}; fields must be quoted strings")
                 key, value = match.groups()
-                if key not in {"class", "reason", "allow", "pacman", "stub", "edge", "edge_allow", "tag_allow"}:
+                if key not in {"class", "reason", "allow", "pacman", "stub", "edge", "edge_allow", "tag_allow", "adopted"}:
                     die(f"{name}: unknown field {key!r}")
                 if key in row:
                     die(f"{name}: duplicate field {key!r}")
@@ -524,6 +524,13 @@ def main():
         if pending:
             print("edge-only rows this pin does not have yet: " + " ".join(pending))
         for n in pending:
+            del ledger[n]
+        # A row whose change a newer quattro adopted holds for older pins only.
+        adopted = sorted(n for n, r in ledger.items()
+                         if r.get("adopted") and derived.get(n) == "vendor")
+        if adopted:
+            print("rows this pin vendors unchanged (adopted upstream): " + " ".join(adopted))
+        for n in adopted:
             del ledger[n]
 
     if args.seed:

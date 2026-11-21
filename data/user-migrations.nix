@@ -515,4 +515,15 @@
     run = "upstream";
     reason = "marks the first-update setup task done under ~/.local/state/omarchy/done/, so the bar's update icon watches Omarchy only; a marker is harmless on a machine whose updates are rebuilds (#1896)";
   };
+  "1795274792" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "gated on omarchy-hw-aarch64-qualcomm and a Snapdragon X device tree; adds the display chain to the boot image with limine-mkinitcpio, which this x86_64-linux port neither targets nor uses (#1896)";
+  };
+  "1795277141" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "runs omarchy-models-launchers to take away the launchers of image, video and music models, which Fantasi now lists itself, leaving the coding models' alone. Upstream already skips a machine without omarchy-local-ai, which is opt-in here (services.agent-local), so it holds unedited (#1896)";
+  };
 }

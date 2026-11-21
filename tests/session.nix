@@ -2628,55 +2628,63 @@ pkgs.testers.runNixOSTest {
     # ---- the native screensaver maps its overlay and dismisses on a key (#1485)
     # quattro's omarchy-launch-screensaver execs a Wayland layer-shell program.
     # The namespace is the one its README says Omarchy's tools find it by.
-    with subtest("screensaver maps its overlay (#1485)"):
-        ns = "org.omarchy.screensaver"
-        # The screensaver exits as "already running" when any process's
-        # cmdline contains its app id, so no guest command may spell it out.
-        ns_re = "org[.]omarchy[.]screensaver"
-        layers_cmd = (
-            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
-            " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
-            " hyprctl layers -j' > /tmp/screensaver-layers.json")
-        machine.succeed(layers_cmd)
-        before = machine.succeed("cat /tmp/screensaver-layers.json")
-        assert ns not in before, f"{ns} is mapped before the screensaver was launched"
-        script = (
-            "export XDG_RUNTIME_DIR=/run/user/1000\n"
-            "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
-            "hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-screensaver force 2>/tmp/screensaver.err\")' "
-            "> /tmp/screensaver-dispatch.txt 2>&1 </dev/null\n"
-        )
-        machine.succeed(
-            "cat > /tmp/screensaver-probe.sh <<'PROBE_EOF'\n" + script + "PROBE_EOF")
-        machine.execute("su omarchy -c 'bash /tmp/screensaver-probe.sh'")
-        reply = machine.execute("cat /tmp/screensaver-dispatch.txt")[1].strip()
-        assert reply == "ok", f"hyprctl dispatch did not accept the launch: {reply!r}"
-        # && throughout: a failed hyprctl leaves an empty file, which must fail
-        # the poll rather than read as "the layer is gone".
-        try:
-            machine.wait_until_succeeds(
-                layers_cmd + f" && grep -q '{ns_re}' /tmp/screensaver-layers.json", timeout=30)
-        except Exception:
-            print("screensaver stderr: " + machine.execute("cat /tmp/screensaver.err")[1])
-            raise
-        # Still running once mapped, so a client that maps and then crashes
-        # cannot pass for one that left because of the key.
-        machine.sleep(2)
-        machine.succeed("pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver")
-        # A key sent before the overlay takes keyboard focus can be lost, so
-        # it is resent; the probe fails only if none of them dismisses it.
-        for _ in range(5):
-            machine.send_key("esc")
-            gone, _ = machine.execute(
-                layers_cmd + f" && ! grep -q '{ns_re}' /tmp/screensaver-layers.json")
-            if gone == 0:
-                break
+    # A property of the pin, not of the guest: v4.5.0 runs the screensaver in a
+    # terminal and ships no omarchy-screensaver, so there is no overlay to map (#1896).
+    if ${
+      if builtins.elem "omarchy-screensaver" omarchyPkg.passthru.basePackages then "True" else "False"
+    }:
+        with subtest("screensaver maps its overlay (#1485)"):
+            ns = "org.omarchy.screensaver"
+            # The screensaver exits as "already running" when any process's
+            # cmdline contains its app id, so no guest command may spell it out.
+            ns_re = "org[.]omarchy[.]screensaver"
+            layers_cmd = (
+                "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+                " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+                " hyprctl layers -j' > /tmp/screensaver-layers.json")
+            machine.succeed(layers_cmd)
+            before = machine.succeed("cat /tmp/screensaver-layers.json")
+            assert ns not in before, f"{ns} is mapped before the screensaver was launched"
+            script = (
+                "export XDG_RUNTIME_DIR=/run/user/1000\n"
+                "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+                "hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-screensaver force 2>/tmp/screensaver.err\")' "
+                "> /tmp/screensaver-dispatch.txt 2>&1 </dev/null\n"
+            )
+            machine.succeed(
+                "cat > /tmp/screensaver-probe.sh <<'PROBE_EOF'\n" + script + "PROBE_EOF")
+            machine.execute("su omarchy -c 'bash /tmp/screensaver-probe.sh'")
+            reply = machine.execute("cat /tmp/screensaver-dispatch.txt")[1].strip()
+            assert reply == "ok", f"hyprctl dispatch did not accept the launch: {reply!r}"
+            # && throughout: a failed hyprctl leaves an empty file, which must fail
+            # the poll rather than read as "the layer is gone".
+            try:
+                machine.wait_until_succeeds(
+                    layers_cmd + f" && grep -q '{ns_re}' /tmp/screensaver-layers.json", timeout=30)
+            except Exception:
+                print("screensaver stderr: " + machine.execute("cat /tmp/screensaver.err")[1])
+                raise
+            # Still running once mapped, so a client that maps and then crashes
+            # cannot pass for one that left because of the key.
             machine.sleep(2)
-        else:
-            raise Exception(f"{ns} was still mapped after five Esc presses")
-        machine.wait_until_fails(
-            "pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver", timeout=15)
-        print("the native screensaver maps its overlay and leaves on a key")
+            machine.succeed("pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver")
+            # A key sent before the overlay takes keyboard focus can be lost, so
+            # it is resent; the probe fails only if none of them dismisses it.
+            for _ in range(5):
+                machine.send_key("esc")
+                gone, _ = machine.execute(
+                    layers_cmd + f" && ! grep -q '{ns_re}' /tmp/screensaver-layers.json")
+                if gone == 0:
+                    break
+                machine.sleep(2)
+            else:
+                raise Exception(f"{ns} was still mapped after five Esc presses")
+            machine.wait_until_fails(
+                "pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver", timeout=15)
+            print("the native screensaver maps its overlay and leaves on a key")
+    else:
+        print("skipped: screensaver maps its overlay (#1485): this pin ships no native "
+              "omarchy-screensaver (it runs the screensaver in a terminal)")
 
     # ---- launchers must look on PATH, not in /usr/bin ---------------------
     # Clicking Spotify offered to install Spotify. Both launchers decide

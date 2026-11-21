@@ -631,8 +631,8 @@ pkgs.testers.runNixOSTest {
             before = machine.succeed(
                 "systemctl show -p InvocationID --value display-manager.service").strip()
             out = machine.succeed(
-                f"systemd-run --quiet --wait --pipe --collect {hook} 2>/tmp/recover.err; "
-                "echo rc=$?; cat /tmp/recover.err")
+                f"rc=0; systemd-run --quiet --wait --pipe --collect {hook} 2>/tmp/recover.err || rc=$?; "
+                "echo rc=$rc; cat /tmp/recover.err")
             assert out.strip() == "rc=0", f"the SDDM recovery hook did not run cleanly: {out}"
             # The restart is queued with --no-block, after the hook has exited.
             machine.wait_until_succeeds(

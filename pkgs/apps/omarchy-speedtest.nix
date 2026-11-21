@@ -7,13 +7,13 @@
 }:
 buildGo127Module (finalAttrs: {
   pname = "omarchy-speedtest";
-  version = "0.2.1";
+  version = "0.2.2";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omarchy-speedtest";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-q3KJ+FS2xuTNzgRal3rfhXot0aFUkD01+PZtq0sq+YQ=";
+    hash = "sha256-+d8012ApTNr39IAVbMy/QQ9poAkLIzQBgFVlm/Vs+LY=";
   };
 
   vendorHash = null;

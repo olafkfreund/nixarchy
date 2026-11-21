@@ -545,7 +545,7 @@ So twenty-two skills ship here instead, with eight Nix skills beside them:
 | **`nixos-gaming`** | Steam as a module rather than a package, Proton per title, the 32-bit graphics stack that is the usual cause, controllers, gamescope, and thirteen libretro cores that live in the package rather than `/usr/lib` |
 | **`nixos-fleet`** | One flake, several machines: the `hosts/<name>/` layout, what is shared and what is per-machine, `nixarchy-apply`'s hostname match, pulling on a timer, and where `--target-host` stops |
 | **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
-| **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
+| **`omarchy-diagnose-crash`** | Upstream's, patched. Keeps upstream's name because `omarchy-agent-crash` reads that path literally |
 | **`omarchy-app`** | Upstream's, new in 4.5: scaffolds a C++ and Qt Quick app that follows the Omarchy theme. Nixarchy rewrites its packaging half, so the app gets a `flake.nix` and `package.nix`, runs with `nix run`, and installs by adding the flake to your configuration |
 | **`omarchy-make-app`** | Upstream's `omarchy-app` under its quattro name, with the same rewrite: the app is a flake that builds and runs with `nix run` |
 | **`omarchy-make-game`** | Upstream's, new in quattro (was `web-game`): a browser game or 3D toy as one HTML file with three.js, saved under `~/Games/vibes` and played from Game Vibes, checked in a headless browser |

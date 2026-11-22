@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1908
 intent: intent/2026-11-22-1908-sddm-probe-failure.md
 ---

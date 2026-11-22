@@ -11,9 +11,10 @@ intent: intent/2026-11-22-1907-first-install-cleanup.md
 `pkgs/omarchy/quattro-user-files.sh` (edge-only, sourced from installPhase) replaces
 the loop body `rm -f ~/.local/share/applications/"${launcher##*/}"` with a guarded
 delete: remove only a regular file that is not a symlink and whose content equals
-the shipped launcher. The substitution runs only where the pin's script contains
-that line, so main's tag and older edge pins build unchanged, and `--replace-fail`
-breaks the build if upstream rewords the line while keeping it.
+the shipped launcher. The substitution runs only where the pin's script has the
+launcher loop (`"$OMARCHY_PATH"/applications/*.desktop; do`), so main's tag and
+older edge pins build unchanged, and `--replace-fail` breaks the build if upstream
+rewords the delete inside the loop.
 
 Content is compared with bash (`$(<a) == $(<b)`), not `cmp`: `diffutils` is not in
 the package's runtime list, and a vendored script must not depend on the caller's
@@ -24,6 +25,9 @@ PATH for it.
 home holding a pristine copy, an edited copy, a symlink to a byte-identical copy
 and a symlink to an edited copy. Only the pristine copy may go. On a pin without
 the cleanup it reports skipped, and fails if the loop is present but not cut out.
+It also fails on any `rm` into `.local/share/applications` left in the built
+script, however the loop around it is renamed, and checks the cut-out block ends
+in `fi`, is at most eight lines and parses.
 
 ## Alternatives rejected
 
@@ -37,7 +41,9 @@ the cleanup it reports skipped, and fails if the loop is present but not cut out
 
 A pristine launcher the user deliberately kept is still removed on a first
 install, as upstream intends. The bash comparison ignores trailing newlines, so a
-copy differing only in those counts as pristine.
+copy differing only in those counts as pristine. If `~/.local/share/applications`
+is itself a symlink into a read-only tree, removing a pristine copy fails and
+aborts provisioning under `set -e`; Home Manager links files, not that directory.
 
 ## Verification
 

@@ -14,9 +14,9 @@ Upstream assumes `/etc/skel` put them there. On nixarchy that file can instead b
 Home Manager link or a launcher the user edited, and the loop deletes it all the
 same, with no ownership test (CLAUDE.md §1, #1304).
 
-Nothing nixarchy ships passes `--first-install`: its only caller is
-`omarchy-provision-owner`, which nixarchy never runs. A user can still type
-`omarchy finalize user --first-install`.
+Nothing nixarchy ships passes `--first-install`: upstream's callers are its ISO's
+target chroot and `omarchy-provision-owner`, and nixarchy runs neither. A user can
+still type `omarchy finalize user --first-install`.
 
 ## Proposed outcome
 

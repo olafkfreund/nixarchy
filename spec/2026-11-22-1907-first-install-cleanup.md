@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1907
 intent: intent/2026-11-22-1907-first-install-cleanup.md
 ---

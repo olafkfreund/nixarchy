@@ -97,6 +97,8 @@ jobs:
           # no previous tag to name and no commit to read. Whole history, and
           # the tags with it.
           fetch-depth: 0
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
 
       # A tag behind main ships a release missing fixes that are already
       # merged, and nothing here noticed.

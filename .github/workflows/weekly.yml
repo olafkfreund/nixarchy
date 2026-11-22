@@ -45,6 +45,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
       - name: Install from the stock NixOS ISO
         run: nix build .#checks.x86_64-linux.install-stock-iso --print-build-logs
 
@@ -115,6 +117,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
       # No cachix push: stable closures are not on the allowlist, and the free
       # tier would evict what users actually download.
       # checks.session with nixpkgs and home-manager swapped for this flake's

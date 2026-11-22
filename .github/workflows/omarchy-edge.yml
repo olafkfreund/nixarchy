@@ -636,6 +636,8 @@ jobs:
           fetch-depth: 0
           # The promote pushes edge: same token rule as prepare.
           token: ${{ secrets.NIXARCHY_EDGE_TOKEN || github.token }}
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
 
       - name: Evaluate options, then boot the VM checks, each separately
         id: vms

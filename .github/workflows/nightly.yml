@@ -51,6 +51,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
 
       # No installer action and no cachix: this runner is a NixOS machine with
       # nix already on it and the store already warm, which is most of why it
@@ -105,6 +107,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
       - name: Install with encryption, boot through the LUKS prompt
         run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.install-encrypted --print-build-logs
 
@@ -126,6 +130,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
       - name: Boot German and Russian keyboard layouts
         run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.keyboard-boot --print-build-logs
 
@@ -142,6 +148,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
       - name: Boot a MicroVM on the -tcg runner
         run: .github/scripts/vm-host-sample.sh 30 -- nix build .#checks.x86_64-linux.microvm-boot --print-build-logs
 
@@ -176,6 +184,8 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
 
       - name: Build the ISO
         run: nix build .#iso-net --no-link --print-build-logs
@@ -425,6 +435,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+      - name: Root this flake's source and inputs for the job (#1909)
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
       - name: Build, push and probe again
         # Guarded since #728 widened the JOB's condition to run for missing
         # PROOFS as well as missing entries. This step had never needed a
@@ -632,6 +644,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
+      - name: Root this flake's source and inputs for the job (#1909)
+        continue-on-error: true
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
       - id: digest
         continue-on-error: true
         env:

@@ -625,9 +625,16 @@ pkgs.testers.runNixOSTest {
             hook = recover_paths.pop()
             # Reach the seat decision, not one of the script's early exits.
             machine.succeed("systemctl is-active --quiet display-manager.service")
-            machine.succeed(
+            # The hook's own verdict on real loginctl output must be "seated" (#1908):
+            # an unreadable list also leaves SDDM alone, and would pass below unseen.
+            verdict = machine.succeed(
                 "s=$(loginctl list-sessions --no-legend) && "
-                "awk '$4 ~ /^seat/ { f=1 } END { exit !f }' <<<\"$s\"")
+                "awk 'NF == 0 { next } NF < 4 || $2 !~ /^[0-9]+$/ || $4 !~ /^(seat|-$)/ { bad = 1 } "
+                "$4 ~ /^seat/ { seat = 1 } END { print (bad ? \"unreadable\" : seat ? \"seated\" : \"seatless\") }' "
+                "<<<\"$s\"").strip()
+            assert verdict == "seated", (
+                f"the recovery probe reads this systemd's loginctl as {verdict}: "
+                + machine.succeed("loginctl list-sessions --no-legend"))
             before = machine.succeed(
                 "systemctl show -p InvocationID --value display-manager.service").strip()
             out = machine.succeed(

@@ -48,6 +48,14 @@ if [ ! -e "$f" ] && [ -e $out/share/omarchy/etc/systemd/system/systemd-suspend.s
   echo "omarchy-system-sddm-recover: the sleep drop-ins ship but the script does not" >&2
   exit 1
 fi
+# A restart ends a live session, so only a probe that read every line and found
+# no seat may cause one: a failed or unreadable probe leaves the greeter alone (#1908).
 [ ! -e "$f" ] || substituteInPlace "$f" \
   --replace-fail 'is-active --quiet sddm.service' 'is-active --quiet display-manager.service' \
-  --replace-fail 'restart --no-block sddm.service' 'restart --no-block display-manager.service'
+  --replace-fail 'restart --no-block sddm.service' 'restart --no-block display-manager.service' \
+  --replace-fail "if awk '\$4 ~ /^seat/ { found=1; exit } END { exit !found }' <<<\"\$sessions\"; then
+  exit 0
+fi" \
+    "verdict=\$(awk 'NF == 0 { next } NF < 4 || \$2 !~ /^[0-9]+\$/ || \$4 !~ /^(seat|-\$)/ { bad = 1 } \$4 ~ /^seat/ { seat = 1 }
+  END { print (bad ? \"unreadable\" : seat ? \"seated\" : \"seatless\") }' <<<\"\$sessions\") || exit 0
+[ \"\$verdict\" = seatless ] || exit 0"

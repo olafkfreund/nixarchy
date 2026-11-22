@@ -1,7 +1,7 @@
 { pkgs, ... }:
 # Quattro's after-sleep SDDM recovery, as shipped here (#1905): our unit-name
 # patch and the restart decision, against stub systemctl and loginctl with the
-# real awk. Upstream's own test covers its logic against sddm.service; this
+# real awk (or one stubbed to fail). Upstream's own test covers its logic against sddm.service; this
 # covers the script NixOS actually runs.
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
@@ -31,7 +31,12 @@ pkgs.runCommand "nixarchy-sddm-recover"
     printf '%s\n' '#!${pkgs.bash}/bin/bash' \
       '[ "$LOGIN_FAIL" != 1 ] || exit 1' \
       'printf "%s" "$SESSIONS"' > fake-bin/loginctl
-    chmod +x fake-bin/systemctl fake-bin/loginctl
+    # awk that fails before reading, as a crash or a killed probe would (#1908).
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' \
+      '[ "$AWK_FAIL" != 1 ] || exit 2' \
+      'exec ${pkgs.gawk}/bin/awk "$@"' > fake-bin/awk
+    chmod +x fake-bin/systemctl fake-bin/loginctl fake-bin/awk
+    export AWK_FAIL=0
     export PATH=$PWD/fake-bin:$PATH CALLS=$PWD/calls
 
     seated=$(printf '%s\n' \
@@ -59,6 +64,13 @@ pkgs.runCommand "nixarchy-sddm-recover"
     DM_ACTIVE=1 LOGIN_FAIL=0 SESSIONS=$seatless check 'no seat session restarts the display manager' 1
     DM_ACTIVE=0 LOGIN_FAIL=0 SESSIONS=$seatless check 'an inactive display manager is left alone' 0
     DM_ACTIVE=1 LOGIN_FAIL=1 SESSIONS=$seatless check 'a failed logind query is left alone' 0
+    # A probe that cannot tell must not end a live session (#1908).
+    DM_ACTIVE=1 LOGIN_FAIL=0 SESSIONS='Failed to parse bus message: Protocol error' \
+      check 'unparseable logind output is left alone' 0
+    AWK_FAIL=1 DM_ACTIVE=1 LOGIN_FAIL=0 SESSIONS=$seatless check 'a failing awk is left alone' 0
+    DM_ACTIVE=1 LOGIN_FAIL=0 SESSIONS='     2 1000 omarchy 1234 user    tty2 no -' \
+      check 'a row with no seat column is left alone' 0
+    DM_ACTIVE=1 LOGIN_FAIL=0 SESSIONS= check 'no sessions at all restarts the display manager' 1
 
     if grep -q 'sddm\.service' "$script"; then
       echo "FAILED: the shipped script still names sddm.service, which NixOS does not have" >&2

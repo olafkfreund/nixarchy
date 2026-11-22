@@ -200,6 +200,11 @@
     nix = "noto-fonts";
   };
   "noto-fonts-cjk" = {
+    edge = "absent";
+    nix = "noto-fonts-cjk-sans";
+  };
+  "noto-fonts-cjk-vf" = {
+    edge = "only";
     nix = "noto-fonts-cjk-sans";
   };
   "noto-fonts-emoji" = {
@@ -599,10 +604,28 @@
     skip = "Intel VA-API driver: a host gets it from nixos-hardware's common-gpu-intel or its own hardware.graphics.extraPackages, not from this port.";
   };
   "lib32-nvidia-580xx-utils" = {
+    edge = "absent";
     skip = "As nvidia-open-dkms.";
   };
   "lib32-nvidia-utils" = {
+    edge = "absent";
     skip = "As nvidia-open-dkms; 32-bit is hardware.graphics.enable32Bit, left to the user.";
+  };
+  "facetimehd-dkms" = {
+    edge = "only";
+    skip = "The FaceTime HD camera driver of Intel Macs; here hardware.facetimehd.enable provides it, which needs unfree firmware, so it is the user's own hardware choice and not set.";
+  };
+  "facetimehd-firmware-fetcher" = {
+    edge = "only";
+    skip = "As facetimehd-dkms: hardware.facetimehd.enable brings the firmware in nixpkgs, so nothing downloads it from Apple at boot.";
+  };
+  "kmscon" = {
+    edge = "only";
+    skip = "Draws Omarchy's Arch installer and first-boot owner setup (omarchy-provision-owner), neither of which runs here; nixarchy has its own installer.";
+  };
+  "pi-coding-agent" = {
+    edge = "only";
+    skip = "A base package upstream. Here it is not on every machine: our omarchy-default-agent installs pi from nixpkgs on request, and services.agent-local puts it in the system with its agents list (#1896).";
   };
   "libva-intel-driver" = {
     skip = "Old Intel VA-API driver; not listed.";

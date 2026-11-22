@@ -872,6 +872,12 @@
     class = "patch";
     reason = "Synchronize the desktop environment after each supervised shell launch, including automatic relaunches.";
   };
+  "omarchy-system-sleep-facetimehd" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged, and unreachable here: it is run by a sleep-unit drop-in that upstream's fix-facetimehd.sh installs from install/hardware, which this port never runs. Where hardware.facetimehd.enable is set, nixpkgs unloads and reloads the driver around sleep itself (powerManagement.powerDownCommands and resumeCommands), so the modprobe in this script is not carried by anything here (#1896).";
+    allow = "modprobe";
+  };
   "omarchy-system-sddm-recover" = {
     edge = "only";
     class = "patch";

@@ -531,4 +531,15 @@
     decision = "not-needed";
     reason = "gated on omarchy-hw-match ZBook Ultra G3a 16; writes amdgpu.dcdebugmask=0x402 into /etc/limine-entry-tool.d and rebuilds the boot image with limine-mkinitcpio. The kernel command line here comes from boot.kernelParams, so a host with that laptop sets the parameter there (#1896)";
   };
+  "1795318856" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "moves Pi from a mise tool to the pi-coding-agent package; there is no mise here, and Pi comes from nixpkgs through omarchy-default-agent or services.agent-local (#1896)";
+  };
+  "1795294173" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "runs omarchy-agent-pi-defaults to link Omarchy's Pi extensions and condense Pi's changelog. It holds unedited: the link points into the Omarchy tree and is moved to the current one at the next run, and it does nothing until the user installs Pi (#1896)";
+  };
 }

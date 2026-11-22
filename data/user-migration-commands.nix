@@ -8,6 +8,11 @@
     follow = true;
     reason = "links each skill Omarchy ships into the agent harnesses' skill directories under ~/.agents, ~/.claude, ~/.pi, ~/.gemini and ~/.hermes, and removes links to skills the tree no longer has";
   };
+  "omarchy-agent-pi-defaults" = {
+    edge = "only";
+    follow = true;
+    reason = "links Omarchy's Pi extensions folder to ~/.pi/agent/extensions/omarchy, replacing a link into another Omarchy tree and leaving a folder or link of the user's own, and writes collapseChangelog into ~/.pi/agent/settings.json only where the user has not chosen";
+  };
   "omarchy-agent-local-launchers" = {
     edge = "only";
     follow = true;

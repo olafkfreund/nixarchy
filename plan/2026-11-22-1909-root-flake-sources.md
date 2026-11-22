@@ -64,6 +64,7 @@ reviewers:
    - Traps: in a `''` string, `''${` escapes and `\$` is literal (§5); avoid heredocs that make nixfmt reindent (§5).
 3. **The 12 call sites**, each with the YAML above, including `continue-on-error: true` on `digest`. In edge's verify, the step goes after the candidate checkout.
    - Verify: actionlint (`nix run nixpkgs#actionlint`).
+   - **Deviation (Codex on #1913).** `release.yml` checks out the tag being released, and a tag older than this commit has no `root-flake.sh`. Its step therefore loads the script from the workflow's own commit, as the release guard does (`git show "$GITHUB_SHA:…" > "$RUNNER_TEMP/root-flake.sh"`), and still roots the tag's tree. Verified on `v4.5.0-3`: 63 paths rooted, exit 0. The other call sites cannot hit this. `install-check` checks out the PR's merge ref, and edge's `verify` checks out a candidate that `prepare` has merged with `main`.
 4. **The coverage half** of `tests/root-flake.nix`: Python with PyYAML over `.github/workflows/*.yml`. It is added only now that step 3 has made the workflows pass.
    - Verify: `nix build .#checks.x86_64-linux.root-flake` passes.
 5. **Red proofs** (§1). For each break: make the break, confirm it landed with `git diff`, build the check and watch it fail with a readable message, restore with `git checkout HEAD -- <file>`, and watch it pass again.

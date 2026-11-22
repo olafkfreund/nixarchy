@@ -2821,6 +2821,10 @@
             pkgs = pkgsFor.${system};
           };
 
+          # A self-hosted job roots its flake source and inputs, so the host's
+          # auto-GC cannot take them mid-job (#1909). See tests/root-flake.nix.
+          root-flake = import ./tests/root-flake.nix { pkgs = pkgsFor.${system}; };
+
           # Every option that adds something, checked with it turned off too --
           # see tests/options.nix for why that half is the one at risk.
           # Upstream's /etc overlay: data/etc-overlay.nix says what answers each

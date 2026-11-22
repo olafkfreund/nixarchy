@@ -97,6 +97,12 @@ jobs:
           # no previous tag to name and no commit to read. Whole history, and
           # the tags with it.
           fetch-depth: 0
+      - name: Root this flake's source and inputs for the job (#1909)
+        # From the workflow's commit, as the release guard is: a tag older than
+        # #1909 has no root-flake.sh, and its tree is still what gets rooted.
+        run: |
+          git show "$GITHUB_SHA:.github/scripts/root-flake.sh" > "$RUNNER_TEMP/root-flake.sh"
+          nix shell --inputs-from . nixpkgs#jq -c bash "$RUNNER_TEMP/root-flake.sh" "$RUNNER_TEMP/flake-roots"
 
       # A tag behind main ships a release missing fixes that are already
       # merged, and nothing here noticed.

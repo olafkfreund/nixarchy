@@ -150,3 +150,13 @@ done' \
   else' \
   --replace-fail '"$cleared" >"$desktop_list"' '"$cleared" >"$desktop_list"
   fi'
+
+# A first install removes the shipped launchers /etc/skel seeded. Here a link
+# (Home Manager) or an edited copy is the user's, so only a pristine copy goes (#1907).
+# Gated on the loop, not the line, so --replace-fail catches a reworded delete.
+if grep -qF '"$OMARCHY_PATH"/applications/*.desktop; do' $out/share/omarchy/bin/omarchy-provision-user; then
+  substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+    --replace-fail 'rm -f ~/.local/share/applications/"${launcher##*/}"' \
+      'seeded=~/.local/share/applications/"${launcher##*/}"
+    if [[ -f $seeded && ! -L $seeded && "$(<"$seeded")" == "$(<"$launcher")" ]]; then rm -f "$seeded"; fi'
+fi

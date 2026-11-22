@@ -1901,6 +1901,8 @@
             # Proves btrfs subvolume and directory exchanges before the reset uses them (#1621).
             "factory-reset"
             "firmware-guard"
+            # A first install removes only pristine seeded launchers, never a link or an edit (#1907).
+            "first-install-launchers"
             # The dangerous one. Installs into free space on a disk that already
             # carries partitions and asserts those partitions are byte-identical
             # afterwards -- entry and content. See tests/free-space.nix; #47 is

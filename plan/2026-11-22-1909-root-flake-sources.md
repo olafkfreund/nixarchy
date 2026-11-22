@@ -4,7 +4,7 @@ issue: 1909
 spec: spec/2026-11-22-1909-root-flake-sources.md
 coders:
   1: claude   # small and tricky: the failure handling is the point; the session writes it
-  2: claude   # the check must be proven to fail three ways, which the session runs
+  2: claude   # the check must be proven to fail seven ways, which the session runs
   3: claude   # 12 one-line YAML insertions; mechanical, but a CI-gate change the session owns
 reviewers:
   - codex     # second read on nix GC semantics
@@ -13,40 +13,81 @@ reviewers:
 
 # Plan: a self-hosted job keeps its own flake source alive through the host's auto-GC
 
-Approved decisions, from the spec:
+## Approved decisions, from the spec
 
-- **Cause.** Nightly run 44979123567's repush job (on p620-nixarchy-2) ran nix's auto-GC, because free space was below `min-free = 100 GiB`. That GC deleted the job's own flake source `/nix/store/3b0k…-source`, which no root held; evaluation then failed with `path … is not valid`.
-- **Fix.** `.github/scripts/root-flake.sh <dir>` roots the flake source and every input, which it reads from `nix flake archive --json .` with `jq -r '[recurse(.inputs[]?) | .path? | strings | select(startswith("/nix/store/"))] | unique | .[]'`. It uses indirect roots (`nix-store --add-root <dir>/<n> --realise <p>`) under `$RUNNER_TEMP`, which on p620 is `/run/github-runner/<name>/_temp`, a host-visible `RuntimeDirectory`. Every self-hosted job runs it right after checkout. That is 12 jobs: nightly's install, install-encrypted, keyboard-boot, microvm, install-iso-net, repush and digest; omarchy-edge's verify; weekly's install-stock-iso and stable-session; release's iso; and install-check's install. On `digest` the step is `continue-on-error: true`.
-- **Failure handling.** The script captures the archive output before splitting it (never `< <(…)`). It refuses a missing top-level `.path` and fewer than two paths. After rooting, it checks every path with `--check-validity` and every link in `--print-roots`, and re-runs from the archive at most three times before failing by name.
-- **Coverage.** `checks.root-flake` also fails, naming the job, when any job whose `runs-on` is not a literal `ubuntu-*` label has a checkout without the root step.
-- **Out of scope.** The host's `min-free` policy (config repo, the owner's call), and any workflow other than the 11 self-hosted jobs.
-- **Merging.** §11: this is a CI-gate change, so the PR stays open for the owner.
+- **Cause.** Nightly run 44979123567's repush job, on p620-nixarchy-2, triggered nix's auto-GC because free space was below `min-free = 100 GiB`. The GC deleted the job's own flake source `/nix/store/3b0k…-source`, which no root held. Evaluation then failed with `path … is not valid`.
+- **Script.** `.github/scripts/root-flake.sh <dir>`:
+  1. `mkdir -p <dir>`;
+  2. `out=$(nix flake archive --json .) || die`, never `< <(…)`;
+  3. `jq -r '[recurse(.inputs[]?) | .path? | strings | select(startswith("/nix/store/"))] | unique | .[]'`, refusing a missing top-level `.path` or fewer than two paths;
+  4. `nix-store --add-root <dir>/<n> --realise <path>` for each path;
+  5. verify every path with `nix-store --check-validity` and every link in `nix-store --gc --print-roots`, re-running from 2 at most three times, then failing with the path's name;
+  6. print the count.
+- **`$RUNNER_TEMP`.** On p620 it is `/run/github-runner/<name>/_temp`, the runner unit's `RuntimeDirectory`, visible to the daemon.
+- **Call sites.** A step right after `actions/checkout` in 12 jobs:
+  - `nightly.yml`: install, install-encrypted, keyboard-boot, microvm, install-iso-net, repush, digest;
+  - `omarchy-edge.yml`: verify;
+  - `weekly.yml`: install-stock-iso, stable-session;
+  - `release.yml`: iso;
+  - `install-check.yml`: install.
+
+  The step:
+
+  ```yaml
+  - name: Root this flake's source and inputs for the job (#1909)
+    run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
+  ```
+
+  On `digest` it also carries `continue-on-error: true`, so a rooting failure cannot suppress the digest.
+- **`checks.root-flake`.** A stubbed script half, and a coverage half that fails, naming the job, when any job whose `runs-on` is not a literal `ubuntu-*` label has a checkout not immediately followed by a step running `root-flake.sh`.
+- **Out of scope.**
+  - The host's `min-free` policy, which lives in the config repo and is the owner's call.
+  - `--no-link` outputs between two commands, and paths fetched outside `flake.lock` (IFD, `builtins.fetch*`). Both fail loudly; the spec records them.
+- **Merging.** This is a CI-gate change (§11), so the PR stays open for the owner.
 
 ## Steps
 
-1. `.github/scripts/root-flake.sh` (new, executable, `#!/usr/bin/env bash`, `set -euo pipefail`): the six behaviours in the spec's Design: mkdir, archive, walk, root, verify-and-retry, report. Verify with `bash -n`, shellcheck through `checks.shellcheck`, and the `grep -q` guard (`checks.grep-q-pipefail`).
-   Traps: `set -e` does not reach inside `$(…)`, so use `out=$(cmd) || die` (§5); a process substitution's status is lost (§4); the script must run under bash (§1).
-2. `tests/root-flake.nix` (new) plus a `checks.root-flake` entry in `flake.nix`, next to `proof-push`.
-   - **Script half.** Stubs: `nix` prints a fixture with a source, inputs, a nested input and an input named `path`. `nix-store` records `--add-root`, requires the root's directory to exist, and answers `--check-validity` and `--print-roots` from its record; it can be told to report one path invalid once, or always. Assert:
-     - every fixture path is rooted and nothing else is;
-     - a failing archive exits non-zero and roots nothing;
+1. **`.github/scripts/root-flake.sh`** (new, executable, `#!/usr/bin/env bash`, `set -euo pipefail`): the six behaviours above.
+   - Verify: `bash -n`, shellcheck, and `checks.grep-q-pipefail`.
+   - Traps: `set -e` does not reach inside `$(…)` (§5), a process substitution's status is lost (§4), and verification runs under bash (§1).
+2. **The script half of `tests/root-flake.nix`** (new), plus `checks.root-flake` in `flake.nix` next to `proof-push`.
+   - Stub `nix`: prints a fixture tree with a source, two inputs, a nested input, and an input *named* `path`. It can instead print that same valid tree and exit 1, or print a tree with inputs but no top-level `.path`.
+   - Stub `nix-store`: records `--add-root` and fails if the root's directory is missing. It answers `--check-validity` and `--print-roots` from its record, and has modes for one path invalid once, one path always invalid, one link missing from `--print-roots` once, and one missing always.
+   - Assertions:
+     - every fixture path is rooted, and nothing else;
+     - a failing archive exits non-zero, with nothing rooted;
+     - an archive with no top-level `.path` is refused;
      - a no-input archive is refused;
-     - an invalid-once path is retried and passes;
-     - an always-invalid path fails, naming it.
-   - **Coverage half.** A Python walk of `.github/workflows/*.yml` with PyYAML.
-   - Verify that `nix build .#checks.x86_64-linux.root-flake` passes, then that each of the spec's five breaks fails it.
-   Traps: in a `''` string, `''${` escapes and `\$` is literal (§5); write fixture files with `printf`, not a heredoc, if nixfmt would reindent (§5); `git add` new files before building (§5).
-3. The five workflows (`nightly.yml`, `omarchy-edge.yml`, `weekly.yml`, `release.yml`, `install-check.yml`): one step after `actions/checkout` in each of the 12 jobs, named "Root this flake's source and inputs for the job (#1909)". Verify with `checks.root-flake`'s coverage half and actionlint.
-   Traps: indentation in YAML; edge's `verify` checks out the candidate SHA, so the step goes after that checkout.
-4. A paragraph in `tests/AGENTS.md`, or CLAUDE.md §4 if it is general (it is: "a path in the store is not a path that stays there during a job"). Append to the existing cache bullet in §4 rather than adding a section (no renumbering). Verify by reading the diff.
+     - an invalid-once path and an unlisted-once link are retried and pass;
+     - an always-invalid path and an always-unlisted link fail, each naming the path.
+   - Verify: `git add`, then `nix build .#checks.x86_64-linux.root-flake` passes.
+   - Traps: in a `''` string, `''${` escapes and `\$` is literal (§5); avoid heredocs that make nixfmt reindent (§5).
+3. **The 12 call sites**, each with the YAML above, including `continue-on-error: true` on `digest`. In edge's verify, the step goes after the candidate checkout.
+   - Verify: actionlint (`nix run nixpkgs#actionlint`).
+4. **The coverage half** of `tests/root-flake.nix`: Python with PyYAML over `.github/workflows/*.yml`. It is added only now that step 3 has made the workflows pass.
+   - Verify: `nix build .#checks.x86_64-linux.root-flake` passes.
+5. **Red proofs** (§1). For each break: make the break, confirm it landed with `git diff`, build the check and watch it fail with a readable message, restore with `git checkout HEAD -- <file>`, and watch it pass again.
+   1. The walk becomes `[.. | objects | .path? // empty] | unique | .[]`. The input named `path` is then emitted as an object and rooted, so "nothing else" must fail.
+   2. The archive is read as `mapfile -t paths < <(nix flake archive --json . | jq …)`. The exit-1 valid tree is then accepted, so "failing archive" must fail.
+   3. The fewer-than-two refusal is removed, so "no-input archive" must fail.
+   4. The top-level `.path` refusal is removed, so "no top-level path" must fail.
+   5. The `--check-validity` check is removed, so "always-invalid" must fail.
+   6. The `--print-roots` check is removed, so "always-unlisted" must fail.
+   7. The step is removed from `nightly.yml`'s repush job, so coverage must fail, naming `nightly.yml: repush`.
+6. **A sentence in CLAUDE.md §4**, appended to the existing bullet "A path in the cache is not a path that stays there". A path in the store is not one that stays there during a job either, when the host auto-GCs. The bullet is extended, not added, so nothing is renumbered.
+   - Verify: read the diff.
 
 ## Tests
 
-- `nix build .#checks.x86_64-linux.root-flake` passes; each of the three breaks fails it with a readable message.
+- `checks.root-flake` passes, and each of the seven breaks in step 5 fails it, then passes again once restored.
 - Every generated check builds (`.github/scripts/generated-checks.sh`), under the build lock.
 - `nix fmt -- --ci`, statix and deadnix are clean.
-- By hand on p620: `.github/scripts/root-flake.sh /mnt/data/vmtest/flake-roots` roots all 63 paths. `nix-store --delete <source>` then refuses while the roots exist, and succeeds once the directory is removed. Then `nix flake archive .` re-creates the source.
-- After merge: `gh workflow run nightly.yml --ref main`, then confirm in that run that the root step ran in each self-hosted job. #1909 closes only after a nightly whose `repush` job ran green.
+- By hand on p620:
+  1. `.github/scripts/root-flake.sh /mnt/data/vmtest/flake-roots` roots every path;
+  2. `nix-store --delete <source>` refuses while the roots exist;
+  3. after `rm -r` of the directory, the delete succeeds;
+  4. `nix flake archive .` puts the source back.
+- After merge, which is the owner's: `gh workflow run nightly.yml --ref main`. Confirm in that run that the root step ran and passed in every self-hosted job that ran. #1909 closes only after a nightly whose `repush` job actually ran the step and passed.
 
 ## Rollback
 

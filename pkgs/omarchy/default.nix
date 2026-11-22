@@ -1835,13 +1835,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # it may have gained a callback, or fixed something we are now
                     # carrying a copy of. There is no way to notice that automatically, so
                     # the build stops and asks.
-                    echo "908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d  ${src}/default/plymouth/omarchy.script" \
-                      | sha256sum -c - > /dev/null || {
+                    # One hash per upstream script read: the tag's and older quattro's, and
+                    # quattro 196e190's faster progress and quit callback, taken into ours (#1896).
+                    case $(sha256sum < ${src}/default/plymouth/omarchy.script | cut -d' ' -f1) in
+                      908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d | e68af11fdf48a5e8ed192a87d215112862e20b136a2d8dbcf9477c0709a58100) ;;
+                      *)
                       echo "plymouth: upstream's omarchy.script changed." >&2
                       echo "plymouth: read it against nixarchy-plymouth.script, take what" >&2
                       echo "plymouth: is worth taking, then update the hash here." >&2
                       exit 1
-                    }
+                      ;;
+                    esac
 
                     # And what the script says it plays has to be what was written. The
                     # two numbers are set in different files by different tools; this is

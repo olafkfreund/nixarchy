@@ -526,4 +526,9 @@
     run = "upstream";
     reason = "runs omarchy-models-launchers to take away the launchers of image, video and music models, which Fantasi now lists itself, leaving the coding models' alone. Upstream already skips a machine without omarchy-local-ai, which is opt-in here (services.agent-local), so it holds unedited (#1896)";
   };
+  "1795285870" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "gated on omarchy-hw-match ZBook Ultra G3a 16; writes amdgpu.dcdebugmask=0x402 into /etc/limine-entry-tool.d and rebuilds the boot image with limine-mkinitcpio. The kernel command line here comes from boot.kernelParams, so a host with that laptop sets the parameter there (#1896)";
+  };
 }

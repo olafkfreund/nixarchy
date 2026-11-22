@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1909
 intent: intent/2026-11-22-1909-root-flake-sources.md
 ---

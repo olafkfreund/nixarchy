@@ -417,6 +417,9 @@ jobs:
 
       - uses: actions/checkout@v5
         if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
+      - name: Root this flake's source and inputs for the job (#1909)
+        if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
+        run: nix shell --inputs-from . nixpkgs#jq -c .github/scripts/root-flake.sh "$RUNNER_TEMP/flake-roots"
 
       # Never start an install VM while omarchy-edge's `verify` is running its
       # own on this host (#1365). The load gate in CLAUDE.md §6 admitted both

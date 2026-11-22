@@ -298,7 +298,12 @@ Two other ways a check stops checking, both found in one week:
   `build.yml` never re-pushes a path it could substitute. The nightly's
   `repush` job builds and pushes every allowlist entry the probe finds
   missing and fails only if it is still missing afterwards
-  (`.github/scripts/cache-entries.sh`).
+  (`.github/scripts/cache-entries.sh`). The local store is no different
+  during a job: p620's nix auto-GCs below `min-free`, and on 2026-11-22 a
+  repush build's own auto-GC deleted the job's unrooted flake source, so
+  evaluation failed with `path '…-source' is not valid` (#1909). Every job
+  that can land on p620 now runs `.github/scripts/root-flake.sh` right after
+  its checkout, and `checks.root-flake` fails if a new one does not.
 - **`mapfile < <(cmd)` cannot see that `cmd` failed**, and an empty list often
   reads as success. `build-unless-proven.sh` did
   `mapfile -t todo < <(already-proven.sh "$@")`: when that script died, `todo`

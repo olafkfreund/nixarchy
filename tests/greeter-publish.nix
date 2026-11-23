@@ -1,6 +1,6 @@
 { pkgs, ... }:
 # The packaged nixarchy-greeter-publish against a temporary tree (#1927). The
-# owner-mismatch case needs a second uid and is covered by greeter-theme.
+# owner-mismatch case fakes a foreign uid; greeter-theme covers a real one.
 pkgs.runCommand "greeter-publish-check"
   {
     nativeBuildInputs = [
@@ -37,6 +37,7 @@ pkgs.runCommand "greeter-publish-check"
     conf | grep -qx 'failed="#ff00ff"' || fail red
     conf | grep -q '^wallpaper="gen-[0-9]*/background.png"' || fail wallpaper
     [ -f $g/out/current/background.png ] || fail png
+    [ "$(cat $g/out/current/request)" = 1 ] || fail request
 
     # bad hex and non-string: key left out, others kept
     reset; printf 'background = "red;"\nforeground = 5\naccent = "#ffff00"\n' > $g/inbox/colors.toml
@@ -48,6 +49,8 @@ pkgs.runCommand "greeter-publish-check"
     # missing files: published, empty
     reset; $pub
     [ -n "$(cur)" ] || fail missing-published
+    [ -r $g/out/current/theme.conf ] || fail missing-readable
+    conf | grep -qx '\[General\]' || fail missing-general
     conf | grep -q wallpaper && fail missing-wallpaper
 
     # corrupt image: published without it
@@ -57,16 +60,33 @@ pkgs.runCommand "greeter-publish-check"
     conf | grep -q wallpaper && fail corrupt-wallpaper
     conf | grep -q '^background=' || fail corrupt-colors
 
-    # unsafe: current stays put
+    # SVG renamed to background: no PNG magic, published without an image
+    reset; echo "$good" > $g/inbox/colors.toml
+    echo '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>' > $g/inbox/background
+    $pub
+    [ -n "$(cur)" ] || fail svg-published
+    conf | grep -q wallpaper && fail svg-wallpaper
+    [ ! -e $g/out/current/background.png ] || fail svg-png
+    conf | grep -q '^background=' || fail svg-colors
+
+    # files owned by another uid: defaults, an empty generation
+    reset; echo "$good" > $g/inbox/colors.toml; cp blue.png $g/inbox/background
+    NIXARCHY_GREETER_UID=$(( $(id -u) + 1 )) $pub
+    [ -n "$(cur)" ] || fail owner-published
+    [ "$(conf)" = "[General]" ] || fail "owner-defaults: $(conf)"
+    [ ! -s $g/out/current/request ] || fail owner-request
+    [ ! -e $g/out/current/background.png ] || fail owner-png
+
+    # unsafe: current stays put, and stderr says why
     reset; echo "$good" > $g/inbox/colors.toml; $pub; echo 'background = "#000000"' > $g/inbox/colors.toml
     ln -s /nonexistent $g/inbox/background  # symlink
-    first=$(cur); $pub; [ "$(cur)" = "$first" ] || fail symlink
+    first=$(cur); $pub 2>err; [ "$(cur)" = "$first" ] || fail symlink; grep -q "^nixarchy-greeter-publish:" err || fail symlink-stderr
     rm $g/inbox/background; mkfifo $g/inbox/background
-    timeout 100 $pub; [ "$(cur)" = "$first" ] || fail fifo
+    timeout 100 $pub 2>err; [ "$(cur)" = "$first" ] || fail fifo; grep -q "^nixarchy-greeter-publish:" err || fail fifo-stderr
     rm $g/inbox/background; truncate -s 51M $g/inbox/background
-    $pub; [ "$(cur)" = "$first" ] || fail oversized
+    $pub 2>err; [ "$(cur)" = "$first" ] || fail oversized; grep -q "^nixarchy-greeter-publish:" err || fail oversized-stderr
     rm $g/inbox/background; echo 'not = = toml' > $g/inbox/colors.toml
-    $pub; [ "$(cur)" = "$first" ] || fail toml-error
+    $pub 2>err; [ "$(cur)" = "$first" ] || fail toml-error; grep -q "^nixarchy-greeter-publish:" err || fail toml-error-stderr
 
     # JPEG becomes a PNG within 3840x2160; GIF gives one PNG
     reset; cp big.jpg $g/inbox/background; $pub

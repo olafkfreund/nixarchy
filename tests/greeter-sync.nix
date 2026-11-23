@@ -1,7 +1,7 @@
 { pkgs, ... }:
 # The packaged nixarchy-greeter-sync against a temporary inbox and a fake HOME
 # (#1927). The publisher side is tests/greeter-publish.nix.
-pkgs.runCommand "greeter-sync-check" { nativeBuildInputs = [ pkgs.coreutils ]; } ''
+pkgs.runCommand "greeter-sync-check" { nativeBuildInputs = [ pkgs.coreutils pkgs.util-linux ]; } ''
   sync=${pkgs.nixarchy-greeter-sync}/bin/nixarchy-greeter-sync
   export HOME=$PWD/home XDG_RUNTIME_DIR=$PWD/run NIXARCHY_GREETER_DIR=$PWD/g
   state=$HOME/.local/state/omarchy/current
@@ -44,12 +44,28 @@ pkgs.runCommand "greeter-sync-check" { nativeBuildInputs = [ pkgs.coreutils ]; }
   $sync
   [ "$(ready)" != "$old" ] || fail ready-replaced
 
-  # two runs together: the final inbox matches the last theme
+  # two runs together: run the raw script with a slow fake `install` first on
+  # PATH (the packaged one prefixes its own coreutils), which flags any overlap.
+  mkdir fake; cat > fake/install <<EOF
+  #!${pkgs.runtimeShell}
+  if ! mkdir $PWD/busy 2>/dev/null; then touch $PWD/overlap; fi
+  sleep 0.3
+  rmdir $PWD/busy 2>/dev/null || true
+  exec ${pkgs.coreutils}/bin/install "\$@"
+  EOF
+  chmod +x fake/install
+  rawsync() { PATH=$PWD/fake:${pkgs.coreutils}/bin:${pkgs.util-linux}/bin ${pkgs.runtimeShell} ${../pkgs/nixarchy-greeter-sync.sh}; }
   echo 'background = "#aaaaaa"' > $state/theme/colors.toml
-  $sync & $sync & wait
+  rawsync & p1=$!
+  rawsync & p2=$!
+  wait $p1 || fail concurrent-exit-1
+  wait $p2 || fail concurrent-exit-2
+  [ ! -e overlap ] || fail concurrent-overlap
+  grep -q aaaaaa $inbox/colors.toml || fail concurrent-result
+  [ -z "$(ls -A $inbox | grep '^\.tmp')" ] || fail concurrent-tmp
   echo 'background = "#bbbbbb"' > $state/theme/colors.toml
   $sync
-  grep -q bbbbbb $inbox/colors.toml || fail concurrent
+  grep -q bbbbbb $inbox/colors.toml || fail serial-after
 
   # missing inbox: exit 0, nothing created
   NIXARCHY_GREETER_DIR=$PWD/none $sync || fail missing-inbox-exit

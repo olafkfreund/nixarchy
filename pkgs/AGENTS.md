@@ -1673,3 +1673,18 @@ not have: SDDM runs as `display-manager.service`, so the script would exit 0 on
 every resume. The patch renames both calls. The tag and edge before ebd2974 ship
 neither the script nor its sleep drop-ins; drop-ins without the script fail the
 build, since that is a rename the hook in `modules/nixos.nix` would miss.
+
+## The keybindings menu drops undescribed submap binds
+
+`omarchy-menu-keybindings` lists every bind Hyprland reports. A hint plugin
+registers about 2,800 undescribed binds in non-default submaps, and the list
+then exceeds the 128 KiB single-argument limit that `omarchy-menu-select`
+hands to perl and omarchy-shell, so the menu never opens. The package drops a
+bind that is in a non-default submap and has no description.
+
+Because the output changes, the script's cache tag is rewritten to
+`v<N>-submaps`, so a cache written by the unpatched script is not reused. The
+tag moves with upstream (v19 on the tag pin, v22 on quattro 9b695d7). The
+build fails with "cache tag moved" when no listed version matched, so a new
+tag has to be added to the loop rather than silently missed.
+

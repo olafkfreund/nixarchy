@@ -479,17 +479,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # CARRIED (#1192): the panel Loader's error handler called a function Qt 6's Loader lacks.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1192-panel-loader-errorstring.patch}
 
-                    # Drop undescribed binds in non-default submaps (a hint plugin registers
-                    # ~2,800): the list otherwise exceeds the 128 KiB single-argument limit
-                    # omarchy-menu-select hands to perl and omarchy-shell, so the menu never opens.
+                    # Why: pkgs/AGENTS.md#the-keybindings-menu-drops-undescribed-submap-binds
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
                       --replace-fail '      if (!seen) return' '      if (!seen) return
-      if (f["submap"] != "" && f["description"] == "") { seen = 0; return }' \
-                      --replace-quiet "printf 'v19\\n'" "printf 'v19-submaps\\n'" \
-                      --replace-quiet "printf 'v20\\n'" "printf 'v20-submaps\\n'" \
-                      --replace-quiet "printf 'v21\\n'" "printf 'v21-submaps\\n'" \
-                      --replace-quiet "printf 'v22\\n'" "printf 'v22-submaps\\n'"
-                    # The tag pin says v19, quattro v22: one of them must have matched.
+      if (f["submap"] != "" && f["description"] == "") { seen = 0; return }'
+                    # The tag pin says v19, quattro v22: one of them must match.
+                    for v in 19 20 21 22; do
+                      substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings --replace-quiet "printf 'v$v\\n'" "printf 'v$v-submaps\\n'"
+                    done
                     grep -q "printf 'v[0-9]*-submaps" $out/share/omarchy/bin/omarchy-menu-keybindings \
                       || { echo "omarchy-menu-keybindings: cache tag moved; update the -submaps tag" >&2; exit 1; }
                     # Summoned from a key bind, the menu reaches the screen after omarchy-shell's
@@ -1158,7 +1155,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     menu=$out/share/omarchy/default/omarchy/omarchy-menu.jsonc
                     # Each id is its own command; antigravity is the one that differs.
                     # Why: pkgs/AGENTS.md#default-agent-menu-commands-use-the-id
-                    # Quattro dropped the Agent menu (#19785); check-menu.py fails a half-removed one.
+                    # No Agent menu on quattro (#19785).
                     if grep -qF '== \"claude\" ]]' $menu; then
                       for a in agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen; do
                         substituteInPlace $menu \

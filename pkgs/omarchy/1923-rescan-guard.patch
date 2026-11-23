@@ -1,0 +1,23 @@
+nixarchy #1923: the shell's rescanPlugins() waits for a running scan check too.
+
+CARRIED, quattro (edge) only: quattro's shell.qml has a rescanPlugins()
+function that queues a rescan while a scan runs. With 1923-reaper-check.patch
+a check can be running instead, so it tests `checking` as well. Omarchy v4.5.0
+has no such function (its IPC rescanPlugins calls reloadPlugins, which
+1923-reaper-check.patch already guards), so default.nix applies this only when
+shell.qml has the shell-level rescanPlugins(). Drop it with 1923-reaper-check.patch.
+
+Applied right after 1923-reaper-check.patch. --fuzz=0.
+
+diff -ru a/shell/shell.qml b/shell/shell.qml
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -1573,7 +1573,7 @@
+   // plugin's panel (Superwhisper's setup) otherwise closed the menu and
+   // blanked the wallpaper.
+   function rescanPlugins() {
+-    if (shell.pluginReloading || shell.pluginRegistry.scanning) {
++    if (shell.pluginReloading || (shell.pluginRegistry.scanning || shell.pluginRegistry.checking)) {
+       shell.pluginRescanPending = true
+       return
+     }

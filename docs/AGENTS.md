@@ -141,7 +141,9 @@ Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
   -format '%w' info:` fails with *"no decode delegate for this image format
   `INFO'"*. One output per call: use `identify` for the first number.
 - **A GIF's frames are deltas.** `magick a.gif[30] out.png` gives the changed
-  rectangle, not the frame a viewer sees. `-coalesce` first.
+  rectangle, not the frame a viewer sees. `-coalesce` first. The same goes
+  for `identify`: `%wx%h` on #1921's 900×563 GIF read 578×430 for its second
+  frame; check the canvas with `-format '%Wx%H'`.
 - **`find` does not follow `result`.** The same trap as AGENTS.md §5, and the
   reason `readme-counts.sh` once counted zero skills.
 
@@ -161,6 +163,12 @@ Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
   caption text was on screen, but `verify-frames.sh` couldn't read it.
   Panels on this site take about 64–80% of the frame. Fix the size, not
   the `--expect`.
+- **OCR a composite through the panel, not the whole frame.** On the full
+  1280×800 still, tesseract read no repository name from #1921's list,
+  although every name was legible: the wallpaper around the card disturbs
+  its layout analysis. Crop to the card, upscale 3× and invert, and make a
+  gate fail when an image yields no names at all, or it passes on
+  silence.
 
 ## Status claims age badly
 

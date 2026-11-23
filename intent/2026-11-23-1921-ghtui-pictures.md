@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1921
 author: olafkfreund
 ---
@@ -67,3 +67,8 @@ and the `p` sentence and the provenance line are there.
    intent/spec/plan files. Leave
    `nixarchy-ghtui` at `cdc49ac` (recommended: no package change), or bump it
    so the pin matches the source of the pictures?
+
+## Decisions (at approval)
+
+1. Add the pull-request still.
+2. Leave the `nixarchy-ghtui` pin at `cdc49ac`.

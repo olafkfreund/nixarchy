@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/7b74559b5449af7487c6b4a5bd31378fca8ac515";
+      url = "github:0xc000022070/zen-browser-flake/1ac6ed0bb28e7e098fa27cf9624b33d74bd4b3bd";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -234,7 +234,7 @@
     # Why: docs/internals/flake.md#the-github-actions-panel-on-by-default-772
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-ghtui = {
-      url = "github:olafkfreund/nixarchy-ghtui/53b1b0acaeb82d6ac513ce79950b915a60486da7";
+      url = "github:olafkfreund/nixarchy-ghtui/afd875d90d70c23eea6ecb0ab7bae30a5e0e2c26";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

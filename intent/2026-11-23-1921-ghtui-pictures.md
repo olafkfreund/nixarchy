@@ -25,19 +25,29 @@ razer at the theme text size:
   request expanded to its four passing checks.
 
 Every image was checked by OCR and by eye to show only public repositories.
+The header shows the panel's account label `olafkfreund@github.com` (login
+at host, not an email address) and account-level counts (123 repositories,
+58 open pull requests, API points left). The ten repositories named in the
+stills are public (`gh repo view`, 2026-11-23).
 
 ## Proposed outcome
 
-The section shows the new GIF, the list and steps stills, and the
-pull-request still, with alt text that describes each, and one sentence
-saying `p` switches to open pull requests. The page reads correctly on
-https://olafkfreund.github.io/nixarchy/manual/plugins.
+The section shows the new GIF, the list and steps stills, and (question 1)
+the pull-request still, with alt text that matches each capture (the list has one
+running workflow; the steps are `omarchy-edge` → `prepare`, not `install`),
+and one sentence saying `p` switches to open pull requests. The sentence
+"with running workflows first" becomes "failing repositories first, then
+running ones", as the panel sorts and ghtui's README says. Checked by: all
+four images load on https://olafkfreund.github.io/nixarchy/manual/plugins,
+and the `p` sentence and the provenance line are there.
 
 ## Affected users and systems
 
 - `docs/manual/plugins.md` and `docs/img/{features,plugins}/`: three files
-  replaced, one added. GitHub Pages build.
-- No module, package, pin or host change.
+  replaced, one added (question 1). GitHub Pages build. No other file links
+  these images (`git grep`, outside intent/spec/plan), and `docs/llms.txt`
+  already says the page has screenshots.
+- No module, package or host change; no pin change unless question 2 says so.
 
 ## Constraints
 
@@ -53,6 +63,7 @@ https://olafkfreund.github.io/nixarchy/manual/plugins.
 
 1. **Pull-request still.** Add it (recommended: it is the feature v1.3.0
    brought), or keep the section to the three existing pictures?
-2. **Pin bump.** `21cdd23` changes only ghtui's README and images. Leave
+2. **Pin bump.** `21cdd23` changes only ghtui's README, images and its own
+   intent/spec/plan files. Leave
    `nixarchy-ghtui` at `cdc49ac` (recommended: no package change), or bump it
    so the pin matches the source of the pictures?

@@ -35,17 +35,25 @@ intent: intent/2026-11-23-1921-ghtui-pictures.md
 
 ### 1. Compose from the ghtui `21cdd23` files
 
-One scratchpad script (`compose.sh`, not committed, as in #889):
+One scratchpad script (`compose.sh`, not committed, as in #889). Each card
+is resampled **once**, straight into the output frame, at #889's placement
+(900×680 at (250,97) on a 1400×875 canvas, i.e. 64% of the width):
 
-- Backdrop: `00-desktop.jpg` cropped to 1400×875, centred.
-- Card: cut at its border (the files already are), rounded corners at the
-  theme radius, soft shadow, centred at (250,97) on the canvas at 900×680
-  (#889's placement). The GIF's 680×514 frames are scaled up to 900×680
-  before placing, so the published card is the same size as today's; the
-  whole frame is then scaled to 900×563 (net 680→579 px, a downscale).
-- GIF: the source GIF (66 frames, 9.43 s) re-sampled to 4 fps, encoded per `tests/demo/encode-gif.sh` rules: 900×563, lanczos,
-  `palettegen=max_colors=96:stats_mode=diff`, under 1 MB.
-- Stills: `github-actions-{list,steps,prs}.webp` composed at 1280×800.
+- Backdrop: `00-desktop.jpg` cropped to 16:10 (1400×875, centred), then
+  scaled once to the output size (900×563 for the GIF, 1280×800 for stills).
+- Card: already cut at its border. Corners stay **square**: Gruvbox's radius
+  is 0, and #889 decided that rounding the card would misstate the theme; the
+  Gruvbox card on the Tokyo Night backdrop is #889's approved exception,
+  carried over. Soft shadow as in #889.
+- GIF: each 680×514 frame scaled once to 579×437, overlaid at (161,62) on the
+  900×563 backdrop. Source timing kept (coalesced frames with their own
+  delays), then `fps=4`; backdrop input read at `-framerate 4`;
+  `mpdecimate` with `-fps_mode vfr` so holds become longer frames;
+  `palettegen=max_colors=96:stats_mode=diff`, `paletteuse=dither=bayer`,
+  lanczos (the `tests/demo/encode-gif.sh` and #889 recipe).
+- Stills: each 900×680 WebP scaled once to 823×622, overlaid at (229,89) on
+  the 1280×800 backdrop, written as WebP at quality 90 (the sources are
+  already lossy; one more high-quality generation).
 
 ### 2. Publish on the plugins page
 
@@ -54,57 +62,73 @@ In `docs/manual/plugins.md` (`## GitHub Actions`, lines 216-237):
 - Replace `docs/img/features/github-actions.gif` and
   `docs/img/plugins/github-actions-{list,steps}.webp`; add
   `docs/img/plugins/github-actions-prs.webp` after the steps still.
-- Alt text, from ghtui's README and checked against each capture:
-  - GIF: *The GitHub Actions panel opening filtered to olafkfreund/nixarchy,
-    then drilling into a running workflow down to the steps of its prepare
-    job and back out*
+- Alt text, checked against each capture:
+  - GIF: *The GitHub Actions panel filtered to olafkfreund/nixarchy,
+    drilling into a running omarchy-edge workflow down to the steps of its
+    prepare job and back out*
   - list: *Repositories matching nixarchy, the one with a running workflow
     first*
   - steps: *A running omarchy-edge run expanded to its prepare job, and the
     job to its steps*
   - prs: *The pull-request view for olafkfreund/nixarchy-hyprflip, with pull
     request #12 expanded to its four passing status checks*
-- Text: "with running workflows first" → "failing repositories first, then
-  running ones"; add "**p** switches to open pull requests and their status
-  checks." before the stills.
+- "What it does" paragraph: "with running workflows first" (wrapped over
+  lines 222-223) becomes "failing repositories first, then running ones",
+  and the paragraph ends with "**p** switches to open pull requests and
+  their status checks."
 - The provenance line stays as it is.
 
-No pin change (intent decision 2).
+No pin change (intent decision 2). On approval of this spec, the intent's
+"copied byte-for-byte" constraint is amended to "composed from" in the same
+commit, citing `docs/AGENTS.md`.
 
 ## Alternatives rejected
 
 - **Ship the card crops as they are** (the intent's wording): breaks
   `docs/AGENTS.md`; #797 is the precedent for correcting exactly that.
+- **Upscale the GIF card to 900×680 first, as #889 placed it:** two
+  non-integer resamples soften text; one downscale gives the same layout.
 - **Re-record on razer at the house sizes:** disrupts razer's desktop again
-  (ai-mirror control, a GIF take) for a sharper source; the composite is a
-  downscale of the existing files, so it isn't needed.
+  for a sharper source that the composite, a downscale, doesn't need.
 - **Composite only the stills and keep today's GIF:** the old GIF shows the
   pre-1.3 text size, which is what the issue is about.
 
 ## Risks
 
-- **OCR on the GIF:** the source GIF is already 680 px and 256-colour;
-  re-palettising onto a gradient may soften text. `verify-frames.sh` is the
-  gate; if it can't read the expected words, fall back to placing the card
-  larger (as #889's deviation did) and record it in the plan.
-- **Size:** a backdrop gradient costs bytes; the 96-colour cap and
-  `mpdecimate` kept #889's 46.75 s take at 1,020,375 bytes, just under the
-  1,048,576 limit. The new take is 9.43 s, so it should fit easily; if not, cap
-  colours lower, never below 4 fps or 900 px.
-- **Privacy:** compositing adds only the stock backdrop. The same allow-list
-  OCR check runs on the composites (every `owner/name` must be one of the
-  public repositories already checked), plus a check by eye.
+- **OCR on the GIF:** the card ends up 579 px wide from a 256-colour source.
+  #889 needed 64% width for OCR and this keeps it. If `verify-frames.sh`
+  still can't read the expected words, place the card larger and record the
+  deviation in the plan.
+- **Timing:** the source GIF has variable delays (66 frames, 9.43 s). Brief
+  states could be dropped at 4 fps; the steps view is held for 13 frames
+  (OCR of source frames 35-47 shows "Set up job"), so it survives.
+- **Size:** #889's 46.75 s take was 1,020,375 bytes; this one is 9.43 s. If it
+  is over anyway, `verify-frames.sh` says cut the scene, not the encoding:
+  never below 96 colours, 4 fps or 900 px.
+- **Privacy:** compositing adds only the stock backdrop. The OCR allow-list
+  check covers every distinct GIF frame and the three stills.
 - No module, package or host is touched; nothing to deploy.
 
 ## Verification
 
-- `magick identify`: GIF 900×563, stills 1280×800; `stat`: GIF under 1 MB.
+- `magick identify`: GIF 900×563, stills 1280×800. Frame delays ≥ 25 cs
+  (4 fps, longer for merged holds).
 - `tests/demo/verify-frames.sh docs/img/features/github-actions.gif
-  --max-bytes 1048576 --expect 'olafkfreund/nixarchy' --expect
-  'prepare|omarchy-edge' --expect 'running|in_progress'` passes.
-- OCR allow-list check on GIF frames (2 fps) and the three stills finds no
-  repository outside the public list; frames and stills checked by eye.
-- `grep` shows the four image paths and the `p` sentence in the section, and
-  no "running workflows first".
-- The PR's checks are green; after merge (Pages deploys from `main`), `curl` returns 200 for
-  each image URL under https://olafkfreund.github.io/nixarchy/.
+  --max-bytes 1048575 --expect 'olafkfreund/nixarchy' --expect 'prepare'
+  --expect 'Set up job' --dump $SCRATCH/vf` passes (`Set up job` only
+  appears once a job is expanded to its steps).
+- The dumped frames, viewed in order, show list → steps → back to the list.
+- OCR allow-list: every `olafkfreund/<name>` read from each distinct GIF frame
+  and the three stills is one of the ten public repositories checked in the
+  intent. Action references (`actions/checkout`, `cachix/cachix-action`) and
+  the upstream `thisisgm/flea` in a description are not account repositories
+  and are excluded by matching only `olafkfreund/`. Checked by eye as well.
+- Text, with whitespace collapsed (the old phrase wraps):
+  `tr -s ' \n' ' '` of the section contains the four image paths, the `p`
+  sentence and "failing repositories first", and not "running workflows
+  first". The same command run before the edit finds the old phrase, so the
+  check can fail.
+- The PR's checks are green. After merge (Pages deploys from `main`), the
+  page https://olafkfreund.github.io/nixarchy/manual/plugins#github-actions
+  references all four images, each image URL returns 200 with `curl`, and
+  the `p` sentence and provenance line are on the page.

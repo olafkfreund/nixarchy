@@ -1449,6 +1449,34 @@ The comment lives here, not in installPhase, because
 installPhase is measured by checks.install-phase-budget
 (#997): this text tipped the edge build over it.
 
+## The watcher reaper checks the scan (#1923)
+
+1923-reaper-check.patch (CARRIED): the watcher reaper's
+exit re-ran every plugin sync; it now only checks the
+scan. It is the last of the shell.qml and
+PluginRegistry.qml edits in default.nix, because its
+context is their result.
+
+1923-rescan-guard.patch applies only where shell.qml has
+the shell-level rescanPlugins() (quattro); v4.5.0 has
+none, so a grep decides. Both drop together.
+
+## refresh_shell_config has no rescanPlugins fallback (#901)
+
+After every external shell.json write (omarchy bar, Bar
+Folder layout.sh), refresh_shell_config sends
+reloadConfig. If the shell missed the 2 s IPC timeout,
+which a shell still rebuilding its bar from the previous
+save does, it fell back to rescanPlugins: a reload of
+every plugin. The shell applies the write through its own
+file watch anyway (proven under QS_DISABLE_FILE_WATCHER=1),
+so the fallback only ever added a full reload. CARRIED, and
+meant to be dropped with the rest of #901 once upstream
+fixes it. The whole function is the needle, so a reworded
+one fails the build. It is built with printf, not a
+multi-line literal: see "A long build phase is one indented
+string, and it strips one indent" above.
+
 <a id="fcitx5-packaged-png-glyphs-1688"></a>
 
 ## Fcitx5 packaged PNG glyphs (#1688)

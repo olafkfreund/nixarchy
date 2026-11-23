@@ -52,7 +52,9 @@ and the `p` sentence and the provenance line are there.
 ## Constraints
 
 - Only public repositories and no personal desktop content in any image.
-  Files are copied byte-for-byte from nixarchy-ghtui `21cdd23`, not re-cropped.
+  Files are composed from nixarchy-ghtui `21cdd23` onto the default desktop,
+  as `docs/AGENTS.md` requires (amended at spec approval; was "copied
+  byte-for-byte").
 - Keep the site's conventions: the GIF in `docs/img/features/`, WebP stills in
   `docs/img/plugins/`, alt text describing what happens.
 - Keep the provenance line ("Recorded on an authenticated desktop, in

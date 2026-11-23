@@ -142,6 +142,10 @@ Alt text:
    intent, spec and plan, saying step 1 was Codex and step 3 agy → verify
    the PR's checks are green and the four image URLs on the branch return
    200 (`raw.githubusercontent.com`).
+   **Added at implementation:** the PR template asks for general lessons
+   in `AGENTS.md` in the same PR, so `docs/AGENTS.md` "ffmpeg compositing
+   traps" gains two: OCR through the panel, not the whole frame, and GIF
+   update rectangles versus the canvas.
 5. **After merge** (lead, on your "merge"). Once Pages deploys,
    https://olafkfreund.github.io/nixarchy/manual/plugins#github-actions
    references the four images, each returns 200 with `curl`, and the `p`

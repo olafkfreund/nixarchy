@@ -161,6 +161,15 @@ Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
   caption text was on screen, but `verify-frames.sh` couldn't read it.
   Panels on this site take about 64–80% of the frame. Fix the size, not
   the `--expect`.
+- **OCR a composite through the panel, not the whole frame.** On the full
+  1280×800 still, tesseract read no repository name from #1921's list,
+  although every name was legible: the wallpaper around the card disturbs
+  its layout analysis. Crop to the card, upscale 3× and invert, and make a
+  gate fail when an image yields no names at all, or it passes on
+  silence.
+- **`magick identify` reports a GIF's update rectangles, not its frames.**
+  ffmpeg stores later frames as the region that changed, so frame 2 of a
+  900×563 GIF can read 578×427. Check the canvas with `-format '%Wx%H'`.
 
 ## Status claims age badly
 

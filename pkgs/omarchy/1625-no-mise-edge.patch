@@ -153,7 +153,7 @@
 -      path+="${path:+:}$dir"
 -    fi
 -  done
--  ! PATH=$path type -P "$provider" >/dev/null
+-  ! PATH=$path type -P "$harness" >/dev/null
 -}
 -
 -if cli_missing; then
@@ -163,8 +163,8 @@
 -  else
 -    install_cli env MISE_MINIMUM_RELEASE_AGE=0 mise use -g "$package"
 -  fi || fail "$(omarchy-i18n agents.installCliFailed "$name")"
-+if PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$provider"; then
-+  fail "$name is not installed. Install it with: omarchy default agent $provider"
++if PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$harness"; then
++  fail "$name is not installed. Install it with: omarchy default agent $harness"
  fi
  
  # Your main browser is almost certainly signed in to the account you already

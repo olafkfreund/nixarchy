@@ -9,7 +9,10 @@ t = re.sub(r",(\s*[}\]])", r"\1", t)
 d = json.loads(t)
 harness = [k for k in d if k.startswith("agent.harness.") and k.count(".") == 2]
 legacy = [k for k in d if k.startswith("setup.default.agent.") and k.count(".") == 3]
-if bool(harness) == bool(legacy):
+# Quattro removed the Agent menu (upstream #19785). Zero rows is legal only
+# when no agent.* key is left at all; a half-removed menu still fails.
+gone = not harness and not legacy and not any(k.startswith("agent.") for k in d)
+if bool(harness) == bool(legacy) and not gone:
     sys.exit(
         "expected agent rows under exactly one of agent.harness.* or "
         "setup.default.agent.* (got %d and %d)" % (len(harness), len(legacy))
@@ -64,7 +67,7 @@ if unknown:
         "menu rows name agents omarchy-default-agent rejects: %s\n"
         "  it accepts: %s" % (unknown, sorted(accepted))
     )
-if prefix + "agy" not in agents:
+if not gone and prefix + "agy" not in agents:
     sys.exit("the Antigravity (agy) row did not survive")
 ask = [k for k in d if k.startswith("trigger.ask")]
 if len(ask) < 10:

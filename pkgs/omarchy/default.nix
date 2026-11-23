@@ -487,8 +487,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       if (f["submap"] != "" && f["description"] == "") { seen = 0; return }' \
                       --replace-quiet "printf 'v19\\n'" "printf 'v19-submaps\\n'" \
                       --replace-quiet "printf 'v20\\n'" "printf 'v20-submaps\\n'" \
-                      --replace-quiet "printf 'v21\\n'" "printf 'v21-submaps\\n'"
-                    # The tag pin says v19, quattro v21: one of them must have matched.
+                      --replace-quiet "printf 'v21\\n'" "printf 'v21-submaps\\n'" \
+                      --replace-quiet "printf 'v22\\n'" "printf 'v22-submaps\\n'"
+                    # The tag pin says v19, quattro v22: one of them must have matched.
                     grep -q "printf 'v[0-9]*-submaps" $out/share/omarchy/bin/omarchy-menu-keybindings \
                       || { echo "omarchy-menu-keybindings: cache tag moved; update the -submaps tag" >&2; exit 1; }
                     # Summoned from a key bind, the menu reaches the screen after omarchy-shell's
@@ -1157,10 +1158,22 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     menu=$out/share/omarchy/default/omarchy/omarchy-menu.jsonc
                     # Each id is its own command; antigravity is the one that differs.
                     # Why: pkgs/AGENTS.md#default-agent-menu-commands-use-the-id
-                    for a in agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen; do
-                      substituteInPlace $menu \
-                        --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"
-                    done
+                    # Quattro dropped the Agent menu (upstream #19785); the tag still has it.
+                    # All rows or none: a partial removal must still fail the build.
+                    agents="agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen"
+                    if grep -qF '== \"claude\" ]]' $menu; then
+                      for a in $agents; do
+                        substituteInPlace $menu \
+                          --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"
+                      done
+                    else
+                      for a in $agents; do
+                        if grep -qF "== \\\"$a\\\" ]]" $menu; then
+                          echo "omarchy-menu.jsonc: agent row $a survives without claude's; re-check the Agent menu" >&2
+                          exit 1
+                        fi
+                      done
+                    fi
 
                     # quattro ships its own Antigravity row, id agy, which the loop above
                     # install-checks like every other agent.

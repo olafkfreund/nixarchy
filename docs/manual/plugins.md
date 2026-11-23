@@ -219,20 +219,23 @@ on, and `nixarchy dev …` is the same tool in a terminal.
 **What it solves.** The same as [GitLab pipelines](#gitlab-pipelines), for
 GitHub: CI across your repositories without a browser tab for each.
 
-**What it does.** Repositories → workflow runs → jobs → steps, with running
-workflows first, through `gh`, which nixarchy installs with it. Run
-`gh auth login` once; until you do, the panel says so and stops polling. Its
-keys are on **Super+Ctrl+Alt+A**.
+**What it does.** Repositories → workflow runs → jobs → steps, failing
+repositories first, then running ones, through `gh`, which nixarchy installs
+with it. Run `gh auth login` once; until you do, the panel says so and stops
+polling. Its keys are on **Super+Ctrl+Alt+A**. **p** switches to open pull
+requests and their status checks.
 
 **If you installed it by hand before,** remove your copy before switching:
 `rm -rf ~/.config/omarchy/plugins/olafkfreund.github-actions`. nixarchy won't
 replace a real directory. It stays enabled, and the managed copy takes over.
 
-![The GitHub Actions panel opening on a search for nixarchy, narrowing it, then following a running workflow down to the steps of its install job and back out](../img/features/github-actions.gif)
+![The GitHub Actions panel filtered to olafkfreund/nixarchy, drilling into a running omarchy-edge workflow down to the steps of its prepare job and back out](../img/features/github-actions.gif)
 
-![Repositories matching nixarchy, the one with two running workflows first](../img/plugins/github-actions-list.webp)
+![Repositories matching nixarchy, the one with a running workflow first](../img/plugins/github-actions-list.webp)
 
-![A running install check expanded to its jobs, and the install job to its eight steps with their status and timers](../img/plugins/github-actions-steps.webp)
+![A running omarchy-edge run expanded to its prepare job, and the job to its steps](../img/plugins/github-actions-steps.webp)
+
+![The pull-request view for olafkfreund/nixarchy-hyprflip, with pull request #12 expanded to its four passing status checks](../img/plugins/github-actions-prs.webp)
 
 *Recorded on an authenticated desktop, in Gruvbox, showing public repositories only.*
 

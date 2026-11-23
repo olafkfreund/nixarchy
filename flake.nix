@@ -1998,6 +1998,9 @@
             # tests/package-delta.nix.
             "package-delta"
             "patched-files"
+            # The greeter's theme sync and publisher, over fixtures (#1927).
+            "greeter-sync"
+            "greeter-publish"
             # Every package Omarchy installs has a decision in data/omarchy-packages.nix (#1572).
             "omarchy-package-ledger"
             # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
@@ -2068,6 +2071,12 @@
           # discovered by whoever rebuilt first with services.nixi.enable on.
           # Cheap: nothing compiles, the derivation places files.
           nixi = self.packages.${system}.nixi;
+
+          # The SDDM greeter follows the theme, through the real greeter (#1927).
+          greeter-theme = import ./tests/greeter-theme.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
 
           # Why: tests/AGENTS.md#a-test-script-over-128-kib-breaks-the-stable-driver
           session =

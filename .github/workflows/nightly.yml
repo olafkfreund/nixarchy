@@ -198,8 +198,13 @@ jobs:
           # carries coreutils but not gawk, so the first real nightly died
           # here with `awk: command not found` and exit 127 -- after the ISO
           # had built perfectly well. Bash can split two fields by itself.
-          read -r _ closure < <(nix path-info -Sh \
+          # Build first: `nix path-info` does not build, and a toplevel the
+          # store has dropped is "not valid" (#1917). Capture, then split:
+          # a process substitution hides the command's failure (CLAUDE.md §4).
+          top=$(nix build --no-link --print-out-paths \
             .#nixosConfigurations.reference.config.system.build.toplevel)
+          info=$(nix path-info -Sh "$top")
+          read -r _ closure <<<"$info"
           printf '| | |\n|---|---|\n| ISO | %s |\n| closure | %s |\n| store path | %s |\n' \
             "$size" "$closure" "$iso" | tee -a "$GITHUB_STEP_SUMMARY"
 

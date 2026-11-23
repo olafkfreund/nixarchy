@@ -2007,6 +2007,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace $out/share/omarchy/shell/shell.qml \
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
 
+                    # CARRIED (#1923): the watcher reaper's exit re-ran every plugin sync; it now only checks the scan.
+                    # Last of the shell.qml and PluginRegistry.qml edits: its context is their result.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-reaper-check.patch}
+                    # Only where shell.qml has the shell-level rescanPlugins() (quattro); v4.5.0 has none.
+                    if grep -q '^  function rescanPlugins() {$' "$out/share/omarchy/shell/shell.qml"; then
+                      patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-rescan-guard.patch}
+                    fi
+
                     # Why: pkgs/AGENTS.md#the-menu-asks-pacman-and-ignores-disabled-1301
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/MenuModel.js \
                       --replace-fail "$(cat ${./1301-pkg-has.old.js})" "$(cat ${./1301-pkg-has.new.js})"

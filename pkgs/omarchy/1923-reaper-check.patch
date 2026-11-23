@@ -1,0 +1,112 @@
+nixarchy #1923: a watcher reaper's exit checks the plugin scan, it no longer repeats it.
+
+CARRIED: the PluginRegistry watcher reaper's exit called registry.rescan(), a
+second full scan at login that re-ran every sync and held desktopReady false.
+This makes that rescan a check: it byte-compares the scan output with the last
+successful scan and, when nothing changed, emits only scanFinished. It came
+from olafkfreund/nixos_config#3181. Drop it when omacom/omarchy changes the
+reaper rescan path.
+
+Applied AFTER every other edit to shell/shell.qml and
+shell/services/PluginRegistry.qml in default.nix: its context is the tree they
+leave. --fuzz=0, so a reworded upstream block fails this build and says so.
+
+
+diff -ru a/shell/services/PluginRegistry.qml b/shell/services/PluginRegistry.qml
+--- a/shell/services/PluginRegistry.qml
++++ b/shell/services/PluginRegistry.qml
+@@ -24,6 +24,11 @@
+   property var installedPlugins: ({})
+   property int registryRevision: 0
+   property bool scanning: false
++  property bool checking: false
++  property bool hasScanOutput: false
++  property string lastScanOutput: ""
++  property bool lastScanSkipped: false
++  property bool _checkRun: false
+   property string lastEnableError: ""
+ 
+   signal pluginsChanged()
+@@ -677,6 +682,18 @@
+   property Process scanProcess: Process {
+     onExited: function(exitCode) {
+       var output = scanStdout.text || ""
++      var wasCheck = _checkRun
++      _checkRun = false
++      if (wasCheck && exitCode === 0 && output === lastScanOutput) {
++        lastScanSkipped = true
++        checking = false
++        scanFinished()
++        return
++      }
++      if (wasCheck) { scanning = true; checking = false }
++      lastScanSkipped = false
++      hasScanOutput = exitCode === 0
++      lastScanOutput = exitCode === 0 ? output : ""
+       registry.parseScanOutput(output)
+     }
+     stdout: StdioCollector {
+@@ -700,7 +717,7 @@
+   property Process watcherReaper: Process {
+     onExited: {
+       localPluginWatcher.running = true
+-      registry.rescan()
++      registry.rescan(true)
+     }
+   }
+ 
+@@ -749,9 +766,15 @@
+     onTriggered: localPluginWatcher.running = true
+   }
+ 
+-  function rescan() {
+-    if (scanning) return
+-    scanning = true
++  function rescan(onlyIfChanged) {
++    if (scanning || checking) return
++    if (onlyIfChanged && hasScanOutput) {
++      _checkRun = true
++      checking = true
++    } else {
++      _checkRun = false
++      scanning = true
++    }
+     // $0 = first-party dir, $1 = third-party dir. Some bash versions need the explicit -- separator.
+     // First-party plugins may be grouped one level deeper, e.g. panels/audio
+     // or services/battery.
+diff -ru a/shell/shell.qml b/shell/shell.qml
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -1581,7 +1581,7 @@
+   }
+ 
+   function reloadPlugins() {
+-    if (shell.pluginReloading || shell.pluginRegistry.scanning) {
++    if (shell.pluginReloading || (shell.pluginRegistry.scanning || shell.pluginRegistry.checking)) {
+       shell.pluginReloadPending = true
+       return
+     }
+@@ -1594,7 +1594,7 @@
+ 
+   function finishPluginReload() {
+     if (!shell.pluginReloading) return
+-    if (shell.pluginRegistry.scanning) {
++    if ((shell.pluginRegistry.scanning || shell.pluginRegistry.checking)) {
+       shell.pluginReloadPending = true
+       return
+     }
+@@ -1620,6 +1620,14 @@
+         Qt.callLater(shell.reloadPlugins)
+         return
+       }
++      if (shell.pluginRegistry.lastScanSkipped) {
++        if (shell.pluginReloading) return
++        if (shell.pluginRescanPending) {
++          shell.pluginRescanPending = false
++          Qt.callLater(shell.rescanPlugins)
++        }
++        return
++      }
+       shell.pluginReloading = false
+       shell._syncServices()
+       shell.syncPanelEntries()

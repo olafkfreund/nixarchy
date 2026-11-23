@@ -141,7 +141,9 @@ Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
   -format '%w' info:` fails with *"no decode delegate for this image format
   `INFO'"*. One output per call: use `identify` for the first number.
 - **A GIF's frames are deltas.** `magick a.gif[30] out.png` gives the changed
-  rectangle, not the frame a viewer sees. `-coalesce` first.
+  rectangle, not the frame a viewer sees. `-coalesce` first. The same goes
+  for `identify`: `%wx%h` on #1921's 900×563 GIF read 578×430 for its second
+  frame; check the canvas with `-format '%Wx%H'`.
 - **`find` does not follow `result`.** The same trap as AGENTS.md §5, and the
   reason `readme-counts.sh` once counted zero skills.
 
@@ -167,10 +169,6 @@ Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
   its layout analysis. Crop to the card, upscale 3× and invert, and make a
   gate fail when an image yields no names at all, or it passes on
   silence.
-- **`magick identify` reports a GIF's update rectangles, not its frames.**
-  ffmpeg stores later frames as the region that changed, so the second
-  frame of a 900×563 GIF can read 578×430. Check the canvas with
-  `-format '%Wx%H'`.
 
 ## Status claims age badly
 

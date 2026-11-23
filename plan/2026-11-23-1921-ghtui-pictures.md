@@ -144,12 +144,16 @@ Alt text:
    200 (`raw.githubusercontent.com`).
    **Added at implementation:** the PR template asks for general lessons
    in `AGENTS.md` in the same PR, so `docs/AGENTS.md` "ffmpeg compositing
-   traps" gains two: OCR through the panel, not the whole frame, and GIF
-   update rectangles versus the canvas.
+   traps" gains one bullet, OCR through the panel, not the whole frame; the
+   GIF canvas note extends the existing "A GIF's frames are deltas" bullet
+   (agy review: one trap, one place).
    **Fixed at review (Opus):** lossy WebP's 4:2:0 chroma mixed the
    backdrop's purple into the card's 1 px border on the stills; they are
    re-encoded with `-define webp:use-sharp-yuv=true` (geometry unchanged,
    OCR gate re-run clean). The GIF is unchanged.
+   **Fixed at review (agy):** the gate's allow-list match is now fixed-string
+   (`grep -Fqx --`), and the planted name was also drawn inside the PR
+   still's card, through the real crop, and flagged.
 5. **After merge** (lead, on your "merge"). Once Pages deploys,
    https://olafkfreund.github.io/nixarchy/manual/plugins#github-actions
    references the four images, each returns 200 with `curl`, and the `p`

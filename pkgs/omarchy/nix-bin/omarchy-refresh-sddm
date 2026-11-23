@@ -12,14 +12,27 @@ if ! systemctl cat nixarchy-greeter-publish.path >/dev/null 2>&1 ||
   exit 0
 fi
 
-before=$(readlink "$dir/out/current" || true)
-nixarchy-greeter-sync
+if [ ! -w "$dir/inbox" ]; then
+  owner=$(stat -c %U "$dir/inbox" 2>/dev/null || echo "the configured user")
+  echo "Only $owner can publish the login theme."
+  exit 1
+fi
+if ! nixarchy-greeter-sync; then
+  echo "Not published (see journalctl -u nixarchy-greeter-publish)."
+  exit 1
+fi
+if ! request=$(cat "$dir/inbox/ready") || [ -z "$request" ]; then
+  echo "Not published (see journalctl -u nixarchy-greeter-publish)."
+  exit 1
+fi
 
-for _ in $(seq 30); do
-  now=$(readlink "$dir/out/current" || true)
-  if [ "$now" != "$before" ] && ! systemctl is-active --quiet nixarchy-greeter-publish.service; then
-    echo "The next login screen uses $(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null || echo "the current theme")."
-    exit 0
+for _ in $(seq 120); do
+  if [ "$(cat "$dir/out/current/request" 2>/dev/null)" = "$request" ]; then
+    if theme=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null) && [ -n "$theme" ]; then
+      echo "The next login screen uses $theme."
+      exit 0
+    fi
+    break
   fi
   sleep 0.5
 done

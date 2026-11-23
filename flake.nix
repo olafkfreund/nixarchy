@@ -1174,7 +1174,7 @@
         };
 
         nixarchy-greeter-publish = final.writeShellScriptBin "nixarchy-greeter-publish" ''
-          export PATH=${lib.makeBinPath [ final.imagemagick ]}:$PATH
+          export PATH=${lib.makeBinPath [ final.imagemagick ]}''${PATH:+:$PATH}
           exec ${final.python3}/bin/python3 ${./pkgs/nixarchy-greeter-publish.py} "$@"
         '';
 

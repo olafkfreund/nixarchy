@@ -1973,6 +1973,7 @@ in
       // lib.optionalAttrs greeterThemeOn {
         nixarchy-greeter-publish = {
           wantedBy = [ "multi-user.target" ];
+          unitConfig.StartLimitIntervalSec = 0;
           after = [
             "systemd-tmpfiles-setup.service"
             "systemd-tmpfiles-resetup.service"
@@ -1990,7 +1991,7 @@ in
             User = "nixarchy-greeter";
             Group = "nixarchy-greeter";
             ExecStart = "${greeterPkgs.nixarchy-greeter-publish}/bin/nixarchy-greeter-publish";
-            TimeoutStartSec = 120;
+            TimeoutStartSec = 300;
             ProtectSystem = "strict";
             ProtectHome = true;
             NoNewPrivileges = true;
@@ -1999,7 +2000,7 @@ in
             PrivateDevices = true;
             ReadWritePaths = [ "/var/lib/nixarchy-greeter/out" ];
             MemoryMax = "1G";
-            RestrictAddressFamilies = "none";
+            RestrictAddressFamilies = [ "AF_UNIX" ];
             LockPersonality = true;
             ProtectKernelTunables = true;
             ProtectKernelModules = true;

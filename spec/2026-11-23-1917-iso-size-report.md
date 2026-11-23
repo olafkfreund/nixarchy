@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1917
 intent: intent/2026-11-23-1917-iso-size-report.md
 ---

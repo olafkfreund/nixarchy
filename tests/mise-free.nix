@@ -18,9 +18,20 @@ let
       ])
     ) allRows
   );
-  active = lib.filterAttrs (
-    _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
-  ) allRows;
+  # `edgeLines` replaces `lines` under an edge pin, where quattro words a file differently.
+  active =
+    lib.mapAttrs
+      (
+        _: r:
+        removeAttrs (r // lib.optionalAttrs (isEdge && r ? edgeLines) { lines = r.edgeLines; }) [
+          "edgeLines"
+        ]
+      )
+      (
+        lib.filterAttrs (
+          _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
+        ) allRows
+      );
   allow = pkgs.writeText "mise-allow.json" (builtins.toJSON active);
 in
 assert lib.assertMsg (badMarker == [ ])

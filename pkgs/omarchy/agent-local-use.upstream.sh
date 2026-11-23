@@ -7,7 +7,7 @@ if [[ ${1:-} == "use" ]]; then
   if [[ " $* " == *" --detach "* ]]; then
     # The agents panel starts a setup in the background, with no terminal to
     # ask for a password in, so polkit asks for it instead. The panel shows
-    # the setup's line while this runs and reads the reason from the Error
+    # the setup's row while this runs and reads the reason from the Error
     # line; pkexec's 126 is the password dialog dismissed, passed on as is.
     if omarchy-pkg-missing "${packages[@]}"; then
       echo "Installing ${packages[*]}"

@@ -142,7 +142,7 @@
   };
   "omarchy-agent-account-add" = {
     class = "patch";
-    reason = "Checks for the real CLI without dispatch on PATH and refuses with the Nix install route instead of running mise, and empties install_desktop_app, which would pacman-install the provider's desktop app after a first sign-in; desktop apps come from the Nix configuration (#1896).";
+    reason = "Checks for the real CLI without dispatch on PATH and refuses with the Nix install route instead of running mise (#1896).";
   };
   "omarchy-agent-usage-codex" = {
     class = "patch";

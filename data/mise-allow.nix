@@ -151,6 +151,12 @@
     lines = [
       "omarchy-cmd-present mise && eval \"$(mise activate bash --shims)\""
     ];
+    # quattro 9b695d7..fef807e: shims go on PATH without running mise, still behind command -v mise.
+    edgeLines = [
+      "if command -v mise >/dev/null 2>&1; then"
+      "omarchy_mise_data_dir=\"\${MISE_DATA_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/mise}\""
+      "omarchy_mise_shims_dir=\"\${MISE_SHIMS_DIR:-$omarchy_mise_data_dir/shims}\""
+    ];
   };
   "tree/install/config/ssh-command-path.sh" = {
     reason = "nothing here reads it";

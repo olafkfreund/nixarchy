@@ -537,6 +537,10 @@
     edge = "only";
     skip = "One Microsoft laptop; not targeted.";
   };
+  "microsoft-surface-laptop-7-support" = {
+    edge = "only";
+    skip = "Surface Laptop 7 (Snapdragon) battery and camera support; aarch64 hardware, not targeted.";
+  };
   "microsoft-surface-pro-11-sensors" = {
     edge = "only";
     skip = "Surface Pro 11 (Snapdragon) sensors; aarch64 hardware, not targeted.";

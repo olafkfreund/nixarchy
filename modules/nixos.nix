@@ -1958,9 +1958,15 @@ in
     # which unstable hides behind a rename (checks.stable-eval).
     systemd.user.${if options.systemd.user ? settings then "settings" else "extraConfig"} =
       if options.systemd.user ? settings then
-        { Manager.DefaultLimitNOFILE = lib.mkDefault "65536:524288"; }
+        {
+          Manager = {
+            DefaultLimitNOFILE = lib.mkDefault "65536:524288";
+          }
+          # and quattro's user.conf.d/10-faster-shutdown.conf, which the tag does not ship.
+          // lib.optionalAttrs isEdge { DefaultTimeoutStopSec = lib.mkDefault "2s"; };
+        }
       else
-        "DefaultLimitNOFILE=65536:524288";
+        "DefaultLimitNOFILE=65536:524288" + lib.optionalString isEdge "\nDefaultTimeoutStopSec=2s";
 
     systemd = {
       # systemd/system.conf.d/20-mount-events.conf: PID 1's mount-event burst.

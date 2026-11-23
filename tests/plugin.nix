@@ -741,7 +741,7 @@ pkgs.testers.runNixOSTest rec {
          "chmod u+w /tmp/want/.config/omarchy/shell.json")
     user("d=$(systemctl --user show-environment | sed -n 's/^OMARCHY_PATH=//p' | tail -n 1); "
          ": \"''${d:=$OMARCHY_PATH}\"; "
-         "for m in 1795200237; do [ ! -f \"$d/migrations/$m.sh\" ] || "
+         "for m in 1795200237 1795380483; do [ ! -f \"$d/migrations/$m.sh\" ] || "
          "HOME=/tmp/want PATH=${pkgs.jq}/bin:$PATH bash \"$d/migrations/$m.sh\"; done")
     want = json.loads(user(f"${pkgs.jq}/bin/jq -S '{ids}' /tmp/want/.config/omarchy/shell.json"))
     for section in ("left", "centerBegin", "center", "centerEnd", "right"):

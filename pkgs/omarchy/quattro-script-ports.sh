@@ -29,7 +29,6 @@ for name in omarchy-models omarchy-agent-local; do
   f=$out/share/omarchy/bin/$name
   [ -e "$f" ] || continue
   use=$(cat "$2")
-  [ "$name" = omarchy-agent-local ] || use=${use/The agents panel starts/The local models panel starts}
   substituteInPlace "$f" --replace-fail "$use" "$(sed "s/omarchy-agent-local/$name/g" "$3")"
 done
 

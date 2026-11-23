@@ -256,6 +256,42 @@
     reason = "BBR and fq, plus desktop memory and writeback tuning, value for value: tcp_mtu_probing, default_qdisc fq, tcp_congestion_control bbr, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included. checks.etc-sysctl compares each with upstream's file.";
   };
 
+  "systemd/system/ldconfig.service.d/10-omarchy.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Drops ldconfig.service's ConditionNeedsUpdate, because pacman already rebuilds /etc/ld.so.cache after every transaction. NixOS has no /usr for that condition to compare and no system-wide library cache for pacman to refresh.";
+  };
+
+  "systemd/system/omarchy-shutdown-ramfs.timer" = {
+    class = "na";
+    edge = "only";
+    reason = "Pre-generates mkinitcpio's shutdown ramfs after boot, behind ConditionPathExists=/run/initramfs/mkinitcpio-shutdown.conf. NixOS does not build its initrd or shutdown ramfs with mkinitcpio, so the condition is never true here.";
+  };
+
+  "systemd/system/systemd-user-sessions.service" = {
+    class = "divergent";
+    edge = "only";
+    reason = "A whole replacement of systemd's unit that drops network.target from its After=, so a graphical login does not wait for network setup. Not adopted: it runs /usr/lib/systemd/systemd-user-sessions, which does not exist on NixOS, and dropping the ordering here would need a replacement of nixpkgs' own unit and a measured boot to justify it.";
+  };
+
+  "systemd/system/thermald.service.d/10-omarchy.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Keeps thermald from starting on ThinkPads whose firmware does thermal management (dytc_lapmode). Nothing here enables services.thermald, so there is no thermald unit for the drop-in to condition.";
+  };
+
+  "systemd/system/ufw.service" = {
+    class = "na";
+    edge = "only";
+    reason = "A whole replacement of ufw's unit that orders it before network-pre.target. The firewall here is the NixOS firewall (networking.firewall, modules/nixos.nix), not ufw, so there is no ufw unit to reorder.";
+  };
+
+  "systemd/user.conf.d/10-faster-shutdown.conf" = {
+    class = "native";
+    edge = "only";
+    reason = "DefaultTimeoutStopSec=2s for the user manager, so a user unit holding a process that ignores SIGTERM does not stall the session stop. modules/nixos.nix sets it through systemd.user.settings.Manager at mkDefault, on edge pins only, since the tag does not ship it.";
+  };
+
   "sysusers.d/omarchy-cups-browsed.conf" = {
     class = "covered";
     reason = "Allocates the cups-browsed system user. cups-browsed is off here (services.printing.browsed.enable = false), and NixOS declares users through users.users rather than sysusers.d in any case.";
@@ -368,6 +404,12 @@
   "tmpfiles.d/omarchy-nopasswd-sudo.conf" = {
     class = "covered";
     reason = "Reaps /etc/sudoers.d/99-omarchy-nopasswd-* at boot so a temporary passwordless sudo cannot outlive it. pkgs/omarchy/nix-bin/omarchy-sudo-passwordless replaces the command that writes those files with a message pointing at security.sudo, so the file this cleans up is never written.";
+  };
+
+  "tmpfiles.d/linux-modules-cleanup.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Defers kernel-modules-hook's cleanup of /usr/lib/modules/.old to systemd-tmpfiles-clean. NixOS keeps kernel modules in the store per generation, so there is no /usr/lib/modules/.old and no Arch hook to replace.";
   };
 
   "tmpfiles.d/omarchy-zswap.conf" = {

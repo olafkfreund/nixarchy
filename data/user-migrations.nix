@@ -542,6 +542,12 @@
     run = "upstream";
     reason = "reruns omarchy-agent-pi-defaults, as 1795294173 does, to leave the loaded-resource listing out of Pi's startup; it does nothing until the user installs Pi (#1896)";
   };
+  "1795380483" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "drops the omarchy.local-models bar entry from ~/.config/omarchy/shell.json with jq, the reverse of 1795200237, because quattro moved local models into the agents panel and removed that plugin; with no entry or no shell.json it does nothing (#1896)";
+  };
   "1795376239" = {
     edge = "only";
     decision = "ported";

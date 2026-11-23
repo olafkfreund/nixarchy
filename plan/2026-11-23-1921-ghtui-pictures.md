@@ -109,6 +109,16 @@ Alt text:
    - Every distinct frame and all three stills checked by eye.
    If OCR fails, place the card larger, re-run step 1, and record the
    deviation here in the same commit as the images.
+   **Deviation, recorded at implementation:** on the whole composite,
+   tesseract read no `olafkfreund/` name from the list still (the backdrop
+   disturbs it), so the gate crops to the card (579×437+161+62 for GIF
+   frames, 823×622+229+89 for stills) and upscales 3× before inverting.
+   With that, all 13 GIF frames and 3 stills yield names; the only
+   out-of-list tokens (`nixarchy-gltul`, `nlxarchy`, `nixarchy-meetingal`,
+   `nixarchy-podsan`) were misreads of listed names, confirmed by eye on
+   frames 0, 1, 2 and 12. The planted `olafkfreund/private-test` was
+   flagged. The images are committed before step 3, not with the page,
+   because `herdr-team up` refuses a dirty worktree.
 3. **Edit the page** (agy). Before handing off, the lead runs the text check
    below and confirms it finds "running workflows first" (wrapped over lines
    222-223 today), so it can fail. agy edits only `docs/manual/plugins.md`

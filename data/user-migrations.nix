@@ -536,6 +536,18 @@
     decision = "not-needed";
     reason = "moves Pi from a mise tool to the pi-coding-agent package; there is no mise here, and Pi comes from nixpkgs through omarchy-default-agent or services.agent-local (#1896)";
   };
+  "1795372675" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "reruns omarchy-agent-pi-defaults, as 1795294173 does, to leave the loaded-resource listing out of Pi's startup; it does nothing until the user installs Pi (#1896)";
+  };
+  "1795376239" = {
+    edge = "only";
+    decision = "ported";
+    run = "upstream";
+    reason = "turns Pi's quietStartup \"header\" into true with jq, only when the earlier Pi migration set it; a value the user chose stays, and with no Pi settings file it does nothing (#1896)";
+  };
   "1795294173" = {
     edge = "only";
     decision = "ported";

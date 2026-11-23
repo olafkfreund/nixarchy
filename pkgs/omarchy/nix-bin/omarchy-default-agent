@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # omarchy:summary=Set and launch the default coding agent (declaratively, on NixOS).
-# omarchy:args=[claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|ori|kimi|qwen|dsh|mcode|kiro-cli|freebuff|kilo|devin|amp|commandcode]
+# omarchy:args=[local|claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|ori|kimi|qwen|dsh|mcode|kiro-cli|freebuff|kilo|devin|amp|commandcode]
 # omarchy:examples=omarchy default agent | omarchy default agent codex | omarchy default agent claude
 
 # Upstream installs the agent with `mise use -g`; nixarchy installs nothing that way.
@@ -13,6 +13,8 @@
 set -uo pipefail
 
 agent_file="$HOME/.config/omarchy/defaults/agent"
+# The local model a default of "local" opens, as upstream's does.
+local_model_file="$HOME/.config/omarchy/defaults/local-model"
 
 # agent id -> nixpkgs attribute. Canonical ids match the installed command;
 # gemini is a legacy spelling that now resolves to Antigravity.
@@ -27,7 +29,7 @@ attr_for() {
     grok)     echo grok-cli ;;
     openclaw) echo openclaw ;;
     agy)      echo antigravity-cli ;;
-    pi)       echo pi-coding-agent ;;
+    pi | local) echo pi-coding-agent ;;
     omp)      echo omp ;;
     cursor-agent) echo cursor-cli ;;
     muse)     echo muse-code ;;
@@ -59,6 +61,15 @@ if [[ ${1:-} == "--installed" ]]; then
   (($# == 1)) || exit 1
 fi
 
+# --select <agent> makes an installed agent the default without opening it, for
+# the agents panel's star; a local model may follow "local" (upstream #19794).
+selecting=false
+if [[ ${1:-} == "--select" ]]; then
+  selecting=true
+  shift
+  (($# == 1)) || { [[ ${1:-} == "local" ]] && (($# == 2)); } || exit 1
+fi
+
 if (($# == 0)); then
   if [[ -f $agent_file ]]; then
     read -r agent <"$agent_file"
@@ -71,6 +82,8 @@ if (($# == 0)); then
 fi
 
 case "$1" in
+# The local model opens in Pi, so Pi is what it needs.
+local) agent="local"; name="Local model" ;;
 pi) agent="pi"; name="Pi" ;;
 omp | oh-my-pi) agent="omp"; name="Oh My Pi" ;;
 opencode | open-code) agent="opencode"; name="OpenCode" ;;
@@ -103,14 +116,20 @@ devin | devin-cli) agent="devin"; name="Devin CLI" ;;
 amp | ampcode) agent="amp"; name="Amp" ;;
 commandcode | command-code | cmdc) agent="commandcode"; name="Command Code" ;;
 *)
-  echo "Usage: omarchy-default-agent <claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|cursor-agent|hermes|muse|openclaw|ori|kimi|qwen|dsh|mcode|kiro-cli|freebuff|kilo|devin|amp|commandcode>" >&2
+  echo "Usage: omarchy-default-agent <local|claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|cursor-agent|hermes|muse|openclaw|ori|kimi|qwen|dsh|mcode|kiro-cli|freebuff|kilo|devin|amp|commandcode>" >&2
   exit 1
   ;;
 esac
 
+local_model=${2:-}
 record() {
   mkdir -p "$(dirname "$agent_file")"
   printf '%s\n' "$agent" >"$agent_file"
+  if [[ $agent == local && -n $local_model ]]; then
+    printf '%s\n' "$local_model" >"$local_model_file"
+  elif [[ $agent == local ]]; then
+    rm -f "$local_model_file"
+  fi
   # #1760: the harness reads shared instructions from its first session; v4.5.0 has no such command.
   if command -v omarchy-agent-instructions >/dev/null 2>&1; then omarchy-agent-instructions "$agent" >/dev/null || true; fi
   # #1847: quattro gives a selected harness its own launcher; v4.5.0 has no such command.
@@ -161,9 +180,15 @@ fi
 # than against a package database: what matters is whether omarchy-agent will
 # find it, and that is the same question.
 agent_cmd=$agent
+[[ $agent == local ]] && agent_cmd=pi
 if [[ $checking == true ]]; then
   PATH=$(omarchy-agent-real-path) command -v "$agent_cmd" &>/dev/null
   exit
+fi
+if [[ $selecting == true ]]; then
+  PATH=$(omarchy-agent-real-path) command -v "$agent_cmd" &>/dev/null || { echo "$name is not installed" >&2; exit 1; }
+  record
+  exit 0
 fi
 if PATH=$(omarchy-agent-real-path) command -v "$agent_cmd" &>/dev/null; then
   record

@@ -316,7 +316,13 @@
   "update.hardware.trackpad" =
     "runtime: reloads the trackpad driver for this boot; nothing a rebuild owns";
   "update.hardware.wifi" = "runtime: resets wifi for this boot; nothing a rebuild owns";
-  "update.password.drive" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+  "update.password" = {
+    reason = "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first); quattro's Update > Password, which changes the login and disk passwords together (#1896)";
+    edge = "only";
+  };
+  "update.password.drive" = {
+    reason = "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    edge = "absent";
+  };
   "update.process.shell" = "session: restarts the user's shell unit";
 }

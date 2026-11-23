@@ -1158,20 +1158,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     menu=$out/share/omarchy/default/omarchy/omarchy-menu.jsonc
                     # Each id is its own command; antigravity is the one that differs.
                     # Why: pkgs/AGENTS.md#default-agent-menu-commands-use-the-id
-                    # Quattro dropped the Agent menu (upstream #19785); the tag still has it.
-                    # All rows or none: a partial removal must still fail the build.
-                    agents="agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen"
+                    # Quattro dropped the Agent menu (#19785); check-menu.py fails a half-removed one.
                     if grep -qF '== \"claude\" ]]' $menu; then
-                      for a in $agents; do
+                      for a in agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen; do
                         substituteInPlace $menu \
                           --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"
-                      done
-                    else
-                      for a in $agents; do
-                        if grep -qF "== \\\"$a\\\" ]]" $menu; then
-                          echo "omarchy-menu.jsonc: agent row $a survives without claude's; re-check the Agent menu" >&2
-                          exit 1
-                        fi
                       done
                     fi
 

@@ -88,7 +88,16 @@
  exec "$agent_binary" "$@"
 --- a/bin/omarchy-agent-account-add
 +++ b/bin/omarchy-agent-account-add
-@@ -134,77 +134,8 @@
+@@ -134,6 +134,8 @@
+   agy) package=antigravity ;;
+   *) return 0 ;;
+   esac
++  # nixarchy: desktop apps come from the Nix configuration, not pacman.
++  return 0
+   omarchy-region-global || return 0
+   omarchy-pkg-present "$package" && return 0
+   say "$(omarchy-i18n agents.installingDesktop "$name")"
+@@ -226,77 +228,8 @@
    wait $!
  }
  

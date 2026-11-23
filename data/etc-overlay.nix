@@ -143,6 +143,11 @@
     reason = "HOOKS for mkinitcpio, including dropping kms on an NVIDIA-only machine. NixOS builds its initrd from boot.initrd.*; there is no hook list to order.";
   };
 
+  "mkinitcpio.conf.d/omarchy_mount_events.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Copies systemd's 20-mount-events.conf into a mkinitcpio systemd initramfs, so PID 1 in the initrd keeps the raised mount-event burst. NixOS builds its initrd from boot.initrd.*, and modules/nixos.nix sets the burst through systemd.managerEnvironment (#1896).";
+  };
   "mkinitcpio.conf.d/omarchy_vconsole.conf" = {
     class = "na";
     reason = "Wraps mkinitcpio's add_file so a non-Latin first keyboard layout's /etc/vconsole.conf stays out of the initramfs, keeping a LUKS passphrase typeable at the Plymouth prompt (4.0.6). NixOS builds its initrd from boot.initrd.* and console.*, without mkinitcpio, so there is no add_file to wrap.";

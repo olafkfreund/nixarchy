@@ -142,7 +142,10 @@ pkgs.testers.runNixOSTest {
         return [hex_rgb(c) for c in found]
 
     def regions(path):
-        """Boxes from Main.qml's centred Column (1x scale, asserted against the VM size).
+        """Boxes from Main.qml's centred Column, at 1x scale, from the screenshot's own size.
+
+        The greeter's Hyprland picks its own mode (1280x800 under QEMU), so only a minimum is
+        asserted: the boxes below need at least 1024x600.
 
         - corner: 16x16 at the origin, outside the central panel.
         - logo: the whole bounding box; width = min(800, 0.8 * W), height = width * 185 / 800.
@@ -150,7 +153,7 @@ pkgs.testers.runNixOSTest {
         - frame: the top 4 rows of the 286x48 entry frame.
         """
         w, h = image_size(path)
-        assert (w, h) == RESOLUTION, f"screenshot is {w}x{h}, VM resolution is {RESOLUTION}"
+        assert w >= 1024 and h >= 600, f"screenshot is {w}x{h}, smaller than the 1024x600 the layout needs"
         logo_w = min(800, round(w * 0.8))
         logo_h = round(logo_w * 185 / 800)
         row_w = 34 + 15 + 286
@@ -174,6 +177,8 @@ pkgs.testers.runNixOSTest {
 
     def start_greeter(node):
         cursor = read_cursor(node)
+        # display-manager allows 3 starts per 30 s; the cases restart it faster.
+        node.succeed("systemctl reset-failed display-manager")
         node.succeed("systemctl restart display-manager")
         node.wait_for_unit("display-manager.service")
         node.wait_until_succeeds("loginctl list-sessions | grep -q greeter")
@@ -226,8 +231,16 @@ pkgs.testers.runNixOSTest {
         generation, empty request: a wrong-owner input) or "unsafe" (abort: current
         unchanged and a rejection line in the unit's journal).
         """
+        # The path unit also watches the inbox directory, so writing the inputs
+        # has already started runs; let them finish before taking the baseline.
+        # A rename of `ready` during a run is then picked up by the publisher's
+        # own catch-up loop rather than a new invocation, so the proof is the
+        # result (request == nonce) or the logged rejection, not an InvocationID.
+        idle = f"! systemctl is-active --quiet {PUBLISH_UNIT}"
+        node.wait_until_succeeds(idle, timeout=60)
+        node.sleep(1)
+        node.wait_until_succeeds(idle, timeout=60)
         before = current_gen(node)
-        run_before = invocation(node)
         cursor = read_cursor(node, PUBLISH_UNIT)
         nonce = str(time.time_ns())
         node.succeed(
@@ -236,11 +249,6 @@ pkgs.testers.runNixOSTest {
             f"echo {nonce} > \"$inbox/.tmp.ready\" && "
             "chmod 0644 \"$inbox/.tmp.ready\" && "
             "mv -f -- \"$inbox/.tmp.ready\" \"$inbox/ready\"'"
-        )
-        node.wait_until_succeeds(
-            f"test \"$(systemctl show -p InvocationID --value {PUBLISH_UNIT})\" != '{run_before}' "
-            f"&& ! systemctl is-active --quiet {PUBLISH_UNIT}",
-            timeout=60,
         )
         if kind == "unsafe":
             node.wait_until_succeeds(
@@ -268,6 +276,21 @@ pkgs.testers.runNixOSTest {
 
     machine.wait_for_unit("multi-user.target")
     broken.wait_for_unit("multi-user.target")
+
+    # A fresh sddm user has never seen this Hyprland, so the greeter's
+    # compositor opens its "Hyprland updated" news window (and may nag) over
+    # the login form. Record the running version and a recent nag time, as a
+    # long-lived host already has, before the first greeter is started.
+    for node in (machine, broken):
+        node.succeed(
+            "d=/var/lib/sddm/.local/share/hyprland; "
+            "install -d -o sddm -g sddm -m 0700 \"$d\"; "
+            "v=$(Hyprland --version | head -1 | awk '{print $2}'); "
+            "test -n \"$v\"; "
+            "printf '%s' \"$v\" > \"$d/lastVersion\"; "
+            "date +%s > \"$d/lastNag\"; "
+            "chown sddm:sddm \"$d/lastVersion\" \"$d/lastNag\""
+        )
 
     # Ensure the initial boot service (if any) has settled and no theme data exists yet.
     machine.wait_until_succeeds(
@@ -478,8 +501,10 @@ pkgs.testers.runNixOSTest {
             "frame": "#c0caf5",
         },
     )
+    # The greeter logs QML errors under its own identifier, not the unit.
     broken.wait_until_succeeds(
-        f"journalctl -u display-manager --after-cursor='{cursor}' --no-pager | grep -q Tinted.qml"
+        "journalctl -b -t sddm-greeter-qt6 --no-pager | grep -q 'Tinted.qml.*Expected token'",
+        timeout=60,
     )
     login_and_logout(broken, cursor)
   '';

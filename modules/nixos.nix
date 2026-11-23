@@ -2023,7 +2023,14 @@ in
       paths = lib.optionalAttrs greeterThemeOn {
         nixarchy-greeter-publish = {
           wantedBy = [ "paths.target" ];
-          pathConfig.PathChanged = "/var/lib/nixarchy-greeter/inbox/ready";
+          # The directory as well as `ready`: after `ready` is deleted, the file
+          # watch alone missed the next rename into place (seen in
+          # checks.greeter-theme). A publish mid-sync is harmless; the
+          # publisher re-reads the nonce and runs again until it settles.
+          pathConfig.PathChanged = [
+            "/var/lib/nixarchy-greeter/inbox/ready"
+            "/var/lib/nixarchy-greeter/inbox"
+          ];
         };
       };
 

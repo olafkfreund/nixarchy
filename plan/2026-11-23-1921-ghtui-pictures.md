@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1921
 spec: spec/2026-11-23-1921-ghtui-pictures.md
 coders:

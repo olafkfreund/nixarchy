@@ -1162,6 +1162,22 @@
           text = builtins.readFile ./pkgs/location.sh;
         };
 
+        # `nixarchy-greeter-sync` -- the theme hooks and omarchy-refresh-sddm run
+        # it to hand the current theme to the SDDM greeter.
+        nixarchy-greeter-sync = final.writeShellApplication {
+          name = "nixarchy-greeter-sync";
+          runtimeInputs = with final; [
+            coreutils
+            util-linux
+          ];
+          text = builtins.readFile ./pkgs/nixarchy-greeter-sync.sh;
+        };
+
+        nixarchy-greeter-publish = final.writeShellScriptBin "nixarchy-greeter-publish" ''
+          export PATH=${lib.makeBinPath [ final.imagemagick ]}:$PATH
+          exec ${final.python3}/bin/python3 ${./pkgs/nixarchy-greeter-publish.py} "$@"
+        '';
+
         nixarchy-verify = final.writeShellApplication {
           name = "nixarchy-verify";
           runtimeInputs = with final; [
@@ -1570,6 +1586,11 @@
 
           # `nixarchy-location` -- see pkgs/location.sh.
           location = pkgsFor.${system}.nixarchy-location;
+
+          # `nixarchy-greeter-sync` -- see pkgs/nixarchy-greeter-sync.sh.
+          nixarchy-greeter-sync = pkgsFor.${system}.nixarchy-greeter-sync;
+
+          nixarchy-greeter-publish = pkgsFor.${system}.nixarchy-greeter-publish;
 
           # `nix run .#devenv-presets` -- every template the Dev environments
           # plugin ships, scaffolded with a real devenv and evaluated (#802).

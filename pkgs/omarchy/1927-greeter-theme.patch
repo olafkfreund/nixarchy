@@ -1,0 +1,196 @@
+diff -ru a/Main.qml b/Main.qml
+--- a/Main.qml	1970-01-01 01:00:01.000000000 +0100
++++ b/Main.qml	2026-11-23 17:24:06.052433682 +0000
+@@ -5,7 +5,18 @@
+   id: root
+   width: 640
+   height: 480
+-  color: "#1a1b26"
++  color: root.bg
++
++  function pick(key, fallback) {
++    return typeof config[key] === "string" && /^#[0-9a-fA-F]{6}$/.test(config[key]) ? config[key] : fallback
++  }
++
++  readonly property color bg: pick("background", "#1a1b26")
++  readonly property color fg: pick("foreground", "#c0caf5")
++  readonly property color accent: pick("accent", "#a8cd76")
++  readonly property color failedTint: pick("failed", "#f7768e")
++  readonly property string wallpaperPath: /^gen-[0-9]+\/background\.png$/.test(config.wallpaper)
++    ? "file:///var/lib/nixarchy-greeter/out/" + config.wallpaper : ""
+ 
+   property string currentUser: userModel.lastUser || userModel.data(userModel.index(0, 0), Qt.UserRole + 1) || ""
+   property bool loginFailed: false
+@@ -18,11 +29,21 @@
+     return sessionModel.lastIndex
+   }
+ 
++  Image {
++    anchors.fill: parent
++    source: root.wallpaperPath
++    asynchronous: true
++    fillMode: Image.PreserveAspectCrop
++    sourceSize.width: root.width
++    sourceSize.height: root.height
++    visible: status === Image.Ready
++  }
++
+   Connections {
+     target: sddm
+     function onLoginFailed() {
+-      root.loginFailed = true
+       password.text = ""
++      root.loginFailed = true
+       password.focus = true
+     }
+     function onLoginSucceeded() {
+@@ -30,39 +51,82 @@
+     }
+   }
+ 
++  Rectangle {
++    anchors.centerIn: parent
++    width: content.width + 48
++    height: content.height + 48
++    color: Qt.alpha(root.bg, 0.75)
++    radius: 8
++  }
++
+   Column {
++    id: content
+     anchors.centerIn: parent
+     spacing: 40
+ 
+-    Image {
+-      id: logo
+-      source: "logo.png"
+-      width: Math.min(sourceSize.width, root.width * 0.8)
+-      height: sourceSize.width > 0 ? Math.round(width * sourceSize.height / sourceSize.width) : 0
+-      fillMode: Image.PreserveAspectFit
++    Item {
++      width: Math.min(800, root.width * 0.8)
++      height: Math.round(width * 185 / 800)
+       anchors.horizontalCenter: parent.horizontalCenter
++
++      Loader {
++        id: logoL
++        anchors.fill: parent
++        source: "Tinted.qml"
++        visible: status === Loader.Ready
++      }
++      Binding { target: logoL.item; when: logoL.status === Loader.Ready; property: "tint"; value: root.accent }
++      Binding { target: logoL.item; when: logoL.status === Loader.Ready; property: "src"; value: "logo.png" }
++      Image {
++        anchors.fill: parent
++        source: "logo.png"
++        fillMode: Image.PreserveAspectFit
++        visible: logoL.status === Loader.Error
++      }
+     }
+ 
+     Row {
+       anchors.horizontalCenter: parent.horizontalCenter
+       spacing: 15
+ 
+-      Image {
+-        source: root.loginFailed ? "lock-failed.png" : "lock.png"
++      Item {
+         width: 34
+         height: 38
+-        fillMode: Image.PreserveAspectFit
+         anchors.verticalCenter: parent.verticalCenter
++
++        Loader {
++          id: lockL
++          anchors.fill: parent
++          source: "Tinted.qml"
++          visible: status === Loader.Ready
++        }
++        Binding { target: lockL.item; when: lockL.status === Loader.Ready; property: "tint"; value: root.loginFailed ? root.failedTint : root.fg }
++        Binding { target: lockL.item; when: lockL.status === Loader.Ready; property: "src"; value: "lock.png" }
++        Image {
++          anchors.fill: parent
++          source: root.loginFailed ? "lock-failed.png" : "lock.png"
++          fillMode: Image.PreserveAspectFit
++          visible: lockL.status === Loader.Error
++        }
+       }
+ 
+       Item {
+-        width: entry.width
+-        height: entry.height
++        width: 286
++        height: 48
+ 
++        Loader {
++          id: frameL
++          anchors.fill: parent
++          source: "Tinted.qml"
++          visible: status === Loader.Ready
++        }
++        Binding { target: frameL.item; when: frameL.status === Loader.Ready; property: "tint"; value: root.loginFailed ? root.failedTint : root.fg }
++        Binding { target: frameL.item; when: frameL.status === Loader.Ready; property: "src"; value: "entry.png" }
+         Image {
+-          id: entry
++          anchors.fill: parent
+           source: root.loginFailed ? "entry-failed.png" : "entry.png"
+-          anchors.centerIn: parent
++          fillMode: Image.PreserveAspectFit
++          visible: frameL.status === Loader.Error
+         }
+ 
+         Row {
+@@ -74,10 +138,11 @@
+           Repeater {
+             model: Math.min(password.text.length, 21)
+ 
+-            Image {
+-              source: "bullet.png"
++            Rectangle {
+               width: 7
+               height: 7
++              radius: 3.5
++              color: root.fg
+             }
+           }
+         }
+@@ -99,18 +164,18 @@
+           cursorDelegate: Item {}
+           focus: true
+ 
+-          onTextChanged: root.loginFailed = false
+-
+           Keys.onPressed: {
+             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+               sddm.login(root.currentUser, password.text, root.sessionIndex)
+               event.accepted = true
++            } else {
++              root.loginFailed = false
++              event.accepted = false
+             }
+           }
+         }
+       }
+     }
+-
+   }
+ 
+   Component.onCompleted: password.forceActiveFocus()
+diff -ru a/metadata.desktop b/metadata.desktop
+--- a/metadata.desktop	1970-01-01 01:00:01.000000000 +0100
++++ b/metadata.desktop	2026-11-23 17:24:22.785645390 +0000
+@@ -5,3 +5,4 @@
+ Type=sddm-theme
+ Version=1.0
+ QtVersion=6
++ConfigFile=theme.conf
+diff -ru a/theme.conf b/theme.conf
+--- a/theme.conf	1970-01-01 01:00:01.000000000 +0100
++++ b/theme.conf	2026-11-23 17:24:22.785645390 +0000
+@@ -1 +1,6 @@
+ [General]
++background="#1a1b26"
++foreground="#c0caf5"
++accent="#a8cd76"
++failed="#f7768e"
++wallpaper=

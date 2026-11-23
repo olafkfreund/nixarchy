@@ -168,8 +168,9 @@ Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
   gate fail when an image yields no names at all, or it passes on
   silence.
 - **`magick identify` reports a GIF's update rectangles, not its frames.**
-  ffmpeg stores later frames as the region that changed, so frame 2 of a
-  900×563 GIF can read 578×427. Check the canvas with `-format '%Wx%H'`.
+  ffmpeg stores later frames as the region that changed, so the second
+  frame of a 900×563 GIF can read 578×430. Check the canvas with
+  `-format '%Wx%H'`.
 
 ## Status claims age badly
 

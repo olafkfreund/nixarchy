@@ -146,6 +146,10 @@ Alt text:
    in `AGENTS.md` in the same PR, so `docs/AGENTS.md` "ffmpeg compositing
    traps" gains two: OCR through the panel, not the whole frame, and GIF
    update rectangles versus the canvas.
+   **Fixed at review (Opus):** lossy WebP's 4:2:0 chroma mixed the
+   backdrop's purple into the card's 1 px border on the stills; they are
+   re-encoded with `-define webp:use-sharp-yuv=true` (geometry unchanged,
+   OCR gate re-run clean). The GIF is unchanged.
 5. **After merge** (lead, on your "merge"). Once Pages deploys,
    https://olafkfreund.github.io/nixarchy/manual/plugins#github-actions
    references the four images, each returns 200 with `curl`, and the `p`

@@ -1881,15 +1881,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       '  }')
                     substituteInPlace "$shellQml" --replace-fail "$cfgOld" "$cfgNew"
 
-                    # After every external shell.json write (omarchy bar, Bar Folder layout.sh)
-                    # refresh_shell_config sends reloadConfig, and if the shell misses the 2 s IPC
-                    # timeout -- which a shell still rebuilding its bar from the previous save
-                    # does -- it fell back to rescanPlugins: a reload of every plugin (#901). The
-                    # shell applies the write through its own file watch anyway (proven under
-                    # QS_DISABLE_FILE_WATCHER=1), so the fallback only ever added a full reload.
-                    # CARRIED, and meant to be dropped with the rest of #901 once upstream fixes
-                    # it. The whole function is the needle, so a reworded one fails this build.
-                    # printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+                    # Why: pkgs/AGENTS.md#refresh_shell_config-has-no-rescanplugins-fallback-901
                     shellConfigHelper=$out/share/omarchy/bin/omarchy-shell-config
                     refreshOld=$(printf '%s\n' \
                       'refresh_shell_config() {' \
@@ -2007,10 +1999,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace $out/share/omarchy/shell/shell.qml \
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
 
-                    # CARRIED (#1923): the watcher reaper's exit re-ran every plugin sync; it now only checks the scan.
-                    # Last of the shell.qml and PluginRegistry.qml edits: its context is their result.
+                    # Why: pkgs/AGENTS.md#the-watcher-reaper-checks-the-scan-1923
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-reaper-check.patch}
-                    # Only where shell.qml has the shell-level rescanPlugins() (quattro); v4.5.0 has none.
                     if grep -q '^  function rescanPlugins() {$' "$out/share/omarchy/shell/shell.qml"; then
                       patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-rescan-guard.patch}
                     fi

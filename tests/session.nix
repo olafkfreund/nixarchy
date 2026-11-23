@@ -7,6 +7,12 @@
 }:
 let
   omarchyPkg = (pkgs.extend inputs.self.overlays.default).omarchy;
+  # The agents panel tries icon candidates in turn and logs each it cannot open.
+  # One upstream never shipped is its fallback, not a file this port lost (#1896).
+  agentAssetsDir = "${inputs.omarchy}/shell/plugins/agents/assets";
+  agentAssets = pkgs.lib.optionals (builtins.pathExists agentAssetsDir) (
+    builtins.attrNames (builtins.readDir agentAssetsDir)
+  );
   portalProbe = pkgs.writeText "portal-probe.py" ''
     import sys
     from gi.repository import Gio, GLib
@@ -3639,9 +3645,14 @@ pkgs.testers.runNixOSTest {
             + " -t omarchy-shell --no-pager -o cat"))
         assert agents_marker in agents_journal, (
             "#1760: the agents journal window missed its marker:\n" + agents_journal)
+        upstream_assets = set(${builtins.toJSON agentAssets})
+        def upstream_fallback(line):
+            m = re.search(r"Cannot open: file://\S*/shell/plugins/agents/assets/([A-Za-z0-9._-]+)", line)
+            return bool(m) and m.group(1) not in upstream_assets
         agents_errors = [line for line in agents_journal.splitlines()
             if ("/agents/" in line or "/panels/tailscale/" in line)
-            and re.search(r"qml:|TypeError|ReferenceError|is not defined|Cannot", line)]
+            and re.search(r"qml:|TypeError|ReferenceError|is not defined|Cannot", line)
+            and not upstream_fallback(line)]
         assert not agents_errors, (
             "#1760: agents or Tailscale QML errors:\n" + "\n".join(agents_errors))
         machine.succeed(as_user("omarchy-shell shell toggle omarchy.agents"))

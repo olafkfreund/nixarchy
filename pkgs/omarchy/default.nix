@@ -2083,6 +2083,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     runHook postInstall
   '';
 
+  postInstall = ''
+    # Why: pkgs/AGENTS.md#the-greeter-follows-the-omarchy-theme-1927
+    patch -d "$out/share/sddm/themes/omarchy" -p1 --forward --fuzz=0 < ${./1927-greeter-theme.patch}
+    install -m644 ${./greeter/Tinted.qml} "$out/share/sddm/themes/omarchy/Tinted.qml"
+    ln -s /var/lib/nixarchy-greeter/out/current/theme.conf "$out/share/sddm/themes/omarchy/theme.conf.user"
+  '';
+
   # Upstream ships `#!/bin/bash`, which does not exist on NixOS.
   postFixup = ''
     patchShebangs $out/share/omarchy/bin

@@ -1,22 +1,39 @@
 #!/bin/bash
 
-# omarchy:summary=Refresh the SDDM login theme
+# omarchy:summary=Refresh the SDDM login theme from the current Omarchy theme
 
-# Upstream removes and re-copies the theme into /usr/share/sddm/themes with
-# sudo. Here it lives in the package, at share/sddm/themes/omarchy, and
-# services.displayManager.sddm.theme names it -- so there is nothing to copy
-# and nowhere to copy it to.
-cat <<'MSG'
-The login theme is declared on NixOS, not refreshed.
+# The greeter theme ships in the package; only its colours and wallpaper
+# follow the Omarchy theme, through nixarchy-greeter-sync.
+dir=/var/lib/nixarchy-greeter
 
-  It ships inside the nixarchy package and is already selected:
+if ! systemctl cat nixarchy-greeter-publish.path >/dev/null 2>&1 ||
+  ! command -v nixarchy-greeter-sync >/dev/null; then
+  echo "The login screen does not follow the theme: set programs.nixarchy.greeterThemeUser."
+  exit 0
+fi
 
-    services.displayManager.sddm.theme = "omarchy";
+if [ "$(id -u)" = 0 ]; then
+  echo "Run this as your own user, not root: root's files would publish the defaults."
+  exit 1
+fi
+if [ ! -w "$dir/inbox" ]; then
+  owner=$(stat -c %U "$dir/inbox" 2>/dev/null || echo "the configured user")
+  echo "Only $owner can publish the login theme."
+  exit 1
+fi
+if ! request=$(nixarchy-greeter-sync) || [ -z "$request" ]; then
+  echo "Not published: the sync failed."
+  exit 1
+fi
 
-  It changes when the system does:
-
-    sudo nixos-rebuild switch --flake <your-flake>
-
-  If another display manager greets you, set
-  programs.nixarchy.displayManager = false and this does not apply at all.
-MSG
+# A decode can take up to 60 s, and the publisher may run once more to catch up.
+for _ in $(seq 300); do
+  if [ "$(cat "$dir/out/current/request" 2>/dev/null)" = "$request" ]; then
+    theme=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)
+    echo "The next login screen uses ${theme:-the current theme}."
+    exit 0
+  fi
+  sleep 0.5
+done
+echo "Not published within 150 s (see journalctl -u nixarchy-greeter-publish)."
+exit 1

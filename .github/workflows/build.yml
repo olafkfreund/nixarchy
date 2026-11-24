@@ -2120,7 +2120,7 @@ jobs:
     needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 40  # +greeter-theme (#1927)
     steps:
       - name: The gate did not succeed, so this check cannot pass
         if: needs.gate.result != 'success'
@@ -2195,6 +2195,11 @@ jobs:
       - name: A VM with a radio can associate to a network
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.wifi-hwsim
+
+      # checks.greeter-theme is a nixosTest with two desktop guests; it needs the /dev/kvm set up above (#1927).
+      - name: The SDDM greeter follows the published theme
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.greeter-theme
 
       # checks.hibernate-resume is a nixosTest and needs the /dev/kvm set up above (#1303).
       - name: A VM with resume configured sees the Hibernate row

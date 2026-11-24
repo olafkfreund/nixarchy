@@ -1162,6 +1162,22 @@
           text = builtins.readFile ./pkgs/location.sh;
         };
 
+        # `nixarchy-greeter-sync` -- the theme hooks and omarchy-refresh-sddm run
+        # it to hand the current theme to the SDDM greeter.
+        nixarchy-greeter-sync = final.writeShellApplication {
+          name = "nixarchy-greeter-sync";
+          runtimeInputs = with final; [
+            coreutils
+            util-linux
+          ];
+          text = builtins.readFile ./pkgs/nixarchy-greeter-sync.sh;
+        };
+
+        nixarchy-greeter-publish = final.writeShellScriptBin "nixarchy-greeter-publish" ''
+          export PATH=${lib.makeBinPath [ final.imagemagick ]}''${PATH:+:$PATH}
+          exec ${final.python3}/bin/python3 ${./pkgs/nixarchy-greeter-publish.py} "$@"
+        '';
+
         nixarchy-verify = final.writeShellApplication {
           name = "nixarchy-verify";
           runtimeInputs = with final; [
@@ -1571,6 +1587,11 @@
           # `nixarchy-location` -- see pkgs/location.sh.
           location = pkgsFor.${system}.nixarchy-location;
 
+          # `nixarchy-greeter-sync` -- see pkgs/nixarchy-greeter-sync.sh.
+          nixarchy-greeter-sync = pkgsFor.${system}.nixarchy-greeter-sync;
+
+          nixarchy-greeter-publish = pkgsFor.${system}.nixarchy-greeter-publish;
+
           # `nix run .#devenv-presets` -- every template the Dev environments
           # plugin ships, scaffolded with a real devenv and evaluated (#802).
           #
@@ -1977,6 +1998,9 @@
             # tests/package-delta.nix.
             "package-delta"
             "patched-files"
+            # The greeter's theme sync and publisher, over fixtures (#1927).
+            "greeter-sync"
+            "greeter-publish"
             # Every package Omarchy installs has a decision in data/omarchy-packages.nix (#1572).
             "omarchy-package-ledger"
             # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
@@ -2047,6 +2071,12 @@
           # discovered by whoever rebuilt first with services.nixi.enable on.
           # Cheap: nothing compiles, the derivation places files.
           nixi = self.packages.${system}.nixi;
+
+          # The SDDM greeter follows the theme, through the real greeter (#1927).
+          greeter-theme = import ./tests/greeter-theme.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
 
           # Why: tests/AGENTS.md#a-test-script-over-128-kib-breaks-the-stable-driver
           session =

@@ -1984,7 +1984,7 @@ in
           //
             lib.optionalAttrs (lib.attrByPath [ cfg.greeterThemeUser "uid" ] null config.users.users != null)
               {
-                NIXARCHY_GREETER_UID = toString (config.users.users.${cfg.greeterThemeUser}.uid);
+                NIXARCHY_GREETER_UID = toString config.users.users.${cfg.greeterThemeUser}.uid;
               };
           serviceConfig = {
             Type = "oneshot";

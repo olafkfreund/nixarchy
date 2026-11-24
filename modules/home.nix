@@ -103,6 +103,7 @@ let
   # (modules/services/default.nix says why), so a plain `pkgs.owe` would fail
   # to resolve.
   owe = (pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe;
+  greeterSync = (pkgs.extend inputs.self.overlays.default).nixarchy-greeter-sync;
 
   aiMirrorConfig =
     args:
@@ -1572,6 +1573,23 @@ in
         text = ''
           #!/usr/bin/env bash
           exec ${cfg.package}/bin/omarchy-cursor-set
+        '';
+      };
+
+      # The SDDM greeter follows the theme (nixarchy-greeter-sync exits 0 when
+      # programs.nixarchy.greeterThemeUser is off).
+      "omarchy/hooks/theme-set.d/20-greeter" = {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          exec ${greeterSync}/bin/nixarchy-greeter-sync
+        '';
+      };
+      "omarchy/hooks/post-boot.d/20-greeter" = {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          exec ${greeterSync}/bin/nixarchy-greeter-sync
         '';
       };
 

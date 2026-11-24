@@ -1515,6 +1515,20 @@ one fails the build. It is built with printf, not a
 multi-line literal: see "A long build phase is one indented
 string, and it strips one indent" above.
 
+<a id="the-greeter-follows-the-omarchy-theme-1927"></a>
+## The greeter follows the Omarchy theme (#1927)
+
+The SDDM theme is copied and altered during `installPhase`. Patch that built
+tree in `postInstall`, so the hunk includes nixarchy's `currentUser` fallback
+and the generated logo, and the measured `installPhase` stays below its byte
+budget. `--fuzz=0` makes an upstream theme change fail the build instead of
+silently placing a hunk in the wrong spot.
+
+The optional user theme is published as `theme.conf.user` at runtime. The QML
+validates colours and a generation-local wallpaper path before using them;
+missing values fall back to the built colours. `Tinted.qml` contains the effects
+import so an unavailable effect leaves the plain PNGs usable.
+
 <a id="fcitx5-packaged-png-glyphs-1688"></a>
 
 ## Fcitx5 packaged PNG glyphs (#1688)

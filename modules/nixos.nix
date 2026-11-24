@@ -8,6 +8,8 @@ inputs:
 }:
 let
   cfg = config.programs.nixarchy;
+  greeterThemeOn = cfg.displayManager && cfg.greeterThemeUser != null;
+  greeterPkgs = pkgs.extend inputs.self.overlays.default;
 
   filteredBrowserPolicy =
     name: source:
@@ -555,6 +557,16 @@ in
         What it buys is the accent colour alone. Light and dark already follow
         the theme without this, through the settings portal rather than a
         policy file -- so the browser is themed either way, just not tinted.
+      '';
+    };
+
+    greeterThemeUser = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "alice";
+      description = ''
+        Let this user's theme wallpaper and colours appear on the SDDM login
+        screen. Other users see them at login too. Requires displayManager.
       '';
     };
 
@@ -1651,7 +1663,8 @@ in
               ) cfg.preinstallsExclude
             )
           )
-        );
+        )
+        ++ lib.optional greeterThemeOn (lib.lowPrio greeterPkgs.nixarchy-greeter-sync);
     };
 
     # install/config/*.sh and install/config/enable-services.sh, expressed as
@@ -2022,6 +2035,48 @@ in
           serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/rm -f /run/avahi-daemon/pid";
         };
       }
+      // lib.optionalAttrs greeterThemeOn {
+        nixarchy-greeter-publish = {
+          wantedBy = [ "multi-user.target" ];
+          unitConfig.StartLimitIntervalSec = 0;
+          after = [
+            "systemd-tmpfiles-setup.service"
+            "systemd-tmpfiles-resetup.service"
+          ];
+          environment = {
+            NIXARCHY_GREETER_USER = cfg.greeterThemeUser;
+          }
+          //
+            lib.optionalAttrs (lib.attrByPath [ cfg.greeterThemeUser "uid" ] null config.users.users != null)
+              {
+                NIXARCHY_GREETER_UID = toString config.users.users.${cfg.greeterThemeUser}.uid;
+              };
+          serviceConfig = {
+            Type = "oneshot";
+            User = "nixarchy-greeter";
+            Group = "nixarchy-greeter";
+            ExecStart = "${greeterPkgs.nixarchy-greeter-publish}/bin/nixarchy-greeter-publish";
+            TimeoutStartSec = 300;
+            ProtectSystem = "strict";
+            ProtectHome = true;
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            PrivateNetwork = true;
+            PrivateDevices = true;
+            ReadWritePaths = [ "/var/lib/nixarchy-greeter/out" ];
+            MemoryMax = "1G";
+            RestrictAddressFamilies = [ "AF_UNIX" ];
+            LockPersonality = true;
+            ProtectKernelTunables = true;
+            ProtectKernelModules = true;
+            ProtectKernelLogs = true;
+            ProtectControlGroups = true;
+            RestrictNamespaces = true;
+            RestrictSUIDSGID = true;
+            SystemCallArchitectures = "native";
+          };
+        };
+      }
       # A stale device handle after resume can make fprintd ignore SIGTERM, and
       # the restart above then waits out the stop timeout; upstream's 3 s keeps
       # the reader's return quick whatever the global default. optionalAttrs, not mkIf:
@@ -2048,23 +2103,48 @@ in
               })
           );
 
+      paths = lib.optionalAttrs greeterThemeOn {
+        nixarchy-greeter-publish = {
+          wantedBy = [ "paths.target" ];
+          # The directory as well as `ready`: after `ready` is deleted, the file
+          # watch alone missed the next rename into place (seen in
+          # checks.greeter-theme). A publish mid-sync is harmless; the
+          # publisher re-reads the nonce and runs again until it settles.
+          pathConfig.PathChanged = [
+            "/var/lib/nixarchy-greeter/inbox/ready"
+            "/var/lib/nixarchy-greeter/inbox"
+          ];
+        };
+      };
+
       # omarchy-theme-set-browser writes {"BrowserThemeColor": ...} into each
       # browser's policy directory on every theme switch, and skips any that
       # does not exist -- which on NixOS is all of them, so the accent silently
       # never applied. Creating them is all that is needed; the script is
       # upstream's and works unchanged once it has somewhere to write.
-      tmpfiles.rules = lib.mkIf (cfg.browserThemeUser != null) (
-        map (dir: "d ${dir} 0755 ${cfg.browserThemeUser} users - -") [
-          "/etc/chromium/policies"
-          "/etc/chromium/policies/managed"
-          "/etc/opt/chrome/policies"
-          "/etc/opt/chrome/policies/managed"
-          "/etc/opt/edge/policies"
-          "/etc/opt/edge/policies/managed"
-          "/etc/brave/policies"
-          "/etc/brave/policies/managed"
-        ]
-      );
+      tmpfiles.rules =
+        (lib.optionals (cfg.browserThemeUser != null) (
+          map (dir: "d ${dir} 0755 ${cfg.browserThemeUser} users - -") [
+            "/etc/chromium/policies"
+            "/etc/chromium/policies/managed"
+            "/etc/opt/chrome/policies"
+            "/etc/opt/chrome/policies/managed"
+            "/etc/opt/edge/policies"
+            "/etc/opt/edge/policies/managed"
+            "/etc/brave/policies"
+            "/etc/brave/policies/managed"
+          ]
+        ))
+        ++ (
+          if greeterThemeOn then
+            [
+              "d /var/lib/nixarchy-greeter 0755 root root -"
+              "d /var/lib/nixarchy-greeter/inbox 0755 ${cfg.greeterThemeUser} users -"
+              "d /var/lib/nixarchy-greeter/out 0755 nixarchy-greeter nixarchy-greeter -"
+            ]
+          else
+            [ "R /var/lib/nixarchy-greeter" ]
+        );
 
       # Why: modules/AGENTS.md#omarchy-path-default-systemd-user-which-upstream-i
       user.services = {
@@ -2293,13 +2373,21 @@ in
     };
 
     # Why: modules/AGENTS.md#our-own-splash-in-the-theme-directory-upstreams-oc
-    users.users = lib.optionalAttrs (cfg.user != null) {
-      ${cfg.user}.extraGroups = [
-        "input"
-      ]
-      # Why: modules/AGENTS.md#docker-is-enabled-above-at-mkdefault-for-every-mac
-      ++ lib.optional config.virtualisation.docker.enable "docker";
-    };
+    users.users =
+      (lib.optionalAttrs (cfg.user != null) {
+        ${cfg.user}.extraGroups = [
+          "input"
+        ]
+        # Why: modules/AGENTS.md#docker-is-enabled-above-at-mkdefault-for-every-mac
+        ++ lib.optional config.virtualisation.docker.enable "docker";
+      })
+      // lib.optionalAttrs greeterThemeOn {
+        nixarchy-greeter = {
+          isSystemUser = true;
+          group = "nixarchy-greeter";
+        };
+      };
+    users.groups = lib.optionalAttrs greeterThemeOn { nixarchy-greeter = { }; };
 
     # The newest kernel nixpkgs has, not the release default.
     #

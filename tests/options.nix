@@ -2235,6 +2235,36 @@ let
           }) != [ ];
       };
 
+    # #1927: the publisher, its path unit and account exist only with a user
+    # and a display manager; off covers both ways of not having them.
+    greeterTheme =
+      let
+        has =
+          c:
+          c.systemd.services ? nixarchy-greeter-publish
+          || c.systemd.paths ? nixarchy-greeter-publish
+          || c.users.users ? nixarchy-greeter;
+        all =
+          c:
+          c.systemd.services ? nixarchy-greeter-publish
+          && c.systemd.paths ? nixarchy-greeter-publish
+          && c.users.users ? nixarchy-greeter;
+      in
+      {
+        on = all (configWith {
+          displayManager = true;
+          greeterThemeUser = "someone";
+        });
+        off =
+          has (configWith {
+            displayManager = true;
+          })
+          || has (configWith {
+            displayManager = false;
+            greeterThemeUser = "someone";
+          });
+      };
+
     binaryCaches = {
       on =
         builtins.elem "https://nixarchy.cachix.org"

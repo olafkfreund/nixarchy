@@ -7,7 +7,8 @@ substituteInPlace $out/share/omarchy/default/chromium/crx/updates.xml \
   --replace-fail 'file:///usr/share/omarchy/' 'file://'"$out"'/share/omarchy/'
 
 substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
-  --replace-fail 'env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser google-chrome.desktop' \
+  --replace-fail 'XDG_CURRENT_DESKTOP= xdg-mime default google-chrome.desktop \
+  text/html x-scheme-handler/http x-scheme-handler/https x-scheme-handler/about x-scheme-handler/unknown' \
     '. '"$out"'/share/omarchy/lib/nixarchy-store-owned.sh
 browser_chosen() {
   local file dir
@@ -29,7 +30,8 @@ browser_chosen() {
   return 1
 }
 if ! store_owned "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" && ! browser_chosen; then
-  env -u BROWSER XDG_CURRENT_DESKTOP= xdg-settings set default-web-browser chromium-browser.desktop
+  XDG_CURRENT_DESKTOP= xdg-mime default chromium-browser.desktop \
+    text/html x-scheme-handler/http x-scheme-handler/https x-scheme-handler/about x-scheme-handler/unknown
 fi'
 # quattro efcf615 dropped HEY's mailto default; older edge pins still set it.
 if grep -q 'HEY.desktop' $out/share/omarchy/bin/omarchy-provision-user; then

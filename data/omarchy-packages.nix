@@ -152,6 +152,10 @@
   "inotify-tools" = {
     nix = "inotify-tools";
   };
+  "intel-ipu7-drivers-dkms" = {
+    edge = "only";
+    skip = "Intel IPU7 camera driver as DKMS, the alternative to linux-omarchy-ipu7; same decision as intel-ipu7-camera, not enabled.";
+  };
   "inxi" = {
     nix = "inxi";
   };
@@ -175,6 +179,14 @@
   };
   "libyaml" = {
     nix = "libyaml";
+  };
+  "linux-omarchy-ipu7" = {
+    edge = "only";
+    skip = "Intel IPU7 camera module built for Omarchy's own kernel; NixOS does not run linux-omarchy, and intel-ipu7-camera is not enabled.";
+  };
+  "linux-omarchy-v4l2loopback" = {
+    edge = "only";
+    skip = "v4l2loopback built for Omarchy's own kernel, for the Cam Link 4K relay and IPU7 camera; NixOS does not run linux-omarchy, and the relay is not ported yet (#1610).";
   };
   "localsend" = {
     nix = "localsend";
@@ -738,6 +750,7 @@
     skip = "Intel thermal daemon; services.thermald is not enabled here.";
   };
   "tuxedo-drivers-nocompatcheck-dkms" = {
+    edge = "absent";
     skip = "Tuxedo laptops; hardware.tuxedo-drivers is the user choice.";
   };
   "vpl-gpu-rt" = {

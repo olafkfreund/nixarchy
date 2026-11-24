@@ -164,6 +164,26 @@
     class = "patch";
     reason = "Upstream installs Node and Playwright through mise on first use, and there is no mise here. Node and playwright-core come from nixpkgs; the browser is still Chrome or Chromium from PATH (#1886).";
   };
+  "omarchy-hw-aarch64-apple" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
+  "omarchy-hw-aarch64-gb10" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
+  "omarchy-hw-aarch64-n1x" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
+  "omarchy-hw-aarch64-qualcomm" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
   "omarchy-install-ai-chatgpt" = {
     class = "patch";
     reason = "The install command launches /usr/bin/chatgpt, which is absent on NixOS; launch the installed command from PATH.";

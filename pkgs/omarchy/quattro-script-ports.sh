@@ -58,3 +58,11 @@ fi" \
     "verdict=\$(awk 'NF == 0 { next } NF < 4 || \$2 !~ /^[0-9]+\$/ || \$4 !~ /^(seat|-\$)/ { bad = 1 } \$4 ~ /^seat/ { seat = 1 }
   END { print (bad ? \"unreadable\" : seat ? \"seated\" : \"seatless\") }' <<<\"\$sessions\") || exit 0
 [ \"\$verdict\" = seatless ] || exit 0"
+
+# quattro 94a8c3c's aarch64 detectors call /usr/bin/uname, absent here, so they
+# could never match; the store's uname is on every script's PATH.
+for hw in $out/share/omarchy/bin/omarchy-hw-aarch64-*; do
+  if grep -sqF '$(/usr/bin/uname -m)' "$hw"; then
+    substituteInPlace "$hw" --replace-fail '$(/usr/bin/uname -m)' '$(uname -m)'
+  fi
+done

@@ -2124,9 +2124,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace "$shellBin" --replace-fail "$ipcOld" "$ipcNew"
                     # Use the same display resolver for desktop and SSH callers;
                     # choosing the newest socket can target an unrelated session.
-                    displayOld=$(sed -n '/^if \[\[ -z \''${WAYLAND_DISPLAY:-}/,/^fi$/p' "$shellBin")
+                    displayOld=$(sed -n '/^if \[\[ -z \''${WAYLAND_DISPLAY:-} ||/,/^fi$/p' "$shellBin")
                     [[ -n $displayOld ]] || { echo "Missing upstream display discovery" >&2; exit 1; }
                     substituteInPlace "$shellBin" --replace-fail "$displayOld" ':'
+                    # quattro 94a8c3c then fails with no display; the session resolver needs none.
+                    noDisplay=$(printf '%s\n' 'if [[ -z ''${WAYLAND_DISPLAY:-} ]]; then' '  fail "omarchy-shell is not running"' 'fi')
+                    if grep -qxF 'if [[ -z ''${WAYLAND_DISPLAY:-} ]]; then' "$shellBin"; then
+                      substituteInPlace "$shellBin" --replace-fail "$noDisplay" ':'
+                    fi
 
 
                     # A monitor surviving a rebuild must use its own helpers,

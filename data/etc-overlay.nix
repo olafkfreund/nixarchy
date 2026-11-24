@@ -271,7 +271,7 @@
   "systemd/system/systemd-user-sessions.service" = {
     class = "divergent";
     edge = "only";
-    reason = "A whole replacement of systemd's unit that drops network.target from its After=, so a graphical login does not wait for network setup. Not adopted: it runs /usr/lib/systemd/systemd-user-sessions, which does not exist on NixOS, and dropping the ordering here would need a replacement of nixpkgs' own unit and a measured boot to justify it.";
+    reason = "A whole replacement of systemd's unit that drops network.target from its After=, so a graphical login does not wait for network setup. Not adopted: it runs /usr/lib/systemd/systemd-user-sessions, which does not exist on NixOS, and dropping the ordering would gain nothing measured: on the 2026-11-24 boots network.target was reached at 19.7 s on p620 and 9.1 s on razer, while user sessions waited on Home Manager's activation until 45.1 s and 13.7 s.";
   };
 
   "systemd/system/thermald.service.d/10-omarchy.conf" = {

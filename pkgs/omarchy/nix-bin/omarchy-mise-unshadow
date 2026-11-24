@@ -62,7 +62,9 @@ for f in "$bin"/*; do
     rm -f -- "$f"
     echo "omarchy-mise-unshadow: removed $f"
     removed+=("$f")
-  elif grep -qaE '(^|[^[:alnum:]_-])mise([[:space:]]|$)' -- "$f"; then
+  # Only scripts: grep reads a non-matching binary whole, at every activation (#1934).
+  elif IFS= read -r -n2 magic <"$f" && [[ $magic == '#!' ]] &&
+    grep -qaE '(^|[^[:alnum:]_-])mise([[:space:]]|$)' -- "$f"; then
     left+=("$f")
   fi
 done

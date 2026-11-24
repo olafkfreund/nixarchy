@@ -36,41 +36,41 @@ pkgs.runCommand "greeter-publish-check"
     # valid input
     reset; echo "$good" > $g/inbox/colors.toml; cp blue.png $g/inbox/background
     pub
-    conf | grep -qx 'background="#ff0000"' || fail bg
-    conf | grep -qx 'failed="#ff00ff"' || fail red
-    conf | grep -q '^wallpaper="gen-[0-9]*/background.png"' || fail wallpaper
+    grep -qx 'background="#ff0000"' $g/out/current/theme.conf || fail bg
+    grep -qx 'failed="#ff00ff"' $g/out/current/theme.conf || fail red
+    grep -q '^wallpaper="gen-[0-9]*/background.png"' $g/out/current/theme.conf || fail wallpaper
     [ -f $g/out/current/background.png ] || fail png
     [ "$(cat $g/out/current/request)" = 1 ] || fail request
 
     # bad hex and non-string: key left out, others kept
     reset; printf 'background = "red;"\nforeground = 5\naccent = "#ffff00"\n' > $g/inbox/colors.toml
     pub
-    conf | grep -q background && fail bad-hex
-    conf | grep -q foreground && fail non-string
-    conf | grep -qx 'accent="#ffff00"' || fail accent-kept
+    grep -q background $g/out/current/theme.conf && fail bad-hex
+    grep -q foreground $g/out/current/theme.conf && fail non-string
+    grep -qx 'accent="#ffff00"' $g/out/current/theme.conf || fail accent-kept
 
     # missing files: published, empty
     reset; pub
     [ -n "$(cur)" ] || fail missing-published
     [ -r $g/out/current/theme.conf ] || fail missing-readable
-    conf | grep -qx '\[General\]' || fail missing-general
-    conf | grep -q wallpaper && fail missing-wallpaper
+    grep -qx '\[General\]' $g/out/current/theme.conf || fail missing-general
+    grep -q wallpaper $g/out/current/theme.conf && fail missing-wallpaper
 
     # corrupt image: published without it
     reset; echo "$good" > $g/inbox/colors.toml; echo notanimage > $g/inbox/background
     pub
     [ -n "$(cur)" ] || fail corrupt-published
-    conf | grep -q wallpaper && fail corrupt-wallpaper
-    conf | grep -q '^background=' || fail corrupt-colors
+    grep -q wallpaper $g/out/current/theme.conf && fail corrupt-wallpaper
+    grep -q '^background=' $g/out/current/theme.conf || fail corrupt-colors
 
     # SVG renamed to background: no PNG magic, published without an image
     reset; echo "$good" > $g/inbox/colors.toml
     echo '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>' > $g/inbox/background
     pub
     [ -n "$(cur)" ] || fail svg-published
-    conf | grep -q wallpaper && fail svg-wallpaper
+    grep -q wallpaper $g/out/current/theme.conf && fail svg-wallpaper
     [ ! -e $g/out/current/background.png ] || fail svg-png
-    conf | grep -q '^background=' || fail svg-colors
+    grep -q '^background=' $g/out/current/theme.conf || fail svg-colors
 
     # files owned by another uid: defaults, an empty generation
     reset; echo "$good" > $g/inbox/colors.toml; cp blue.png $g/inbox/background
@@ -106,8 +106,8 @@ pkgs.runCommand "greeter-publish-check"
     reset; echo "$good" > $g/inbox/colors.toml
     printf '\x89PNG\r\n\x1a\nnot really a png' > $g/inbox/background; pub
     [ -n "$(cur)" ] || fail corrupt-png-published
-    conf | grep -q wallpaper && fail corrupt-png-wallpaper
-    conf | grep -qx 'background="#ff0000"' || fail corrupt-png-colours
+    grep -q wallpaper $g/out/current/theme.conf && fail corrupt-png-wallpaper
+    grep -qx 'background="#ff0000"' $g/out/current/theme.conf || fail corrupt-png-colours
 
     # a sync still running (an input newer than ready) is not published
     reset; touch -d '1 minute ago' $g/inbox/ready; echo "$good" > $g/inbox/colors.toml

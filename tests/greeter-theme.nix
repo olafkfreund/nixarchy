@@ -181,7 +181,7 @@ pkgs.testers.runNixOSTest {
         node.succeed("systemctl reset-failed display-manager")
         node.succeed("systemctl restart display-manager")
         node.wait_for_unit("display-manager.service")
-        node.wait_until_succeeds("loginctl list-sessions | grep -q greeter")
+        node.wait_until_succeeds("loginctl list-sessions | grep greeter")
         return cursor
 
     def wait_for_pixels(node, label, expected, tol=8):
@@ -206,7 +206,7 @@ pkgs.testers.runNixOSTest {
         node.send_chars("omarchy\n")
         node.wait_until_succeeds(
             f"journalctl -u display-manager --after-cursor='{cursor}' --no-pager "
-            "| grep -q 'Authentication for user .*omarchy.* successful'"
+            "| grep 'Authentication for user .*omarchy.* successful'"
         )
         node.wait_until_succeeds(
             "loginctl list-sessions --no-legend | awk '$3 == \"omarchy\" { found = 1 } END { exit !found }'"
@@ -239,7 +239,7 @@ pkgs.testers.runNixOSTest {
         # Not `is-active`: a oneshot that is still starting reports "activating".
         idle = (
             f"systemctl show -p ActiveState --value {PUBLISH_UNIT} "
-            "| grep -qxE 'inactive|failed'"
+            "| grep -xE 'inactive|failed'"
         )
         node.wait_until_succeeds(idle, timeout=60)
         node.sleep(1)
@@ -257,7 +257,7 @@ pkgs.testers.runNixOSTest {
         if kind == "unsafe":
             node.wait_until_succeeds(
                 f"journalctl -u {PUBLISH_UNIT} --after-cursor='{cursor}' --no-pager "
-                "| grep -q 'nixarchy-greeter-publish: '",
+                "| grep 'nixarchy-greeter-publish: '",
                 timeout=30,
             )
             after = current_gen(node)
@@ -507,7 +507,7 @@ pkgs.testers.runNixOSTest {
     )
     # The greeter logs QML errors under its own identifier, not the unit.
     broken.wait_until_succeeds(
-        "journalctl -b -t sddm-greeter-qt6 --no-pager | grep -q 'Tinted.qml.*Expected token'",
+        "journalctl -b -t sddm-greeter-qt6 --no-pager | grep 'Tinted.qml.*Expected token'",
         timeout=60,
     )
     login_and_logout(broken, cursor)

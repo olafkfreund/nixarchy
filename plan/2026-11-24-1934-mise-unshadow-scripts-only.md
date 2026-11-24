@@ -22,6 +22,10 @@ must not appear in the notice.
    two bytes with `read -r -n2` and require `#!` before grepping → the same
    check passes.
 
+3. (Deviation, found by `checks.mise-free`.) `data/mise-allow.nix`: the
+   allowed line for the grep moves to its new continuation line → `nix build
+   .#checks.x86_64-linux.mise-free` passes.
+
 ## Tests
 
 `checks.mise-launchers` red then green; every generated check; `nix fmt -- --ci`.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1934
 intent: intent/2026-11-24-1934-mise-unshadow-scripts-only.md
 ---

@@ -9,13 +9,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omawrite";
-  version = "0.7.6";
+  version = "0.7.8";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omawrite";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-7Kv+jjv+5852w0vMF9KbQbAIpjFaw8s1fS2QZSv0Fjk=";
+    hash = "sha256-wsNNpCPneuAdu9rvxvM0PYnSBZGA3rMLjehbXarXBSs=";
   };
 
   # One of the four applications Omarchy writes itself and installs by default.

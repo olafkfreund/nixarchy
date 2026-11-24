@@ -19,10 +19,16 @@ WRONG_OWNER = object()
 
 
 def read_input(path, limit, uid):
+    """None if absent, WRONG_OWNER if not uid's, else (bytes, mtime_ns). Raises on unsafe."""
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
     except FileNotFoundError:
         return None
+    except PermissionError:
+        # A 0600 file left by a previous greeterThemeUser: not this user's data.
+        if os.lstat(path).st_uid != uid:
+            return WRONG_OWNER
+        raise
     with os.fdopen(fd, "rb") as stream:
         info = os.fstat(stream.fileno())
         if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
@@ -32,24 +38,47 @@ def read_input(path, limit, uid):
         data = stream.read(limit + 1)
         if len(data) > limit:
             raise ValueError(f"oversized input: {path}")
-        return data
+        return data, info.st_mtime_ns
 
 
 def publish(uid):
     inbox = ROOT / "inbox"
     out = ROOT / "out"
-    for _ in range(3):
+    publishes, waits = 0, 0
+    while publishes < 3:
         ready = read_input(inbox / "ready", 65536, uid)
         colors = read_input(inbox / "colors.toml", 65536, uid)
         image = read_input(inbox / "background", 50 * 1024 * 1024, uid)
         observed_ready = ready
         if any(item is WRONG_OWNER for item in (ready, colors, image)):
+            # Files from another owner (a previous greeterThemeUser, or root):
+            # publish the defaults rather than keep someone else's theme.
             ready, colors, image = None, None, None
+        else:
+            # The sync writes the inputs first and renames `ready` last. An input
+            # newer than `ready`, or inputs with no `ready` yet, mean a sync is
+            # still running; its final rename triggers the real publish.
+            inputs = [item for item in (colors, image) if item is not None]
+            if inputs and (ready is None or any(item[1] > ready[1] for item in inputs)):
+                # A trigger that lands while this run is alive is dropped by
+                # systemd, so wait here for the sync to finish, briefly.
+                waits += 1
+                if waits > 15:
+                    return
+                time.sleep(1)
+                continue
+            ready, colors, image = (
+                None if item is None else item[0] for item in (ready, colors, image)
+            )
 
         parsed = tomllib.loads(colors.decode("utf-8")) if colors is not None else {}
         values = {}
-        for source, target in (("background", "background"), ("foreground", "foreground"),
-                               ("accent", "accent"), ("red", "failed")):
+        for source, target in (
+            ("background", "background"),
+            ("foreground", "foreground"),
+            ("accent", "accent"),
+            ("red", "failed"),
+        ):
             value = parsed.get(source)
             if isinstance(value, str) and COLOR.fullmatch(value):
                 values[target] = value
@@ -63,8 +92,13 @@ def publish(uid):
         request.chmod(0o644)
         if image is not None:
             coder = None
-            for magic, name_of_coder in ((b"\x89PNG\r\n\x1a\n", "png"), (b"\xff\xd8\xff", "jpeg"),
-                                         (b"GIF87a", "gif"), (b"GIF89a", "gif"), (b"BM", "bmp")):
+            for magic, name_of_coder in (
+                (b"\x89PNG\r\n\x1a\n", "png"),
+                (b"\xff\xd8\xff", "jpeg"),
+                (b"GIF87a", "gif"),
+                (b"GIF89a", "gif"),
+                (b"BM", "bmp"),
+            ):
                 if image.startswith(magic):
                     coder = name_of_coder
                     break
@@ -74,13 +108,38 @@ def publish(uid):
                 picture = generation / ".background.tmp.png"
                 try:
                     result = subprocess.run(
-                        ["magick", "-limit", "memory", "256MiB", "-limit", "map", "512MiB",
-                         "-limit", "disk", "256MiB", "-limit", "width", "16KP",
-                         "-limit", "height", "16KP", "-limit", "time", "30",
-                         f"{coder}:-[0]", "-auto-orient", "-resize", "3840x2160>", "-strip",
-                         f"png:{picture}"],
-                        input=image, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        timeout=60, check=False,
+                        [
+                            "magick",
+                            "-limit",
+                            "memory",
+                            "256MiB",
+                            "-limit",
+                            "map",
+                            "512MiB",
+                            "-limit",
+                            "disk",
+                            "256MiB",
+                            "-limit",
+                            "width",
+                            "16KP",
+                            "-limit",
+                            "height",
+                            "16KP",
+                            "-limit",
+                            "time",
+                            "30",
+                            f"{coder}:-[0]",
+                            "-auto-orient",
+                            "-resize",
+                            "3840x2160>",
+                            "-strip",
+                            f"png:{picture}",
+                        ],
+                        input=image,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=60,
+                        check=False,
                     )
                     decoded = result.returncode == 0 and picture.is_file()
                 except subprocess.TimeoutExpired:
@@ -112,6 +171,7 @@ def publish(uid):
         pending.unlink(missing_ok=True)
         pending.symlink_to(name)
         os.replace(pending, current)
+        publishes += 1
         try:
             latest = read_input(inbox / "ready", 65536, uid)
         except (OSError, ValueError):
@@ -122,9 +182,19 @@ def publish(uid):
 
 def main():
     try:
-        uid = int(os.environ["NIXARCHY_GREETER_UID"]) if "NIXARCHY_GREETER_UID" in os.environ else pwd.getpwnam(os.environ["NIXARCHY_GREETER_USER"]).pw_uid
+        uid = (
+            int(os.environ["NIXARCHY_GREETER_UID"])
+            if "NIXARCHY_GREETER_UID" in os.environ
+            else pwd.getpwnam(os.environ["NIXARCHY_GREETER_USER"]).pw_uid
+        )
         publish(uid)
-    except (OSError, ValueError, UnicodeError, tomllib.TOMLDecodeError, KeyError) as error:
+    except (
+        OSError,
+        ValueError,
+        UnicodeError,
+        tomllib.TOMLDecodeError,
+        KeyError,
+    ) as error:
         print(f"nixarchy-greeter-publish: {error}", file=sys.stderr)
     return 0
 

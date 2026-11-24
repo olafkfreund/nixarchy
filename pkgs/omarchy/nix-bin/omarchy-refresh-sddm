@@ -12,28 +12,28 @@ if ! systemctl cat nixarchy-greeter-publish.path >/dev/null 2>&1 ||
   exit 0
 fi
 
+if [ "$(id -u)" = 0 ]; then
+  echo "Run this as your own user, not root: root's files would publish the defaults."
+  exit 1
+fi
 if [ ! -w "$dir/inbox" ]; then
   owner=$(stat -c %U "$dir/inbox" 2>/dev/null || echo "the configured user")
   echo "Only $owner can publish the login theme."
   exit 1
 fi
-if ! nixarchy-greeter-sync; then
-  echo "Not published (see journalctl -u nixarchy-greeter-publish)."
-  exit 1
-fi
-if ! request=$(cat "$dir/inbox/ready") || [ -z "$request" ]; then
-  echo "Not published (see journalctl -u nixarchy-greeter-publish)."
+if ! request=$(nixarchy-greeter-sync) || [ -z "$request" ]; then
+  echo "Not published: the sync failed."
   exit 1
 fi
 
-for _ in $(seq 120); do
+# A decode can take up to 60 s, and the publisher may run once more to catch up.
+for _ in $(seq 300); do
   if [ "$(cat "$dir/out/current/request" 2>/dev/null)" = "$request" ]; then
-    if theme=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null) && [ -n "$theme" ]; then
-      echo "The next login screen uses $theme."
-      exit 0
-    fi
-    break
+    theme=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)
+    echo "The next login screen uses ${theme:-the current theme}."
+    exit 0
   fi
   sleep 0.5
 done
-echo "Not published (see journalctl -u nixarchy-greeter-publish)."
+echo "Not published within 150 s (see journalctl -u nixarchy-greeter-publish)."
+exit 1

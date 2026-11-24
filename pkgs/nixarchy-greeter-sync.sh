@@ -37,6 +37,9 @@ else
   rm -f "$inbox/background"
 fi
 
-date +%s%N >"$inbox/.tmp.ready"
+nonce=$(date +%s%N)
+printf '%s\n' "$nonce" >"$inbox/.tmp.ready"
 chmod 0644 "$inbox/.tmp.ready"
 mv -f -- "$inbox/.tmp.ready" "$inbox/ready"
+# The nonce on stdout lets omarchy-refresh-sddm wait for its own publish.
+printf '%s\n' "$nonce"

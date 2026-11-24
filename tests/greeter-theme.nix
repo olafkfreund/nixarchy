@@ -236,7 +236,11 @@ pkgs.testers.runNixOSTest {
         # A rename of `ready` during a run is then picked up by the publisher's
         # own catch-up loop rather than a new invocation, so the proof is the
         # result (request == nonce) or the logged rejection, not an InvocationID.
-        idle = f"! systemctl is-active --quiet {PUBLISH_UNIT}"
+        # Not `is-active`: a oneshot that is still starting reports "activating".
+        idle = (
+            f"systemctl show -p ActiveState --value {PUBLISH_UNIT} "
+            "| grep -qxE 'inactive|failed'"
+        )
         node.wait_until_succeeds(idle, timeout=60)
         node.sleep(1)
         node.wait_until_succeeds(idle, timeout=60)

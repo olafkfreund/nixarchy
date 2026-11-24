@@ -96,7 +96,7 @@
       "if [[ $line =~ ^mise\\ use\\ -g(\\ --quiet)?\\ \\\"([^\\\"]+)\\\" ]]; then"
       "for form in quiet cooldown-export bail-on-failure mise-exec bare-exec; do"
       "echo \"omarchy-mise-unshadow: removed $f\""
-      "elif grep -qaE '(^|[^[:alnum:]_-])mise([[:space:]]|$)' -- \"$f\"; then"
+      "grep -qaE '(^|[^[:alnum:]_-])mise([[:space:]]|$)' -- \"$f\"; then"
       "for d in \"$HOME/.local/share/mise/installs\"/*; do"
       "echo \"mise is no longer part of nixarchy. Nothing you own was deleted except any launchers listed here.\""
       "echo \"Off your PATH now, in ~/.local/share/mise/installs: \${tools[*]}\""

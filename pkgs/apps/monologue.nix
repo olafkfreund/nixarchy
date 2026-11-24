@@ -13,13 +13,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "monologue";
-  version = "0.4.0";
+  version = "0.4.1";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "monologue";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-ItL5WqPYJo7gr6uSd9FHVFbvtnJE51tUR4EXVCFeLk4=";
+    hash = "sha256-YksthuX2lXMYiYofvrlPElbiBB5p7g4eEEby8q13WLo=";
   };
 
   # Omarchy 4.5 default app, on through omarchyApps.enable, built like pkgs/apps/omawrite.nix.

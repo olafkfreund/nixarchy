@@ -83,6 +83,8 @@ pkgs.runCommand "nixarchy-mise-launchers"
     ln -s "$TMPDIR/hm/linked" "$bin/linked"
     printf '#!/bin/bash\necho mine\n' > "$bin/personal"
     printf '#!/bin/bash\neval "$(mise activate zsh)"\n' > "$bin/activation"
+    # #1934: a compiled program is not a launcher, whatever strings it holds.
+    printf '\177ELF\0\0mise use -g "x"\n' > "$bin/compiled"
     launcher quiet pkg:large large > "$bin/large"
     printf '%1100s' ' ' >> "$bin/large"
     mkdir -p "$XDG_DATA_HOME/mise/installs/node" "$XDG_DATA_HOME/mise/shims"
@@ -104,6 +106,8 @@ pkgs.runCommand "nixarchy-mise-launchers"
     grep -F 'installs: node' "$notice"
     [ -L "$bin/linked" ] && [ -f "$TMPDIR/hm/linked" ]
     [ -f "$bin/personal" ]
+    # Not `! grep`: set -e ignores a negated command.
+    if grep -F "$bin/compiled" "$notice"; then exit 1; fi
 
     cp after before
     "${omarchy}/bin/omarchy-mise-unshadow" > second.log

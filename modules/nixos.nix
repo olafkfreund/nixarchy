@@ -1478,7 +1478,9 @@ in
         ]
         # Why: modules/AGENTS.md#minus-hyprland-itself
         ++ map lib.lowPrio (
-          builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
+          builtins.filter (
+            d: !(lib.hasPrefix "hyprland-" (d.name or "") || (d.pname or "") == "systemd")
+          ) cfg.package.passthru.runtimeDeps
         )
         ++ [ (lib.lowPrio (pkgs.writeShellScriptBin "vi" ''exec nvim "$@"'')) ]
         # Omarchy's pipewire-jack: nixpkgs deprecated the global jack.enable for the pw-jack wrapper.

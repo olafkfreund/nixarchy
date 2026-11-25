@@ -272,10 +272,12 @@ wheels (`docs/manual/boxes.md`, `docs/manual/troubleshooting.md`, the
 ### Minus Hyprland itself
 
 ```nix
-++ builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
+++ builtins.filter (
+  d: !(lib.hasPrefix "hyprland-" (d.name or "") || (d.pname or "") == "systemd")
+) cfg.package.passthru.runtimeDeps
 ```
 
-Minus Hyprland itself.
+Minus Hyprland itself, and minus systemd.
 
 The package carries the compositor its Lua config is written against as
 a runtime dependency, and putting that in systemPackages made it the
@@ -292,6 +294,14 @@ nixarchy sets the option, theirs when they mkForce it -- so dropping it
 here changes nothing on a clean machine and stops overriding anyone
 else's. omarchy-session still runs the Lua config through
 config.programs.hyprland.package, which is the same binary either way.
+
+systemd goes for the same reason (#1937). NixOS always installs its own
+`config.systemd.package`, and nixpkgs now patches that through the option's
+`apply`, so it is no longer `pkgs.systemd`. The package's stock copy then
+put a second systemd 262 in the profile, and its `-man` output collided with
+the real one file by file: hundreds of buildEnv warnings on every switch.
+bin/ is a symlink farm, so the scripts take `systemctl` from the profile
+either way, and now that is the systemd that is actually running.
 
 <a id="hyprlands-mesa-follows-its-own-nixpkgs-1"></a>
 

@@ -131,7 +131,7 @@
 
     # Why: docs/internals/flake.md#declarative-secrets-adopted-for-one-concrete-reaso
     sops-nix = {
-      url = "github:Mic92/sops-nix/11e5885d241743ff0193465d533b20e754bc3ce0";
+      url = "github:Mic92/sops-nix/d5abe5e53200ad48254e8e6bd95e6cef94e66577";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -370,7 +370,7 @@
 
     # Why: docs/internals/flake.md#221-222
     microvm = {
-      url = "github:microvm-nix/microvm.nix/194a254693f49af939a2b53d04982bd4b276fdb3";
+      url = "github:microvm-nix/microvm.nix/430a46d03ef15f1b8b715fafa85f21847960b783";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

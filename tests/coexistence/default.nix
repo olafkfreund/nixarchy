@@ -19,6 +19,7 @@
 #   then order. The user's own ffmpeg-full must win over nixarchy's ffmpeg.
 # - systempkg-own-vi, neovim-vialias: a user's vi wins; otherwise nixarchy's
 #   wrapper reaches nvim from PATH.
+# - systemd-once: the profile holds one systemd, NixOS's own (#1937).
 let
   inherit (pkgs) lib;
 
@@ -118,6 +119,16 @@ let
     && builtins.any (p: (p.pname or "") == "mise-coexist") c.environment.systemPackages
     && !builtins.any (p: (p.pname or "") == "mise") c.environment.systemPackages
     && c.environment.etc."mise/conf.d/omarchy.toml".text == "# theirs\n";
+
+  # One systemd in the profile, and it is NixOS's (#1937). Compared by drvPath
+  # with the context discarded, so the check builds neither.
+  systemdOnceCheck =
+    let
+      c = reference.config;
+      drv = p: builtins.unsafeDiscardStringContext (p.drvPath or "");
+      ours = builtins.filter (p: (p.pname or "") == "systemd") c.environment.systemPackages;
+    in
+    map drv ours == [ (drv c.systemd.package) ];
 
   # The plugin must be built against the user's Hyprland. Compared by drvPath
   # with the context discarded: this check must not build either Hyprland.
@@ -552,6 +563,17 @@ let
         esac
       '';
 
+  systemdOnceScript =
+    if systemdOnceCheck then
+      ''
+        echo "systemd-once: ok"
+      ''
+    else
+      ''
+        echo "systemd-once: FAIL environment.systemPackages holds a systemd other than config.systemd.package" >&2
+        fail=1
+      '';
+
   miseOwnScript =
     if miseOwnCheck then
       ''
@@ -676,6 +698,7 @@ pkgs.runCommand "nixarchy-coexistence"
         ''
     }
     ${hyprlandScript}
+    ${systemdOnceScript}
     ${chromiumScript}
     ${chromiumDisabledScript}
     ${lib.concatStrings agentLocalScripts}

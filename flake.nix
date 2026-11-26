@@ -2007,6 +2007,8 @@
             "omarchy-package-ledger"
             # The pure pin-fix modes, daily proposal selector, and every probe in data/pin-fix.nix.
             "pin-fix"
+            # The updater's diff and launch verdict gates fail under scope and settle mutations (#1943).
+            "update-launch"
             # What Omarchy's autostart runs at every login ships system-wide (#1956).
             "autostart-runtime"
             # The watchdog that starts a scheduled run GitHub skipped, over fixtures (#1942).
@@ -2082,6 +2084,16 @@
           greeter-theme = import ./tests/greeter-theme.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
+          };
+          # A real login and mapped app window; the update job selects the bumped GUI apps (#1943).
+          update-launch-vm = import ./tests/update-launch-vm.nix {
+            inputs = realInputs;
+            pkgs = pkgsFor.${system};
+            names =
+              let
+                selected = builtins.getEnv "NIXARCHY_LAUNCH_APPS";
+              in
+              if selected == "" then [ "omacut" ] else builtins.fromJSON selected;
           };
 
           # Why: tests/AGENTS.md#a-test-script-over-128-kib-breaks-the-stable-driver

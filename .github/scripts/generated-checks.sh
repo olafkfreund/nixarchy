@@ -41,7 +41,7 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # factory-reset is a nixosTest and needs /dev/kvm, as wifi-hwsim.
 # sshd-login is a nixosTest and needs /dev/kvm, as wifi-hwsim.
 # greeter-theme is a nixosTest and needs /dev/kvm, as wifi-hwsim.
-claimed="wifi-hwsim greeter-theme factory-reset remove-fingerprint-vm hibernate-resume boot-hang-detect sshd-login keyboard-boot install free-space installer-refusal
+claimed="wifi-hwsim greeter-theme update-launch-vm factory-reset remove-fingerprint-vm hibernate-resume boot-hang-detect sshd-login keyboard-boot install free-space installer-refusal
   install-encrypted install-iso-net install-stock-iso iso-budget microvm-boot
   box-boot box-template coexist coexistence dashboard-clock installer-ui
   installer-wizard integration microvm-template

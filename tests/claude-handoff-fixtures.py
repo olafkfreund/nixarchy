@@ -72,6 +72,24 @@ class HandoffFixtures(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "auto-merge"):
                 handoff.publish()
 
+    def test_pinned_packages_disables_auto_merge_before_publish(self):
+        with tempfile.TemporaryDirectory() as temp:
+            previous = os.getcwd()
+            try:
+                os.chdir(temp)
+                Path("verified-files.json").write_text('{"files": []}')
+                with patch.dict(os.environ, {"REPO": "o/r", "BRANCH": "update/pinned-packages",
+                                             "SHA": "deadbeef", "PR": "19"}), \
+                     patch.object(handoff, "pr_state", return_value=pull()), \
+                     patch.object(handoff, "gh", side_effect=[{"auto_merge": {"enabled_at": "now"}},
+                                                             {"data": {"createCommitOnBranch": {"commit": {"oid": "new"}}}}]), \
+                     patch.object(handoff.subprocess, "run") as run:
+                    handoff.publish()
+                    run.assert_called_once_with(
+                        ["gh", "pr", "merge", "19", "--repo", "o/r", "--disable-auto"], check=True)
+            finally:
+                os.chdir(previous)
+
 
 if __name__ == "__main__":
     unittest.main()

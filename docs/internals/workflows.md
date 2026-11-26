@@ -31,8 +31,7 @@ gh run watch --interval 60            # follow the newest run
 | `flake-update.yml` | 07:00 UTC | hosted | bump nixpkgs; draft a fix when it breaks a pinned input |
 | `release.yml` | a `v*` tag | **self-hosted** | build and publish the images |
 | `wiki.yml` | `docs/internals/**` | hosted | mirror these pages |
-| `copilot-setup-steps.yml` | Copilot | hosted | agent environment |
-| `copilot-handoff.yml` | `build` fails on `update/` | hosted | hand a red bump to Copilot |
+| `claude-handoff.yml` | `build` fails on `update/` | hosted | propose, verify, and publish a bounded Claude fix |
 
 The clock is staggered on purpose: each one reports on the state the previous
 one left.
@@ -256,7 +255,7 @@ lands on `main` with no `build` and no install check. #671 did exactly that
 (#676). Without the secret both steps fall back to `GITHUB_TOKEN`, and the
 merge step fails saying so rather than arming a merge that can never fire.
 
-A bump that goes red is handed to Copilot — see `copilot-handoff.yml` below.
+A bump that goes red is offered to Claude — see `claude-handoff.yml` below.
 
 ---
 
@@ -368,8 +367,8 @@ It moves **nixpkgs only**, and only nixpkgs ever merges itself.
   and its lock must equal its merge base's apart from the root `nixpkgs` node
   (`pin-fix.sh --only-nixpkgs`, with the file list from GitHub's compare, since
   the checkout is shallow). Auto-merge is bound to that head
-  (`--match-head-commit`), and `copilot-handoff.sh` takes it off a nixpkgs
-  bump before Copilot pushes to it.
+  (`--match-head-commit`), and `claude-handoff.yml` takes it off a nixpkgs
+  bump before publishing a repair.
 - **Failure kinds.** `eval-gate.sh` exits 2, failing the job, when its lists
   cannot be read or every failure is a fetch error: the network, not upstream.
   A pin-fix that crashes still opens the draft with nixpkgs alone, then fails
@@ -377,7 +376,7 @@ It moves **nixpkgs only**, and only nixpkgs ever merges itself.
 - **Time.** The job has 45 minutes; `pin-fix.sh` stops trying new moves 28
   minutes in, so a draft still opens.
 - **Watching it.** `review.yml` reports `flake-update.yml` and a blocked draft
-  older than three days (`nix run .#review`). `copilot-handoff.yml` skips
+  older than three days (`nix run .#review`). `claude-handoff.yml` skips
   drafts, and PRs from a fork never count as the blocked draft.
 
 ---
@@ -423,49 +422,25 @@ in the wiki are overwritten.
 **The wiki is generated. Do not edit it there** — the next push to `main`
 discards it.
 
-## `copilot-setup-steps.yml`
-
-Installs the agent-bus MCP server for Copilot agents and proves it starts and
-serves the tools its allowlist names.
-
-## `copilot-handoff.yml` — a red bump, handed to Copilot
+## `claude-handoff.yml` — a red bump, proposed to Claude
 
 **Trigger:** `workflow_run` on `build` completing. **Runs only when** the
 conclusion is `failure`, the branch starts `update/` (all three bump bots
 use that prefix), and the branch is in this repository.
 
-It runs `.github/scripts/copilot-handoff.sh`, which posts one `@copilot`
-comment on that branch's open pull request: the failed job names, the `error`
-lines from the log (post-job cleanup and nix trace frames cut, colour stripped
-in both spellings), and three constraints — fix the cause rather than revert
-the bump, show it failing then passing (§1), and **stop and say so** if the
-failing job needs KVM or a self-hosted runner. Copilot pushes its fix to that
-same branch, and `build` runs again.
+The gate requires one current, non-draft PR at the failed SHA. It rejects
+cancelled runs, VM failures, and steps without a known cheap reproducer. A
+marker from the `BUMP_TOKEN` identity limits it to one attempt per SHA and two
+per PR. The proposal job checks out trusted code and gives Claude only a
+bounded diff and failure excerpt as diagnostic text. It has the subscription
+token but no write permission and never checks out the bump.
 
-**It holds `COPILOT_AGENT_TOKEN`, a broad PAT**, because Copilot answers only
-comments from someone with write access and `GITHUB_TOKEN` is not that. The
-shape around it:
-
-| guard | what it stops |
-|---|---|
-| `workflow_run`, checking out `main` | pull request code never runs while the secret is in scope |
-| same-repository test | a fork naming its branch `update/anything` |
-| `permissions: {}` | nothing else rides on the job token |
-| values passed through `env:` | expression injection into `run:` |
-
-**What it will not do:**
-
-- **Hand off a `cancelled` run.** An eviction or a timeout has no failed job
-  (§6); an eviction needs nothing, and a timeout is a CI-gate change for a
-  human.
-- **Hand off the same commit twice.** Each comment carries a hidden
-  `copilot-handoff sha=<sha>` marker, so a re-run of that commit is skipped.
-- **Loop.** At most two handoffs per pull request; after that the step
-  summary says it is left for a human.
-- **Watch `install check`.** Those jobs need the self-hosted runners, which
-  Copilot cannot reach.
-
-`DRY_RUN=1` prints the comment instead of posting it.
+The validator checks out the bump separately without secrets. It runs the
+trusted reproducer before and after applying Claude's patch, and refuses CI
+gate edits. The publisher rechecks the PR head, disables nixpkgs auto-merge
+when armed, and appends exactly the verified files with `expectedHeadOid`.
+Its `BUMP_TOKEN` commit starts the ordinary PR checks. A human reviews the
+workflow change and the resulting PR before merge.
 
 ---
 

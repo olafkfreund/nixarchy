@@ -72,6 +72,8 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     import importlib.util
     import json
+    import os
+    from pathlib import Path
     import shlex
     import time
 
@@ -99,6 +101,7 @@ pkgs.testers.runNixOSTest {
         return json.loads(machine.succeed(desktop("hyprctl clients -j")))
 
     failures = []
+    verdicts = {}
     for app in apps:
         name = app["name"]
         before = clients()
@@ -131,14 +134,18 @@ pkgs.testers.runNixOSTest {
             alive = {pid} if machine.execute("kill -0 " + str(pid))[0] == 0 else set()
             assert launch.observed(before, opened, settled, app["class"], alive), "window or process did not survive settle"
             print("launch-verdict " + name + " PASS")
+            verdicts[name] = "PASS"
         except Exception as exc:
             print("launch-verdict " + name + " FAIL: " + str(exc))
+            verdicts[name] = "FAIL"
             print("launcher log: " + machine.succeed("cat " + log + " || true"))
             print("clients: " + json.dumps(clients()))
             failures.append(name)
         finally:
             if pid:
                 machine.succeed("pkill -P " + str(pid) + " || true; kill " + str(pid) + " 2>/dev/null || true")
+    Path(os.environ["out"]).mkdir(exist_ok=True)
+    (Path(os.environ["out"]) / "verdicts.json").write_text(json.dumps(verdicts))
     assert not failures, "launch failures: " + ", ".join(failures)
   '';
 }

@@ -150,7 +150,7 @@ def publish():
     number = pr["number"]
     if number != int(os.environ["PR"]):
         raise ValueError("PR number changed")
-    if branch.startswith("update/nixpkgs-"):
+    if branch.startswith("update/nixpkgs-") or branch == "update/pinned-packages":
         details = gh("api", f"repos/{repo}/pulls/{number}")
         if "auto_merge" not in details:
             raise ValueError("cannot read auto-merge state")

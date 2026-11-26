@@ -4,6 +4,9 @@
 import atexit
 import importlib.util
 import os
+from pathlib import Path
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -49,6 +52,23 @@ def changed(path, old, new, before="100644", after="100644"):
 
 
 class Fixture(unittest.TestCase):
+    def test_cached_gui_verdict_comes_from_output(self):
+        workflow = Path(os.environ["UPDATE_WORKFLOW"]).read_text()
+        vm_test = Path(os.environ["UPDATE_VM_TEST"]).read_text()
+        self.assertIn('"verdicts.json").write_text(json.dumps(verdicts))', vm_test)
+        self.assertIn("--print-out-paths", workflow)
+        self.assertFalse('grep -Fq "launch-verdict' in workflow)
+        match = re.search(r'gui_result=\$\(jq -er --arg n "\$name" \'([^\']+)\' "\$vm_out/verdicts.json"\)', workflow)
+        self.assertIsNotNone(match)
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "verdicts.json"
+            output.write_text('{"omacut": "PASS"}')
+            (Path(temp) / "gui.log").write_text("")
+            self.assertEqual(subprocess.check_output(
+                ["jq", "-r", "--arg", "n", "omacut", match.group(1), str(output)], text=True).strip(), "PASS")
+            self.assertEqual(subprocess.check_output(
+                ["jq", "-r", "--arg", "n", "missing", match.group(1), str(output)], text=True).strip(), "MISSING")
+
     def test_accept_qt_and_arch_map(self):
         self.assertEqual(launch.scope(changed("pkgs/apps/omacut.nix", QT, QT.replace(b"0.1.0", b"0.2.0"))), ["pkgs/apps/omacut.nix"])
         self.assertEqual(launch.scope(changed("pkgs/apps/hey-cli.nix", HEY, HEY.replace(b"a" * 64, b"c" * 64))), ["pkgs/apps/hey-cli.nix"])

@@ -311,8 +311,8 @@ jobs:
             if [ "$result" = FAIL ]; then failed=1; fi
           done <<< "$paths"
           if [ "$GUI" != '[]' ]; then
-            if NIXARCHY_LAUNCH_APPS="$GUI" nix build --impure -L .#checks.x86_64-linux.update-launch-vm \
-                > "$RUNNER_TEMP/gui.log" 2>&1; then
+            if vm_out=$(NIXARCHY_LAUNCH_APPS="$GUI" nix build --impure -L --no-link --print-out-paths \
+                .#checks.x86_64-linux.update-launch-vm 2> "$RUNNER_TEMP/gui.log"); then
               vm_rc=0
             else
               vm_rc=1
@@ -323,9 +323,10 @@ jobs:
             while IFS= read -r name; do
               path="pkgs/apps/$name.nix"
               gui_result=MISSING
-              if grep -Fq "launch-verdict $name PASS" "$RUNNER_TEMP/gui.log"; then gui_result=PASS; fi
-              if grep -Fq "launch-verdict $name FAIL" "$RUNNER_TEMP/gui.log"; then gui_result=FAIL; fi
-              if [ "$vm_rc" -eq 0 ] && [ "$gui_result" != PASS ]; then gui_result=MISSING; failed=1; fi
+              if [ "$vm_rc" -eq 0 ]; then
+                gui_result=$(jq -er --arg n "$name" '.[$n] // "MISSING"' "$vm_out/verdicts.json") || gui_result=MISSING
+              fi
+              if [ "$gui_result" != PASS ]; then failed=1; fi
               results=$(jq -c --arg p "$path" --arg r "$gui_result" '. + {($p): $r}' <<< "$results")
               echo "$name: $gui_result" >> "$GITHUB_STEP_SUMMARY"
             done <<< "$gui_names"

@@ -2007,6 +2007,8 @@
             "omarchy-package-ledger"
             # The pure pin-fix modes, daily proposal selector, and every probe in data/pin-fix.nix.
             "pin-fix"
+            # What Omarchy's autostart runs at every login ships system-wide (#1956).
+            "autostart-runtime"
             # The watchdog that starts a scheduled run GitHub skipped, over fixtures (#1942).
             "schedule-watchdog"
             # Adds a real third-party plugin from a real repo. The plugin system

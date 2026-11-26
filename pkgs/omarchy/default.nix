@@ -25,6 +25,8 @@
   libnotify,
   # Wayland / Hyprland session
   hyprland,
+  # nixpkgs-unstable has it; stable does not, and then the herdr plugin is the route.
+  herdr ? null,
   hyprpicker,
   hyprsunset,
   hyprlock,
@@ -189,6 +191,11 @@ let
 
   runtimeDeps = [
     bash
+  ]
+  # default/hypr/autostart.lua starts `herdr server` at every login, for every
+  # user, so it ships here rather than only with the per-user plugin (#1956).
+  ++ lib.optional (herdr != null) herdr
+  ++ [
     coreutils
     util-linux
     # omarchy-install-font asks it whether a family is installed before

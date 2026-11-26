@@ -1,4 +1,4 @@
-{ inputs, pkgs }:
+{ pkgs, ... }:
 pkgs.runCommand "nixarchy-hypr-seedless"
   {
     nativeBuildInputs = [ pkgs.lua5_4 ];

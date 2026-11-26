@@ -22,6 +22,12 @@ def pull(sha="deadbeef", draft=False):
 
 
 class HandoffFixtures(unittest.TestCase):
+    def test_lint_commands_use_pinned_nixpkgs(self):
+        self.assertEqual(handoff.command("statix"),
+                         ["nix", "run", "--inputs-from", ".", "nixpkgs#statix", "--", "check", "."])
+        self.assertEqual(handoff.command("deadnix"),
+                         ["nix", "run", "--inputs-from", ".", "nixpkgs#deadnix", "--", "--fail", "."])
+
     def test_draft_and_stale_sha(self):
         for candidate in (pull(draft=True), pull(sha="old")):
             with self.subTest(candidate=candidate), patch.object(handoff, "gh", return_value=[candidate]):

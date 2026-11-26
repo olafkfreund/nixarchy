@@ -99,9 +99,9 @@ def command(name):
     if name == "fmt":
         return ["nix", "fmt", "--", "--ci"]
     if name == "statix":
-        return ["nix", "run", "nixpkgs#statix", "--", "check", "."]
+        return ["nix", "run", "--inputs-from", ".", "nixpkgs#statix", "--", "check", "."]
     if name == "deadnix":
-        return ["nix", "run", "nixpkgs#deadnix", "--", "--fail", "."]
+        return ["nix", "run", "--inputs-from", ".", "nixpkgs#deadnix", "--", "--fail", "."]
     if name in {"options-system", "options-home", "options-microvm", "options-files", "bin-ledger"}:
         return ["nix", "build", f".#checks.x86_64-linux.{name}", "-L"]
     raise ValueError("unknown check")

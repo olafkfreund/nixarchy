@@ -850,7 +850,7 @@
     edge = "only";
   };
   "herdr" = {
-    skip = "Carried as nixarchy's own herdr plugin (nixarchy-plugin nixarchy.herdr, SUPER+ALT+H), not as this package.";
+    nix = "herdr";
   };
   "inetutils" = {
     skip = "Not installed by default.";

@@ -111,6 +111,9 @@ def eligible(verdict, sha, apps):
     )
 
 
+NOT_ELIGIBLE = 3  # stays a draft; distinct from 1, a real failure
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("scope", "eligible"))
@@ -129,7 +132,10 @@ def main():
             verdict = json.load(open(args.verdict, encoding="utf-8"))
             apps = scope_git(args.base, args.head)
             if not eligible(verdict, args.head, apps):
-                raise ValueError("incomplete or stale launch verdict")
+                # Not an error: the PR stays a draft for a person (a manual-only
+                # app, a failed probe, a stale head). Exit 3 tells the workflow so.
+                print("update launch: not eligible: incomplete or stale launch verdict", file=sys.stderr)
+                return NOT_ELIGIBLE
             print("eligible")
     except (ValueError, OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
         print(f"update launch: {exc}", file=sys.stderr)

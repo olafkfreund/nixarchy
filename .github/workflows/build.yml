@@ -2090,7 +2090,7 @@ jobs:
   # options shards since #1463), so a nixpkgs bump, which has no proofs, fits
   # each 75-minute cap; this passes only when all of them did. Never
   # skipped: a skipped required check passes the merge gate (#1144).
-  # copilot-handoff.sh ignores this job: a part's timeout is a human's (#1341).
+  # claude-handoff ignores this aggregator: a part's timeout is a human's (#1341).
   system:
     needs: [gate, system-build, system-checks, system-session, options]
     if: ${{ !cancelled() }}

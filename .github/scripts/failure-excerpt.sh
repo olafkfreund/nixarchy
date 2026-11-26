@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # stdin: a failing log. stdout: the lines that name the cause, MAX (40) at most.
-# Shared by copilot-handoff.sh and failure-digest.sh (#1384).
+# Shared by claude-handoff.py and failure-digest.sh (#1384).
 #
 # nix's `… while calling` frames are dropped: the line that names the cause is
 # the `error:` at the bottom of a trace two hundred lines deep, and a tail

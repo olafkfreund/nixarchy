@@ -2529,11 +2529,9 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
-          # #1157: the failing-log excerpt read to EOF instead of exiting
-          # early under `head -100`, which SIGPIPEd an upstream pipeline
-          # stage under `pipefail` and killed the handoff before it posted.
-          # See tests/copilot-handoff.nix.
-          copilot-handoff = import ./tests/copilot-handoff.nix {
+          # #1944: guard the trusted workflow and the handoff refusal cases.
+          # #1944: the handoff cannot expose the bump checkout to OAuth or skip the same-repository guard.
+          claude-handoff = import ./tests/claude-handoff.nix {
             pkgs = pkgsFor.${system};
           };
           # #1384: a failed build job ends with the failing check and its error.

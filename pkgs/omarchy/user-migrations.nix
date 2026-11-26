@@ -117,6 +117,16 @@ runCommand "nixarchy-user-migrations"
               fi'
               ;;
             1794330979)
+              if grep -q '^removing=()$' "$script"; then
+                # Quattro checks reverse dependencies before removing Nautilus;
+                # package management is already owned by the NixOS module.
+                block=$(sed -n '/^# Nautilus goes/,/^  user_mimeapps=/p' "$script")
+                [[ $block == *'sudo pacman -Rn --noconfirm "''${removing[@]}"'* ]] || exit 1
+                substituteInPlace "$script" --replace-fail "$block" 'user_mimeapps="$HOME/.config/mimeapps.list"'
+                block=$(sed -n '/^  shell_json=/,$p' "$script")
+                [[ $block == *'sed --follow-symlinks -i'* && $block == *'fi' ]] || exit 1
+                substituteInPlace "$script" --replace-fail "$block" ""
+              else
               substituteInPlace "$script" \
                 --replace-fail 'omarchy-pkg-add folio' "" \
                 --replace-fail ${
@@ -131,9 +141,10 @@ runCommand "nixarchy-user-migrations"
                       fi' ''
                   else
                     "'omarchy-pkg-drop nautilus nautilus-python nautilus-dropbox sushi' "
-                }"" \
-                --replace-fail '# A dock that still pins Nautilus pins Files instead.' ""
-              block=$(sed -n '/^if \[\[ -f \$user_mimeapps \]\] && grep -q/,/^fi$/p' "$script")
+                }""
+              fi
+              substituteInPlace "$script" --replace-fail '# A dock that still pins Nautilus pins Files instead.' ""
+              block=$(sed -n '/^[[:space:]]*if \[\[ -f \$user_mimeapps \]\] && grep -q/,/^[[:space:]]*fi$/p' "$script")
               [[ $block == *"sed --follow-symlinks -i 's/org\\.gnome\\.Nautilus\\.desktop/folio.desktop/g' \"\$user_mimeapps\""* ]] || exit 1
               substituteInPlace "$script" --replace-fail "$block" 'if [[ -L $user_mimeapps ]]; then
                 if [[ -e $user_mimeapps && -r $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Nautilus.desktop* ]]; then
@@ -142,9 +153,11 @@ runCommand "nixarchy-user-migrations"
               elif [[ -f $user_mimeapps && -w $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Nautilus.desktop* ]]; then
                 sed -i '"'"'s/org\.gnome\.Nautilus\.desktop/folio.desktop/g'"'"' "$user_mimeapps"
               fi'
-              block=$(sed -n '/^shell_json=/,/^fi$/p' "$script")
-              [[ $block == *"sed --follow-symlinks -i 's/\"org\\.gnome\\.Nautilus\"/\"folio\"/' \"\$shell_json\""* ]] || exit 1
-              substituteInPlace "$script" --replace-fail "$block" ""
+              if ! grep -q '^removing=()$' "${tree}/migrations/$id.sh"; then
+                block=$(sed -n '/^shell_json=/,/^fi$/p' "$script")
+                [[ $block == *"sed --follow-symlinks -i 's/\"org\\.gnome\\.Nautilus\"/\"folio\"/' \"\$shell_json\""* ]] || exit 1
+                substituteInPlace "$script" --replace-fail "$block" ""
+              fi
               ;;
             1794341736)
               substituteInPlace "$script" --replace-fail 'user_mimeapps="$HOME/.config/mimeapps.list"' 'user_mimeapps="$HOME/.config/mimeapps.list"

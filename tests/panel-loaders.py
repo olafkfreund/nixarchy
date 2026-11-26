@@ -30,9 +30,10 @@ def main() -> int:
         "&& next.sourceUrl === row.sourceUrl"
     )
     idx = text.find(keep_cond)
+    end = text.find("} else {", idx) if idx != -1 else -1
     if idx == -1:
         failures.append("keep-condition for an unchanged panel entry not found")
-    elif "delete wanted[row.pluginId]" not in text[idx : idx + 400]:
+    elif end == -1 or "delete wanted[row.pluginId]" not in text[idx:end]:
         failures.append(
             "keep-condition found, but no 'delete wanted[row.pluginId]' follows it"
         )

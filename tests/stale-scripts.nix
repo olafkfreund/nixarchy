@@ -14,6 +14,7 @@ pkgs.runCommand "nixarchy-stale-scripts"
     set -euo pipefail
     mkdir -p stub
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > stub/omarchy-pkg-add
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > stub/omarchy-pkg-add-curated
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exec "$@"' > stub/setsid
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "%s\n" "$*" > "$STUB_LOG"' > stub/uwsm-app
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > stub/omarchy-hw-x86

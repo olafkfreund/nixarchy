@@ -994,7 +994,7 @@
     edge = "only";
     class = "vendor";
     reason = "Vendored unchanged (#1552; renamed from omarchy-keyboard-toprow in quattro c6945de, which also handles a read-only sysfs). Writes /etc/modprobe.d/omarchy-toprow.conf for hid_apple, hid_asus and asus_wmi, sets hid_apple's live fnmode, and reruns limine-mkinitcpio, which NixOS does not have, so a run on a machine with one of those drivers stops at the boot-image rebuild. The declarative equivalent is boot.extraModprobeConfig.";
-    allow = "initrd-boot modprobe";
+    allow = "modprobe";
   };
   "omarchy-remove-ai-ollama" = {
     class = "vendor";
@@ -1053,5 +1053,67 @@
   "omarchy-theme-set-fcitx5" = {
     class = "patch";
     reason = "Patched (#1278 edge): the packaged fcitx5 theme default points at /run/current-system/sw/share.";
+  };
+  "omarchy-agent-account-dispatch" = {
+    edge = "only";
+    class = "patch";
+    reason = "Quattro's account dispatcher is patched by the no-mise carry to route typed agents through the generated Nix dispatch directory instead of mise.";
+  };
+  "omarchy-pkg-add-curated" = {
+    edge = "only";
+    class = "patch";
+    reason = "Quattro's passwordless polkit helper invokes Arch pacman and bypasses the Nix package guard. It now delegates to omarchy-pkg-add, which points at declarative packages and stops a caller when one is absent.";
+  };
+  "omarchy-boot-rebuild" = {
+    edge = "only";
+    class = "vendor";
+    allow = "initrd-boot";
+    pacman = "Reads pacman kernel transactions for Arch boot images; NixOS builds its own initrd and the pacman hooks are not installed here.";
+    reason = "Builds Arch mkinitcpio and Limine/systemd-boot images. Its installed-kernel scan needs /usr/lib/modules/*/pkgbase, absent on NixOS, so the rebuild path has no kernel to act on.";
+  };
+  "omarchy-boot-switch" = {
+    edge = "only";
+    class = "vendor";
+    allow = "etc-write initrd-boot systemctl-system";
+    pacman = "The switch installs Arch's omarchy-boot-systemd with pacman; no NixOS path installs this package or invokes the switch.";
+    reason = "Converts Limine to Arch's systemd-boot by writing /etc/fstab, boot files and system units. NixOS already owns its bootloader and initrd through the flake; no menu or installer path invokes this command here.";
+  };
+  "omarchy-boot-sync" = {
+    edge = "only";
+    class = "vendor";
+    allow = "boot-write etc-write";
+    reason = "Publishes Arch kernel images into a separately mounted boot store and ESP, and reads /etc/kernel/uki.conf. Those mounts and its snapshot hooks are not installed by Nixarchy; NixOS builds boot entries declaratively.";
+  };
+  "omarchy-boot-sync-initcpio" = {
+    edge = "only";
+    class = "vendor";
+    allow = "initrd-boot";
+    pacman = "Checks an Arch pacman hook and mkinitcpio state; NixOS has neither pacman transactions nor mkinitcpio hooks.";
+    reason = "Tracks Arch initcpio hook changes and asks omarchy-boot-rebuild for new images. NixOS builds its initrd from the flake and never installs this hook.";
+  };
+  "omarchy-camera-guard" = {
+    edge = "only";
+    class = "vendor";
+    allow = "systemctl-user";
+    pacman = "The --needed version probe reads Arch's libcamera version with pacman; the user guard unit is not installed by Nixarchy.";
+    reason = "Restarts Omarchy's user camera relay on libcamera failures. Nixarchy does not install the relay or guard user units, so there is no service to restart.";
+  };
+  "omarchy-camera-tuning" = {
+    edge = "only";
+    class = "vendor";
+    allow = "systemctl-user";
+    reason = "Writes per-user camera relay tuning and restarts the upstream user units. Those units and their hardware-specific tuning files are not installed by Nixarchy.";
+  };
+  "omarchy-rollcall" = {
+    edge = "only";
+    class = "vendor";
+    allow = "rfkill";
+    reason = "Hardware diagnostic checks rfkill state while reporting Wi-Fi and Bluetooth health; it does not change radio state. It is available manually on NixOS.";
+  };
+  "omarchy-update-qualcomm-device-trees" = {
+    edge = "only";
+    class = "vendor";
+    allow = "initrd-boot";
+    reason = "Refreshes Snapdragon device trees in Arch's /etc/kernel/uki.conf before rebuilding a UKI. Nixarchy targets no such host and NixOS owns its kernel and boot image declaratively.";
   };
 }

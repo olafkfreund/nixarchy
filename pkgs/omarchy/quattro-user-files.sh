@@ -77,7 +77,7 @@ exec omarchy-launch-editor "$canonical"'
 if grep -q 'set_if_changed icon-theme "Adwaita"' $out/share/omarchy/bin/omarchy-theme-set-gnome; then
   substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-gnome \
     --replace-fail 'set_if_changed icon-theme "Adwaita"' \
-      'current=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d \047 || true)
+      'current=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d "\047" || true)
 case $current in
   Yaru* | Adwaita | hicolor | "") set_if_changed icon-theme "Adwaita" ;;
 esac'

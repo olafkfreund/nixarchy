@@ -541,6 +541,14 @@
     edge = "only";
     skip = "ASUS Zenbook A16 firmware from Omarchy's Arch repo; not targeted.";
   };
+  "anduril-bluechip-support" = {
+    edge = "only";
+    skip = "Arch hardware support for Anduril Bluechip; no targeted NixOS host has this device.";
+  };
+  "asus-zenbook-a16-support" = {
+    edge = "only";
+    skip = "Arch hardware support for ASUS Zenbook A16; a host with one needs its own NixOS hardware configuration.";
+  };
   "iptsd" = {
     edge = "only";
     skip = "Surface touch and pen daemon; a Surface host gets it from nixos-hardware's microsoft-surface modules, not from this port.";
@@ -942,6 +950,18 @@
   "flowtunes" = {
     edge = "only";
     skip = "Omarchy's endless genre-music player (omacom/flowtunes), new in quattro e4635a4's base list and not packaged yet; its install migration is not-needed until it is (#1896)";
+  };
+  "nodejs" = {
+    edge = "only";
+    nix = "nodejs";
+  };
+  "playwright-cli" = {
+    edge = "only";
+    skip = "Upstream CLI is installed by its package manager; omarchy-agent-look-page here uses nixpkgs playwright-driver and nodejs directly.";
+  };
+  "uv" = {
+    edge = "only";
+    nix = "uv";
   };
   "ghostscript" = {
     edge = "only";

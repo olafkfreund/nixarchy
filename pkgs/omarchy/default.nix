@@ -558,19 +558,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       fi
                     fi
 
-                    # CARRIED (#1370): nixpkgs wraps kitty (and may wrap ghostty), so the running
-                    # process is .kitty-wrapped, and an exact match on the bare name misses it.
-                    if grep -q 'if pgrep -x kitty' $out/share/omarchy/bin/omarchy-restart-terminal; then
-                      substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \
-                        --replace-fail 'if pgrep -x kitty >/dev/null; then' "if pgrep -x '[.]?kitty(-wrapped)?' >/dev/null; then" \
-                        --replace-fail '  killall -SIGUSR1 kitty >/dev/null' "  pkill -USR1 -x '[.]?kitty(-wrapped)?' >/dev/null" \
-                        --replace-fail 'if pgrep -x ghostty >/dev/null; then' "if pgrep -x '[.]?ghostty(-wrapped?)?' >/dev/null; then" \
-                        --replace-fail '  killall -SIGUSR2 ghostty' "  pkill -USR2 -x '[.]?ghostty(-wrapped?)?'"
-                    else
-                      substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \
-                        --replace-fail 'pkill -SIGUSR1 -x kitty' "pkill -SIGUSR1 -x '[.]?kitty(-wrapped)?'" \
-                        --replace-fail 'pkill -SIGUSR2 -x ghostty' "pkill -SIGUSR2 -x '[.]?ghostty(-wrapped?)?'"
-                    fi
+                    # #1370: match nixpkgs' wrapped kitty and ghostty process names.
+                    . ${./restart-terminal.sh}
 
                     # Cursor resolves through PATH, because /usr/bin is not where anything
                     # lives here.
@@ -1126,6 +1115,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       # yet unreachable to the scripts that call it.
                       [ -e "$out/bin/$name" ] || ln -s "$target" "$out/bin/$name"
                     done
+                    if [ -e $out/share/omarchy/bin/omarchy-pkg-add-curated ]; then
+                      install -m755 ${./curated-pkg-add.sh} $out/share/omarchy/bin/omarchy-pkg-add-curated
+                    fi
 
                     # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
                     substituteInPlace $out/share/omarchy/bin/nixarchy-version \

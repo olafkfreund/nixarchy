@@ -109,6 +109,7 @@
   };
 
   "mise/conf.d/omarchy-agent-accounts.toml" = {
+    edge = "absent";
     class = "divergent";
     reason = "Not installed: nixarchy ships no mise (#1625). Inert under share/omarchy/etc so checks.etc-overlay still sees upstream.";
   };
@@ -204,6 +205,21 @@
   "sddm.conf.d/10-wayland.conf" = {
     class = "native";
     reason = "services.displayManager.sddm.wayland.enable = true in modules/nixos.nix. The CompositorCommand naming /usr/share/sddm/hyprland.lua is Arch's path; nixpkgs' sddm module supplies its own compositor command, so taking this file would break the greeter rather than configure it.";
+  };
+  "systemd/system/sddm.service.d/10-omarchy-wait-drm.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Runs /usr/bin/omarchy-system-sddm-wait-drm before Arch's SDDM unit to wait for the real DRM driver. NixOS has no /usr/bin program or upstream unit override here; the host display manager is configured by modules/nixos.nix.";
+  };
+  "systemd/user/app-models.slice" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Places upstream's local AI model containers under a low-weight user slice. Nixarchy's agent-local service is a NixOS Podman service, so this upstream user slice is not installed or used.";
+  };
+  "systemd/user/omarchy-agent-local-model-.service.d/10-omarchy.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Tunes the upstream template user unit for local AI model containers. Nixarchy does not install that user unit: programs.nixarchy.services.agent-local runs through its NixOS module instead.";
   };
 
   "security/faillock.conf" = {

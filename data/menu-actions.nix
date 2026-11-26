@@ -128,6 +128,10 @@
     reason = "unreached: its theme refresh reaches theme-set-hermes, which runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
     edge = "only";
   };
+  "install.ai.desktop.herdr" = {
+    reason = "session: the desktop install path can stop the user's Hermes unit before replacing it; its theme refresh can run a remote command only for a linked Herdr machine.";
+    edge = "only";
+  };
   "install.preinstalls" =
     "owned: adds missing launchers only, never overwrites; its one rm is its own marker (decision 2, checks.remove-preinstalls)";
   "install.style.font.bitstream" = "session: restarts the user's shell unit";

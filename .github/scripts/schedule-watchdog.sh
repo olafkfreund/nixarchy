@@ -58,20 +58,20 @@ slot_for() {
 }
 
 read_runs() {
-  local workflow=$1 out
+  local workflow=$1 reply
   [[ ! -v failed[$workflow] ]] || return 1
   if [[ ! -v runs[$workflow] ]]; then
-    if ! out=$("$gh" api "repos/olafkfreund/nixarchy/actions/workflows/$workflow/runs?branch=main&per_page=50"); then
+    if ! reply=$("$gh" api "repos/olafkfreund/nixarchy/actions/workflows/$workflow/runs?branch=main&per_page=50"); then
       echo "failed to read runs: $workflow" >&2
       failed[$workflow]=1 error=1
       return 1
     fi
-    if ! jq -e '.workflow_runs | type == "array"' >/dev/null <<< "$out"; then
+    if ! jq -e '.workflow_runs | type == "array"' >/dev/null <<< "$reply"; then
       echo "invalid runs: $workflow" >&2
       failed[$workflow]=1 error=1
       return 1
     fi
-    runs[$workflow]=$out
+    runs[$workflow]=$reply
   fi
 }
 
@@ -80,7 +80,7 @@ in_flight() {
 }
 
 qualifies() {
-  local workflow=$1 slot=$2 input=$3 extra=$4 ids id out
+  local workflow=$1 slot=$2 input=$3 extra=$4 ids id reply
   read_runs "$workflow" || return 2
   ids=$(jq -r --argjson slot "$slot" --arg extra "$extra" '
     .workflow_runs[] | select(.head_branch == "main" and
@@ -90,17 +90,17 @@ qualifies() {
   [[ -n $ids ]] || return 1
   [[ $input != - ]] && {
     while IFS= read -r id; do
-      if ! out=$("$gh" api "repos/olafkfreund/nixarchy/actions/runs/$id/jobs"); then
+      if ! reply=$("$gh" api "repos/olafkfreund/nixarchy/actions/runs/$id/jobs"); then
         echo "failed to read jobs: $workflow run $id" >&2
         failed[$workflow]=1 error=1
         return 2
       fi
-      if ! jq -e '.jobs | type == "array"' >/dev/null <<< "$out"; then
+      if ! jq -e '.jobs | type == "array"' >/dev/null <<< "$reply"; then
         echo "invalid jobs: $workflow run $id" >&2
         failed[$workflow]=1 error=1
         return 2
       fi
-      if jq -e --arg input "$input" '[.jobs[] | select(.name == $input and .conclusion != "skipped" and .status != "skipped")] | length > 0' >/dev/null <<< "$out"; then
+      if jq -e --arg input "$input" '[.jobs[] | select(.name == $input and .conclusion != "skipped" and .status != "skipped")] | length > 0' >/dev/null <<< "$reply"; then
         return 0
       fi
     done <<< "$ids"
@@ -146,13 +146,13 @@ while IFS='|' read -r workflow cron input extra waits; do
   fi
   marker="$state/schedule-watchdog/${workflow}-${input}-${slot}"
   if [[ -e $marker ]]; then echo "$label: already dispatched"; continue; fi
-  if ! out=$("$gh" api "repos/olafkfreund/nixarchy/actions/workflows/$workflow/runs?branch=main&per_page=50"); then
+  if ! reply=$("$gh" api "repos/olafkfreund/nixarchy/actions/workflows/$workflow/runs?branch=main&per_page=50"); then
     echo "failed to re-read runs: $workflow" >&2; failed[$workflow]=1 error=1; continue
   fi
-  if ! jq -e '.workflow_runs | type == "array"' >/dev/null <<< "$out"; then
+  if ! jq -e '.workflow_runs | type == "array"' >/dev/null <<< "$reply"; then
     echo "invalid re-read: $workflow" >&2; failed[$workflow]=1 error=1; continue
   fi
-  runs[$workflow]=$out
+  runs[$workflow]=$reply
   if in_flight "$workflow"; then echo "$label: in flight"; continue; fi
   if [[ ${1:-} == --dry-run ]]; then echo "$label: would dispatch"; continue; fi
   args=(workflow run "$workflow" --ref main)

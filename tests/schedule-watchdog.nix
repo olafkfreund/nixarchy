@@ -155,6 +155,14 @@ pkgs.runCommand "nixarchy-schedule-watchdog"
     cases() {
       # ---- a missed daily job, and the margin
       setup "2026-11-26 12:00"; check "all done" "" ok
+      # A real 50-run reply is ~250 KB. The builder exports $out, so a script
+      # variable named out would carry the reply into every child's
+      # environment and fail it with E2BIG, as a dev shell did by hand.
+      setup "2026-11-26 12:00"
+      head -c 200000 /dev/zero | tr '\0' x > "$FIX/pad"
+      jq --rawfile p "$FIX/pad" '.workflow_runs[0].pad = $p' "$FIX/runs/nightly.yml.json" > "$FIX/big"
+      mv "$FIX/big" "$FIX/runs/nightly.yml.json"
+      check "a reply over 128 KiB" "" ok
       [ ! -s "$FIX/notified" ] || bad "$TZ: notified with nothing dispatched"
       runs flake-update.yml; check "daily missed" "$FU" ok
       setup "2026-11-26 12:00"

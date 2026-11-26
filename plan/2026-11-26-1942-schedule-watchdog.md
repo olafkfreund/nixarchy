@@ -88,6 +88,10 @@ Approved decisions, carried from the spec:
    failed with E2BIG. Renamed, and a case with a reply over 128 KiB fails with
    the old name.
 
+7. (Deviation.) Step 4's `tests/AGENTS.md` row is not written: that file has no
+   per-check list for script checks like `pin-fix`. The trap found in step 6
+   went into CLAUDE.md §5 instead, as §5's own rule asks.
+
 ## Tests
 
 - §1: after step 2 passes, break each decision once (drop step 3's status

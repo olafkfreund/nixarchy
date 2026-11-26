@@ -885,6 +885,16 @@ is the anonymous part. So run the measured command in its own scope
 (`systemd-run --user --scope`), and sample `anon` from that cgroup's
 `memory.stat`.
 
+**The GitHub API budget is the account's, not the session's (#1948).** The
+owner's account has 5,000 core requests an hour, shared by every agent session
+on every host, the desktop's own pollers, and the schedule watchdog on p620
+(#1942), which goes blind when it is spent. It ran out on 2026-11-24, 25 and
+26. `gh run watch` polls every 3 seconds by default and `gh pr checks
+--watch` every 10, several requests a tick, so one watcher costs about 40 a
+minute. Pass `--interval 60` or more; fleet-guard refuses either below 30
+(nixos_config #3227). A loop around `gh pr view` wants minutes between
+iterations, not seconds. `gh api rate_limit` shows what is left.
+
 ## 7. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the

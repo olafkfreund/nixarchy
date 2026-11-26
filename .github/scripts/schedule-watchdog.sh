@@ -114,6 +114,21 @@ while IFS='|' read -r workflow cron input extra waits; do
   label="$workflow $input"
   if (( now - slot < 2700 )); then echo "$label: not due"; continue; fi
   if (( now - slot > 86400 )); then echo "$label: too old"; continue; fi
+  # GitHub's schedule can arrive hours late rather than never (9-11 h on
+  # 2026-11-25), so a slot we dispatched gets its late run cancelled. Not
+  # weekly: with delays that long, a run's time cannot say which job it is.
+  if [[ $input == - && -e "$state/schedule-watchdog/${workflow}---${slot}" ]] && read_runs "$workflow"; then
+    late=$(jq -r --argjson slot "$slot" '.workflow_runs[] | select(.head_branch == "main" and
+      .event == "schedule" and .status != "completed" and (.created_at | fromdateiso8601) >= $slot) | .id' <<< "${runs[$workflow]}")
+    for id in $late; do
+      if [[ ${1:-} == --dry-run ]]; then echo "$label: would cancel late run $id"; continue; fi
+      if "$gh" api -X POST "repos/olafkfreund/nixarchy/actions/runs/$id/cancel" >/dev/null; then
+        echo "$label: cancelled late run $id"
+      else
+        echo "cancel failed: $label run $id" >&2; error=1
+      fi
+    done
+  fi
   if qualifies "$workflow" "$slot" "$input" "$extra"; then
     echo "$label: done"; continue
   else

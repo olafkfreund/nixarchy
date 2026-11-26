@@ -44,8 +44,8 @@ did anything therefore do not hide a miss.
 **Decision**, per row, in table order:
 
 1. Now is less than 45 minutes after `T`: not due. GitHub's own delay here ran
-   1 to 16 minutes from 2026-11-13 to 2026-11-24. At a 15-minute tick, a miss is
-   started at most an hour after its cron.
+   1 to 16 minutes from 2026-11-13 to 2026-11-24. At a 5-minute tick, a miss is
+   started at most 50 minutes after its cron.
 2. A qualifying run exists: done.
 3. A run of that workflow on `main` is queued, waiting, requested, pending or in
    progress (any status but `completed`): leave it. A dispatch would evict a
@@ -72,9 +72,19 @@ did anything therefore do not hide a miss.
 `$(( ))`). Sunday is `0`, as in cron. The table's crons are GitHub's, which are
 UTC, and p620 runs in local time with daylight saving.
 
+**Late runs (added during implementation).** GitHub's schedule can arrive
+hours late rather than never: on 2026-11-25 every scheduled workflow started 9
+to 11 hours after its cron, after each had been started by hand. So before
+deciding a daily row, the watchdog cancels any run of that workflow on `main`
+that came from `schedule`, has not completed, was created at or after `T`, and
+whose slot carries the watchdog's marker. Runs started by hand, runs on other
+branches and slots the watchdog did not start are never cancelled. `weekly`
+rows are never cancelled: with delays that long, a run's creation time cannot
+say which of the three jobs it is. `--dry-run` prints what it would cancel.
+
 **Cost and failure.** Runs are read once per workflow per tick
 (`actions/workflows/<file>/runs?branch=main&per_page=50`), with one job list
-per `weekly` run inside a live slot. That is about 10 requests a tick, 40 an
+per `weekly` run inside a live slot. That is about 10 requests a tick, 120 an
 hour, against a limit of 5,000. A failed read skips that workflow's rows,
 never dispatches for them, and makes the script exit non-zero after the other
 rows are done, so the unit shows failed. `NOW`, `GH` and the state directory
@@ -111,7 +121,7 @@ fixed `NOW`, and asserts:
   `job` options; and each `weekly` job's `if:` names both its cron and its
   input. Each comparison names the row that disagrees (§4).
 
-**The timer** is in `nixos_config`, on p620: a user service and timer every 15
+**The timer** is in `nixos_config`, on p620: a user service and timer every 5
 minutes, running the script from the `nixarchy` input's store path with `gh`
 and `jq` on its path. It authenticates with a fine-grained token limited to
 `olafkfreund/nixarchy` with Actions read and write, held in agenix and passed
@@ -154,7 +164,7 @@ also visible in the Actions list as `workflow_dispatch`.
 - **The table runs from `nixos_config`'s pin of nixarchy,** so a schedule
   changed on `main` is watched from the next deploy of p620. The check keeps
   the table and the workflows equal at every commit; #1946 shortens the lag.
-- **API budget.** About 10 requests a tick, 40 an hour, against 5,000 an hour.
+- **API budget.** About 10 requests a tick, 120 an hour, against 5,000 an hour.
 - **A run started in the same seconds as a dispatch.** Step 6 narrows it and
   cannot close it. For `omarchy-edge`, losing that race cancels the other run,
   which is then re-run by hand. This is weaker than the intent's "must not

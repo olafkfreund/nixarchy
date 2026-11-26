@@ -24,6 +24,7 @@
 #   api repos/olafkfreund/nixarchy/actions/workflows/<file>/runs?branch=main&per_page=50
 #   api repos/olafkfreund/nixarchy/actions/runs/<id>/jobs
 #   workflow run <file> --ref main [-f job=<input>]     with GH_REPO set
+#   api -X POST repos/olafkfreund/nixarchy/actions/runs/<id>/cancel
 #
 # `notify-send` is taken from PATH, once per tick that dispatched; it fails
 # here, and that must not fail the tick. --dry-run's stdout names every row's
@@ -36,6 +37,15 @@ let
       shift 2
       echo "$*" >> "$FIX/dispatched"
       exit 0
+    fi
+    if [ "$#" = 4 ] && [ "$1 $2 $3" = "api -X POST" ]; then
+      case "$4" in
+        "$base/runs/"*"/cancel")
+          id=''${4#"$base/runs/"}
+          echo "''${id%/cancel}" >> "$FIX/cancelled"
+          exit 0
+          ;;
+      esac
     fi
     if [ "$#" = 2 ] && [ "$1" = api ]; then
       case "$2" in
@@ -134,13 +144,16 @@ pkgs.runCommand "nixarchy-schedule-watchdog"
     check() { # name, wanted dispatch lines, ok|error|any, [script args]
       name="$TZ: $1" want=$2 wantrc=$3
       shift 3
-      : > "$FIX/dispatched"; : > "$FIX/unexpected"; : > "$FIX/reads"
+      : > "$FIX/dispatched"; : > "$FIX/unexpected"; : > "$FIX/reads"; : > "$FIX/cancelled"
       bash "$S" "$@" > "$FIX/stdout" 2> "$FIX/stderr"
       rc=$?
       got=ok; [ $rc = 0 ] || got=error
       if [ "$wantrc" != any ] && [ "$got" != "$wantrc" ]; then bad "$name: wanted $wantrc, exit $rc"; cat "$FIX/stderr" >&2; fi
       if [ "$(cat "$FIX/dispatched")" != "$want" ]; then
         bad "$name: wanted dispatches [$want], got [$(cat "$FIX/dispatched")]"
+      fi
+      if [ "$(cat "$FIX/cancelled")" != "''${WANT_CANCEL:-}" ]; then
+        bad "$name: wanted cancels [''${WANT_CANCEL:-}], got [$(cat "$FIX/cancelled")]"
       fi
       if [ -s "$FIX/unexpected" ]; then bad "$name: unexpected call: $(cat "$FIX/unexpected")"; fi
     }
@@ -277,6 +290,29 @@ pkgs.runCommand "nixarchy-schedule-watchdog"
       clock "2026-11-22 16:00"; weekly_skipped install-stock-iso
       runs weekly.yml "$(run 1 schedule main completed success "@$((NOW - 60))")"
       check "marker: per weekly input" "''${WK}install-stock-iso" ok
+
+      # ---- GitHub's late run of a slot the watchdog started is cancelled
+      late() { # the slot was dispatched; then GitHub's own run turns up
+        setup "2026-11-26 08:00"; runs flake-update.yml
+        check "late: dispatch" "$FU" ok
+        clock "2026-11-26 17:50"
+        runs flake-update.yml "$(run 3 workflow_dispatch main completed success "2026-11-26 07:46")" \
+          "$(run 9 "$1" "$2" "$3" - "2026-11-26 17:49")"
+      }
+      late schedule main queued; WANT_CANCEL=9 check "late: queued schedule run cancelled" "" ok
+      late schedule main in_progress; WANT_CANCEL=9 check "late: running schedule run cancelled" "" ok
+      late schedule main in_progress; check "late: dry run cancels nothing" "" ok --dry-run
+      late workflow_dispatch main queued; check "late: a run started by hand is kept" "" ok
+      late schedule other queued; check "late: another branch is kept" "" ok
+      setup "2026-11-26 17:50"
+      runs flake-update.yml "$(run 9 schedule main queued - "2026-11-26 17:49")"
+      check "late: no marker, nothing cancelled" "" ok
+      setup "2026-11-22 12:00"; weekly_skipped stable-session
+      check "late: weekly dispatch" "''${WK}stable-session" ok
+      clock "2026-11-22 18:30"
+      runs weekly.yml "$(run 1 schedule main completed success "2026-11-22 09:50")" \
+        "$(run 9 schedule main queued - "2026-11-22 18:29")"
+      check "late: weekly is never cancelled" "" any
 
       # ---- nightly waits for the VM host
       for h in install:busy edge:busy install:unknown edge:unknown; do

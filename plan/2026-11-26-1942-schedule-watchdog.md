@@ -38,7 +38,7 @@ Approved decisions, carried from the spec:
   the rest. `TZ=UTC`, arithmetic on epoch seconds only. `GH_REPO` set by the
   script. `NOW`, `GH`, `STATE` overridable; `--dry-run` prints decisions.
 - One notification after all rows, failure ignored.
-- The p620 timer (every 15 min, fine-grained token from agenix as `GH_TOKEN`)
+- The p620 timer (every 5 min, fine-grained token from agenix as `GH_TOKEN`)
   is a separate pull request in `nixos_config`, after this one merges; it is
   not part of this plan.
 
@@ -73,6 +73,20 @@ Approved decisions, carried from the spec:
    watchdog does, where it runs, the residual races, and that it reads the
    table at p620's pin. `tests/AGENTS.md`: a row for the check. → `nix build`
    of the docs checks the generated set includes passes.
+
+5. (Deviation, found by the live dry run on 2026-11-26.) The script cancels
+   GitHub's late `schedule` run of a daily slot the watchdog dispatched (marker
+   present, run on `main`, not completed, created at or after `T`); never a
+   `weekly` run, a run started by hand, or a slot without a marker. The check
+   gains a stubbed `api -X POST .../runs/<id>/cancel`, every case asserts the
+   cancels it expects (none by default), and seven cases cover the rule. The
+   timer ticks every 5 minutes rather than 15, so a late `nightly` is
+   cancelled before it gets far.
+6. (Deviation, found by the same dry run.) The script's API replies were held
+   in a variable named `out`, which a dev shell exports; bash keeps the export
+   on a `local`, so a 250 KB reply reached every child's environment and `jq`
+   failed with E2BIG. Renamed, and a case with a reply over 128 KiB fails with
+   the old name.
 
 ## Tests
 

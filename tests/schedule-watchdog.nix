@@ -312,7 +312,24 @@ pkgs.runCommand "nixarchy-schedule-watchdog"
       clock "2026-11-22 18:30"
       runs weekly.yml "$(run 1 schedule main completed success "2026-11-22 09:50")" \
         "$(run 9 schedule main queued - "2026-11-22 18:29")"
-      check "late: weekly is never cancelled" "" any
+      jobs 9 propose=skipped stable-session=skipped install-stock-iso=skipped
+      check "late: weekly is never cancelled" "" ok
+      # omarchy-edge's late run cancels ours on arrival; it must then be kept.
+      setup "2026-11-26 08:00"; runs omarchy-edge.yml
+      check "late: edge dispatch" "omarchy-edge.yml --ref main" ok
+      clock "2026-11-26 16:31"
+      runs omarchy-edge.yml "$(run 3 workflow_dispatch main completed cancelled "2026-11-26 06:46")" \
+        "$(run 9 schedule main in_progress - "2026-11-26 16:30")"
+      check "late: kept when it cancelled ours" "" ok
+      late schedule main completed; check "late: a finished run is not cancelled" "" ok
+      setup "2026-11-26 08:00"; runs flake-update.yml
+      check "late: dispatch again" "$FU" ok
+      runs flake-update.yml "$(run 3 workflow_dispatch main completed success "2026-11-26 07:46")" \
+        "$(run 8 schedule main in_progress - "2026-11-25 23:00")"
+      check "late: yesterday's running run is not this slot's" "" ok
+      # Two weekly rows missed in one tick: the second waits for the first.
+      setup "2026-11-22 16:00"; weekly_skipped stable-session install-stock-iso
+      check "weekly: one dispatch per tick" "''${WK}stable-session" ok
 
       # ---- nightly waits for the VM host
       for h in install:busy edge:busy install:unknown edge:unknown; do

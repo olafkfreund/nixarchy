@@ -29,7 +29,7 @@ now=${NOW:-$(date -u +%s)}
 gh=${GH:-gh}
 state=${STATE:-${XDG_STATE_HOME:-$HOME/.local/state}}
 vm_host_free=${VM_HOST_FREE:-$(dirname "$0")/vm-host-free.sh}
-declare -A runs=() failed=()
+declare -A runs=() failed=() ticked=()
 error=0 dispatched=0
 
 slot_for() {
@@ -117,9 +117,13 @@ while IFS='|' read -r workflow cron input extra waits; do
   # GitHub's schedule can arrive hours late rather than never (9-11 h on
   # 2026-11-25), so a slot we dispatched gets its late run cancelled. Not
   # weekly: with delays that long, a run's time cannot say which job it is.
+  # Only while our run lives: in omarchy-edge the late run cancels ours on arrival,
+  # and cancelling it back would leave the slot with no run at all.
   if [[ $input == - && -e "$state/schedule-watchdog/${workflow}---${slot}" ]] && read_runs "$workflow"; then
-    late=$(jq -r --argjson slot "$slot" '.workflow_runs[] | select(.head_branch == "main" and
-      .event == "schedule" and .status != "completed" and (.created_at | fromdateiso8601) >= $slot) | .id' <<< "${runs[$workflow]}")
+    late=$(jq -r --argjson slot "$slot" '
+      [.workflow_runs[] | select(.head_branch == "main" and (.created_at | fromdateiso8601) >= $slot)] as $r |
+      if any($r[]; .event == "workflow_dispatch" and .conclusion != "cancelled")
+      then $r[] | select(.event == "schedule" and .status != "completed") | .id else empty end' <<< "${runs[$workflow]}")
     for id in $late; do
       if [[ ${1:-} == --dry-run ]]; then echo "$label: would cancel late run $id"; continue; fi
       if "$gh" api -X POST "repos/olafkfreund/nixarchy/actions/runs/$id/cancel" >/dev/null; then
@@ -135,7 +139,8 @@ while IFS='|' read -r workflow cron input extra waits; do
     rc=$?
     if (( rc == 2 )); then echo "$label: unreadable"; continue; fi
   fi
-  if in_flight "$workflow"; then echo "$label: in flight"; continue; fi
+  # A run dispatched earlier this tick may not be listed yet (weekly has three rows).
+  if [[ -v ticked[$workflow] ]] || in_flight "$workflow"; then echo "$label: in flight"; continue; fi
   blocked=0
   if [[ -n $waits ]]; then
     IFS=, read -r -a prerequisites <<< "$waits"
@@ -176,7 +181,7 @@ while IFS='|' read -r workflow cron input extra waits; do
   mkdir -p "$(dirname "$marker")"
   touch "$marker"
   echo "$label: dispatched"
-  dispatched=1
+  dispatched=1 ticked[$workflow]=1
 done <<< "$table"
 
 if (( dispatched )); then notify-send 'Nixarchy schedule watchdog' 'Dispatched missed workflows' || true; fi

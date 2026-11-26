@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1942
 intent: intent/2026-11-26-1942-schedule-watchdog.md
 ---

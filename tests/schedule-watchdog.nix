@@ -114,6 +114,7 @@ pkgs.runCommand "nixarchy-schedule-watchdog"
     # A tick at "date (UTC)" where every row is already done; each case takes
     # away the thing it is about.
     setup() {
+      local f # callers loop over f too
       clock "$1"
       export FIX=$(mktemp -d)
       export STATE=$FIX/state

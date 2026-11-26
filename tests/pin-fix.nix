@@ -101,6 +101,50 @@ pkgs.runCommand "nixarchy-pin-fix"
     printf '{bad json' > select.json
     expect_prefix "select malformed" "refuse" "$(bash $P --select select.json "$NEW" 1795694400 pin-table.json 2>/dev/null)"
 
+    # Run the workflow's discovery and rotation with the real request cap.
+    # On day three, three release refusals must not starve zen-browser.
+    awk '/^            release=none$/ { copy=1 }
+         /^            verdict=/ { copy=0 }
+         copy { sub(/^            /, ""); print }' ${../.github/workflows/flake-update.yml} > discover.sh
+    awk '/^          rows=\$\(printf/ {
+      sub(/^          /, ""); print
+      getline; sub(/^          /, ""); print
+    }' ${../.github/workflows/flake-update.yml} > rotate.sh
+    RUNNER_TEMP=$PWD
+    GITHUB_STEP_SUMMARY=$PWD/summary
+    echo 0 > "$RUNNER_TEMP/pin-api-count"
+    upstream_api() {
+      local n
+      n=$(cat "$RUNNER_TEMP/pin-api-count")
+      [ "$n" -lt 20 ] || return 1
+      echo "$((n + 1))" > "$RUNNER_TEMP/pin-api-count"
+      case "$1" in
+        */releases/latest) [ "$name" = zen-browser ] && echo v1 || return 1 ;;
+        */tags) echo v1 ;;
+        */compare/v1...*) [ "$name" = zen-browser ] && echo identical || echo behind ;;
+        */commits/*) echo "$NEW" ;;
+        */compare/*) jq -n '{status:"ahead",ahead_by:1,
+          commits:[{commit:{committer:{date:"2026-11-18T12:00:00Z"}}}]}' ;;
+        *) echo main ;;
+      esac
+    }
+    proposed=
+    date() { [ "$*" != '-u +%j' ] || { echo 003; return; }; command date "$@"; }
+    rows=$(printf '%s\n' microvm sops-nix mcp-servers-nix zen-browser)
+    . ./rotate.sh
+    for name in $rows; do
+      repo="upstream/$name"
+      owner=upstream
+      ref=$OLD
+      old=$OLD
+      modified=1767225600
+      [ "$(cat "$RUNNER_TEMP/pin-api-count")" -lt 20 ] || break
+      . ./discover.sh
+      verdict=$(bash $P --select "$RUNNER_TEMP/pin-facts.json" "$new" 1795694400 pin-table.json)
+      [[ $verdict != move\ * ]] || proposed=$name
+    done
+    expect "fourth candidate proposed within budget" zen-browser "$proposed"
+
     # ---- --replace, on a copy of the real flake.nix
     rev_of() { jq -r --arg n "$1" '.nodes[$n].locked.rev' ${../flake.lock}; }
     for in in microvm zen-browser; do

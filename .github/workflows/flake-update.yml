@@ -97,6 +97,8 @@ jobs:
           cp flake.lock "$RUNNER_TEMP/base-flake.lock"
           rows=$(python3 pkgs/flake-pins.py | sort -t $'\t' -k5,5n)
           [ -n "$rows" ] || { echo 'No root GitHub inputs' >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          rows=$(printf '%s\n' "$rows" | awk -v day="$(date -u +%j)" \
+            '{ row[NR]=$0 } END { for (i=0; i<NR; i++) print row[(day+i)%NR+1] }')
           while IFS=$'\t' read -r name kind repo old modified; do
             [ "$kind" = rev ] || continue
             jq -e --arg n "$name" 'has($n)' "$table" >/dev/null || continue

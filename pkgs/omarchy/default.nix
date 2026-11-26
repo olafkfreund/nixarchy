@@ -2193,6 +2193,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'require("hypr.looknfeel")' \
                       $'require("hypr.looknfeel")\nrequire("default.hypr.require_optional").module("hypr.layouts") -- nixarchy: layout settings (#1596)'
 
+                    substituteInPlace $out/share/omarchy/config/hypr/hyprland.lua \
+                      --replace-fail 'dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/bootstrap.lua")' \
+                      $'dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/bootstrap.lua")\npackage.path = package.path .. ";" .. (os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/config/?.lua" -- nixarchy: shipped defaults for a missing ~/.config/hypr file (#1950)'
+
                     # The default plugins' binds (#766), in the SEED, so new homes get
                     # them and nobody's edited bindings.lua is touched. Appended after
                     # upstream's last line, asserted first so a reworded seed fails here.

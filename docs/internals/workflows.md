@@ -10,7 +10,7 @@ Every one of them accepts **manual dispatch**:
 ```bash
 gh workflow run <name>.yml            # on main
 gh workflow run <name>.yml --ref <branch>
-gh run watch                          # follow the newest run
+gh run watch --interval 60            # follow the newest run
 ```
 
 > Source of truth is `docs/internals/` in the main repository. The wiki copy
@@ -283,6 +283,52 @@ own board row flags any open issue without one — itself included (#670).
 nix run .#review        # the same table, locally
 ```
 
+## The schedule watchdog — on p620, every 5 minutes
+
+GitHub's scheduler is best effort, and on 2026-11-25 it was hours late for
+every workflow here: `nightly` arrived at 12:01 instead of 03:00, and
+`flake-update` at 17:49 instead of 07:00. Nothing noticed, because `review` is
+the job that reports a workflow that has not run, and `review` was late too.
+`.github/scripts/schedule-watchdog.sh` (#1942) is the answer, and it runs on
+p620 from a user timer in `nixos_config`, not as a GitHub cron: a cron here is
+the scheduler that failed.
+
+For each scheduled job in its table, it works out the slot (the latest cron
+time in UTC) and then, in order:
+
+1. less than 45 minutes after the slot: not due yet;
+2. a run on `main` since the slot, from the schedule or by hand (and, for
+   `build`, a push): done. For `weekly`, only if that job actually ran in it;
+3. a run on `main` still queued or running: leave it, because a dispatch would
+   evict it or, in `omarchy-edge`, cancel it (§8);
+4. `review` and `propose` wait until the runs they report on are done;
+5. `nightly` waits until `vm-host-free.sh` says no install or edge VM job is
+   running, because it never asks that itself;
+6. a slot it already dispatched is never dispatched again;
+7. otherwise it re-reads the runs and dispatches on `main`.
+
+A slot more than 24 hours old is never acted on. When GitHub's own late run
+of a slot the watchdog already started turns up, the watchdog cancels it, so
+the job does not run twice. It never cancels a run started by hand, a run on
+another branch, or a `weekly` run: with delays of nine hours a run's
+creation time cannot say which of `weekly`'s three jobs it is.
+
+Two races remain, and neither can be closed from outside GitHub: a run started
+in the same seconds as a dispatch, and GitHub's run arriving after the margin
+but before the next tick cancels it. The timer authenticates with a
+fine-grained token limited to Actions on this repository, not the owner's
+login.
+
+It reads its table from p620's pin of nixarchy, so a schedule changed on
+`main` is watched from p620's next deploy. `checks.schedule-watchdog` keeps
+the table equal to the workflows at every commit: every `cron:` line has a
+row, every row's workflow takes `workflow_dispatch`, and each `weekly` row's
+input is a `job` option its `if:` names.
+
+```bash
+bash .github/scripts/schedule-watchdog.sh --dry-run   # what it would do now
+```
+
 ## `flake-update.yml` — 07:00 UTC, the inputs
 
 *What the apps are on today* → *Move the pin* → *What the apps would be on* →
@@ -335,6 +381,18 @@ It moves **nixpkgs only**, and only nixpkgs ever merges itself.
   drafts, and PRs from a fork never count as the blocked draft.
 
 ---
+
+## `milestone.yml` — on every issue opened
+
+An issue opened without a milestone is given *Keeping the lights on* (#1947),
+because one with none is invisible in every view that groups by milestone, and
+the review's board row would otherwise ask a person to set it. Issues the bots
+file already name a milestone, and a run started by `GITHUB_TOKEN` cannot
+trigger this one anyway.
+
+Epics are exempt (§12). The filing order adds the `epic` label after the issue
+exists, so the default given on open is removed again when that label arrives,
+and only if it is still the default.
 
 ## `release.yml` — on a `v*` tag
 

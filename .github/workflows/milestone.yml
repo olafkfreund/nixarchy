@@ -1,0 +1,39 @@
+name: milestone
+
+# An issue opened without a milestone is invisible in every view that groups by
+# one, and the review's board row then asks a person to set it (#1947). Issues
+# the bots file already name one; this covers the ones people open.
+#
+# Epics are exempt: one in its own milestone reads as a child of itself (§12).
+# The filing order adds the epic label after the issue exists, so a default
+# given on open is taken back when the label arrives.
+
+on:
+  issues:
+    types: [opened, reopened, labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  default:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      NUMBER: ${{ github.event.issue.number }}
+      DEFAULT: Keeping the lights on
+    steps:
+      - name: Give it the default milestone
+        if: >-
+          github.event.action != 'labeled' &&
+          github.event.issue.milestone == null &&
+          !contains(github.event.issue.labels.*.name, 'epic')
+        run: gh issue edit "$NUMBER" --milestone "$DEFAULT"
+      - name: Take the default back from an epic
+        if: >-
+          github.event.action == 'labeled' &&
+          github.event.label.name == 'epic' &&
+          github.event.issue.milestone.title == 'Keeping the lights on'
+        run: gh issue edit "$NUMBER" --remove-milestone

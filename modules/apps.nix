@@ -1264,6 +1264,25 @@ let
         optional = {k for k, v in overrides.items() if v.pop("ifUpstream", False)}
         arch_map = json.load(open(archmap_path))
 
+        # Quattro split AI rows into Desktop and CLI; keep the tag's IDs in the source data.
+        if "install.ai.desktop.amp" in upstream:
+            renamed = {
+                "install.ai.amp": "install.ai.desktop.amp",
+                "install.ai.chatgpt": "install.ai.desktop.chatgpt",
+                "install.ai.grok-bot": "install.ai.desktop.grok-bot",
+                "install.ai.hermes": "install.ai.desktop.hermes",
+                "install.ai.lm-studio": "install.ai.desktop.lm-studio",
+                "install.ai.ollama": "install.ai.cli.ollama",
+                "install.ai.openclaw": "install.ai.desktop.openclaw",
+                "install.ai.perplexity": "install.ai.desktop.perplexity",
+                "install.ai.t3-code": "install.ai.desktop.t3-code",
+                "remove.ai.hermes": "remove.ai.desktop.hermes",
+                "remove.ai.ollama": "remove.ai.cli.ollama",
+                "remove.ai.perplexity": "remove.ai.desktop.perplexity",
+            }
+            overrides = {renamed.get(k, k): v for k, v in overrides.items()}
+            optional = {renamed.get(k, k) for k in optional}
+
         # Upstream's `omarchy-pkg-*` guards, which the menu answers from the PATH (#1301).
         PKG_GUARD = re.compile(r"\bomarchy-pkg-(present|missing)\b")
 

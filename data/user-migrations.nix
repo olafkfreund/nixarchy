@@ -560,4 +560,34 @@
     run = "upstream";
     reason = "runs omarchy-agent-pi-defaults to link Omarchy's Pi extensions and condense Pi's changelog. It holds unedited: the link points into the Omarchy tree and is moved to the current one at the next run, and it does nothing until the user installs Pi (#1896)";
   };
+  "1795441383" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "moves Arch's bundled mise tools to packages and removes retired agent defaults and launchers; Nixarchy has its own package and agent routes, so existing user selections stay";
+  };
+  "1795613633" = {
+    edge = "only";
+    decision = "declined";
+    reason = "auto-enables Dell XPS 16 speaker tuning after an Arch package install; Nixarchy supports user-installed LSP limiter tuning and keeps activation opt-in";
+  };
+  "1795692660" = {
+    edge = "only";
+    decision = "declined";
+    reason = "clock catch-up expects /usr/lib/systemd/user units and may link them into user config; Nixarchy would need declarative user units";
+  };
+  "1795697268" = {
+    edge = "only";
+    decision = "declined";
+    reason = "auto-enables Flower Sakura speaker tuning after an Arch package install; Nixarchy supports user-installed LSP limiter tuning and keeps activation opt-in";
+  };
+  "1795704234" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "ASUS speaker tuning refresh targets Qualcomm ARM hardware, while this port targets x86_64-linux";
+  };
+  "1795705800" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "Anduril camera migration depends on the Arch anduril-bluechip-support package and its legacy units";
+  };
 }

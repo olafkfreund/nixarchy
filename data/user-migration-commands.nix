@@ -31,6 +31,11 @@
     follow = true;
     reason = "updates bar layout and widget settings in ~/.config/omarchy/shell.json via omarchy-shell-config and omarchy-shell IPC";
   };
+  "omarchy-cmd-default-browser" = {
+    edge = "only";
+    follow = false;
+    reason = "reads the browser MIME defaults and writes no user files";
+  };
   "omarchy-cmd-editor-mimetypes" = {
     edge = "only";
     follow = true;

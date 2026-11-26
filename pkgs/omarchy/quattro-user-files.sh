@@ -74,13 +74,22 @@ fi' \
   exit 0
 fi
 exec omarchy-launch-editor "$canonical"'
-substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-gnome \
+if grep -q 'set_if_changed icon-theme "Adwaita"' $out/share/omarchy/bin/omarchy-theme-set-gnome; then
+  substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-gnome \
+    --replace-fail 'set_if_changed icon-theme "Adwaita"' \
+      'current=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d \047 || true)
+case $current in
+  Yaru* | Adwaita | hicolor | "") set_if_changed icon-theme "Adwaita" ;;
+esac'
+else
+  substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-gnome \
   --replace-fail 'gsettings set org.gnome.desktop.interface icon-theme "Adwaita"' \
     '# A theme the user chose stays; gsettings quotes its value, so strip the quotes (\\047).
 current=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d \\047 || true)
 case $current in
   Yaru* | Adwaita | hicolor | "") gsettings set org.gnome.desktop.interface icon-theme "Adwaita" ;;
 esac'
+fi
 substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-qt \
   --replace-fail '[[ -f $CONFIG ]] || exit 0' \
     '[[ -f $CONFIG ]] || exit 0

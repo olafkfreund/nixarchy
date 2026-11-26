@@ -76,6 +76,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
     row_text=$("$grep_bin" -oE '(^|[ ;])agent="[a-z0-9-]+"' ${omarchySrc}/bin/omarchy-default-agent |
       "$sed_bin" 's/.*agent="//;s/"$//' | sort -u) || fail "cannot read upstream's agent ids"
     expect=25
+    [ ! -f ${omarchySrc}/bin/omarchy-install-ai-cli ] || expect=23
   else
     [ "$harness" -ne "$legacy" ] || fail "menu must have exactly one of agent.harness or setup.default.agent rows (found harness=$harness legacy=$legacy)"
     prefix='setup\.default\.agent'

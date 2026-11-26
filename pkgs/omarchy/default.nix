@@ -490,8 +490,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
                       --replace-fail '      if (!seen) return' '      if (!seen) return
       if (f["submap"] != "" && f["description"] == "") { seen = 0; return }'
-                    # The tag pin says v19, quattro v22: one of them must match.
-                    for v in 19 20 21 22; do
+                    # The tag pin says v19, quattro v22 or v23: one must match.
+                    for v in 19 20 21 22 23; do
                       substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings --replace-quiet "printf 'v$v\\n'" "printf 'v$v-submaps\\n'"
                     done
                     grep -q "printf 'v[0-9]*-submaps" $out/share/omarchy/bin/omarchy-menu-keybindings \
@@ -547,19 +547,30 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # Look page takes Node and Playwright from mise on first use; no mise
                     # here, so both come from nixpkgs (#1886). Quattro only.
                     if [ -e $out/share/omarchy/bin/omarchy-agent-look-page ]; then
-                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-look-page \
-                        --replace-fail "$(cat ${./look-page-playwright.upstream.sh})" 'playwright=${playwright-driver}' \
-                        --replace-fail '"$playwright/node_modules/playwright"' '"$playwright"' \
-                        --replace-fail 'mise exec node -- node -' '${nodejs}/bin/node -'
+                      if grep -q 'mise where playwright' $out/share/omarchy/bin/omarchy-agent-look-page; then
+                        substituteInPlace $out/share/omarchy/bin/omarchy-agent-look-page \
+                          --replace-fail "$(cat ${./look-page-playwright.upstream.sh})" 'playwright=${playwright-driver}' \
+                          --replace-fail '"$playwright/node_modules/playwright"' '"$playwright"' \
+                          --replace-fail 'mise exec node -- node -' '${nodejs}/bin/node -'
+                      else
+                        substituteInPlace $out/share/omarchy/bin/omarchy-agent-look-page \
+                          --replace-fail '/usr/bin/node -' '${nodejs}/bin/node -'
+                      fi
                     fi
 
                     # CARRIED (#1370): nixpkgs wraps kitty (and may wrap ghostty), so the running
                     # process is .kitty-wrapped, and an exact match on the bare name misses it.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \
-                      --replace-fail 'if pgrep -x kitty >/dev/null; then' "if pgrep -x '[.]?kitty(-wrapped)?' >/dev/null; then" \
-                      --replace-fail '  killall -SIGUSR1 kitty >/dev/null' "  pkill -USR1 -x '[.]?kitty(-wrapped)?' >/dev/null" \
-                      --replace-fail 'if pgrep -x ghostty >/dev/null; then' "if pgrep -x '[.]?ghostty(-wrapped?)?' >/dev/null; then" \
-                      --replace-fail '  killall -SIGUSR2 ghostty' "  pkill -USR2 -x '[.]?ghostty(-wrapped?)?'"
+                    if grep -q 'if pgrep -x kitty' $out/share/omarchy/bin/omarchy-restart-terminal; then
+                      substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \
+                        --replace-fail 'if pgrep -x kitty >/dev/null; then' "if pgrep -x '[.]?kitty(-wrapped)?' >/dev/null; then" \
+                        --replace-fail '  killall -SIGUSR1 kitty >/dev/null' "  pkill -USR1 -x '[.]?kitty(-wrapped)?' >/dev/null" \
+                        --replace-fail 'if pgrep -x ghostty >/dev/null; then' "if pgrep -x '[.]?ghostty(-wrapped?)?' >/dev/null; then" \
+                        --replace-fail '  killall -SIGUSR2 ghostty' "  pkill -USR2 -x '[.]?ghostty(-wrapped?)?'"
+                    else
+                      substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \
+                        --replace-fail 'pkill -SIGUSR1 -x kitty' "pkill -SIGUSR1 -x '[.]?kitty(-wrapped)?'" \
+                        --replace-fail 'pkill -SIGUSR2 -x ghostty' "pkill -SIGUSR2 -x '[.]?ghostty(-wrapped?)?'"
+                    fi
 
                     # Cursor resolves through PATH, because /usr/bin is not where anything
                     # lives here.
@@ -1177,13 +1188,19 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 --no-backup-if-mismatch < ${
-                      if isEdge then ./1625-no-mise-edge.patch else ./1625-no-mise.patch
+                      if lib.hasSuffix "155c4b4" version then
+                        ./1625-no-mise-edge.patch
+                      else if isEdge then
+                        ./1625-no-mise-edge-364.patch
+                      else
+                        ./1625-no-mise.patch
                     }
                     # Why: pkgs/AGENTS.md#power-actions-authorise-before-closing-windows-1659
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
                       if isEdge then ./1659-system-authorise-first-edge.patch else ./1659-system-authorise-first.patch
                     }
-                    rm $out/share/omarchy/install/user/mise.sh
+                    # New quattro keeps only mise-work.sh, which creates Work directories.
+                    rm -f $out/share/omarchy/install/user/mise.sh
                     substituteInPlace $out/share/omarchy/bin/omarchy-agent $out/share/omarchy/bin/omarchy-agent-account-exec \
                       --replace-fail '@omarchyDispatch@' "$out/share/omarchy/agent-dispatch"
                     mkdir -p $out/share/omarchy/agent-dispatch
@@ -2146,9 +2163,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
 
                     # Why: pkgs/AGENTS.md#the-watcher-reaper-checks-the-scan-1923
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-reaper-check.patch}
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
+                      if lib.hasSuffix "155c4b4" version then ./1923-reaper-check-155.patch else ./1923-reaper-check.patch
+                    }
                     patch_reaper_guard
-                    if grep -q '^  function rescanPlugins() {$' "$out/share/omarchy/shell/shell.qml"; then
+                    if grep -q '^    if (shell.pluginReloading || shell.pluginRegistry.scanning) {$' "$out/share/omarchy/shell/shell.qml"; then
                       patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-rescan-guard.patch}
                     fi
 
@@ -2172,8 +2191,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail "  function openDmenu(payload) {"$'\n'"    requestSerial += 1" "  function openDmenu(payload) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1"
 
                     # Why: pkgs/AGENTS.md#the-menu-fits-its-widest-label-1339
-                    substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
-                      --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "appearance.font" || root.activeMenu === "update.kernel") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
+                    if grep -q 'root.wideMenus\[root.activeMenu\]' $out/share/omarchy/shell/plugins/menu/Menu.qml; then
+                      substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                        --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : (root.wideMenus[root.activeMenu] === true ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width-155.qml})"
+                    else
+                      substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                        --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "appearance.font" || root.activeMenu === "update.kernel") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
+                    fi
 
                     # The plugin lives in the system profile, not /usr/lib (#1572).
                     substituteInPlace $out/share/omarchy/default/hypr/workspace-modes.lua \

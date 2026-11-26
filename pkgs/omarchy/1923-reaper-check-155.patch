@@ -1,0 +1,97 @@
+--- a/shell/services/PluginRegistry.qml
++++ b/shell/services/PluginRegistry.qml
+@@ -24,6 +24,11 @@
+   property var installedPlugins: ({})
+   property int registryRevision: 0
+   property bool scanning: false
++  property bool checking: false
++  property bool hasScanOutput: false
++  property string lastScanOutput: ""
++  property bool lastScanSkipped: false
++  property bool _checkRun: false
+   property bool rescanQueued: false
+   property bool destroying: false
+   property string lastEnableError: ""
+@@ -683,6 +688,22 @@
+   property Process scanProcess: Process {
+     onExited: function(exitCode) {
+       var output = scanStdout.text || ""
++      var wasCheck = _checkRun
++      _checkRun = false
++      if (wasCheck && exitCode === 0 && output === lastScanOutput) {
++        lastScanSkipped = true
++        checking = false
++        scanFinished()
++        if (registry.rescanQueued && !registry.destroying) {
++          registry.rescanQueued = false
++          registry.rescan()
++        }
++        return
++      }
++      if (wasCheck) { scanning = true; checking = false }
++      lastScanSkipped = false
++      hasScanOutput = exitCode === 0
++      lastScanOutput = exitCode === 0 ? output : ""
+       registry.parseScanOutput(output)
+       if (registry.rescanQueued && !registry.destroying) {
+         registry.rescanQueued = false
+@@ -711,7 +732,7 @@
+     onExited: {
+       if (registry.destroying) return
+       localPluginWatcher.running = true
+-      registry.rescan()
++      registry.rescan(true)
+     }
+   }
+ 
+@@ -763,12 +784,18 @@
+     onTriggered: localPluginWatcher.running = true
+   }
+ 
+-  function rescan() {
+-    if (scanning) {
++  function rescan(onlyIfChanged) {
++    if (scanning || checking) {
+       registry.rescanQueued = true
+       return
+     }
+-    scanning = true
++    if (onlyIfChanged && hasScanOutput) {
++      _checkRun = true
++      checking = true
++    } else {
++      _checkRun = false
++      scanning = true
++    }
+     registry.rescanQueued = false
+     // $0 = first-party dir, $1 = third-party dir. Some bash versions need the explicit -- separator.
+     // First-party plugins may be grouped one level deeper, e.g. panels/audio
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -1599,7 +1599,7 @@
+   // plugin's panel (Superwhisper's setup) otherwise closed the menu and
+   // blanked the wallpaper.
+   function rescanPlugins() {
+-    if (shell.pluginReloading || shell.pluginRegistry.scanning) {
++    if (shell.pluginReloading || (shell.pluginRegistry.scanning || shell.pluginRegistry.checking)) {
+       shell.pluginRescanPending = true
+       return
+     }
+@@ -1607,7 +1607,7 @@
+   }
+ 
+   function reloadPlugins() {
+-    if (shell.pluginReloading || shell.pluginRegistry.scanning) {
++    if (shell.pluginReloading || (shell.pluginRegistry.scanning || shell.pluginRegistry.checking)) {
+       shell.pluginReloadPending = true
+       return
+     }
+@@ -1620,7 +1620,7 @@
+ 
+   function finishPluginReload() {
+     if (!shell.pluginReloading) return
+-    if (shell.pluginRegistry.scanning) {
++    if ((shell.pluginRegistry.scanning || shell.pluginRegistry.checking)) {
+       shell.pluginReloadPending = true
+       return
+     }

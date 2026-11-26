@@ -164,6 +164,15 @@ case_1674() {
   ln -s "$staged/1-totoro.jpg" "$current/background"
   printf '%s\n' "$staged/1-totoro.jpg" > "$remembered/catppuccin"
   printf '%s\n' "$staged/0-winding-road.jpg" > "$remembered/tokyo-night"
+  # Quattro's upstream themes can omit bundled backgrounds; use a user theme fixture.
+  if [[ ! -f $OMARCHY_PATH/themes/catppuccin/backgrounds/1-totoro.webp ]]; then
+    mkdir -p "$XDG_CONFIG_HOME/omarchy/themes/catppuccin/backgrounds"
+    printf 'fixture\n' > "$XDG_CONFIG_HOME/omarchy/themes/catppuccin/backgrounds/1-totoro.webp"
+  fi
+  if [[ ! -f $OMARCHY_PATH/themes/tokyo-night/backgrounds/1-winding-road.webp ]]; then
+    mkdir -p "$XDG_CONFIG_HOME/omarchy/themes/tokyo-night/backgrounds"
+    printf 'fixture\n' > "$XDG_CONFIG_HOME/omarchy/themes/tokyo-night/backgrounds/1-winding-road.webp"
+  fi
   printf '%s\n' 'hl.config({ animations = { enabled = false } })' \
     'o.window(".*", { opacity = "1 1" })' > "$toggles/no-animations.lua"
   printf '%s\n' '-- existing look and feel' > "$XDG_CONFIG_HOME/hypr/looknfeel.lua"
@@ -183,6 +192,7 @@ case_1674() {
   if [[ " $ids " == *' 1791470456 '* ]]; then
     [[ $(readlink "$current/background") == "$webp" ]] || fail '1674: active background was not repaired'
     source=$OMARCHY_PATH/themes/catppuccin/backgrounds/1-totoro.webp
+    [[ -f $source ]] || source=$XDG_CONFIG_HOME/omarchy/themes/catppuccin/backgrounds/1-totoro.webp
     cmp "$source" "$webp" || fail '1674: bundled WebP was not staged'
     [[ $(<"$remembered/catppuccin") == "$webp" ]] || fail '1674: remembered JPG was not repaired'
   fi

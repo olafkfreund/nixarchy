@@ -98,7 +98,8 @@ pkgs.runCommand "nixarchy-agent-account-routing"
 
     # Case 8: stale mise command wrappers still lose to dispatch after config removal.
     export D MISE_BIN=${pkgs.mise}/bin/mise
-    cp ${omarchy}/share/omarchy/etc/mise/conf.d/omarchy-agent-accounts.toml "$MISE_SYSTEM_CONFIG_DIR/conf.d/"
+    printf '%s\n' '[wrappers.claude]' 'command = "omarchy-agent-account-exec"' 'args = ["claude"]' \
+      > "$MISE_SYSTEM_CONFIG_DIR/conf.d/omarchy-agent-accounts.toml"
     ${pkgs.mise}/bin/mise reshim || bad 'case 8: reshim failed'
     rm "$MISE_SYSTEM_CONFIG_DIR/conf.d/omarchy-agent-accounts.toml"
     got=$(PATH=$base:$PWD/withclaude bash -c 'eval "$(''${MISE_BIN} activate bash)"; PATH="$D:$PATH"; claude' 2>err) \

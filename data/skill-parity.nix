@@ -60,9 +60,10 @@
 
   "## Privilege Escalation" = {
     class = "adapted";
-    upstream = "d4ded906a1a4";
+    upstream = "fde15ad3173f";
+    tag_upstream = "d4ded906a1a4";
     anchor = "Use `pkexec` only when the caller cannot interact with a terminal";
-    reason = "The sudo/pkexec split is upstream's and kept. The sentence about Omarchy granting passwordless sudo to particular commands is dropped: that is an Arch packaging arrangement this port does not make.";
+    reason = "The sudo/pkexec split is upstream's and kept. Omarchy's new exception for installing curated Arch packages does not apply: Nixarchy installs packages declaratively, and the earlier passwordless-sudo arrangement is not made here.";
   };
 
   "## System Architecture" = {

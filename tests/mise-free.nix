@@ -8,6 +8,7 @@ let
   allRows = import ../data/mise-allow.nix;
   # An optional `edge` marker ("only" or "absent"), validated on every row first (#1752).
   isEdge = lib.hasPrefix "edge-" pkgs.omarchy.version;
+  isLatestEdge = lib.hasSuffix "-155c4b4" pkgs.omarchy.version;
   badMarker = lib.attrNames (
     lib.filterAttrs (
       _: r:
@@ -16,6 +17,7 @@ let
         "only"
         "absent"
       ])
+      || r ? latestEdge && r.latestEdge != "absent"
     ) allRows
   );
   # `edgeLines` replaces `lines` under an edge pin, where quattro words a file differently.
@@ -23,13 +25,26 @@ let
     lib.mapAttrs
       (
         _: r:
-        removeAttrs (r // lib.optionalAttrs (isEdge && r ? edgeLines) { lines = r.edgeLines; }) [
-          "edgeLines"
-        ]
+        removeAttrs
+          (
+            r
+            // lib.optionalAttrs (isEdge && r ? edgeLines) { lines = r.edgeLines; }
+            // lib.optionalAttrs (isLatestEdge && r ? latestEdgeLines) { lines = r.latestEdgeLines; }
+          )
+          [
+            "edgeLines"
+            "latestEdgeLines"
+            "latestEdge"
+          ]
       )
       (
         lib.filterAttrs (
-          _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
+          _: r:
+          !(
+            r.edge or "" == "only" && !isEdge
+            || r.edge or "" == "absent" && isEdge
+            || r.latestEdge or "" == "absent" && isLatestEdge
+          )
         ) allRows
       );
   allow = pkgs.writeText "mise-allow.json" (builtins.toJSON active);

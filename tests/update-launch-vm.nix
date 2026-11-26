@@ -78,6 +78,7 @@ pkgs.testers.runNixOSTest {
     import time
 
     spec = importlib.util.spec_from_file_location("update_launch", "${../.github/scripts/update-launch.py}")
+    assert spec is not None and spec.loader is not None, "update-launch.py did not load"
     launch = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(launch)
     apps = json.loads(${

@@ -253,7 +253,12 @@
 
   "sysctl.d/99-omarchy-sysctl.conf" = {
     class = "native";
-    reason = "BBR and fq, plus desktop memory and writeback tuning, value for value: tcp_mtu_probing, default_qdisc fq, tcp_congestion_control bbr, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included. checks.etc-sysctl compares each with upstream's file.";
+    reason = "BBR and fq, plus desktop memory and writeback tuning: tcp_mtu_probing, default_qdisc fq, tcp_congestion_control bbr, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included. checks.etc-sysctl compares each with upstream's file.";
+    differs."vm.swappiness" = {
+      pin = "edge-20261125-3642699";
+      upstream = "1";
+      reason = "Keep 150 with zram: preferring cheap compressed swap preserves file cache. Upstream's 1 suits its capped zram plus disk swapfile, but would delay using zram here until memory is nearly full.";
+    };
   };
 
   "systemd/system/ldconfig.service.d/10-omarchy.conf" = {
@@ -391,6 +396,12 @@
     reason = "TimeoutStopSec=5s on the user manager, the per-user half of the faster shutdown, so logout and power-off do not wait on a stuck user service. modules/nixos.nix sets it on systemd.services.\"user@\" at mkDefault.";
   };
 
+  "systemd/user/session.slice.d/10-omarchy.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "MemorySwapMax=0 and CPUWeight=500 protect the compositor, shell, audio and portals in session.slice under app.slice pressure. Not adopted: modules/nixos.nix currently tunes app.slice for oomd, and this new user slice policy has not been measured on a NixOS session.";
+  };
+
   "systemd/user.conf.d/20-omarchy-nofile.conf" = {
     class = "native";
     reason = "DefaultLimitNOFILE=65536:524288 for the user manager, the limit every graphical application actually inherits. modules/nixos.nix sets it through systemd.user.settings.Manager at mkDefault.";
@@ -418,7 +429,7 @@
   };
 
   "udev/rules.d/60-omarchy-hp-zbook-ultra-g3a-usb.rules" = {
-    edge = "only";
+    pin = "edge-20261125-58cf525";
     class = "divergent";
     reason = "Disables a phantom USB2 port on the HP ZBook Ultra G3a, which stalls its fingerprint reader. It would act on that laptop only, through services.udev.extraRules since NixOS generates /etc/udev/rules.d, and is not adopted: no machine here can test it. A host with this laptop can carry the rule in that option itself.";
   };

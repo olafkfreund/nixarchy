@@ -66,3 +66,51 @@ for hw in $out/share/omarchy/bin/omarchy-hw-aarch64-*; do
     substituteInPlace "$hw" --replace-fail '$(/usr/bin/uname -m)' '$(uname -m)'
   fi
 done
+
+# NixOS knows whether the activated kernel differs from the booted one.
+f=$out/share/omarchy/bin/omarchy-update-restart
+if grep -Fq 'for kernel in "$kernel_modules_path"/*/modules.builtin; do' "$f"; then
+  substituteInPlace "$f" \
+    --replace-fail 'for kernel in "$kernel_modules_path"/*/modules.builtin; do' \
+    'for kernel in /run/current-system/kernel; do' \
+    --replace-fail 'if [[ -f $kernel ]] && pacman -Qo "$kernel" &>/dev/null; then' \
+    'if [[ -e $kernel ]]; then
+  if [[ "$(readlink -f /run/booted-system/kernel)" == "$(readlink -f "$kernel")" ]]; then
+    kernel_updated=false
+  fi
+  continue
+fi
+if false; then'
+else
+  substituteInPlace "$f" \
+    --replace-fail "$(printf '%s\n' 'if [[ -f $kernel_modules_path/$running_kernel/modules.builtin ]] &&' '    pacman -Qo -- "$kernel_modules_path/$running_kernel/modules.builtin" &>/dev/null; then')" \
+    "$(printf '%s\n' 'if [[ -e /run/current-system/kernel ]] &&' '    [[ "$(readlink -f /run/booted-system/kernel)" == "$(readlink -f /run/current-system/kernel)" ]]; then')"
+fi
+
+f=$out/share/omarchy/bin/omarchy-launch-webapp
+if grep -Fq 'exec setsid uwsm-app -- $browser_exec' "$f"; then
+  substituteInPlace "$f" \
+    --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
+    'exec setsid uwsm-app -- "$browser_exec"'
+else
+  grep -Fq 'exec setsid uwsm-app -- "$browser_exec"' "$f" || {
+    echo 'omarchy-launch-webapp browser exec changed' >&2
+    exit 1
+  }
+fi
+
+patch_reaper_guard() {
+  local scanReturn scanGuard
+  scanReturn=$(printf '%s\n' '        Qt.callLater(shell.reloadPlugins)' '        return' '      }')
+  scanGuard=$(printf '%s\n' \
+    '      if (shell.pluginRegistry.lastScanSkipped) {' \
+    '        if (shell.pluginReloading) return' \
+    '        if (shell.pluginRescanPending) {' \
+    '          shell.pluginRescanPending = false' \
+    '          Qt.callLater(shell.rescanPlugins)' \
+    '        }' \
+    '        return' \
+    '      }')
+  substituteInPlace "$out/share/omarchy/shell/shell.qml" \
+    --replace-fail "$scanReturn" "$scanReturn"$'\n'"$scanGuard"
+}

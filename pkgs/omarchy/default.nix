@@ -684,7 +684,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # The channel splice goes in front of the FIRST pacman grep, not before the final comparison.
                     # Why: pkgs/AGENTS.md#version-channel-reads-nixos-version
                     substituteInPlace $out/share/omarchy/bin/omarchy-version-channel \
-                      --replace-fail 'if grep -Eq "https://(arm-)?stable-mirror\.omarchy\.org/" /etc/pacman.d/mirrorlist; then' 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; if grep -Eq "https://(arm-)?stable-mirror\.omarchy\.org/" /etc/pacman.d/mirrorlist; then'
+                      --replace-fail "# Arch Linux ARM's mirrors are the same hosts with an arm- prefix." 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; # Arch Linux ARM'"'"'s mirrors are the same hosts with an arm- prefix.'
 
                     # The channel switch is nixarchy-channel's, not pacman's.
                     #
@@ -762,29 +762,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 # Why: spec/2026-09-30-1085-bluetooth-pairing.md#design
                 pairBranch=$(cat ${./bluetooth-pair-branch.sh})
                 substituteInPlace "$pairCommand" --replace-fail "$pairLine" "$pairBranch"
-
-                # "Restart to finish the update" was going to be the answer every time.
-                #
-                # Upstream decides whether the kernel changed by walking
-                # $kernel_modules_path/*/modules.builtin and asking pacman who owns each. Here the
-                # glob matches nothing, so the loop never runs and kernel_updated keeps the
-                # `true` it was initialised with -- a reboot prompt after every update,
-                # whether or not anything needing one changed.
-                #
-                # NixOS answers this exactly rather than by inference: /run/booted-system
-                # is what is running and /run/current-system is what is activated, so the
-                # kernels differing is precisely "you are not running what you installed".
-                substituteInPlace $out/share/omarchy/bin/omarchy-update-restart \
-                  --replace-fail 'for kernel in "$kernel_modules_path"/*/modules.builtin; do' \
-                  'for kernel in /run/current-system/kernel; do' \
-                  --replace-fail 'if [[ -f $kernel ]] && pacman -Qo "$kernel" &>/dev/null; then' \
-                  'if [[ -e $kernel ]]; then
-                  if [[ "$(readlink -f /run/booted-system/kernel)" == "$(readlink -f "$kernel")" ]]; then
-                    kernel_updated=false
-                  fi
-                  continue
-                fi
-                if false; then'
 
                 # The speaker-tuning limiter was never found.
                 #
@@ -1007,10 +984,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     '*) browser="chromium-browser.desktop" ;;'
                 ''
             }
-
-            substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-              --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
-              'exec setsid uwsm-app -- "$browser_exec"'
 
             # The registered native host must outlive an update's store-path GC (#1491).
             substituteInPlace $out/share/omarchy/bin/omarchy-install-chromium-copy-url \
@@ -2167,6 +2140,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     # Why: pkgs/AGENTS.md#the-watcher-reaper-checks-the-scan-1923
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-reaper-check.patch}
+                    patch_reaper_guard
                     if grep -q '^  function rescanPlugins() {$' "$out/share/omarchy/shell/shell.qml"; then
                       patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-rescan-guard.patch}
                     fi

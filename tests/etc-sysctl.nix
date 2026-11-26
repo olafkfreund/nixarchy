@@ -47,7 +47,10 @@ let
       inherit name exists;
       inherit (parsed) malformed values;
       inherit (row) class;
-      differs = row.differs or { };
+      differs = lib.filterAttrs (
+        _: decision:
+        decision.pin or null == null || decision.pin == (pkgs.nixarchy-omarchy or pkgs.omarchy).version
+      ) (row.differs or { });
     }
   ) rows;
 

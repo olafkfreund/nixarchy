@@ -86,7 +86,7 @@ pkgs.testers.runNixOSTest {
 
     machine.start()
     machine.wait_for_unit("display-manager.service")
-    machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")
+    machine.wait_until_succeeds("loginctl list-sessions | grep greeter")
     machine.send_chars("omarchy\n")
     machine.wait_until_succeeds("loginctl list-sessions --no-legend | awk '$3 == \"omarchy\" {found=1} END {exit !found}'")
     machine.wait_until_succeeds("test -S /run/user/1000/hypr/$(ls -t /run/user/1000/hypr | head -1)/.socket.sock", timeout=90)

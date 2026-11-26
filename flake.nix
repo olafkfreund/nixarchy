@@ -2005,10 +2005,12 @@
             "greeter-publish"
             # Every package Omarchy installs has a decision in data/omarchy-packages.nix (#1572).
             "omarchy-package-ledger"
-            # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
+            # The pure pin-fix modes, daily proposal selector, and every probe in data/pin-fix.nix.
             "pin-fix"
             # The updater's diff and launch verdict gates fail under scope and settle mutations (#1943).
             "update-launch"
+            # What Omarchy's autostart runs at every login ships system-wide (#1956).
+            "autostart-runtime"
             # The watchdog that starts a scheduled run GitHub skipped, over fixtures (#1942).
             "schedule-watchdog"
             # Adds a real third-party plugin from a real repo. The plugin system
@@ -2541,11 +2543,9 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
-          # #1157: the failing-log excerpt read to EOF instead of exiting
-          # early under `head -100`, which SIGPIPEd an upstream pipeline
-          # stage under `pipefail` and killed the handoff before it posted.
-          # See tests/copilot-handoff.nix.
-          copilot-handoff = import ./tests/copilot-handoff.nix {
+          # #1944: guard the trusted workflow and the handoff refusal cases.
+          # #1944: the handoff cannot expose the bump checkout to OAuth or skip the same-repository guard.
+          claude-handoff = import ./tests/claude-handoff.nix {
             pkgs = pkgsFor.${system};
           };
           # #1384: a failed build job ends with the failing check and its error.

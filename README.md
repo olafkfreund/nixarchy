@@ -773,9 +773,7 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 
 | epic | what it is for | |
 | --- | --- | --- |
-
-*Nothing in flight.* The last epic landed; what is next is picked in
-[Discussions](https://github.com/olafkfreund/nixarchy/discussions).
+| [#1941](https://github.com/olafkfreund/nixarchy/issues/1941) | **Self-running maintenance** — the daily loop of bumps, reviews and deploys still needs a person at every step. Missed schedules restart themselves, a bump that builds and launches merges itself, Claude fixes the ones that break, and p620 and razer follow a green edge with rollback | 7 filed |
 
 ### What is deliberately not planned
 

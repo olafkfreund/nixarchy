@@ -10,7 +10,7 @@ Every one of them accepts **manual dispatch**:
 ```bash
 gh workflow run <name>.yml            # on main
 gh workflow run <name>.yml --ref <branch>
-gh run watch                          # follow the newest run
+gh run watch --interval 60            # follow the newest run
 ```
 
 > Source of truth is `docs/internals/` in the main repository. The wiki copy
@@ -380,6 +380,18 @@ It moves **nixpkgs only**, and only nixpkgs ever merges itself.
   drafts, and PRs from a fork never count as the blocked draft.
 
 ---
+
+## `milestone.yml` — on every issue opened
+
+An issue opened without a milestone is given *Keeping the lights on* (#1947),
+because one with none is invisible in every view that groups by milestone, and
+the review's board row would otherwise ask a person to set it. Issues the bots
+file already name a milestone, and a run started by `GITHUB_TOKEN` cannot
+trigger this one anyway.
+
+Epics are exempt (§12). The filing order adds the `epic` label after the issue
+exists, so the default given on open is removed again when that label arrives,
+and only if it is still the default.
 
 ## `release.yml` — on a `v*` tag
 

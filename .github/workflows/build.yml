@@ -2201,6 +2201,11 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.greeter-theme
 
+      # checks.update-launch-vm needs the same writable /dev/kvm and real login seat (#1943).
+      - name: A bumped app opens and keeps its own window
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.update-launch-vm
+
       # checks.hibernate-resume is a nixosTest and needs the /dev/kvm set up above (#1303).
       - name: A VM with resume configured sees the Hibernate row
         if: needs.gate.outputs.relevant == 'true'

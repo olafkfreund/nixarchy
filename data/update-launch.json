@@ -1,0 +1,19 @@
+{
+  "aether": {"kind": "manual", "reason": "Wails startup has no verified window signature"},
+  "cards": {"kind": "manual", "reason": "game startup has no verified window signature"},
+  "checkmate": {"kind": "manual", "reason": "3D startup has no verified window signature"},
+  "hey-cli": {"kind": "cli", "args": ["--help"]},
+  "hype": {"kind": "manual", "reason": "editor startup has no verified window signature"},
+  "monologue": {"kind": "gui", "class": "monologue"},
+  "omacalc": {"kind": "manual", "reason": "calculator startup has no verified window signature"},
+  "omacut": {"kind": "gui", "class": "omacut"},
+  "omarchy-hyprland-titlebars": {"kind": "manual", "reason": "Hyprland plugin has no standalone launcher"},
+  "omarchy-local-ai": {"kind": "manual", "reason": "model runner needs Podman and a startup probe"},
+  "omarchy-screensaver": {"kind": "manual", "reason": "screensaver entry point is installed under lib"},
+  "omarchy-speedtest": {"kind": "manual", "reason": "startup needs an external speed-test service"},
+  "omawrite": {"kind": "gui", "class": "omawrite"},
+  "once": {"kind": "cli", "args": ["--help"]},
+  "owe": {"kind": "manual", "reason": "video wallpaper startup needs a session probe"},
+  "signed": {"kind": "manual", "reason": "PDF startup has no verified window signature"},
+  "ttfx": {"kind": "cli", "args": ["--help"]}
+}

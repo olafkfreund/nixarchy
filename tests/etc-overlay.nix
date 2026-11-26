@@ -25,13 +25,12 @@ let
   inherit (pkgs) lib;
 
   allRows = import ../data/etc-overlay.nix;
-  # An optional `edge` marker ("only" or "absent") or exact `pin` scopes a row.
-  inherit (pkgs.nixarchy-omarchy or pkgs.omarchy) version;
-  isEdge = lib.hasPrefix "edge-" version;
+  # An optional `edge` marker ("only" or "absent"): validated on every row, then
+  # rows inactive under this pin leave the comparison (#1752). Not a version
+  # string: edge's carries the run's date, so one would go stale the next day (#1940).
+  isEdge = lib.hasPrefix "edge-" (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
   manifest = lib.filterAttrs (
-    _: r:
-    (r.pin or version) == version
-    && !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
+    _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
   ) allRows;
 
   classes = [

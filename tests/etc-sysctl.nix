@@ -6,6 +6,7 @@
 # Upstream's sysctl.d, value for value, against the file a machine reads.
 # Why: tests/AGENTS.md#etc-sysctl-compares-values-every-other-native-row-is-still-a-name
 let
+  isEdge = lib.hasPrefix "edge-" (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
   inherit (pkgs) lib;
 
   rows = lib.filterAttrs (name: _: lib.hasPrefix "sysctl.d/" name) (import ../data/etc-overlay.nix);
@@ -47,10 +48,9 @@ let
       inherit name exists;
       inherit (parsed) malformed values;
       inherit (row) class;
-      differs = lib.filterAttrs (
-        _: decision:
-        decision.pin or null == null || decision.pin == (pkgs.nixarchy-omarchy or pkgs.omarchy).version
-      ) (row.differs or { });
+      differs = lib.filterAttrs (_: decision: decision.edge or "" != "only" || isEdge) (
+        row.differs or { }
+      );
     }
   ) rows;
 
@@ -67,6 +67,9 @@ let
           "${key}: upstream's ${file.name} says ${want}, this configuration says ${
             if have == null then "nothing" else have
           }. Set it in modules/nixos.nix, or record differs.\"${key}\" on that row of data/etc-overlay.nix."
+      # An edge-only decision on an older quattro pin that still agrees (#1940).
+      else if decision.edge or "" == "only" && have == want then
+        [ ]
       else if decision.upstream != want then
         [
           "${key}: the decision in data/etc-overlay.nix was about upstream's ${decision.upstream}, and upstream now says ${want}. Decide again."

@@ -255,7 +255,8 @@
     class = "native";
     reason = "BBR and fq, plus desktop memory and writeback tuning: tcp_mtu_probing, default_qdisc fq, tcp_congestion_control bbr, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included. checks.etc-sysctl compares each with upstream's file.";
     differs."vm.swappiness" = {
-      pin = "edge-20261125-3642699";
+      # Quattro since 3642699; an older quattro fallback still agrees (#1940).
+      edge = "only";
       upstream = "1";
       reason = "Keep 150 with zram: preferring cheap compressed swap preserves file cache. Upstream's 1 suits its capped zram plus disk swapfile, but would delay using zram here until memory is nearly full.";
     };
@@ -429,7 +430,8 @@
   };
 
   "udev/rules.d/60-omarchy-hp-zbook-ultra-g3a-usb.rules" = {
-    pin = "edge-20261125-58cf525";
+    # Only older quattro ships it; edge-only rows a pin lacks are reported (#1896).
+    edge = "only";
     class = "divergent";
     reason = "Disables a phantom USB2 port on the HP ZBook Ultra G3a, which stalls its fingerprint reader. It would act on that laptop only, through services.udev.extraRules since NixOS generates /etc/udev/rules.d, and is not adopted: no machine here can test it. A host with this laptop can carry the rule in that option itself.";
   };

@@ -2007,6 +2007,8 @@
             "omarchy-package-ledger"
             # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
             "pin-fix"
+            # The updater's diff and launch verdict gates fail under scope and settle mutations (#1943).
+            "update-launch"
             # The watchdog that starts a scheduled run GitHub skipped, over fixtures (#1942).
             "schedule-watchdog"
             # Adds a real third-party plugin from a real repo. The plugin system
@@ -2080,6 +2082,16 @@
           greeter-theme = import ./tests/greeter-theme.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
+          };
+          # A real login and mapped app window; the update job selects the bumped GUI apps (#1943).
+          update-launch-vm = import ./tests/update-launch-vm.nix {
+            inputs = realInputs;
+            pkgs = pkgsFor.${system};
+            names =
+              let
+                selected = builtins.getEnv "NIXARCHY_LAUNCH_APPS";
+              in
+              if selected == "" then [ "omacut" ] else builtins.fromJSON selected;
           };
 
           # Why: tests/AGENTS.md#a-test-script-over-128-kib-breaks-the-stable-driver

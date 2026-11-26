@@ -362,7 +362,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # Who may write update/nixpkgs-blocked? Asked just before anything writes
-      # to it, on both paths. A person (or Copilot) who has pushed to the
+      # to it, on both paths. A person who has pushed to the
       # draft owns it from then on, and this job must not overwrite them. If
       # the question cannot be answered the job FAILS: a fail-safe that is
       # silent is a bump that stops, and nobody hears.
@@ -651,8 +651,8 @@ jobs:
           # Needs "Allow auto-merge" (Settings -> General). If it is off, fail
           # here and say so: the PR is open and safe to merge by hand.
           # Bound to the head judged above: a later push is not what passed
-          # the guard. copilot-handoff.sh also takes auto-merge off a nixpkgs
-          # bump before Copilot pushes to it.
+          # the guard. claude-handoff also takes auto-merge off a nixpkgs
+          # bump before publishing a repair.
           if ! gh pr merge "$pr" --auto --squash --delete-branch --match-head-commit "$sha"; then
             echo "::error::could not arm auto-merge on #$pr -- most likely" \
               "'Allow auto-merge' is off in the repository settings. The PR" \

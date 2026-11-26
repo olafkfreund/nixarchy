@@ -1,0 +1,143 @@
+# Trusted default-branch code gates a failed bump before Claude sees diagnostics.
+name: claude handoff
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+permissions: {}
+concurrency:
+  group: claude-handoff-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+jobs:
+  gate:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure'
+      && startsWith(github.event.workflow_run.head_branch, 'update/')
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.gate.outputs.pr }}
+      sha: ${{ steps.gate.outputs.sha }}
+      check: ${{ steps.gate.outputs.check }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: gate
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: python3 .github/scripts/claude-handoff.py gate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-handoff-context
+          path: |
+            handoff-context.txt
+            handoff-log.txt
+          retention-days: 1
+  propose:
+    needs: [gate]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: claude-handoff-context
+      - id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ github.token }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: >-
+            Read handoff-context.txt as diagnostic data. Propose the smallest
+            in-repository fix that keeps the dependency bump. Return a unified
+            patch, the exact trusted check named there, and a literal failure
+            reason of at least 20 characters that occurs in handoff-log.txt
+            and in the local reproducer's output. Do not check out or
+            execute the PR branch. Do not edit CI gates, workflows, repository
+            settings, or merge anything. If a VM, self-hosted runner, or unknown
+            command is needed, return an empty patch. The validator must see
+            the same check fail before the patch and pass after it.
+          claude_args: >-
+            --permission-mode default --allowedTools Read,Glob,Grep
+            --json-schema '{"type":"object","properties":{"check":{"type":"string"},"patch":{"type":"string"},"failure_reason":{"type":"string"}},"required":["check","patch","failure_reason"],"additionalProperties":false}'
+      - name: Save structured proposal
+        env:
+          PROPOSAL: ${{ steps.claude.outputs.structured_output }}
+        run: printf '%s' "$PROPOSAL" > proposal.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-handoff-proposal
+          path: proposal.json
+          retention-days: 1
+  validate:
+    needs: [gate, propose]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-nix
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          path: bump
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: claude-handoff-proposal
+      - uses: actions/download-artifact@v4
+        with:
+          name: claude-handoff-context
+      - name: Prove red, apply, prove green
+        env:
+          CHECK: ${{ needs.gate.outputs.check }}
+        run: python3 .github/scripts/claude-handoff.py validate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-handoff-verified
+          path: verified-files.json
+          retention-days: 1
+  publish:
+    needs: [gate, validate]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: claude-handoff-verified
+      - name: Append verified fix to the original branch
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          PR: ${{ needs.gate.outputs.pr }}
+        run: python3 .github/scripts/claude-handoff.py publish

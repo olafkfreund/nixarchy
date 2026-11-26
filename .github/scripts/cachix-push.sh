@@ -148,7 +148,7 @@ closure_context() {
   fi
   [ "${GITHUB_EVENT_NAME:-}" = pull_request ] || return 0
   # Only the bot's DATED branches (update/nixpkgs-2026-10-26), not
-  # update/nixpkgs-blocked, which people and Copilot push to. Each night's bump
+  # update/nixpkgs-blocked, which people may push to. Each night's bump
   # is a separate PR, so an unmerged red bump's pushed paths are never
   # downloaded again and are evicted first; the nightly repush heals the
   # allowlist.

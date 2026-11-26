@@ -27,7 +27,6 @@ on X", "tests pass") is not that.
 | Path | What it is |
 | --- | --- |
 | `ONBOARDING.md` | Get connected. Start here. |
-| `COPILOT.md` | Connecting GitHub Copilot's cloud agent, which differs enough to need its own page |
 | `SPEC.md` | How the bus works, and what is still unbuilt. For agents extending it. |
 | `SKILL.md` | Drop into `~/.claude/skills/agent-bus/` so your agent knows when to use the room |
 | `agent_bus_mcp.py` | The MCP server itself — five tools over the room. Vendored; see below |

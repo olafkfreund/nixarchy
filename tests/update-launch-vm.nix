@@ -22,6 +22,8 @@ let
 in
 pkgs.testers.runNixOSTest {
   name = "nixarchy-update-launch-vm";
+  # The login waits for the greeter by its text, as tests/session.nix does.
+  enableOCR = true;
   nodes.machine =
     { config, lib, ... }:
     {
@@ -88,7 +90,19 @@ pkgs.testers.runNixOSTest {
     machine.start()
     machine.wait_for_unit("display-manager.service")
     machine.wait_until_succeeds("loginctl list-sessions | grep greeter")
+    drawn = ""
+    for attempt in range(10):
+        machine.sleep(4)
+        machine.screenshot("greeter")
+        drawn = machine.get_screen_text().strip()
+        if drawn:
+            break
+    assert drawn, "the greeter never drew anything in 40s"
     machine.send_chars("omarchy\n")
+    machine.wait_until_succeeds(
+        "out=$(journalctl -b -u display-manager --no-pager); "
+        "grep -q 'Authentication for user .*omarchy.* successful' <<<\"$out\"")
+    machine.wait_until_succeeds("systemctl is-active user@1000.service")
     machine.wait_until_succeeds("loginctl list-sessions --no-legend | awk '$3 == \"omarchy\" {found=1} END {exit !found}'")
     machine.wait_until_succeeds("test -S /run/user/1000/hypr/$(ls -t /run/user/1000/hypr | head -1)/.socket.sock", timeout=90)
 
@@ -114,7 +128,8 @@ pkgs.testers.runNixOSTest {
                    "export XDG_DATA_HOME=/tmp/profile-" + name + "/data\n"
                    "exec " + shlex.quote(app["command"]) + " >" + log + " 2>&1\n")
         machine.succeed("printf '%s' " + shlex.quote(command) + " > " + script + " && chmod 755 " + script)
-        machine.succeed(desktop("hyprctl dispatch exec " + shlex.quote(script)))
+        # Hyprland's Lua config takes a Lua dispatch, as tests/session.nix sends.
+        machine.succeed(desktop("hyprctl dispatch " + shlex.quote(f'hl.dsp.exec_cmd("sh {script}")')))
         pid = 0
         opened = []
         try:

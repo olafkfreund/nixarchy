@@ -102,6 +102,24 @@ class Fixture(unittest.TestCase):
                 self.assertFalse(launch.eligible(base | change, "head", apps))
         self.assertFalse(launch.eligible(base, "head", apps + ["pkgs/apps/unknown.nix"]))
 
+    def test_not_eligible_is_a_draft_not_a_failure(self):
+        # A manual-only app leaves the PR in draft; the workflow must not go red for it.
+        apps = ["pkgs/apps/omarchy-local-ai.nix"]
+        verdict = {"sha": "head", "updater": "clean", "build": "clean",
+                   "results": {apps[0]: "MANUAL"}}
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            import json
+            json.dump(verdict, handle)
+        original_scope, original_argv = launch.scope_git, sys.argv
+        launch.scope_git = lambda base, head: apps
+        sys.argv = ["update-launch.py", "eligible", "--base", "b", "--head", "head", "--verdict", handle.name]
+        try:
+            self.assertEqual(launch.main(), launch.NOT_ELIGIBLE)
+            self.assertNotEqual(launch.NOT_ELIGIBLE, 1)
+        finally:
+            launch.scope_git, sys.argv = original_scope, original_argv
+            os.unlink(handle.name)
+
     def test_window_must_be_new_owned_and_stable(self):
         old = [{"address": "0x1", "class": "omacut", "pid": 10}]
         new = {"address": "0x2", "class": "omacut", "pid": 20}

@@ -389,8 +389,16 @@ jobs:
             exit 1
           fi
           git fetch --no-tags origin "$SHA"
+          rc=0
           python3 .github/scripts/update-launch.py eligible --base "$BASE" --head "$SHA" \
-            --verdict <(printf '%s' "$VERDICT")
+            --verdict <(printf '%s' "$VERDICT") || rc=$?
+          # 3: not every changed app has a passing launch (a manual-only app, a
+          # failed probe): the PR stays a draft for a person, and that is no failure.
+          if [ "$rc" = 3 ]; then
+            echo "PR stays draft: not every changed app has a passing launch result; see the launch job" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [ "$rc" = 0 ] || exit "$rc"
           if [ "$ARM_AUTO_MERGE" != true ]; then
             echo "Launch passed; auto-merge arming flag is OFF pending warm and cold hosted runs" >> "$GITHUB_STEP_SUMMARY"
             exit 0

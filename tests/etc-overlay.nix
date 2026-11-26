@@ -26,7 +26,7 @@ let
 
   allRows = import ../data/etc-overlay.nix;
   # An optional `edge` marker ("only" or "absent") or exact `pin` scopes a row.
-  version = (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
+  inherit (pkgs.nixarchy-omarchy or pkgs.omarchy) version;
   isEdge = lib.hasPrefix "edge-" version;
   manifest = lib.filterAttrs (
     _: r:

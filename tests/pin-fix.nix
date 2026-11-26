@@ -48,6 +48,7 @@ pkgs.runCommand "nixarchy-pin-fix"
   ''
     set +e # the checks below read exit statuses on purpose
     P=${../.github/scripts/pin-fix.sh}
+    printf '%s' '${builtins.toJSON table}' > pin-table.json
     fail=0
     expect() { # name, wanted, got
       if [ "$2" != "$3" ]; then
@@ -74,6 +75,31 @@ pkgs.runCommand "nixarchy-pin-fix"
     cmp_json behind 5;      expect_prefix "decide behind" "refuse" "$(bash $P --decide microvm-nix c.json $NEW)"
     cmp_json ahead 3;       expect_prefix "decide bad sha" "refuse" "$(bash $P --decide microvm-nix c.json not-a-sha)"
     expect_prefix "decide own repo" "refuse" "$(bash $P --decide olafkfreund c.json $NEW)"
+
+    # ---- --select: the proposal job's fixed-clock release and age gate
+    select_pin() {
+      jq -n --arg name "$1" --arg owner "$2" --arg ref "$3" --arg old "$4" \
+        --arg release "$5" --arg tag_status "$6" --arg status "$7" \
+        --argjson ahead "$8" --arg oldest "$9" \
+        '{name:$name, owner:$owner, ref:$ref, old:$old,
+          pin_date:"2026-01-01T00:00:00Z",
+          release:$release, tag_status:$tag_status,
+          compare:{status:$status, ahead_by:$ahead,
+            commits:[{commit:{committer:{date:$oldest}}}]}}' > select.json
+      bash $P --select select.json "$NEW" 1795694400 pin-table.json
+    }
+    OLD=$(printf 'b%.0s' $(seq 40))
+    expect_prefix "select eight days" "move " "$(select_pin microvm microvm-nix "$OLD" "$OLD" none identical ahead 1 2026-11-18T12:00:00Z)"
+    expect_prefix "select seven days 23 hours" "refuse" "$(select_pin microvm microvm-nix "$OLD" "$OLD" none identical ahead 1 2026-11-18T13:00:00Z)"
+    expect_prefix "select old pin, recent missing commit" "refuse" "$(select_pin microvm microvm-nix "$OLD" "$OLD" none identical ahead 2 2026-11-25T12:00:00Z)"
+    expect_prefix "select unlisted" "refuse" "$(select_pin unknown upstream "$OLD" "$OLD" none identical ahead 1 2026-11-18T12:00:00Z)"
+    expect_prefix "select branch" "refuse" "$(select_pin microvm microvm-nix main "$OLD" none identical ahead 1 2026-11-18T12:00:00Z)"
+    expect_prefix "select own repo" "refuse" "$(select_pin microvm OLAFKFREUND "$OLD" "$OLD" none identical ahead 1 2026-11-18T12:00:00Z)"
+    expect_prefix "select missing release" "refuse" "$(select_pin microvm microvm-nix "$OLD" "$OLD" v2 behind ahead 1 2026-11-18T12:00:00Z)"
+    expect_prefix "select identical" "refuse" "$(select_pin microvm microvm-nix "$OLD" "$OLD" none identical identical 0 2026-11-18T12:00:00Z)"
+    expect_prefix "select diverged" "refuse" "$(select_pin microvm microvm-nix "$OLD" "$OLD" none identical diverged 1 2026-11-18T12:00:00Z)"
+    printf '{bad json' > select.json
+    expect_prefix "select malformed" "refuse" "$(bash $P --select select.json "$NEW" 1795694400 pin-table.json 2>/dev/null)"
 
     # ---- --replace, on a copy of the real flake.nix
     rev_of() { jq -r --arg n "$1" '.nodes[$n].locked.rev' ${../flake.lock}; }

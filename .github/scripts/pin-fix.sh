@@ -5,6 +5,8 @@
 #
 #   pin-fix.sh FAILURES_TSV                      the default run (workflow)
 #   pin-fix.sh --decide OWNER COMPARE_JSON SHA   print `move <sha> <n>` or `refuse <why>`
+#   pin-fix.sh --select FACTS_JSON SHA NOW TABLE_JSON  nightly proposal eligibility
+#   pin-fix.sh --url-of FLAKE_NIX INPUT        github owner/repo/ref
 #   pin-fix.sh --replace FLAKE_NIX INPUT OLD_FULL_SHA NEW_SHA
 #   pin-fix.sh --moved BASE_LOCK NEW_LOCK        root inputs whose lock differs
 #   pin-fix.sh --only-nixpkgs MAIN PR [FILES]   exit 0 iff only nixpkgs moved (and FILES is just flake.lock)
@@ -47,6 +49,34 @@ decide() {
   { [ "$ahead" -ge 1 ] && [ "$ahead" -le 100 ]; } ||
     { echo "refuse ahead_by $ahead is outside 1..100"; return 0; }
   echo "move $sha $ahead"
+}
+
+select_pin() {
+  local verdict
+  verdict=$(jq -r --arg sha "$2" --argjson now "$3" --slurpfile table "$4" '
+    . as $f
+    | ($f.compare.commits | if type == "array" then
+        [.[].commit.committer.date | select(. >= $f.pin_date)] | min
+          // ($f.compare.commits[-1].commit.committer.date // "")
+      else "" end) as $oldest
+    | (try ($oldest | fromdateiso8601) catch null) as $when
+    | if ($table[0] | has($f.name)) | not then "refuse input is not allowlisted"
+      elif ($f.owner | ascii_downcase) == "olafkfreund" then "refuse own repository"
+      elif ($f.old | type != "string") or ($f.ref | type != "string")
+        or (($f.old | test("^[0-9a-f]{40}$")) | not)
+        or (($f.ref | test("^[0-9a-f]{7,40}$")) | not)
+        or (($f.old | startswith($f.ref)) | not) then "refuse URL is not a commit pin"
+      elif ($sha | test("^[0-9a-f]{40}$") | not) or $sha == $f.old then "refuse head is not new"
+      elif $f.release != "none" and $f.tag_status != "identical" and $f.tag_status != "ahead"
+        then "refuse newer release needs review"
+      elif $f.compare.status != "ahead" then "refuse comparison is not ahead"
+      elif ($f.compare.ahead_by | type != "number") or $f.compare.ahead_by < 1
+        or $f.compare.ahead_by > 100 then "refuse commit count outside 1..100"
+      elif $when == null or $when > $now then "refuse missing commit date unreadable"
+      elif (($now - $when) / 86400 | floor) <= 7 then "refuse missing commit is newer than eight days"
+      else "move \($sha) \($f.compare.ahead_by)" end
+  ' "$1" 2>/dev/null) || verdict='refuse unreadable comparison'
+  printf '%s\n' "$verdict"
 }
 
 # The line number of INPUT's url line inside its `INPUT = {` block.
@@ -329,6 +359,8 @@ run() {
 
 case "${1:-}" in
   --decide) [ $# = 4 ] || die "usage: --decide OWNER COMPARE_JSON NEW_SHA"; decide "$2" "$3" "$4" ;;
+  --select) [ $# = 5 ] || die "usage: --select FACTS_JSON NEW_SHA NOW TABLE_JSON"; select_pin "$2" "$3" "$4" "$5" ;;
+  --url-of) [ $# = 3 ] || die "usage: --url-of FLAKE_NIX INPUT"; url_of "$2" "$3" ;;
   --replace) [ $# = 5 ] || die "usage: --replace FLAKE_NIX INPUT OLD_SHA NEW_SHA"; replace "$2" "$3" "$4" "$5" ;;
   --moved)
     [ $# = 3 ] || die "usage: --moved BASE_LOCK NEW_LOCK"

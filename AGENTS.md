@@ -589,6 +589,14 @@ Two other ways a check stops checking, both found in one week:
   broken path. A job that had no work to do proves nothing about the work:
   test the path with a fixture that forces it, as `checks.nix-update-archive`
   does.
+- **A variable named like an exported one stays exported, even `local`.**
+  A dev shell and every Nix builder export `$out`, and bash keeps the export
+  attribute on a `local out` in a function. `schedule-watchdog.sh` held a
+  250 KB API reply in `out`, so it went into every child's environment and
+  `jq` failed with "Argument list too long" (E2BIG: Linux caps one string at
+  128 KiB). Its fixtures were small, so the check passed; the first live dry
+  run failed (#1942). Name such variables something no environment sets, and
+  give a fixture one reply over 128 KiB.
 
 ## 6. How to run the checks, and what each one costs
 

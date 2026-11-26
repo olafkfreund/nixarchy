@@ -68,6 +68,141 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pin-proposal:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: ./.github/actions/setup-nix
+
+      - name: Try one stale commit pin
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          table="$RUNNER_TEMP/pin-table.json"
+          nix eval --json -f data/pin-fix.nix > "$table"
+          echo 0 > "$RUNNER_TEMP/pin-api-count"
+          upstream_api() {
+            local n
+            n=$(cat "$RUNNER_TEMP/pin-api-count")
+            [ "$n" -lt 20 ] || return 1
+            echo "$((n + 1))" > "$RUNNER_TEMP/pin-api-count"
+            gh api "$@"
+          }
+          cp flake.nix "$RUNNER_TEMP/base-flake.nix"
+          cp flake.lock "$RUNNER_TEMP/base-flake.lock"
+          rows=$(python3 pkgs/flake-pins.py | sort -t $'\t' -k5,5n)
+          [ -n "$rows" ] || { echo 'No root GitHub inputs' >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          rows=$(printf '%s\n' "$rows" | awk -v day="$(date -u +%j)" \
+            '{ row[NR]=$0 } END { for (i=0; i<NR; i++) print row[(day+i)%NR+1] }')
+          while IFS=$'\t' read -r name kind repo old modified; do
+            [ "$kind" = rev ] || continue
+            jq -e --arg n "$name" 'has($n)' "$table" >/dev/null || continue
+            if [ "$(cat "$RUNNER_TEMP/pin-api-count")" -ge 20 ]; then
+              echo '- Upstream scan stopped at the 20-request budget' >> "$GITHUB_STEP_SUMMARY"
+              break
+            fi
+            branch="update/pin-$name"
+            rc=0
+            git ls-remote --exit-code --heads origin "$branch" >/dev/null || rc=$?
+            case "$rc" in
+              0) echo "- $name: proposal branch already exists" >> "$GITHUB_STEP_SUMMARY"; continue ;;
+              2) ;;
+              *) echo "::error::cannot check $branch"; exit 1 ;;
+            esac
+            spec=$(./.github/scripts/pin-fix.sh --url-of flake.nix "$name") || continue
+            IFS=/ read -r owner project ref <<< "$spec"
+            [ "$repo" = "$owner/$project" ] || continue
+            release=none
+            tag_status=identical
+            if release=$(upstream_api "repos/$repo/releases/latest" --jq .tag_name 2>/dev/null); then
+              tag_status=$(upstream_api "repos/$repo/compare/$release...$old" --jq .status 2>/dev/null) || tag_status=unreadable
+            else
+              tags=$(upstream_api "repos/$repo/tags" --jq 'map(.name) | map(select(test("^v?[0-9]"))) | .[0] // "none"' 2>/dev/null) || {
+                echo "- $name: release and tags unreadable" >> "$GITHUB_STEP_SUMMARY"
+                continue
+              }
+              release=$tags
+              if [ "$release" != none ]; then
+                tag_status=$(upstream_api "repos/$repo/compare/$release...$old" --jq .status 2>/dev/null) || tag_status=unreadable
+              fi
+            fi
+            upstream_branch=$(upstream_api "repos/$repo" --jq .default_branch 2>/dev/null) || upstream_branch=
+            [ -n "$upstream_branch" ] || { echo "- $name: default branch unreadable" >> "$GITHUB_STEP_SUMMARY"; continue; }
+            new=$(upstream_api "repos/$repo/commits/$upstream_branch" --jq .sha 2>/dev/null) || new=
+            [[ $new =~ ^[0-9a-f]{40}$ ]] || { echo "- $name: head unreadable" >> "$GITHUB_STEP_SUMMARY"; continue; }
+            compare=$(upstream_api "repos/$repo/compare/$old...$new?per_page=100" 2>/dev/null) || compare=
+            [ -n "$compare" ] || { echo "- $name: comparison unreadable" >> "$GITHUB_STEP_SUMMARY"; continue; }
+            jq -n --arg name "$name" --arg owner "$owner" --arg ref "$ref" \
+              --arg old "$old" --arg pin_date "$(date -u -d "@$modified" +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg release "$release" --arg tag_status "$tag_status" --argjson compare "$compare" \
+              '{name:$name,owner:$owner,ref:$ref,old:$old,pin_date:$pin_date,
+                release:$release,tag_status:$tag_status,compare:$compare}' > "$RUNNER_TEMP/pin-facts.json"
+            verdict=$(./.github/scripts/pin-fix.sh --select "$RUNNER_TEMP/pin-facts.json" "$new" "$(date +%s)" "$table")
+            if [[ $verdict != move\ * ]]; then
+              echo "- $name: $verdict" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            if ! ./.github/scripts/pin-fix.sh --replace flake.nix "$name" "$old" "$new" ||
+              ! nix flake lock; then
+              echo "- $name: URL or lock update failed" >> "$GITHUB_STEP_SUMMARY"
+              cp "$RUNNER_TEMP/base-flake.nix" flake.nix
+              cp "$RUNNER_TEMP/base-flake.lock" flake.lock
+              continue
+            fi
+            moved=$(./.github/scripts/pin-fix.sh --moved "$RUNNER_TEMP/base-flake.lock" flake.lock) || moved=unreadable
+            locked=$(jq -r --arg n "$name" '.nodes[.nodes.root.inputs[$n]].locked.rev // ""' flake.lock)
+            if [ "$moved" != "$name" ] || [ "$locked" != "$new" ] ||
+              ! ./.github/scripts/pin-fix.sh --intact "$RUNNER_TEMP/base-flake.lock" flake.lock "$name"; then
+              echo "- $name: lock moved unexpected inputs or changed follows" >> "$GITHUB_STEP_SUMMARY"
+              cp "$RUNNER_TEMP/base-flake.nix" flake.nix
+              cp "$RUNNER_TEMP/base-flake.lock" flake.lock
+              continue
+            fi
+            rc=0
+            ./.github/scripts/eval-gate.sh > "$RUNNER_TEMP/pin-gate.tsv" || rc=$?
+            if [ "$rc" != 0 ]; then
+              echo "- $name: evaluation gate failed (exit $rc)" >> "$GITHUB_STEP_SUMMARY"
+              cp "$RUNNER_TEMP/base-flake.nix" flake.nix
+              cp "$RUNNER_TEMP/base-flake.lock" flake.lock
+              continue
+            fi
+            probe=$(jq -r --arg n "$name" '.[$n].probe' "$table")
+            {
+              echo "Move the $name commit pin from $old to $new."
+              echo
+              echo "Upstream comparison: https://github.com/$repo/compare/$old...$new"
+              echo
+              echo "Probe \`$probe\` and every cached output passed \`.github/scripts/eval-gate.sh\`."
+              echo 'Required branch protection checks must pass before a human merges this PR.'
+              echo
+              echo 'Closes #1945'
+            } | ./.github/scripts/pin-fix.sh --sanitize > "$RUNNER_TEMP/pin.body.md"
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
+            echo "name=$name" >> "$GITHUB_OUTPUT"
+            echo "- $name: evaluation passed; proposing $old -> $new" >> "$GITHUB_STEP_SUMMARY"
+            break
+          done <<< "$rows"
+
+      - name: Open a pin proposal for human merge
+        if: steps.select.outputs.branch != ''
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.BUMP_TOKEN }}
+          branch: ${{ steps.select.outputs.branch }}
+          title: "pin: move ${{ steps.select.outputs.name }} to upstream head"
+          commit-message: |
+            Move the ${{ steps.select.outputs.name }} commit pin
+
+            Generated by .github/workflows/flake-update.yml.
+          body-path: ${{ runner.temp }}/pin.body.md
+          labels: dependencies
+          delete-branch: true
+
   bump:
     runs-on: ubuntu-26.04
     # 45, not 30 (#1459): the gate evaluates every cached output (about 2 minutes)
@@ -368,6 +503,7 @@ jobs:
           DELTA: ${{ steps.delta.outputs.delta }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016
           {
             echo 'Nightly bump of the `nixpkgs` input. Only that input: the others'
             echo 'are left where they are, because at least one of them is pinned on'

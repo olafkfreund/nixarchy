@@ -2005,7 +2005,7 @@
             "greeter-publish"
             # Every package Omarchy installs has a decision in data/omarchy-packages.nix (#1572).
             "omarchy-package-ledger"
-            # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
+            # The pure pin-fix modes, daily proposal selector, and every probe in data/pin-fix.nix.
             "pin-fix"
             # The watchdog that starts a scheduled run GitHub skipped, over fixtures (#1942).
             "schedule-watchdog"

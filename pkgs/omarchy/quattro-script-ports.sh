@@ -114,3 +114,20 @@ patch_reaper_guard() {
   substituteInPlace "$out/share/omarchy/shell/shell.qml" \
     --replace-fail "$scanReturn" "$scanReturn"$'\n'"$scanGuard"
 }
+
+# rc1's fingerprint panel runs this helper as root through pkexec, which clears
+# the environment: give it a trusted NixOS PATH and the packaged tree, and the
+# fprintd preflight instead of pacman (#1975).
+enroll=$out/share/omarchy/bin/omarchy-setup-security-fingerprint-enroll
+if [ -e "$enroll" ]; then
+  substituteInPlace "$enroll" \
+    --replace-fail 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin' \
+      'export PATH=/run/wrappers/bin:/run/current-system/sw/bin' \
+    --replace-fail 'export OMARCHY_PATH=/usr/share/omarchy' \
+      "export OMARCHY_PATH=$out/share/omarchy" \
+    --replace-fail 'libfprint_owner=$(pacman -Qqo /usr/lib/libfprint-2.so.2 2>/dev/null || true)' 'libfprint_owner=' \
+    --replace-fail 'if omarchy-pkg-missing "${packages[@]}" >&2; then' \
+      'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
+    --replace-fail 'pacman -S --needed --noconfirm --ask 4 -- "${packages[@]}" </dev/null >&2 || fail packages' \
+      'echo "Enable the reader first: services.fprintd.enable = true; then rebuild and run this again." >&2; fail packages'
+fi

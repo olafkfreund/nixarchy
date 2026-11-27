@@ -834,19 +834,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                   --replace-fail "as_root tee /etc/pam.d/omarchy-lock-fingerprint >/dev/null <<'EOF'" ": <<'EOF'" \
                   --replace-fail 'as_root rm -f /etc/pam.d/omarchy-lock-fingerprint' ':'
 
-                enroll=$out/share/omarchy/bin/omarchy-setup-security-fingerprint-enroll
-                if [ -e "$enroll" ]; then
-                  substituteInPlace "$enroll" \
-                    --replace-fail 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin' \
-                      'export PATH=/run/wrappers/bin:/run/current-system/sw/bin' \
-                    --replace-fail 'export OMARCHY_PATH=/usr/share/omarchy' \
-                      "export OMARCHY_PATH=$out/share/omarchy" \
-                    --replace-fail 'libfprint_owner=$(pacman -Qqo /usr/lib/libfprint-2.so.2 2>/dev/null || true)' 'libfprint_owner=' \
-                    --replace-fail 'if omarchy-pkg-missing "''${packages[@]}" >&2; then' \
-                      'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
-                    --replace-fail 'pacman -S --needed --noconfirm --ask 4 -- "''${packages[@]}" </dev/null >&2 || fail packages' \
-                      'echo "Enable the reader first: services.fprintd.enable = true; then rebuild and run this again." >&2; fail packages'
-                fi
 
                 # #1385: sudo is configuration on NixOS, so the bar's passwordless-sudo indicator is neutered and unoffered.
                 substituteInPlace $out/share/omarchy/shell/plugins/bar/indicators/PasswordlessSudo.qml \
@@ -1503,20 +1490,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     if grep -q '^setup_pam_config() {$' $pambin/omarchy-setup-security-fingerprint; then
                       sed -i '/^setup_pam_config() {$/,/^}$/d' $pambin/omarchy-setup-security-fingerprint
                       substituteInPlace $pambin/omarchy-setup-security-fingerprint \
-                        --replace-fail 'setup_pam_config' \
-                          'echo "" >&2
-                          echo "PAM is configured by your NixOS build, not by editing /etc/pam.d." >&2
-                          echo "" >&2
-                          echo "  Your fingerprint is enrolled and verified. What is left is" >&2
-                          echo "  telling PAM to accept it:" >&2
-                          echo "" >&2
-                          echo "    services.fprintd.enable = true;" >&2
-                          echo "    security.pam.services.sudo.fprintAuth = true;" >&2
-                          echo "    security.pam.services.polkit-1.fprintAuth = true;" >&2
-                          echo "    security.pam.services.hyprlock.fprintAuth = true;" >&2
-                          echo "" >&2
-                          echo "  then: sudo nixos-rebuild switch --flake <your-flake>" >&2
-                          exit 1'
+                        --replace-fail 'setup_pam_config' "$(cat ${./1975-setup-pam-guidance.sh})"
                     fi
                     sed -i '/^remove_pam_config() {$/,/^}$/d' \
                       $pambin/omarchy-remove-security-fido2 \

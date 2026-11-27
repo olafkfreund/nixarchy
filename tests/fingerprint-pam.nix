@@ -50,7 +50,7 @@ pkgs.runCommand "nixarchy-fingerprint-pam"
       sed \
         -e "s|export PATH=/run/wrappers/bin:/run/current-system/sw/bin|export PATH=$TMPDIR/stubs:$PATH|" \
         -e 's/(( EUID == 0 )) || fail not-root/true/' \
-        -e 's/watch_cancel <\&0 \&/: # watcher disabled in fixture/' \
+        -e 's/watch_cancel <\&0 \&/: \& # no watcher in the fixture, but the next line reads its pid/' \
         "$bin/omarchy-setup-security-fingerprint-enroll" > "$TMPDIR/enroll"
       chmod +x "$TMPDIR/enroll"
       env -i PKEXEC_UID=1000 TEST_LOG="$TMPDIR/enroll-called" HOME="$TMPDIR" \

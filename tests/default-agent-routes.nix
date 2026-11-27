@@ -25,6 +25,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "apply %s\n" "$(cat "$agent_file")" >> "$log"' > "$TMPDIR/stubs/nixarchy-apply"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "launched %s\n" "$(command -v "$WANT")" >> "$log"' 'exit 0' > "$TMPDIR/stubs/omarchy-agent"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "launcher %s\n" "$*" >> "$log"' > "$TMPDIR/stubs/omarchy-launch-floating-terminal-with-presentation"
+  printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "harness-entry %s\n" "$*" >> "$log"' > "$TMPDIR/stubs/omarchy-agent-launcher"
   printf '%s\n' '#!${pkgs.bash}/bin/bash' 'echo mise >> "$log"' > "$TMPDIR/mise-bin/mise"
   chmod +x "$TMPDIR"/stubs/* "$TMPDIR/mise-bin/mise"
   # The package patches this shebang at install. A sandbox has no /usr/bin/env.
@@ -56,19 +57,57 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
     rc=0
     if [ "$mode" = plain ]; then
       ${pkgs.bash}/bin/bash "$source_script" "$id" > "$out_file" 2>&1 </dev/null || rc=$?
+    elif [ "$mode" = select ]; then
+      # Unquoted: "local <model>" is two arguments.
+      ${pkgs.bash}/bin/bash "$source_script" --select $id > "$out_file" 2>&1 </dev/null || rc=$?
+    elif [ "$mode" = installed ]; then
+      ${pkgs.bash}/bin/bash "$source_script" --installed "$id" > "$out_file" 2>&1 </dev/null || rc=$?
     else
       ${pkgs.bash}/bin/bash "$source_script" --install "$id" > "$out_file" 2>&1 </dev/null || rc=$?
     fi
   }
 
-  row_text=$("$grep_bin" -oE '"setup\.default\.agent\.[a-z0-9-]+"' "$menu" |
-    "$sed_bin" 's/^"setup\.default\.agent\.//;s/"$//' | sort -u) || fail "cannot read menu rows"
+  harness=0 legacy=0
+  "$grep_bin" -Eq '"agent\.harness\.[a-z0-9-]+"' "$menu" && harness=1
+  "$grep_bin" -Eq '"setup\.default\.agent\.[a-z0-9-]+"' "$menu" && legacy=1
+  if [ "$harness" -eq 0 ] && [ "$legacy" -eq 0 ] && ! "$grep_bin" -q '"agent\.' "$menu"; then
+    # Quattro dropped the Agent menu (upstream #19785); its ids are the
+    # canonical agent="..." of upstream's own script, local included.
+    row_text=$("$grep_bin" -oE '(^|[ ;])agent="[a-z0-9-]+"' ${omarchySrc}/bin/omarchy-default-agent |
+      "$sed_bin" 's/.*agent="//;s/"$//' | sort -u) || fail "cannot read upstream's agent ids"
+    expect=25
+    [ ! -f ${omarchySrc}/bin/omarchy-install-ai-cli ] || expect=23
+  else
+    [ "$harness" -ne "$legacy" ] || fail "menu must have exactly one of agent.harness or setup.default.agent rows (found harness=$harness legacy=$legacy)"
+    prefix='setup\.default\.agent'
+    [ "$harness" -eq 0 ] || prefix='agent\.harness'
+    row_text=$("$grep_bin" -oE "\"$prefix\.[a-z0-9-]+\"" "$menu" |
+      "$sed_bin" "s/^\"$prefix\.//;s/\"$//" | sort -u) || fail "cannot read menu rows"
+    expect=24
+  fi
   mapfile -t rows <<< "$row_text"
   [ "''${#rows[@]}" -ge 20 ] || fail "menu yielded fewer than 20 agent rows"
-  [ "''${#rows[@]}" -eq 24 ] || fail "expected 24 menu rows, got ''${#rows[@]}"
+  [ "''${#rows[@]}" -eq "$expect" ] || fail "expected $expect agent ids, got ''${#rows[@]}"
+
+  # Account-add must still see a recorded choice when its command is absent.
+  if [ -n "''${rows[0]:-}" ]; then
+    prior=''${rows[0]}
+    export HOME=$TMPDIR/home XDG_DATA_HOME=$TMPDIR/home/data
+    export XDG_STATE_HOME=$TMPDIR/home/state XDG_CONFIG_HOME=$TMPDIR/home/config
+    export XDG_CACHE_HOME=$TMPDIR/home/cache
+    agent_file=$HOME/.config/omarchy/defaults/agent
+    rm -rf "$HOME"
+    mkdir -p "$(dirname "$agent_file")" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+    printf '%s\n' "$prior" > "$agent_file"
+    export PATH=$TMPDIR/stubs:$tools
+    rc=0
+    ${pkgs.bash}/bin/bash "$script" > "$out_file" 2>&1 </dev/null || rc=$?
+    [ "$rc" -eq 0 ] || fail "$prior recorded getter: exited $rc"
+    [ "$(cat "$out_file")" = "$prior" ] || fail "$prior recorded getter: printed $(cat "$out_file")"
+  fi
 
   for id in "''${rows[@]}"; do
-    if PATH=$tools command -v "$id" >/dev/null 2>&1; then fail "$id: present on fixture PATH"; fi
+    if PATH=$tools type -P "$id" >/dev/null 2>&1; then fail "$id: present on fixture PATH"; fi
   done
 
   for id in "''${rows[@]}"; do
@@ -132,7 +171,7 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
     fail "mise appears outside the two PATH-filter exceptions"
   fi
 
-  "$sed_bin" '/pi) *echo pi-coding-agent/d' "$script" > "$TMPDIR/no-pi"
+  "$sed_bin" '/pi | local) *echo pi-coding-agent/d' "$script" > "$TMPDIR/no-pi"
   ${pkgs.diffutils}/bin/cmp -s "$script" "$TMPDIR/no-pi" && fail "pi break did not land"
   run_case pi --install "$TMPDIR/mise-bin" "$TMPDIR/no-pi"
   [ "$rc" -eq 1 ] || fail "unknown route: exited $rc"
@@ -173,8 +212,37 @@ pkgs.runCommand "nixarchy-default-agent-routes" { } ''
   done
   run_case kimi plain "$TMPDIR/real/bin"
   has "$log" "launched $TMPDIR/real/bin/kimi" 'present agent'
+  # #1847: a selected harness gets quattro's launcher of its own, as upstream's selection does.
+  "$grep_bin" -Fxq -- "harness-entry kimi" "$log" || fail "present agent: no omarchy-agent-launcher kimi"
   lacks "$log" 'launcher' 'present agent'
   [ "$(cat "$agent_file")" = kimi ] || fail "present agent was not recorded"
+
+  # --installed answers by exit status and does nothing else (#1847).
+  run_case kimi installed "$TMPDIR/real/bin"
+  [ "$rc" -eq 0 ] || fail "--installed on a present agent: exited $rc"
+  empty "$log" '--installed on a present agent'
+  [ ! -e "$agent_file" ] || fail "--installed recorded a default"
+  run_case pi installed "$TMPDIR/mise-bin"
+  [ "$rc" -eq 1 ] || fail "--installed on an absent agent: exited $rc"
+  empty "$log" '--installed on an absent agent'
+
+  # --select makes an installed agent the default and opens nothing (upstream #19794).
+  run_case kimi select "$TMPDIR/real/bin"
+  [ "$rc" -eq 0 ] || fail "--select on a present agent: exited $rc"
+  [ "$(cat "$agent_file")" = kimi ] || fail "--select did not record kimi"
+  lacks "$log" 'launched' '--select on a present agent'
+  lacks "$log" 'launcher omarchy-default-agent' '--select on a present agent'
+  run_case kimi select "$TMPDIR/mise-bin" "$script" claude
+  [ "$rc" -eq 1 ] || fail "--select on an absent agent: exited $rc"
+  has "$out_file" 'is not installed' '--select on an absent agent'
+  [ "$(cat "$agent_file")" = claude ] || fail "--select on an absent agent changed the default"
+  lacks "$log" 'pkg-add' '--select on an absent agent'
+  make_agent "$TMPDIR/real/bin" pi
+  run_case "local qwen3-8b" select "$TMPDIR/real/bin"
+  [ "$rc" -eq 0 ] || fail "--select local <model>: exited $rc"
+  [ "$(cat "$agent_file")" = local ] || fail "--select local did not record local"
+  [ "$(cat "$HOME/.config/omarchy/defaults/local-model")" = qwen3-8b ] || fail "--select local did not pin the model"
+  rm -f "$TMPDIR/real/bin/pi"
 
   PKG_ADD_RC=1
   run_case pi --install "$TMPDIR/mise-bin" "$script" claude

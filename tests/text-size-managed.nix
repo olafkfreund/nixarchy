@@ -57,13 +57,14 @@ pkgs.runCommand "nixarchy-text-size-managed"
     ret=$(awk -v s="$guard" 'NR>s && /^  return 0$/ {print NR; exit}' "$script")
     # ^ *sed, not /sed -i/: the guard's own comment SAYS "sed -i", and matching
     # prose put the first hit inside the explanation rather than at the code.
-    sedline=$(awk -v s="$guard" 'NR>s && /^ *sed -i -E/ {print NR; exit}' "$script")
+    sedline=$(awk -v s="$guard" 'NR>s && /^ *sed (--follow-symlinks )?-i -E/ {print NR; exit}' "$script")
     [ -n "$ret" ] && [ -n "$sedline" ] || fail "could not locate the guard's return or the first sed"
     [ "$ret" -lt "$sedline" ] || fail "the guard returns after the first sed -i, which is too late"
 
     # 4. An UNMANAGED config still gets edited -- somebody who opted out of the
     #    seeding, or wrote their own, keeps today's behaviour.
     grep -q 'sed -i -E "s/\^size\[\[:space:\]\]\*=\.\*/size = \$pt/"' "$script" \
+      || grep -qF 'sed --follow-symlinks -i -E "s/^size[[:space:]]*=.*/size = $pt/"' "$script" \
       || grep -q 'sed -i -E' "$script" \
       || fail "the original edit path is gone, so an unmanaged config is no longer handled"
 

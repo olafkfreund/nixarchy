@@ -25,11 +25,33 @@ rows = {
     if k.startswith("install.") and "action" in v
 }
 known = set(os.environ["mapped"].split()) | set(os.environ["notApps"].split())
+if "install.ai.desktop.amp" in rows:
+    renamed = {
+        "install.ai.amp": "install.ai.desktop.amp",
+        "install.ai.chatgpt": "install.ai.desktop.chatgpt",
+        "install.ai.claude": "install.ai.desktop.claude",
+        "install.ai.grok-bot": "install.ai.desktop.grok-bot",
+        "install.ai.hermes": "install.ai.desktop.hermes",
+        "install.ai.lm-studio": "install.ai.desktop.lm-studio",
+        "install.ai.ollama": "install.ai.cli.ollama",
+        "install.ai.openclaw": "install.ai.desktop.openclaw",
+        "install.ai.perplexity": "install.ai.desktop.perplexity",
+        "install.ai.t3-code": "install.ai.desktop.t3-code",
+    }
+    known = {renamed.get(k, k) for k in known}
 
 unmapped = sorted(rows - known)
 # Only Install rows can go stale here: an app may map a row elsewhere in the
 # menu (quattro moved dictation to setup.default.dictation, #1278).
 stale = sorted(k for k in known - rows if k.startswith("install."))
+# An edge-only app row an older edge pin lacks (a refused candidate's fallback)
+# is dropped from the menu there, so it is reported, not fatal (#1896).
+# shortcut: on the newest pin too, a row upstream later drops is only reported;
+# it fails once main adopts the pin and the row loses its edge marker.
+pending = sorted(set(stale) & set(os.environ.get("edgeOnly", "").split()))
+stale = [k for k in stale if k not in pending]
+if pending:
+    print("edge-only rows this pin's menu does not have yet: " + " ".join(pending))
 
 if unmapped:
     sys.exit(

@@ -19,15 +19,14 @@ log() { printf '%s\n' "$*" | systemd-cat -t nixarchy-user-migrations || true; }
 # ahead of the reply (AGENTS.md §13).
 ipc() { LC_ALL=C.UTF-8 omarchy-shell shell "$@"; }
 
-bar_migrations() (
-[[ -r $cfg ]] && jq -e '.bar | type == "object" and has("centerAnchor")' "$cfg" >/dev/null 2>&1 || exit 0
-[[ -e $state/1790042972.sh && -e $state/1791968925.sh && -e $state/1791969355.sh ]] && exit 0
-
-for ((i = 0; i < ping_attempts; i++)); do
-  ipc ping >/dev/null 2>&1 && break
-  ((i + 1 == ping_attempts)) || sleep 1
-done
-ipc ping >/dev/null 2>&1 || exit 0
+wait_for_ipc() {
+  local i
+  for ((i = 0; i < ping_attempts; i++)); do
+    ipc ping >/dev/null 2>&1 && break
+    ((i + 1 == ping_attempts)) || sleep 1
+  done
+  ipc ping >/dev/null 2>&1
+}
 
 poll_file() {
   local filter=$1 want=${2:-null} i
@@ -37,6 +36,11 @@ poll_file() {
   done
   return 1
 }
+
+bar_migrations() (
+[[ -r $cfg ]] && jq -e '.bar | type == "object" and has("centerAnchor")' "$cfg" >/dev/null 2>&1 || exit 0
+[[ -e $state/1790042972.sh && -e $state/1791968925.sh && -e $state/1791969355.sh ]] && exit 0
+wait_for_ipc || exit 0
 
 move() {
   local out
@@ -121,22 +125,48 @@ if [[ ! -e $state/1791969355.sh ]]; then
 fi
 )
 
-run_upstream() {
-  local id script
+local_models_migration() {
+  local id=$1 done_filter done_on_disk out
+  local layout_ids='[.bar.layout[]? | arrays | .[] | if type == "object" then .id else . end]'
+  [[ -s $cfg ]] || return 0
+  case $id in
+    1795200237) done_filter="$layout_ids | "'index("omarchy.local-models") != null or index("omarchy.agents") == null' ;;
+    1795380483) done_filter="$layout_ids | "'index("omarchy.local-models") == null' ;;
+    *) return 1 ;;
+  esac
+  done_on_disk=$(jq -r "$done_filter" "$cfg") || { log "$id: cannot read shell.json"; return 1; }
+  [[ $done_on_disk != true ]] || return 0
+  wait_for_ipc || return 1
+  out=$(ipc migrateLocalModelsBar "$id") || { log "$id: shell IPC failed"; return 1; }
+  [[ $out == ok ]] || { log "$id: $out"; return 1; }
+  poll_file "$done_filter" || { log "$id: shell.json did not show the migration"; return 1; }
+}
+
+run_listed() {
+  local id script bar_pending=0
   [[ -n ${NIXARCHY_USER_MIGRATIONS:-} ]] || return 0
   # fd 3, as upstream's runner does: a script reading stdin must not eat the list.
   while IFS=$'\t' read -r id script <&3; do
     [[ -n $id && -n $script ]] || { log 'invalid user migration list entry'; return 1; }
     [[ ! -e $state/$id.sh ]] || continue
-    if ! OMARCHY_PATH=${OMARCHY_PATH:-$(dirname "$(dirname "$0")")/share/omarchy} bash -euo pipefail "$script" 3<&- </dev/null; then
+    if [[ $script == bar ]]; then
+      # The later bar migration removes what the earlier one adds.
+      ((bar_pending == 0)) || continue
+      if ! local_models_migration "$id" 3<&- </dev/null; then
+        log "$id: bar migration pending"
+        bar_pending=1
+        continue
+      fi
+    elif ! OMARCHY_PATH=${OMARCHY_PATH:-$(dirname "$(dirname "$0")")/share/omarchy} bash -euo pipefail "$script" 3<&- </dev/null; then
       log "$id: user migration failed"
       return 1
     fi
     mkdir -p "$state"
     touch "$state/$id.sh"
   done 3< "$NIXARCHY_USER_MIGRATIONS/list"
+  return "$bar_pending"
 }
 
-# A failed bar migration must not hold back the others.
+# Run listed migrations even if the legacy bar pass fails.
 bar_migrations || log 'bar migrations failed'
-run_upstream
+run_listed

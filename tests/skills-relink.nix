@@ -142,6 +142,25 @@ pkgs.runCommand "nixarchy-skills-relink" { nativeBuildInputs = [ pkgs.coreutils 
     bad "an owned skill nested a link in the user's real directory: $got"
   fi
 
+  # ---- 7. Gemini and Hermes, only where the harness is (#1847) -----------
+  run --own "$own" >/dev/null 2>&1
+  if [ ! -e "$HOME/.gemini" ] && [ ! -e "$HOME/.hermes" ]; then
+    ok "no Gemini or Hermes directory is created for a harness that is not there"
+  else
+    bad "the relink created ~/.gemini or ~/.hermes on its own"
+  fi
+  mkdir -p "$HOME/.gemini" "$HOME/.hermes/profiles/work"
+  run --own "$own" >/dev/null 2>&1
+  linked=0
+  for d in .gemini/config/skills .hermes/skills .hermes/profiles/work/skills; do
+    [ "$(readlink "$HOME/$d/nixos")" = "$own/nixos" ] && linked=$((linked + 1))
+  done
+  if [ "$linked" -eq 3 ]; then
+    ok "our skills reach Gemini, Hermes and a Hermes profile"
+  else
+    bad "own skills reached $linked of 3 Gemini/Hermes directories"
+  fi
+
   [ "$fails" -eq 0 ] || exit 1
   touch $out
 ''

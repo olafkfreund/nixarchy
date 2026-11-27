@@ -13,6 +13,24 @@ cfg=$XDG_CONFIG_HOME/omarchy/shell.json
 
 case ${1:-} in
   ping|rescanPlugins) printf '%s\n' ok ;;
+  migrateLocalModelsBar)
+    if ! jq -e '.version == 1' "$cfg" >/dev/null; then
+      printf '%s\n' 'shell config is unreadable'
+      exit 0
+    fi
+    if [[ ${STUB_NOWRITE:-0} == 1 ]]; then printf '%s\n' ok; exit 0; fi
+    jq --arg migration "$2" '
+      def entry_id: if type == "object" then .id else . end;
+      .bar.layout[] |= if type != "array" then .
+        elif $migration == "1795200237" then
+          [.[] | if entry_id == "omarchy.agents" then {id:"omarchy.local-models"}, . else . end]
+        elif $migration == "1795380483" then
+          map(select(entry_id != "omarchy.local-models"))
+        else error("unknown migration") end
+    ' "$cfg" > "$cfg.tmp"
+    mv "$cfg.tmp" "$cfg" # 847-allow: sandbox shell IPC persistence
+    printf '%s\n' ok
+    ;;
   putBarWidget)
     id=$2 placement=$3
     if [[ ${STUB_NOWRITE:-0} == 1 ]]; then printf '%s\n' ok; exit 0; fi

@@ -1703,6 +1703,11 @@ in
         marker=${lib.escapeShellArg "${config.xdg.stateHome}/nixarchy/t3code-theme-selected"}
         t3="${osConfig.programs.nixarchy.apps.t3-code.package}/bin/t3"
         warn() { echo "nixarchy: T3 Code: $*" >&2; }
+        # Quattro publishes through jq and adds its chrome as `css`, so compare content, not bytes.
+        samePalette() {
+          local a b
+          a=$(${pkgs.jq}/bin/jq -S 'del(.css)' "$1") && b=$(${pkgs.jq}/bin/jq -S 'del(.css)' "$2") && [ "$a" = "$b" ]
+        }
 
         if ! run mkdir -p "$t3home/userdata" ${lib.escapeShellArg "${config.xdg.stateHome}/nixarchy"}; then
           warn "could not create profile or state directory"
@@ -1712,10 +1717,12 @@ in
               pkgs.coreutils
               pkgs.gnused
               pkgs.gnugrep
+              pkgs.util-linux
+              pkgs.jq
             ]
           }:$PATH OMARCHY_PATH=${omarchyPath} T3CODE_HOME="$t3home" ${omarchyPath}/bin/omarchy-theme-set-t3code; then
             if [ -f "$HOME/.local/state/omarchy/current/theme/t3code.json" ] &&
-              ${pkgs.diffutils}/bin/cmp -s "$HOME/.local/state/omarchy/current/theme/t3code.json" "$t3home/userdata/themes/omarchy.json" &&
+              samePalette "$HOME/.local/state/omarchy/current/theme/t3code.json" "$t3home/userdata/themes/omarchy.json" &&
               [ ! -e "$marker" ]; then
               settings="$t3home/userdata/settings.json"
               if [ ! -e "$settings" ]; then

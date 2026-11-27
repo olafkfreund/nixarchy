@@ -8,7 +8,7 @@
 # ## The rule that keeps this file honest
 #
 # A vendored command does NOT get a row, unless it carries a `pacman` or an
-# `allow` field -- see below, and note that neither of those restates the
+# allowance field -- see below, and note that neither of those restates the
 # comparison. Otherwise a row is a CLAIM that the shipped file
 # differs from upstream, and .github/scripts/check-bin-ledger.py fails in BOTH
 # directions: a file that differs with no row is unclassified, and a row whose
@@ -48,9 +48,13 @@
 # allowance fails, and an allowance the script no longer matches fails too, so
 # an upstream cleanup is reported rather than assumed.
 #
-# `allow` is a STRING and not a list because the ledger is read by regex over
-# quoted strings; a list-valued key would be invisible to the parser and the
-# allowance would silently mean nothing.
+# `allow`, `edge_allow` and `tag_allow` are space-separated strings of distinct
+# groups. `edge_allow` applies only to an edge pin; `tag_allow` applies only to
+# a non-edge pin. `edge = "only"` keeps a whole row only on edge, while
+# `edge = "absent"` keeps it only off edge. Every field is checked before a row
+# is filtered; unknown fields and non-string values are errors. `adopted` names
+# the quattro commit that ships the file unchanged: on an edge pin where it
+# derives `vendor` the row is dropped, and older pins still check it.
 #
 # The patterns over-match on purpose -- `cp /etc/skel/. ~/` reads /etc and
 # still counts -- because a false positive costs one row saying so, and a false
@@ -138,7 +142,7 @@
   };
   "omarchy-agent-account-add" = {
     class = "patch";
-    reason = "Checks for the real CLI without dispatch on PATH and refuses with the Nix install route instead of running mise.";
+    reason = "Checks for the real CLI without dispatch on PATH and refuses with the Nix install route instead of running mise (#1896).";
   };
   "omarchy-agent-usage-codex" = {
     class = "patch";
@@ -149,21 +153,63 @@
     reason = "Vendored unchanged. Sends logins over ssh -T to a receiver command omarchy-agent-account-transfer generates naming /bin/bash and /usr/bin/python3, which must resolve on the far end, with OMARCHY_PATH set there. On nixarchy that takes envfs; checks.session runs it over a real sshd, and checks.account-copy pins the failures (#1616).";
     allow = "remote-exec";
   };
+  "omarchy-agent-local" = {
+    edge = "only";
+    class = "patch";
+    reason = "Upstream's `use` installs the omarchy-local-ai package with omarchy-pkg-add, which does not exist here. Replaced by a preflight that names programs.nixarchy.services.agent-local when Podman, the unlimited memlock limit, or an NVIDIA CDI spec is missing (#1577).";
+    allow = "systemctl-user";
+  };
+  "omarchy-agent-look-page" = {
+    edge = "only";
+    class = "patch";
+    reason = "Upstream installs Node and Playwright through mise on first use, and there is no mise here. Node and playwright-core come from nixpkgs; the browser is still Chrome or Chromium from PATH (#1886).";
+  };
+  "omarchy-hw-aarch64-apple" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
+  "omarchy-hw-aarch64-gb10" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
+  "omarchy-hw-aarch64-n1x" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
+  "omarchy-hw-aarch64-qualcomm" = {
+    edge = "only";
+    class = "patch";
+    reason = "Edge only: quattro 94a8c3c detects aarch64 with /usr/bin/uname, which does not exist on NixOS, so the check could never pass; it calls the uname on PATH instead (#1896).";
+  };
   "omarchy-install-ai-chatgpt" = {
     class = "patch";
     reason = "The install command launches /usr/bin/chatgpt, which is absent on NixOS; launch the installed command from PATH.";
+  };
+  "omarchy-install-browser-extensions" = {
+    class = "patch";
+    edge = "only";
+    reason = "Repairs Chromium-family browsers' bundled extensions. Chrome's policy is declared by environment.etc, so its repair refuses instead of writing /etc (#1793).";
   };
   "omarchy-install-service-signal" = {
     class = "patch";
     reason = "The install command launches /usr/bin/signal-desktop, which is absent on NixOS; launch the installed command from PATH.";
   };
   "omarchy-install-service-spotify" = {
+    edge = "absent";
     class = "patch";
     reason = "The install command launches /usr/bin/spotify, which is absent on NixOS; launch the installed command from PATH.";
   };
+  "omarchy-apply-fingerprint-pam" = {
+    edge = "only";
+    class = "patch";
+    reason = "Checks the active NixOS-declared sudo and polkit fingerprint rules instead of editing their PAM stacks.";
+  };
   "omarchy-apply-lock" = {
     class = "patch";
-    reason = "Its root PATH reset points at /usr/bin, which holds nothing here, so it lost tee and getent while writing lock-screen PAM files; and its `-x /usr/bin/fprintd-list` probe was never true. On quattro (#1285) it also copies a resume hook into /usr/lib and a stop timeout into /etc/systemd; modules/nixos.nix declares both, so those copies are dropped.";
+    reason = "Its root PATH reset points at /usr/bin, which holds nothing here, and its `-x /usr/bin/fprintd-list` probe was never true. NixOS owns the fingerprint lock PAM stack, resume hook and stop timeout, so their runtime writes and removal are dropped.";
     allow = "etc-write";
   };
   "omarchy-apply-pacman" = {
@@ -198,6 +244,11 @@
     class = "patch";
     reason = "Upstream switches channels with pacman and mirrors. The body is replaced by a delegation to `nixarchy-channel omarchy`, which edits the machine's flake.nix (stable, edge, or a checkout of your own; rc is refused). The shebang and `# omarchy:` header lines are kept, minus requires-sudo.";
   };
+  "omarchy-cmd-editor-mimetypes" = {
+    class = "patch";
+    edge = "only";
+    reason = "Leaves Home Manager mimeapps and desktop lists alone, counts NixOS's /etc/xdg list as a choice, reads aliases from shared-mime-info, and does not copy the handler into ~/.local/share (#1760).";
+  };
   "omarchy-cursor-set" = {
     class = "new";
     reason = "Not in upstream, which sets a cursor size but never a theme, because on Arch one arrives with the desktop packages. Picks Bibata Ice or Classic from the mode in the theme's colors.toml.";
@@ -207,10 +258,21 @@
     reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
     pacman = "Reads pacman state for display only; nothing is installed or removed.";
   };
+  "omarchy-launch-versions" = {
+    class = "vendor";
+    edge = "only";
+    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
+    pacman = "Asks pacman -Qo which package owns each launcher entry, for display only; the shim fails, its stderr goes to /dev/null, and the app grid shows no version (#1776).";
+  };
   "omarchy-debug-idle" = {
     class = "vendor";
     reason = "Vendored unchanged. Reads `systemctl --user status omarchy-sleep-lock.service` for a diagnostic dump; nothing is started, stopped or enabled.";
     allow = "systemctl-user";
+  };
+  "omarchy-agent-instructions" = {
+    class = "patch";
+    edge = "only";
+    reason = "Never writes through or moves onto linked shared AGENTS.md, skips harness links and store-linked directories, and names Home Manager for a store-owned shared file on --edit (#1760).";
   };
   "omarchy-default-agent" = {
     class = "replace";
@@ -243,6 +305,11 @@
     class = "vendor";
     reason = "Vendored unchanged. The other half of omarchy-dev-link: rewrites /etc/omarchy.conf back to the default target with `sudo tee`, and is wrong here for the same reason.";
     allow = "etc-write";
+  };
+  "omarchy-setup-hostname" = {
+    edge = "only";
+    class = "patch";
+    reason = "Setup > Network > Hostname, new in quattro efcf615. Upstream renames the machine with hostnamectl; here the hostname is networking.hostName, so it exits 1 with that route before asking for a name or calling hostnamectl (#1896).";
   };
   "omarchy-dns" = {
     class = "patch";
@@ -364,6 +431,11 @@
     reason = "Vendored unchanged, and read-only: `systemctl --user is-enabled openclaw-gateway.service` decides whether to launch the gateway or the client.";
     allow = "systemctl-user";
   };
+  "omarchy-launch-screensaver" = {
+    edge = "only";
+    class = "patch";
+    reason = "quattro's launcher is one line, `exec /usr/lib/omarchy-screensaver/omarchy-screensaver`, from Arch's omarchy-screensaver package. It execs the store path of pkgs/apps/omarchy-screensaver.nix instead (#1485).";
+  };
   "omarchy-launch-signal" = {
     class = "patch";
     reason = "It decides Signal is installed by testing `-x /usr/bin/signal-desktop`, never true here, so the menu offered to install an app already on PATH. Uses `command -v` and launches by name.";
@@ -416,6 +488,12 @@
   "omarchy-mise-unshadow" = {
     class = "new";
     reason = "Not in upstream. Run on every activation: removes upstream's exact generated mise launchers from ~/.local/bin, because mise is gone and they can only fail and shadow their replacement, and records what mise left (#707, #1625).";
+  };
+  "omarchy-models" = {
+    edge = "only";
+    class = "patch";
+    reason = "omarchy-agent-local, renamed in quattro ebd2974. Upstream's `use` installs Podman with pacman or omarchy-pkg-add, which do not exist here. Replaced by the same preflight, naming programs.nixarchy.services.agent-local when Podman, the unlimited memlock limit, or an NVIDIA CDI spec is missing (#1577, #1896).";
+    allow = "systemctl-user";
   };
   "omarchy-network-speedtest" = {
     class = "patch";
@@ -481,6 +559,13 @@
   "omarchy-provision-user" = {
     class = "patch";
     reason = "Two edits: `xdg-settings set default-web-browser chromium.desktop` exits 2 under `set -euo pipefail` and aborted provisioning, and the shipped HEY.desktop is installed prefixed as omarchy-HEY.desktop.";
+  };
+  "omarchy-realtime-repair" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged (#1498, quattro 8478247). Installs rtkit and raises the hard RLIMIT_RTTIME of 0 that processes took from a portal started without it. Its callers are a migration and omarchy-upgrade-to-quattro, and nixarchy runs neither; modules/nixos.nix turns security.rtkit.enable on from boot, so the zero never arises on a fresh boot.";
+    pacman = "Installs rtkit with pacman. Unreachable here: no migration runs, and security.rtkit.enable stands in for the install.";
+    allow = "systemctl-system systemctl-user";
   };
   "omarchy-refresh-applications" = {
     class = "replace";
@@ -632,6 +717,11 @@
     class = "patch";
     reason = "Same as fido2: setup_pam_config and setup_lock_fingerprint_pam edit NixOS-managed PAM stacks. fprintd-enroll stays; the PAM step names services.fprintd and the fprintAuth options instead. The pacman install becomes the services.fprintd.enable line (#1304).";
   };
+  "omarchy-setup-security-fingerprint-enroll" = {
+    edge = "only";
+    class = "patch";
+    reason = "The panel's root helper uses the trusted NixOS PATH and packaged Omarchy tree after pkexec, and checks for fprintd-enroll instead of installing Arch packages.";
+  };
   "omarchy-setup-security-sshd" = {
     class = "vendor";
     reason = "Vendored unchanged. Since v4.5.0-rc3 it enables and (re)starts sshd.service only once a key is authorized, then runs `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach. Its remote-exec match is a false positive: the echo at the end only prints the ssh command to connect with.";
@@ -675,6 +765,11 @@
     class = "patch";
     reason = "Three edits: `cp -r` from $OMARCHY_THEMES_PATH preserves the store's read-only directory modes, so the next switch cannot clean up; omarchy-theme-set-zed is appended, which upstream has no equivalent of; and the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429) adds is_video_path and the staged-background lookups it needs, carried as a patch and deleted by the quattro bump with the rest of it.";
   };
+  "omarchy-theme-set-gnome" = {
+    class = "patch";
+    edge = "only";
+    reason = "Keeps a user-chosen GTK icon theme while moving Yaru to Adwaita (#1760).";
+  };
   "omarchy-theme-set-herdr-machines" = {
     class = "vendor";
     reason = "Vendored unchanged. Runs `bash -l -s` on each herdr machine from the far end's PATH, so no fixed path is involved and the far end may be any OS (#1616).";
@@ -687,6 +782,11 @@
   "omarchy-theme-set-browser" = {
     class = "patch";
     reason = "Browser accent policy is opt-in through browserThemeUser. Skip root-owned policy directories created by other NixOS browser modules, and recognize canonical user-owned files so repeat theme switches do not rewrite them.";
+  };
+  "omarchy-theme-set-qt" = {
+    class = "patch";
+    edge = "only";
+    reason = "Keeps a user-chosen Qt icon theme and leaves store-owned qtengine config alone (#1760).";
   };
   "omarchy-theme-set-vscode" = {
     class = "patch";
@@ -702,8 +802,9 @@
     allow = "systemctl-user";
   };
   "omarchy-toggle-hybrid-gpu" = {
+    edge = "absent";
     class = "vendor";
-    reason = "Vendored unchanged. Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only.";
+    reason = "Vendored unchanged on the tag pin. Quattro ships it as a one-line alias of omarchy-device-gpu-hybrid, which gets the row there. Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only.";
     allow = "etc-write systemctl-system";
   };
   "omarchy-update" = {
@@ -801,6 +902,17 @@
     class = "patch";
     reason = "Synchronize the desktop environment after each supervised shell launch, including automatic relaunches.";
   };
+  "omarchy-system-sleep-facetimehd" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged, and unreachable here: it is run by a sleep-unit drop-in that upstream's fix-facetimehd.sh installs from install/hardware, which this port never runs. Where hardware.facetimehd.enable is set, nixpkgs unloads and reloads the driver around sleep itself (powerManagement.powerDownCommands and resumeCommands), so the modprobe in this script is not carried by anything here (#1896).";
+    allow = "modprobe";
+  };
+  "omarchy-system-sddm-recover" = {
+    edge = "only";
+    class = "patch";
+    reason = "Upstream asks for and restarts sddm.service, which NixOS does not have: SDDM runs as display-manager.service, so unpatched it exits 0 on every resume. Both calls name display-manager.service; modules/nixos.nix runs it after sleep (#1905).";
+  };
   "omarchy-system-sleep-monitor" = {
     class = "patch";
     reason = "Use the packaged lock helper and re-execute the monitor itself instead of following an inherited tree across rebuilds.";
@@ -814,9 +926,21 @@
     reason = "Vendored unchanged. Asks whether superwhisper.service, a user unit, is active before toggling it: session state, no configuration.";
     allow = "systemctl-user";
   };
+  "omarchy-install-dictation-hex" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged. Enables hex.service, a user unit the install writes under the user's own tree.";
+    allow = "systemctl-user";
+  };
   "omarchy-install-dictation-voxtype" = {
     class = "vendor";
     reason = "Vendored unchanged. Enables voxtype.service, a user unit the install writes under the user's own tree.";
+    allow = "systemctl-user";
+  };
+  "omarchy-remove-dictation-hex" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged. Disables hex.service, a user unit installed under the user's own tree, and reloads the user manager.";
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-superwhisper" = {
@@ -870,6 +994,18 @@
     reason = "Vendored unchanged (#1423, quattro be54892). Switches the kernel Limine boots by default, through /etc/default/limine and an initramfs rebuild: Arch-only. Its one caller, the Update > Kernel menu row, shows only when `omarchy-kernel list` prints more than one kernel, and that list reads /usr/lib/modules/*/pkgbase, which NixOS does not have -- so the row never appears and nothing reaches `set`.";
     allow = "initrd-boot";
   };
+  "omarchy-device-gpu-hybrid" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged (quattro; the old omarchy-toggle-hybrid-gpu moved here). Writes /etc/supergfxd.conf, edits it with `sed -i`, drops a unit override under /etc/systemd/system and enables supergfxd. Since quattro c6945de it also stages through /usr/bin/mktemp, install and mv and writes a sleep hook to /usr/lib/systemd/system-sleep. Nothing here packages supergfxd and /etc/systemd/system is generated, so the whole path is Arch-only; both menu rows that run it are dimmed (modules/apps.nix).";
+    allow = "etc-write systemctl-system";
+  };
+  "omarchy-device-keyboard-toprow" = {
+    edge = "only";
+    class = "vendor";
+    reason = "Vendored unchanged (#1552; renamed from omarchy-keyboard-toprow in quattro c6945de, which also handles a read-only sysfs). Writes /etc/modprobe.d/omarchy-toprow.conf for hid_apple, hid_asus and asus_wmi, sets hid_apple's live fnmode, and reruns limine-mkinitcpio, which NixOS does not have, so a run on a machine with one of those drivers stops at the boot-image rebuild. The declarative equivalent is boot.extraModprobeConfig.";
+    allow = "modprobe";
+  };
   "omarchy-remove-ai-ollama" = {
     class = "vendor";
     reason = "Vendored unchanged. Reached only by upstream's remove.ai.ollama row, which modules/apps.nix hides: Ollama here is services.ollama under programs.nixarchy.localAi, and disabling its unit by hand would only last until the next switch.";
@@ -891,6 +1027,27 @@
     class = "patch";
     reason = "Upstream uncomments /etc/locale.gen and runs locale-gen as root. NixOS builds locales with the system (i18n.extraLocales), so this refuses and names nixarchy-language-select (#1289).";
   };
+  "omarchy-region" = {
+    edge = "only";
+    class = "patch";
+    adopted = "efcf615";
+    reason = "Setup > Region > Formats, new in quattro. Sources omarchy-locale-session by its $OMARCHY_PATH path rather than from PATH, as omarchy-language does here (#1847). Quattro efcf615 moved the formats to omarchy-region-formats, and this now only reports the install region.";
+  };
+  "omarchy-region-formats" = {
+    edge = "only";
+    class = "patch";
+    reason = "omarchy-region's formats half, moved here in quattro efcf615. Sources omarchy-locale-session by its $OMARCHY_PATH path rather than from PATH, as omarchy-language does here (#1847, #1896).";
+  };
+  "omarchy-locale-session" = {
+    edge = "only";
+    class = "patch";
+    reason = "Quattro 2eb7eb3 moved omarchy-language's locale generation here, for it and omarchy-region to source. The same #1289 patch follows it: a locale the system has not built is recorded with nixarchy-language-select for the next rebuild, never generated as root at runtime.";
+  };
+  "omarchy-agent-skills-link" = {
+    edge = "only";
+    class = "patch";
+    reason = "Links Omarchy's skills into each harness's directory. ~/.codex/skills is left out, as omarchy-provision-user's list was (#1847): Codex also reads ~/.agents/skills and does not merge same-named skills, so it showed every skill twice.";
+  };
   "omarchy-language" = {
     class = "patch";
     reason = "Patched (#1278 edge): its Python helper runs with nixpkgs' python3. A locale the system has not built is recorded with nixarchy-language-select for the next rebuild, and the switch stops before LANG changes, instead of running locale-gen as root (#1289).";
@@ -906,5 +1063,70 @@
   "omarchy-theme-set-fcitx5" = {
     class = "patch";
     reason = "Patched (#1278 edge): the packaged fcitx5 theme default points at /run/current-system/sw/share.";
+  };
+  "omarchy-agent-account-dispatch" = {
+    edge = "only";
+    class = "patch";
+    reason = "Quattro's account dispatcher is patched by the no-mise carry to route typed agents through the generated Nix dispatch directory instead of mise.";
+  };
+  "omarchy-pkg-add-curated" = {
+    edge = "only";
+    class = "patch";
+    reason = "Quattro's passwordless polkit helper invokes Arch pacman and bypasses the Nix package guard. It now delegates to omarchy-pkg-add, which points at declarative packages and stops a caller when one is absent.";
+  };
+  "omarchy-boot-rebuild" = {
+    edge = "only";
+    class = "patch";
+    reason = "Refuses Arch mkinitcpio and Limine/systemd-boot image writes; NixOS builds its boot images from the flake.";
+  };
+  "omarchy-boot-switch" = {
+    edge = "only";
+    class = "patch";
+    reason = "Refuses Arch's Limine-to-systemd-boot conversion; NixOS owns its bootloader through the flake.";
+  };
+  "omarchy-boot-sync" = {
+    edge = "only";
+    class = "patch";
+    reason = "Refuses Arch boot-store and ESP writes; NixOS builds boot entries declaratively.";
+  };
+  "omarchy-boot-sync-initcpio" = {
+    edge = "only";
+    class = "patch";
+    reason = "Refuses Arch initcpio hook updates; NixOS builds its initrd from the flake.";
+  };
+  "omarchy-boot-backend" = {
+    edge = "only";
+    class = "patch";
+    reason = "Refuses Arch bootloader detection, which reads an Arch snapper marker; NixOS's bootloader is configured in the flake.";
+  };
+  "omarchy-camera-guard" = {
+    edge = "only";
+    class = "vendor";
+    allow = "systemctl-user";
+    pacman = "The --needed version probe reads Arch's libcamera version with pacman; the user guard unit is not installed by Nixarchy.";
+    reason = "Restarts Omarchy's user camera relay on libcamera failures. Nixarchy does not install the relay or guard user units, so there is no service to restart.";
+  };
+  "omarchy-camera-tuning" = {
+    edge = "only";
+    class = "vendor";
+    allow = "systemctl-user";
+    reason = "Writes per-user camera relay tuning and restarts the upstream user units. Those units and their hardware-specific tuning files are not installed by Nixarchy.";
+  };
+  "omarchy-rollcall" = {
+    edge = "only";
+    class = "patch";
+    allow = "rfkill";
+    reason = "Reports failed NixOS systemd units from store fragments, instead of looking only under Arch's /usr/lib/systemd/system; rfkill only reads radio state.";
+  };
+  "omarchy-theme-bg-boot-intro" = {
+    edge = "only";
+    class = "patch";
+    reason = "Reads packaged themes from the Omarchy store tree instead of Arch's /usr/share/omarchy/themes fallback.";
+  };
+  "omarchy-update-qualcomm-device-trees" = {
+    edge = "only";
+    class = "vendor";
+    allow = "initrd-boot";
+    reason = "Refreshes Snapdragon device trees in Arch's /etc/kernel/uki.conf before rebuilding a UKI. Nixarchy targets no such host and NixOS owns its kernel and boot image declaratively.";
   };
 }

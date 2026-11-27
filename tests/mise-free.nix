@@ -4,8 +4,56 @@ let
   installedMise = pkgs.lib.filterAttrs (
     name: row: pkgs.lib.hasPrefix "mise/" name && row.class == "installed"
   ) (import ../data/etc-overlay.nix);
-  allow = pkgs.writeText "mise-allow.json" (builtins.toJSON (import ../data/mise-allow.nix));
+  inherit (pkgs) lib;
+  allRows = import ../data/mise-allow.nix;
+  # An optional `edge` marker ("only" or "absent"), validated on every row first (#1752).
+  isQuattro = import ../pkgs/omarchy/is-quattro.nix lib;
+  isEdge = isQuattro pkgs.omarchy.version;
+  isLatestEdge =
+    lib.hasSuffix "-745271c" pkgs.omarchy.version
+    || (isQuattro pkgs.omarchy.version && !lib.hasPrefix "edge-" pkgs.omarchy.version);
+  badMarker = lib.attrNames (
+    lib.filterAttrs (
+      _: r:
+      r ? edge
+      && !(lib.elem r.edge [
+        "only"
+        "absent"
+      ])
+      || r ? latestEdge && r.latestEdge != "absent"
+    ) allRows
+  );
+  # `edgeLines` replaces `lines` under an edge pin, where quattro words a file differently.
+  active =
+    lib.mapAttrs
+      (
+        _: r:
+        removeAttrs
+          (
+            r
+            // lib.optionalAttrs (isEdge && r ? edgeLines) { lines = r.edgeLines; }
+            // lib.optionalAttrs (isLatestEdge && r ? latestEdgeLines) { lines = r.latestEdgeLines; }
+          )
+          [
+            "edgeLines"
+            "latestEdgeLines"
+            "latestEdge"
+          ]
+      )
+      (
+        lib.filterAttrs (
+          _: r:
+          !(
+            r.edge or "" == "only" && !isEdge
+            || r.edge or "" == "absent" && isEdge
+            || r.latestEdge or "" == "absent" && isLatestEdge
+          )
+        ) allRows
+      );
+  allow = pkgs.writeText "mise-allow.json" (builtins.toJSON active);
 in
+assert lib.assertMsg (badMarker == [ ])
+  "data/mise-allow.nix: edge must be \"only\" or \"absent\": ${lib.concatStringsSep ", " badMarker}";
 assert pkgs.lib.assertMsg (
   builtins.attrNames installedMise == [ ]
 ) "mise-free: /etc/mise is installed";

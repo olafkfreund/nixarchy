@@ -105,6 +105,14 @@
     xdg.mime.defaultApplications."application/pdf" = "own.desktop";
   };
 
+  # #1750: a user's own file manager and editor win over Files and Plain.
+  xdg-mime-own-files-editor = {
+    xdg.mime.defaultApplications = {
+      "inode/directory" = "thunar.desktop";
+      "text/plain" = "org.gnome.TextEditor.desktop";
+    };
+  };
+
   # #1613: a person's own portable Superwhisper on PATH, the app off. Nixarchy
   # adds no package, no unit, and no second copy of the name.
   superwhisper-own-copy =
@@ -172,12 +180,24 @@
     };
   };
 
-  # A user's own programs.chromium writes policies/managed/extra.json;
-  # nixarchy's policy is omarchy.json beside it, not the same file (#1491).
+  # A user's own programs.chromium writes policies/managed/{default,extra}.json;
+  # nixarchy's policy files sit beside them and drop every policy name the user
+  # sets in extraOpts (#1491, #1764).
   chromium-own-policy = {
     programs.chromium = {
       enable = true;
-      extraOpts.BookmarkBarEnabled = true;
+      extensions = [ "aeblfdkhhhdcdjpifhhbdiojplfjncoa" ];
+      extraOpts = {
+        BookmarkBarEnabled = true;
+        DefaultBrowserSettingEnabled = true;
+      };
+    };
+  };
+
+  chromium-policy-disabled = {
+    programs.chromium = {
+      enable = false;
+      extraOpts.DefaultBrowserSettingEnabled = true;
     };
   };
 
@@ -310,6 +330,14 @@
       programs.nixarchy.services.openssh.enable = true;
       services.openssh.settings.PasswordAuthentication = lib.mkDefault true;
     };
+
+  # nixarchy exports /lib/qt-6/plugins for qtengine (#1736); the qt module adds
+  # the same string. Both must reach the merged list, so a check for one
+  # element would stay green with nixarchy's line removed.
+  qt-own-platform-theme = {
+    qt.enable = true;
+    qt.platformTheme = "kde";
+  };
 
   openssh-plain-line =
     { lib, ... }:

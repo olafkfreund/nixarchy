@@ -67,7 +67,7 @@ pkgs.runCommand "nixarchy-remove-preinstalls"
 
     # Fixture. Seeds Omarchy wrote, and things it did not (including home/.local/bin/gh).
     cp --no-preserve=mode "$tree/applications/YouTube.desktop" "$A/"
-    cp --no-preserve=mode "$tree/applications/mpv.desktop" "$A/"
+    cp --no-preserve=mode "$tree/applications/foot.desktop" "$A/"
     sed 's|https://launchpad.37signals.com|https://example.org/bc|' "$tree/applications/Basecamp.desktop" > "$A/Basecamp.desktop"
     printf '[Desktop Entry]\nName=MyApp\nExec=omarchy-launch-webapp https://example.org\n' > "$A/MyApp.desktop"
     printf '[Desktop Entry]\nName=MyTui\nExec=xdg-terminal-exec --app-id=TUI.mytui -e htop\n' > "$A/MyTui.desktop"

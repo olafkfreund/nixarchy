@@ -79,7 +79,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/v4.5.0";
+      url = "github:basecamp/omarchy/v4.6.0-rc1";
       flake = false;
     };
 
@@ -433,7 +433,7 @@
         ) boxImagePins
       );
 
-      omarchyVersion = "4.5.0";
+      omarchyVersion = "4.6.0-rc1";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).
@@ -1292,6 +1292,9 @@
             # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
             # and the lock screen's video feed. Not in nixpkgs. #1153.
             owe = callPackage ./pkgs/apps/owe.nix { };
+            folio = callPackage ./pkgs/apps/folio.nix { };
+            omaview = callPackage ./pkgs/apps/omaview.nix { };
+            plain = callPackage ./pkgs/apps/plain.nix { };
 
             # The fourth, and the only one that is not a small script or a Qt
             # program: a Wails app, so a Go module set AND an npm tree to pin.
@@ -1399,6 +1402,9 @@
           inherit (final.nixarchy-apps)
             disktree
             ttfx
+            folio
+            omaview
+            plain
             omasnap
             omarchy-speedtest
             omarchy-screensaver
@@ -1642,6 +1648,9 @@
             omacut
             omasnap
             owe
+            folio
+            omaview
+            plain
             aether
             ttfx
             omarchy-speedtest
@@ -1848,6 +1857,8 @@
           # here counts as registered; one that needs other arguments stays
           # an explicit entry below.
           uniformChecks = [
+            # Shared agent instructions respect Home Manager links, and default-agent records a usable choice (#1760).
+            "agent-instructions"
             "agent-local-memlock"
             "app-selection"
             "apply-detach-interface"
@@ -1861,6 +1872,13 @@
             "language-select"
             "pkg-index"
             "writer-lock"
+            # Upstream desktop and installed /etc sources must exist in the package (#1793).
+            "media-viewer-desktop"
+            "etc-overlay-sources"
+            # Power actions authorise before closing; the browser-extensions repair stays out of /etc (#1793).
+            "omarchy-system"
+            # Runtime dependencies expose ffplay and rsvg-convert on PATH (#1793).
+            "runtime-path"
             # The notification history keeps text for the newest rows only (#1663).
             "notification-store"
             # data/bin-ledger.nix, held to its own claim. Also the home of the
@@ -1873,6 +1891,7 @@
             "branch-guard"
             # The cargo carry, against stand-in nixpkgs sets (#1722). See tests/cargo-system-libs.nix.
             "cargo-system-libs"
+            "chrome-policy"
             # Boots the Omarchy session on a machine whose hyprland.lua belongs to
             # somebody else -- the case the session entry exists for.
             "coexist"
@@ -1898,9 +1917,13 @@
             "edge-carry"
             "edge-report"
             "edge-promote"
+            # Editor MIME defaults respect Home Manager links and NixOS's system list (#1760).
+            "editor-mimetypes"
             # Proves btrfs subvolume and directory exchanges before the reset uses them (#1621).
             "factory-reset"
             "firmware-guard"
+            # A first install removes only pristine seeded launchers, never a link or an edit (#1907).
+            "first-install-launchers"
             # The dangerous one. Installs into free space on a disk that already
             # carries partitions and asserts those partitions are byte-identical
             # afterwards -- entry and content. See tests/free-space.nix; #47 is
@@ -1918,6 +1941,10 @@
             "hypr-seedless"
             # The Hibernate row's logind answer, in a VM with resume configured (#1303). Needs KVM.
             "hibernate-resume"
+            # Home Manager directory links survive quattro's user-file scripts (#1304, #1760).
+            "home-links-quattro"
+            # Edge icon setters and the Yaru migration keep user choices and store-owned Qt config (#1760).
+            "icon-theme"
             # The profile a user with their own interpreter actually gets, built
             # rather than inspected: #809's collision only exists once something
             # calls buildEnv. See tests/home-profile.nix.
@@ -1975,6 +2002,7 @@
             "menu-verbs"
             # The menu scripts patched to explain and exit 1 call no writer (#1304).
             "menu-guidance"
+            "fingerprint-pam"
             # Removal asks fprintd first, then removes only the invoking account's files (#1620).
             "remove-fingerprint"
             # A font row run with no terminal reopens itself in one, when the font is missing (#1304).
@@ -2042,6 +2070,8 @@
             # The standalone Home Manager profile: the package plus every runtime
             # dependency, built with collisions refused (#1485).
             "runtime-profile"
+            # Quattro's after-sleep SDDM recovery, patched to display-manager.service (#1905).
+            "sddm-recover"
             "session-journal-race"
             # A WebP loads through the plugin path the shell is launched with (#1284).
             "shell-image-formats"
@@ -2052,12 +2082,16 @@
             "sshd-enable"
             # A real ssh login against the menu's sshd, and the plain line as control (#1611). Needs KVM.
             "sshd-login"
+            # Store ownership follows Home Manager file and directory links (#1304).
+            "store-owned"
             "swap-guard"
             "switch-indicator"
             "update-available"
             "user-unit-links"
             "verify-boxes"
             "verify-sections"
+            # The shipped browser fallback and guarded provisioning on the edge pin (#1760).
+            "webapp-browser"
           ];
         in
         {
@@ -2579,6 +2613,10 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
+          agent-local-detach = import ./tests/agent-local-detach.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
           user-migrations = import ./tests/user-migrations.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
@@ -2657,11 +2695,20 @@
 
           # The omarchy-app skill's templates build as written (#1406). See
           # tests/omarchy-app-template.nix.
-          omarchy-app-template = import ./tests/omarchy-app-template.nix {
-            pkgs = pkgsFor.${system};
-            omarchy = self.packages.${system}.omarchy;
-            patch = ./pkgs/omarchy/1406-omarchy-app-nix.patch;
-          };
+          omarchy-app-template =
+            let
+              isEdge = import ./pkgs/omarchy/is-quattro.nix lib self.packages.${system}.omarchy.version;
+            in
+            import ./tests/omarchy-app-template.nix {
+              pkgs = pkgsFor.${system};
+              omarchy = self.packages.${system}.omarchy;
+              inherit isEdge;
+              patch =
+                if isEdge then
+                  ./pkgs/omarchy/1406-omarchy-app-nix-edge.patch
+                else
+                  ./pkgs/omarchy/1406-omarchy-app-nix.patch;
+            };
 
           # The nightly's cache step: probe every allowlist entry, rebuild and
           # push what the cache dropped, and still fail when a push delivers

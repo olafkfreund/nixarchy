@@ -728,19 +728,47 @@ pkgs.testers.runNixOSTest rec {
     machine.wait_until_fails("su omarchy -c 'bash /tmp/ping.sh'", timeout=60)
     user("cp ${./fixtures/shell-json/v4.0.6.json} ~/.config/omarchy/shell.json")  # 847-allow
     user("chmod u+w ~/.config/omarchy/shell.json; rm -rf ~/.local/state/omarchy/migrations")
+    models_insert = ${
+      if builtins.pathExists "${inputs.omarchy}/migrations/1795200237.sh" then "True" else "False"
+    }
+    models_remove = ${
+      if builtins.pathExists "${inputs.omarchy}/migrations/1795380483.sh" then "True" else "False"
+    }
+    migration_state = "~/.local/state/omarchy/migrations"
+    if models_insert and models_remove:
+        # Let the login hook apply the insertion by itself first.
+        user(f"mkdir -p {migration_state}; touch {migration_state}/1795380483.sh")
     user("omarchy-restart-shell", check=False)
     wait_for_shell()
     user("~/.config/omarchy/hooks/post-boot.d/user-migrations", timeout=300)
     ids = ('[.bar.layout | to_entries[] | {key, value: [.value[] | '
            'if type == "object" then .id else . end]}] | from_entries')
+    if models_insert:
+        intermediate = json.loads(user(f"jq -S '{ids}' ~/.config/omarchy/shell.json"))
+        right = intermediate["right"]
+        assert right.index("omarchy.local-models") + 1 == right.index("omarchy.agents"), right
+        user(f"test -e {migration_state}/1795200237.sh")
+    if models_insert and models_remove:
+        user(f"rm {migration_state}/1795380483.sh")
+        user("~/.config/omarchy/hooks/post-boot.d/user-migrations", timeout=300)
+    if models_remove:
+        user(f"test -e {migration_state}/1795380483.sh")
     got = json.loads(user(f"jq -S '{ids}' ~/.config/omarchy/shell.json"))
-    want = json.loads(machine.succeed(f"${pkgs.jq}/bin/jq -S '{ids}' ${expectedA}"))
+    # expectedA covers the three legacy migrations. Apply the newer upstream
+    # scripts to a disposable copy for the final comparison.
+    user("mkdir -p /tmp/want/.config/omarchy && cp ${expectedA} /tmp/want/.config/omarchy/shell.json && "
+         "chmod u+w /tmp/want/.config/omarchy/shell.json")
+    user("d=$(systemctl --user show-environment | sed -n 's/^OMARCHY_PATH=//p' | tail -n 1); "
+         ": \"''${d:=$OMARCHY_PATH}\"; "
+         "for m in 1795200237 1795380483; do [ ! -f \"$d/migrations/$m.sh\" ] || "
+         "HOME=/tmp/want PATH=${pkgs.jq}/bin:$PATH bash \"$d/migrations/$m.sh\"; done")
+    want = json.loads(user(f"${pkgs.jq}/bin/jq -S '{ids}' /tmp/want/.config/omarchy/shell.json"))
     for section in ("left", "centerBegin", "center", "centerEnd", "right"):
         assert got.get(section, []) == want.get(section, []), (
             f"{section} after the real shell's IPC is {got.get(section)}, "
             f"the stub-checked port gives {want.get(section)}")
     for m in ("1790042972", "1791968925", "1791969355"):
         user(f"test -e ~/.local/state/omarchy/migrations/{m}.sh")
-    print("the v4.0.6 seed's bar migrated through the real shell, three markers written")
+    print("the v4.0.6 seed's bar migrated through the real shell, with all applicable markers")
   '';
 }

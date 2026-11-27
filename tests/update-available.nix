@@ -2,6 +2,7 @@
 # Exercise the bar command with a local lock and a fake remote; no network.
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
+  isEdge = if import ../pkgs/omarchy/is-quattro.nix pkgs.lib shipped.version then "1" else "";
 in
 pkgs.runCommand "nixarchy-update-available"
   {
@@ -127,6 +128,12 @@ pkgs.runCommand "nixarchy-update-available"
     check 'invalid installed SHA' 1 0
 
     sed -n '/^update_pending() {$/,/^}$/p' ${shipped}/share/omarchy/install/user/first-run/wifi.sh > pending.sh
+    # Quattro ebd2974 dropped the update prompt from first-run wifi.sh (#1896).
+    if [ ! -s pending.sh ] && [ -n "${isEdge}" ]; then
+      echo 'skipped: this pin'"'"'s first-run wifi.sh has no update_pending'
+      touch "$out"
+      exit 0
+    fi
     grep -qF omarchy-update-available pending.sh || {
       echo 'update_pending no longer calls omarchy-update-available' >&2
       exit 1

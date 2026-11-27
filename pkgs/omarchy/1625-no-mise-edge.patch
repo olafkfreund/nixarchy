@@ -1,0 +1,308 @@
+--- a/default/bash/init
++++ b/default/bash/init
+@@ -1,16 +1,3 @@
+-_omarchy_prioritize_agent_accounts_path() {
+-  local rc=$?
+-  local dir="$HOME/.local/share/omarchy/agent-accounts/bin"
+-  if [[ $PATH != "$dir":* && $PATH != "$dir" ]]; then
+-    local p=":$PATH:"
+-    p="${p//":$dir:"/:}"
+-    p="${p#:}"
+-    p="${p%:}"
+-    export PATH="$dir${p:+:$p}"
+-  fi
+-  return "$rc"
+-}
+-
+ _omarchy_starship_now() {
+   local t="${EPOCHREALTIME/[.,]/}"
+   printf -v "$1" '%s' "${t%???}"
+@@ -38,23 +25,6 @@
+     fi
+   done <"$cfg"
+   return 0
+-}
+-
+-_omarchy_transform_mise_init() {
+-  local output="$1"
+-  local line
+-  local -a lines=()
+-
+-  while IFS= read -r line; do
+-    case "$line" in
+-      *'eval "$(mise hook-env '* | *'eval "$(command '*' "$command" "$@")"'*)
+-        lines+=("$line; _omarchy_prioritize_agent_accounts_path")
+-        ;;
+-      *) lines+=("$line") ;;
+-    esac
+-  done <<<"$output"
+-
+-  printf '%s\n' "${lines[@]}"
+ }
+ 
+ _omarchy_transform_starship_init() {
+@@ -121,12 +91,8 @@
+   eval "$output"
+ }
+ 
+-if command -v mise &> /dev/null; then
+-  if _omarchy_mise_init=$(mise activate bash 2>/dev/null); then
+-    eval "$(_omarchy_transform_mise_init "$_omarchy_mise_init")"
+-    _omarchy_prioritize_agent_accounts_path
+-  fi
+-  unset _omarchy_mise_init
++if [[ :$PATH: != *":$OMARCHY_PATH/agent-dispatch:"* ]]; then
++  PATH="$OMARCHY_PATH/agent-dispatch:$PATH"
+ fi
+ 
+ _omarchy_init_paths=()
+@@ -168,7 +134,7 @@
+   fi
+ fi
+ unset _omarchy_init_paths _omarchy_init_stamps _omarchy_stamp_idx _omarchy_starship _omarchy_starship_cfg _omarchy_starship_stamp _omarchy_zoxide
+-unset -f _omarchy_source_cached_init _omarchy_transform_mise_init _omarchy_transform_starship_init _omarchy_starship_ps2_is_static
++unset -f _omarchy_source_cached_init _omarchy_transform_starship_init _omarchy_starship_ps2_is_static
+ 
+ if command -v try &> /dev/null; then
+   try() {
+--- a/default/bash/aliases
++++ b/default/bash/aliases
+@@ -56,7 +56,6 @@
+ alias ic='tdl c'
+ alias ix='tdl cx'
+ alias icx='tdl c cx'
+-alias mup='MISE_MINIMUM_RELEASE_AGE=0 mise up'
+ n() { if [ "$#" -eq 0 ]; then command nvim . ; else command nvim "$@"; fi; }
+ 
+ # Git
+--- a/default/bash/fns/worktrees
++++ b/default/bash/fns/worktrees
+@@ -11,7 +11,6 @@
+   local wt_path="../${base}--${slug}"
+ 
+   git worktree add -b "$branch" "$wt_path" || return 1
+-  mise trust "$wt_path"
+   cd "$wt_path" || return 1
+ }
+ 
+--- a/bin/omarchy-agent-account-exec
++++ b/bin/omarchy-agent-account-exec
+@@ -39,13 +39,12 @@
+ for dir in "${dirs[@]}"; do
+   [[ $dir == "$dispatchers" ]] || cli_path+="${cli_path:+:}$dir"
+ done
+-if ! agent_binary=$(PATH=$cli_path type -P "$provider"); then
+-  rm -f "$dispatchers/$provider"
+-  echo "$provider: command not found" >&2
++real_path=$(PATH=$cli_path omarchy-agent-real-path)
++if ! agent_binary=$(PATH=$real_path type -P "$provider"); then
++  echo "$provider is not installed. nixarchy installs it through Nix: omarchy default agent $provider" >&2
+   exit 127
+ fi
+ 
+-# The agent's own subprocesses dispatch too, so another provider they start
+-# runs as its selected account.
+-export PATH="$dispatchers:$cli_path"
++# The agent's subprocesses route through this generation's dispatch.
++export PATH="@omarchyDispatch@:$real_path"
+ exec "$agent_binary" "$@"
+--- a/bin/omarchy-agent-account-add
++++ b/bin/omarchy-agent-account-add
+@@ -223,12 +223,9 @@
+   wait $!
+ }
+ 
+-if ! omarchy-install-ai-cli --check "$harness"; then
+-  say "$(omarchy-i18n agents.installingCli "$name")"
+-  install_cli omarchy-install-ai-cli "$harness" || fail "$(omarchy-i18n agents.installCliFailed "$name")"
+-fi
+-# A CLI installed outside Omarchy has no account dispatcher yet.
+-omarchy-agent-account-dispatch "$harness"
++if PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$harness"; then
++  fail "$name is not installed. Install it with: omarchy default agent $harness"
++fi
+ 
+ # Your main browser is almost certainly signed in to the account you already
+ # have, and a login would quietly reuse it. The CLIs open their login page
+--- a/bin/omarchy-agent
++++ b/bin/omarchy-agent
+@@ -112,21 +112,10 @@
+ 
+ # OpenClaw's launcher sets OpenClaw up when the package became the seed before
+ # this user's OpenClaw moved, so with the package a missing command is its to fix.
+-if omarchy-cmd-missing "$agent" && ! { [[ $agent == "openclaw" ]] && omarchy-pkg-present openclaw; }; then
+-  # An agent you still have a sign-in for can be missing its CLI: removed, or
+-  # signed in to on another machine and copied over. Launching it installs the
+-  # CLI first and then opens as asked, in this terminal or a floating one.
+-  if omarchy-install-ai-cli --package "$agent" &>/dev/null; then
+-    if [[ -t 0 ]]; then
+-      omarchy-install-ai-cli "$agent" || exit 1
+-    else
+-      printf -v relaunch '%q ' omarchy-agent "${launch_args[@]}"
+-      exec omarchy-launch-floating-terminal-with-presentation "omarchy-install-ai-cli $agent && ${relaunch% }"
+-    fi
+-  else
+-    echo "$agent is not installed. Choose an installed agent with: omarchy default agent <name>" >&2
+-    exit 1
+-  fi
++if PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$agent" && ! { [[ $agent == "openclaw" ]] && omarchy-pkg-present openclaw; }; then
++  echo "$agent is not installed. Choose an installed agent with: omarchy default agent <name>" >&2
++  omarchy-notification-send -u normal "$agent is not installed" "Choose an installed agent with: omarchy default agent <name>" || true
++  exit 1
+ fi
+ 
+ # Agents launched from the keybinding or menu run unattended, so each one starts
+@@ -265,6 +254,15 @@
+   exit 1
+   ;;
+ esac
++
++# An explicit user CLI wins over a system one, but never run a retired mise launcher.
++user_install="$HOME/.local/bin/$agent"
++if [[ $agent != "openclaw" && -f $user_install && -x $user_install && ! -L $user_install ]] &&
++  ! head -c 4096 "$user_install" | grep -qaE 'mise (use|x) '; then
++  for i in "${!command[@]}"; do
++    [[ ${command[i]} != "$agent" ]] || command[i]=$user_install
++  done
++fi
+ 
+ # A model that is set up but not running, as one opened from its launcher may
+ # be, is started first, in the terminal the agent will have: loading takes a
+@@ -370,6 +368,9 @@
+   fi
+ fi
+ 
++# Menu and uwsm launches do not source the shell rc.
++command=(env "PATH=@omarchyDispatch@:$PATH" "${command[@]}")
++
+ if [[ $inline == "true" ]]; then
+   exec "${command[@]}"
+ else
+--- a/bin/omarchy-agent-account-dispatch
++++ b/bin/omarchy-agent-account-dispatch
+@@ -10,32 +10,5 @@
+ # claude command before Claude Code is. Installing or removing an agent through
+ # Omarchy runs this; with no agents named, every one is brought in line.
+ 
+-dir="$HOME/.local/share/omarchy/agent-accounts/bin"
+-
+-# The real CLI is whatever PATH finds past the dispatchers.
+-cli_path=""
+-IFS=: read -r -a dirs <<<"$PATH"
+-for entry in "${dirs[@]}"; do
+-  [[ $entry == "$dir" ]] || cli_path+="${cli_path:+:}$entry"
+-done
+-
+-agents=("$@")
+-(( ${#agents[@]} )) || agents=(claude codex grok)
+-
+-for agent in "${agents[@]}"; do
+-  case $agent in
+-  claude | codex | grok) ;;
+-  *) continue ;;
+-  esac
+-
+-  if PATH=$cli_path type -P "$agent" >/dev/null; then
+-    # Renamed into place, so a command starting while this runs never finds
+-    # the dispatcher half written.
+-    mkdir -p "$dir"
+-    printf '#!/bin/bash\nexec omarchy-agent-account-exec %s "$@"\n' "$agent" >"$dir/.$agent.new"
+-    chmod +x "$dir/.$agent.new"
+-    mv -f "$dir/.$agent.new" "$dir/$agent"
+-  else
+-    rm -f "$dir/$agent"
+-  fi
+-done
++# Nixarchy routes accounts through the package's store dispatchers.
++exit 0
+--- a/bin/omarchy-agent-usage-codex
++++ b/bin/omarchy-agent-usage-codex
+@@ -95,6 +95,8 @@
+ 
+ 
+ def is_lazy_launcher(path):
++  if os.path.basename(os.path.dirname(os.path.abspath(path))) == "agent-dispatch":
++    return True
+   # omarchy-mise-install writes a regular file whose first step is `mise use
+   # -g`, and mise's shims exec `mise x`; running either installs the tool it
+   # wraps. A shim is a symlink to the mise binary itself, so the symlink
+@@ -118,19 +120,6 @@
+     candidate = os.path.join(directory, "codex")
+     if os.path.isfile(candidate) and os.access(candidate, os.X_OK) and not is_lazy_launcher(candidate):
+       return candidate
+-  # `mise which` only prints a binary that is already installed, so it is the
+-  # safe way to resolve a codex managed by mise without running the launcher.
+-  # `mise which` can resolve a configured `latest` over the network; the usage
+-  # probe stays offline.
+-  mise = find_command("mise")
+-  if mise:
+-    try:
+-      out = subprocess.run([mise, "which", "codex"], capture_output=True, text=True, env=dict(ENV, MISE_OFFLINE="1"), timeout=10)
+-      resolved = out.stdout.strip()
+-      if out.returncode == 0 and os.path.isfile(resolved) and not is_lazy_launcher(resolved):
+-        return resolved
+-    except Exception:
+-      pass
+   return None
+ 
+ 
+@@ -816,8 +805,7 @@
+ # Only then is a missing sign-in or binary worth saying.
+ def codex_in_use(stats):
+   return (
+-    bool(find_command("codex"))
+-    or bool(find_codex_binary())
++    bool(find_codex_binary())
+     or codex_home().exists()
+     or bool(ENV.get("CODEX_ACCESS_TOKEN"))
+     or number(stats.get("totalSessions")) > 0
+--- a/bin/omarchy-install-hermes-cli
++++ b/bin/omarchy-install-hermes-cli
+@@ -87,36 +87,9 @@
+   return 1
+ }
+ 
+-# Gone means neither installed nor still asked for in the global config, where
+-# `mise up` would build it again. `mise rm -g` exits 0 whether or not it removed
+-# anything, so the listing is read instead, and a listing that cannot be read
+-# -- mise broken, or not there to read it -- is not an answer. The key carries
+-# the backend and name, with or without the options.
+-mise_retired() {
+-  local requested
+-  requested=$(mise ls -g --json 2>/dev/null) || return 1
+-  ! mise where "$legacy_tool" >/dev/null 2>&1 && ! grep -qE '"pipx:hermes-agent(\[|")' <<<"$requested"
+-}
+-
+-# Removes the environment the retired wrapper built, judged by what is left
+-# rather than by what the commands claimed. Only for a caller that has proved
+-# it Omarchy's.
++# nixarchy ships no mise, so the environment stays where mise built it.
+ retire_mise() {
+-  if mise_retired; then
+-    return 0
+-  fi
+-  mise rm -g "$legacy_tool" >/dev/null 2>&1 || true
+-  mise uninstall --all "$legacy_tool" >/dev/null 2>&1 || true
+-  if mise_retired; then
+-    return 0
+-  fi
+-  echo "Could not remove the Hermes that mise built. Finish by hand:" >&2
+-  if omarchy-cmd-missing mise; then
+-    echo "  omarchy pkg add mise" >&2
+-  fi
+-  echo "  mise rm -g '$legacy_tool'" >&2
+-  echo "  mise uninstall --all '$legacy_tool'" >&2
+-  return 1
++  echo "The Hermes that mise built stays in ~/.local/share/mise." >&2
+ }
+ 
+ # Once the environment is gone the proof has done its work. Left behind it
+@@ -227,7 +200,7 @@
+ # what the default agent would run instead.
+ settle_path() {
+   if legacy_owned; then
+-    echo "Removing the Hermes that mise built; Hermes now updates itself..."
++    echo "Retiring the Hermes wrapper; Hermes now updates itself..."
+     retire_mise || return 1
+     forget_legacy
+   fi

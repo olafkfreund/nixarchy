@@ -31,6 +31,9 @@ raw = open(sys.argv[1]).read()
 raw = re.sub(r"^\s*//[^\n]*(\n|$)", "", raw, flags=re.M)
 menu = json.loads(re.sub(r",(\s*[}\]])", r"\1", raw))
 rows = {k: v for k, v in menu.items() if isinstance(v, dict)}
+# Quattro's root Agent menu takes the `agent` alias Ask declares: an exact id wins.
+if "agent" in rows:
+    EXPECTED["agent"] = "agent"
 
 # Refuse rather than pass on a parse that found next to nothing.
 if len(rows) < 200 or "install" not in rows:

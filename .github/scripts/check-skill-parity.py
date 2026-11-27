@@ -133,7 +133,7 @@ def ours(directory):
     return "\n".join(text)
 
 
-def problems(manifest, upstream, mine):
+def problems(manifest, upstream, mine, edge=True):
     found = []
 
     for key in sorted(set(upstream) - set(manifest)):
@@ -145,7 +145,11 @@ def problems(manifest, upstream, mine):
             f"or a reason."
         )
 
+    # edge = "only" is a section only the edge pin has, edge = "absent" one only the tag
+    # has, the convention the other ledgers use: neither is stale on the other pin (#1847).
     for key in sorted(set(manifest) - set(upstream)):
+        if manifest[key].get("edge") == ("absent" if edge else "only"):
+            continue
         found.append(
             f"stale: data/skill-parity.nix classifies {key!r} and upstream's "
             f"SKILL.md no longer has it.\n"
@@ -155,18 +159,34 @@ def problems(manifest, upstream, mine):
 
     for key in sorted(set(manifest) & set(upstream)):
         row = manifest[key]
+        if row.get("edge") == ("absent" if edge else "only"):
+            found.append(
+                f"pinned to the wrong side: {key!r} is marked edge = {row['edge']!r}, "
+                f"and this pin has it.\n"
+                f"    Drop the edge field, or classify it for this pin too."
+            )
+            continue
         klass = row.get("class")
         anchor = row.get("anchor")
         reason = row.get("reason")
 
-        pinned = row.get("upstream")
+        # Off edge, a section whose text differs between the pins is read from tag_upstream (#1752).
+        pinned = row.get("upstream") if edge else row.get("tag_upstream", row.get("upstream"))
         current = digest(upstream[key])
-        if pinned != current:
+        if not edge and "tag_upstream" in row and current == row.get("upstream"):
+            found.append(
+                f"{key!r}: the tag's text now matches edge's. Delete its "
+                f"tag_upstream, which no longer says anything."
+            )
+        elif pinned != current:
+            field = "upstream" if edge else "tag_upstream"
             found.append(
                 f"moved: upstream rewrote {key!r}.\n"
                 f"    Pinned {pinned}, upstream is now {current}. Read the new "
                 f"text, decide whether the classification still holds, then "
-                f'set upstream = "{current}".'
+                f'set {field} = "{current}"'
+                + ("" if edge or "tag_upstream" in row else ", keeping upstream for edge")
+                + "."
             )
 
         if klass == "omitted":
@@ -211,6 +231,7 @@ def main():
     parser.add_argument("--skill", required=True, help="our skills/nixarchy dir")
     parser.add_argument("--manifest", required=True, help="data/skill-parity.nix")
     parser.add_argument("--report", action="store_true", help="digests, for a bump")
+    parser.add_argument("--edge", action="store_true", help="the pin is an edge commit")
     args = parser.parse_args()
 
     # Nix, read by regex, and not JSON -- the same call check-bin-ledger.py
@@ -246,7 +267,7 @@ def main():
             print(f'"{key}" -- upstream = "{digest(upstream[key])}"')
         return
 
-    found = problems(manifest, upstream, mine)
+    found = problems(manifest, upstream, mine, args.edge)
     if found:
         print(
             f"data/skill-parity.nix and upstream's SKILL.md disagree, "

@@ -1,12 +1,19 @@
 {
+  lib,
   runCommand,
   jq,
+  glib,
   omarchy,
   omarchy-nvim-config,
 }:
 let
+  isEdge = import ./is-quattro.nix lib omarchy.version;
   ledger = builtins.toFile "nixarchy-user-migrations.json" (
-    builtins.toJSON (import ../../data/user-migrations.nix)
+    builtins.toJSON (
+      lib.filterAttrs (
+        _: r: !(lib.isAttrs r && (r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge))
+      ) (import ../../data/user-migrations.nix)
+    )
   );
   tree = "${omarchy}/share/omarchy";
 in
@@ -18,10 +25,22 @@ runCommand "nixarchy-user-migrations"
     set -euo pipefail
     mkdir -p "$out/scripts"
     : > "$out/list"
-    jq -r 'del(.predates) | to_entries[] | select((.value.decision | IN("ported", "partial")) and .value.run != "bar") | [.key, .value.run] | @tsv' ${ledger} | sort > rows
-    while IFS=$'\t' read -r id run; do
+    jq -r 'del(.predates) | to_entries[] | select(.value.decision | IN("ported", "partial")) | [.key, .value.run, (.value.edge // "-")] | @tsv' ${ledger} | sort > rows
+    while IFS=$'\t' read -r id run edge; do
       [[ $id =~ ^[0-9]+$ && -n $run ]] || { echo "invalid migration row: $id" >&2; exit 1; }
+      # An older edge pin (edge's fallback) lacks a newer pin's migrations (#1896).
+      if [[ $edge == only && ! -f ${tree}/migrations/$id.sh ]]; then
+        echo "edge-only migration this pin does not have yet: $id"
+        continue
+      fi
       case $run in
+        bar)
+          case $id in
+            1790042972|1791968925|1791969355) continue ;; # The legacy bar ports run before the list.
+            1795200237|1795380483) script=bar ;;
+            *) echo "no bar port defined for $id" >&2; exit 1 ;;
+          esac
+          ;;
         upstream)
           script=${tree}/migrations/$id.sh
           test -f "$script"
@@ -36,6 +55,14 @@ runCommand "nixarchy-user-migrations"
               script=$out/scripts/$id.sh
               cp ${./user-migrations/1787481315.sh} "$script"
               ;;
+            1794397144)
+              script=$out/scripts/$id.sh
+              cp ${./user-migrations/1794397144.sh} "$script"
+              substituteInPlace "$script" \
+                --replace-fail '@gsettings@' '${glib}/bin/gsettings' \
+                --replace-fail '@jq@' '${jq}/bin/jq' \
+                --replace-fail '@helper@' '${tree}/lib/nixarchy-store-owned.sh'
+              ;;
             *) echo "no port defined for $id" >&2; exit 1 ;;
           esac
           ;;
@@ -44,6 +71,18 @@ runCommand "nixarchy-user-migrations"
           cp "${tree}/migrations/$id.sh" "$script"
           chmod u+w "$script"
           case $id in
+            1794839007)
+              # The local-model engine is opt-in here (services.agent-local); without it the
+              # launchers script exits 1, and a failed migration stops every later one (#1847).
+              # Quattro ebd2974 adopted the skip (omarchy-cmd-present omarchy-local-ai).
+              if grep -q '^omarchy-agent-local-launchers$' "$script"; then
+                substituteInPlace "$script" --replace-fail 'omarchy-agent-local-launchers' \
+                  'command -v omarchy-local-ai >/dev/null || exit 0
+              omarchy-agent-local-launchers'
+              else
+                grep -q 'if omarchy-cmd-present omarchy-local-ai; then' "$script" || exit 1
+              fi
+              ;;
             1786719479)
               block=$(sed -n '/^if omarchy-cmd-missing agy &&/,/^fi$/p' "$script")
               [[ $block == *'omarchy-mise-install antigravity-cli agy'* ]] || exit 1
@@ -66,6 +105,87 @@ runCommand "nixarchy-user-migrations"
                        33d29360df84ed48c70606580749536520384ec64afe650151d4e26e7922b410*) ;;
                      *) exit 0 ;;
                    esac'
+              ;;
+            1792902457)
+              substituteInPlace "$script" --replace-fail 'omarchy-pkg-add qtengine' ""
+              ;;
+            1794165002)
+              substituteInPlace "$script" \
+                --replace-fail 'omarchy-pkg-add papers' "" \
+                --replace-fail 'omarchy-pkg-drop evince' ""
+              block=$(sed -n '/^if \[\[ -f \$user_mimeapps \]\] && grep -q/,/^fi$/p' "$script")
+              [[ $block == *"sed --follow-symlinks -i 's/org\\.gnome\\.Evince\\.desktop/org.gnome.Papers.desktop/g' \"\$user_mimeapps\""* ]] || exit 1
+              substituteInPlace "$script" --replace-fail "$block" 'if [[ -L $user_mimeapps ]]; then
+                if [[ -e $user_mimeapps && -r $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Evince.desktop* ]]; then
+                  echo "nixarchy: $user_mimeapps is a link, left alone; it still names Evince"
+                fi
+              elif [[ -f $user_mimeapps && -w $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Evince.desktop* ]]; then
+                sed -i '"'"'s/org\.gnome\.Evince\.desktop/org.gnome.Papers.desktop/g'"'"' "$user_mimeapps"
+              fi'
+              ;;
+            1794330979)
+              if grep -q '^removing=()$' "$script"; then
+                # Quattro checks reverse dependencies before removing Nautilus;
+                # package management is already owned by the NixOS module.
+                block=$(sed -n '/^# Nautilus goes/,/^  user_mimeapps=/p' "$script")
+                [[ $block == *'sudo pacman -Rn --noconfirm "''${removing[@]}"'* ]] || exit 1
+                substituteInPlace "$script" --replace-fail "$block" 'user_mimeapps="$HOME/.config/mimeapps.list"'
+                block=$(sed -n '/^  shell_json=/,$p' "$script")
+                [[ $block == *'sed --follow-symlinks -i'* && $block == *'fi' ]] || exit 1
+                substituteInPlace "$script" --replace-fail "$block" ""
+              else
+              substituteInPlace "$script" \
+                --replace-fail 'omarchy-pkg-add folio' "" \
+                --replace-fail ${
+                  if isEdge then
+                    ''
+                      'nautilus_packages=()
+                      for package_name in nautilus nautilus-python nautilus-dropbox sushi; do
+                        pacman -Qq "$package_name" &>/dev/null && nautilus_packages+=("$package_name")
+                      done
+                      if ((''${#nautilus_packages[@]})); then
+                        sudo pacman -Rn --noconfirm "''${nautilus_packages[@]}"
+                      fi' ''
+                  else
+                    "'omarchy-pkg-drop nautilus nautilus-python nautilus-dropbox sushi' "
+                }""
+              fi
+              substituteInPlace "$script" --replace-fail '# A dock that still pins Nautilus pins Files instead.' ""
+              block=$(sed -n '/^[[:space:]]*if \[\[ -f \$user_mimeapps \]\] && grep -q/,/^[[:space:]]*fi$/p' "$script")
+              [[ $block == *"sed --follow-symlinks -i 's/org\\.gnome\\.Nautilus\\.desktop/folio.desktop/g' \"\$user_mimeapps\""* ]] || exit 1
+              substituteInPlace "$script" --replace-fail "$block" 'if [[ -L $user_mimeapps ]]; then
+                if [[ -e $user_mimeapps && -r $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Nautilus.desktop* ]]; then
+                  echo "nixarchy: $user_mimeapps is a link, left alone; it still names Nautilus"
+                fi
+              elif [[ -f $user_mimeapps && -w $user_mimeapps && $(<"$user_mimeapps") == *org.gnome.Nautilus.desktop* ]]; then
+                sed -i '"'"'s/org\.gnome\.Nautilus\.desktop/folio.desktop/g'"'"' "$user_mimeapps"
+              fi'
+              if ! grep -q '^removing=()$' "${tree}/migrations/$id.sh"; then
+                block=$(sed -n '/^shell_json=/,/^fi$/p' "$script")
+                [[ $block == *"sed --follow-symlinks -i 's/\"org\\.gnome\\.Nautilus\"/\"folio\"/' \"\$shell_json\""* ]] || exit 1
+                substituteInPlace "$script" --replace-fail "$block" ""
+              fi
+              ;;
+            1794341736)
+              substituteInPlace "$script" --replace-fail 'user_mimeapps="$HOME/.config/mimeapps.list"' 'user_mimeapps="$HOME/.config/mimeapps.list"
+              if [[ -L $user_mimeapps ]]; then
+                echo "nixarchy: $user_mimeapps is a link, left alone"
+                exit 0
+              fi
+              [[ ! -e $user_mimeapps || ( -f $user_mimeapps && -w $user_mimeapps ) ]] || exit 0'
+              ;;
+            1794387387)
+              substituteInPlace "$script" \
+                --replace-fail 'if [[ -f $bindings ]] && grep -qxF "$legacy" "$bindings"; then' \
+                  '. @helper@
+              if [[ -f $bindings ]] && ! store_owned "$bindings" && grep -qxF "$legacy" "$bindings"; then' \
+                --replace-fail '@helper@' '${tree}/lib/nixarchy-store-owned.sh'
+              ;;
+            1794774234)
+              # Omaview, imv and mpv-mpris come from the runtime list, not a package manager (#1793).
+              substituteInPlace "$script" \
+                --replace-fail 'omarchy-pkg-add omaview' "" \
+                --replace-fail 'omarchy-pkg-drop imv mpv-mpris' ""
               ;;
             *) echo "no edit defined for $id" >&2; exit 1 ;;
           esac

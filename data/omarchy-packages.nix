@@ -46,13 +46,19 @@
     nix = "btop";
   };
   "btrfs-progs" = {
+    edge = "absent";
     nix = "btrfs-progs";
   };
   "chromium" = {
+    edge = "absent";
     nix = "chromium";
   };
   "cliamp" = {
     nix = "cliamp";
+  };
+  "crun" = {
+    edge = "only";
+    skip = "podman's OCI runtime, a base package since quattro 74de104; here virtualisation.podman brings its own runtime where services.agent-local or Boxes turn podman on.";
   };
   "cups-pk-helper" = {
     nix = "cups-pk-helper";
@@ -65,9 +71,6 @@
   };
   "dosfstools" = {
     nix = "dosfstools";
-  };
-  "evince" = {
-    nix = "evince";
   };
   "eza" = {
     nix = "eza";
@@ -83,6 +86,10 @@
   };
   "ffmpegthumbnailer" = {
     nix = "ffmpegthumbnailer";
+  };
+  "folio" = {
+    edge = "only";
+    nix = "nixarchy-apps.folio";
   };
   "fontconfig" = {
     nix = "fontconfig";
@@ -117,6 +124,10 @@
   "gum" = {
     nix = "gum";
   };
+  "hp-omnibook-3-audio" = {
+    edge = "only";
+    skip = "HP OmniBook 3 (Snapdragon) speakers and microphones; aarch64 hardware, not targeted.";
+  };
   "hype" = {
     nix = "nixarchy-apps.hype";
   };
@@ -136,10 +147,15 @@
     nix = "imagemagick";
   };
   "imv" = {
+    edge = "absent";
     nix = "imv";
   };
   "inotify-tools" = {
     nix = "inotify-tools";
+  };
+  "intel-ipu7-drivers-dkms" = {
+    edge = "only";
+    skip = "Intel IPU7 camera driver as DKMS, the alternative to linux-omarchy-ipu7; same decision as intel-ipu7-camera, not enabled.";
   };
   "inxi" = {
     nix = "inxi";
@@ -154,6 +170,7 @@
     nix = "less";
   };
   "libpulse" = {
+    edge = "absent";
     nix = "pulseaudio";
   };
   "libreoffice-fresh" = {
@@ -165,11 +182,23 @@
   "libyaml" = {
     nix = "libyaml";
   };
+  "linux-omarchy-ipu7" = {
+    edge = "only";
+    skip = "Intel IPU7 camera module built for Omarchy's own kernel; NixOS does not run linux-omarchy, and intel-ipu7-camera is not enabled.";
+  };
+  "linux-omarchy-v4l2loopback" = {
+    edge = "only";
+    skip = "v4l2loopback built for Omarchy's own kernel, for the Cam Link 4K relay and IPU7 camera; NixOS does not run linux-omarchy, and the relay is not ported yet (#1610).";
+  };
   "localsend" = {
     nix = "localsend";
   };
   "man-db" = {
     nix = "man-db";
+  };
+  "microsoft-surface-snapdragon-addresses" = {
+    edge = "only";
+    skip = "Surface Laptop 7 (Snapdragon) board addresses; aarch64 hardware, not targeted.";
   };
   "mise-bin" = {
     skip = "nixarchy does not ship mise (#1625). A person who wants it adds pkgs.mise to their own configuration.";
@@ -177,19 +206,19 @@
   "monologue" = {
     nix = "nixarchy-apps.monologue";
   };
-  "moonlight-qt" = {
-    nix = "moonlight-qt";
-  };
   "mpv" = {
+    edge = "absent";
     nix = "mpv";
-  };
-  "nautilus" = {
-    nix = "nautilus";
   };
   "noto-fonts" = {
     nix = "noto-fonts";
   };
   "noto-fonts-cjk" = {
+    edge = "absent";
+    nix = "noto-fonts-cjk-sans";
+  };
+  "noto-fonts-cjk-vf" = {
+    edge = "only";
     nix = "noto-fonts-cjk-sans";
   };
   "noto-fonts-emoji" = {
@@ -213,14 +242,38 @@
   "omarchy-nvim" = {
     nix = "omarchy-nvim-config";
   };
+  "omarchy-local-ai" = {
+    edge = "only";
+    nix = "nixarchy-apps.omarchy-local-ai";
+  };
+  "omarchy-screensaver" = {
+    edge = "only";
+    nix = "nixarchy-apps.omarchy-screensaver";
+  };
   "omasnap" = {
     nix = "nixarchy-apps.omasnap";
+  };
+  "omaview" = {
+    edge = "only";
+    nix = "nixarchy-apps.omaview";
   };
   "omawrite" = {
     nix = "nixarchy-apps.omawrite";
   };
   "owe" = {
     nix = "nixarchy-apps.owe";
+  };
+  "papers" = {
+    edge = "only";
+    nix = "papers";
+  };
+  "podman" = {
+    edge = "only";
+    skip = "a base package since quattro 74de104, for the local model runner; here services.agent-local and Boxes turn on virtualisation.podman, and the runner's preflight names that option (#1577).";
+  };
+  "xorg-xrandr" = {
+    edge = "only";
+    nix = "xrandr";
   };
   "pamixer" = {
     nix = "pamixer";
@@ -231,8 +284,16 @@
   "pinta" = {
     nix = "pinta";
   };
+  "plain" = {
+    edge = "only";
+    nix = "nixarchy-apps.plain";
+  };
   "qrencode" = {
     nix = "qrencode";
+  };
+  "qtengine" = {
+    edge = "only";
+    nix = "qtengine";
   };
   "quickshell" = {
     nix = "quickshell";
@@ -247,6 +308,7 @@
     nix = "slurp";
   };
   "snapper" = {
+    edge = "absent";
     nix = "snapper";
   };
   "socat" = {
@@ -254,9 +316,6 @@
   };
   "starship" = {
     nix = "starship";
-  };
-  "sushi" = {
-    nix = "sushi";
   };
   "tesseract" = {
     nix = "tesseract";
@@ -303,7 +362,12 @@
   "xdg-terminal-exec" = {
     nix = "xdg-terminal-exec";
   };
+  "xdg-user-dirs" = {
+    edge = "only";
+    nix = "xdg-user-dirs";
+  };
   "yaru-icon-theme" = {
+    edge = "absent";
     nix = "yaru-theme";
   };
   "yt-dlp" = {
@@ -375,6 +439,7 @@
     module = "programs.hyprland.enable";
   };
   "linux-firmware" = {
+    edge = "absent";
     module = "hardware.enableRedistributableFirmware";
   };
   "networkmanager" = {
@@ -387,15 +452,18 @@
     module = "services.power-profiles-daemon.enable";
   };
   "pipewire" = {
+    edge = "absent";
     module = "services.pipewire.enable";
   };
   "pipewire-alsa" = {
+    edge = "absent";
     module = "services.pipewire.alsa.enable";
   };
   "pipewire-jack" = {
     nix = "pipewire.jack";
   };
   "pipewire-pulse" = {
+    edge = "absent";
     module = "services.pipewire.pulse.enable";
   };
   "plocate" = {
@@ -425,15 +493,18 @@
 
   # ── Arch-only tooling and packaging ───────────────────────────────────────
   "autoconf-archive" = {
+    edge = "absent";
     skip = "Arch build dependency; not installed by default.";
   };
   "base" = {
+    edge = "absent";
     skip = "Arch base meta-package; NixOS has its own base system.";
   };
   "base-devel" = {
     skip = "Arch build meta-package; makepkg is not used here.";
   };
   "dkms" = {
+    edge = "absent";
     skip = "Arch out-of-tree module build; NixOS builds modules into the kernel package set.";
   };
   "expac" = {
@@ -446,12 +517,15 @@
     skip = "Arch kernel-upgrade hook; NixOS boots a generation that carries its own modules.";
   };
   "limine" = {
+    edge = "absent";
     skip = "Arch boot-loader choice; the installer picks the boot loader.";
   };
   "limine-mkinitcpio-hook" = {
+    edge = "absent";
     skip = "Arch limine/mkinitcpio integration.";
   };
   "limine-snapper-sync" = {
+    edge = "absent";
     skip = "Arch limine/snapper integration.";
   };
   "pacman-contrib" = {
@@ -464,10 +538,51 @@
     skip = "AUR helper; no AUR here.";
   };
   "yay-debug" = {
+    edge = "absent";
     skip = "AUR helper debug package.";
   };
 
   # ── Hardware this port does not target ────────────────────────────────────
+  "acer-aspire-16-ai-audio" = {
+    skip = "an Arch package fixing one Acer laptop's speaker topology; not checked against nixos-hardware";
+    edge = "only";
+  };
+  "asus-zenbook-a16-audio" = {
+    edge = "only";
+    skip = "ASUS Zenbook A16 speaker quirk from Omarchy's Arch repo; a host with one carries it in its own config or nixos-hardware.";
+  };
+  "asus-zenbook-a16-firmware" = {
+    edge = "only";
+    skip = "ASUS Zenbook A16 firmware from Omarchy's Arch repo; not targeted.";
+  };
+  "anduril-bluechip-support" = {
+    edge = "only";
+    skip = "Arch hardware support for Anduril Bluechip; no targeted NixOS host has this device.";
+  };
+  "asus-zenbook-a16-support" = {
+    edge = "only";
+    skip = "Arch hardware support for ASUS Zenbook A16; a host with one needs its own NixOS hardware configuration.";
+  };
+  "iptsd" = {
+    edge = "only";
+    skip = "Surface touch and pen daemon; a Surface host gets it from nixos-hardware's microsoft-surface modules, not from this port.";
+  };
+  "microsoft-surface-laptop-8-support" = {
+    edge = "only";
+    skip = "One Microsoft laptop; not targeted.";
+  };
+  "microsoft-surface-laptop-7-support" = {
+    edge = "only";
+    skip = "Surface Laptop 7 (Snapdragon) battery and camera support; aarch64 hardware, not targeted.";
+  };
+  "microsoft-surface-pro-11-sensors" = {
+    edge = "only";
+    skip = "Surface Pro 11 (Snapdragon) sensors; aarch64 hardware, not targeted.";
+  };
+  "microsoft-surface-pro-11-support" = {
+    edge = "only";
+    skip = "Surface Pro 11 (Snapdragon) board support; aarch64 hardware, not targeted.";
+  };
   "apple-bcm-firmware-fetcher" = {
     skip = "Apple Silicon hardware; this port targets x86_64.";
   };
@@ -477,10 +592,23 @@
   "asahi-bless" = {
     skip = "Apple Silicon hardware; this port targets x86_64.";
   };
+  "ath12k-board-fallback" = {
+    edge = "only";
+    skip = "Arch board-data fallback for unlisted Qualcomm Wi-Fi cards; not targeted.";
+  };
   "asdcontrol" = {
     skip = "Apple Studio Display brightness; not shipped.";
   };
-  "asus-proart-p14-speaker-firmware" = {
+  "asus-proart-p14-audio" = {
+    edge = "only";
+    skip = "One ASUS laptop; not targeted.";
+  };
+  "asus-proart-pz13-audio" = {
+    edge = "only";
+    skip = "One ASUS laptop; not targeted.";
+  };
+  "asus-zenbook-14-ux3480qa-audio" = {
+    edge = "only";
     skip = "One ASUS laptop; not targeted.";
   };
   "asusctl" = {
@@ -502,6 +630,7 @@
     skip = "Dell XPS hardware; not targeted.";
   };
   "egl-wayland" = {
+    edge = "absent";
     skip = "NVIDIA EGL glue; comes with the user NVIDIA driver choice.";
   };
   "intel-ipu7-camera" = {
@@ -514,10 +643,28 @@
     skip = "Intel VA-API driver: a host gets it from nixos-hardware's common-gpu-intel or its own hardware.graphics.extraPackages, not from this port.";
   };
   "lib32-nvidia-580xx-utils" = {
+    edge = "absent";
     skip = "As nvidia-open-dkms.";
   };
   "lib32-nvidia-utils" = {
+    edge = "absent";
     skip = "As nvidia-open-dkms; 32-bit is hardware.graphics.enable32Bit, left to the user.";
+  };
+  "facetimehd-dkms" = {
+    edge = "only";
+    skip = "The FaceTime HD camera driver of Intel Macs; here hardware.facetimehd.enable provides it, which needs unfree firmware, so it is the user's own hardware choice and not set.";
+  };
+  "facetimehd-firmware-fetcher" = {
+    edge = "only";
+    skip = "As facetimehd-dkms: hardware.facetimehd.enable brings the firmware in nixpkgs, so nothing downloads it from Apple at boot.";
+  };
+  "kmscon" = {
+    edge = "only";
+    skip = "Draws Omarchy's Arch installer and first-boot owner setup (omarchy-provision-owner), neither of which runs here; nixarchy has its own installer.";
+  };
+  "pi-coding-agent" = {
+    edge = "only";
+    skip = "A base package upstream. Here it is not on every machine: our omarchy-default-agent installs pi from nixpkgs on request, and services.agent-local puts it in the system with its agents list (#1896).";
   };
   "libva-intel-driver" = {
     skip = "Old Intel VA-API driver; not listed.";
@@ -546,6 +693,10 @@
   "linux-omarchy-headers" = {
     skip = "As linux-omarchy.";
   };
+  "linux-omarchy-nvidia-open" = {
+    edge = "only";
+    skip = "Prebuilt NVIDIA modules for linux-omarchy; nixarchy uses the NixOS kernel, and the driver is the user own hardware.nvidia choice.";
+  };
   "linux-t2" = {
     skip = "Intel T2 Mac kernel; not targeted.";
   };
@@ -571,9 +722,11 @@
     skip = "GB10 (aarch64) only.";
   };
   "nvidia-dkms" = {
+    edge = "absent";
     skip = "As nvidia-open-dkms.";
   };
   "nvidia-open-dkms" = {
+    edge = "absent";
     skip = "The NVIDIA driver is the user own hardware.nvidia choice; Omarchy picks an Arch package by detection, nixarchy does not.";
   };
   "nvidia-utils" = {
@@ -594,11 +747,23 @@
   "qmk-hid" = {
     skip = "Keyboard firmware tool; not shipped.";
   };
+  "raspberry-pi-4-bluetooth-firmware" = {
+    edge = "only";
+    skip = "Raspberry Pi 4 hardware (aarch64); this port targets x86_64.";
+  };
   "rdma-core" = {
     skip = "GB10 (aarch64) only.";
   };
+  "samsung-galaxy-book4-edge-14-support" = {
+    edge = "only";
+    skip = "Samsung Galaxy Book4 Edge 14 (Snapdragon) board package; aarch64 hardware, not targeted.";
+  };
   "sof-firmware" = {
     module = "hardware.enableRedistributableFirmware"; # nixos/modules/hardware/all-firmware.nix lists it
+  };
+  "systemd-stub-omarchy" = {
+    edge = "only";
+    skip = "Snapdragon boot-image stub holding every device tree (quattro dceae18); aarch64 hardware, not targeted.";
   };
   "systemd-ukify" = {
     skip = "Qualcomm (aarch64) boot tooling; not targeted.";
@@ -610,12 +775,14 @@
     skip = "Intel thermal daemon; services.thermald is not enabled here.";
   };
   "tuxedo-drivers-nocompatcheck-dkms" = {
+    edge = "absent";
     skip = "Tuxedo laptops; hardware.tuxedo-drivers is the user choice.";
   };
   "vpl-gpu-rt" = {
     skip = "Intel video runtime; not listed.";
   };
   "vulkan-asahi" = {
+    edge = "absent";
     skip = "Apple Silicon hardware; this port targets x86_64.";
   };
   "vulkan-freedreno" = {
@@ -642,6 +809,7 @@
     skip = "GStreamer plugin; not shipped separately.";
   };
   "gtk4-layer-shell" = {
+    edge = "absent";
     skip = "Library; comes with the programs that link it.";
   };
   "libsecret" = {
@@ -655,9 +823,6 @@
   };
   "mariadb-libs" = {
     skip = "Library for Arch language bindings.";
-  };
-  "nautilus-python" = {
-    skip = "Nautilus extension host; not shipped.";
   };
   "postgresql-libs" = {
     skip = "Library for Arch language bindings.";
@@ -690,10 +855,15 @@
     skip = "Language runtime; installed on request through the language rows.";
   };
   "webp-pixbuf-loader" = {
+    edge = "absent";
     skip = "gdk-pixbuf loader; not shipped separately.";
   };
 
   # ── nixpkgs has it; this port does not install it by default ──────────────
+  "cmake" = {
+    skip = "the omarchy-app skill builds through its own Nix flake, which brings CMake";
+    edge = "only";
+  };
   "docker-buildx" = {
     skip = "nixpkgs docker bundles it.";
   };
@@ -702,6 +872,10 @@
   };
   "exfatprogs" = {
     skip = "Not installed by default.";
+  };
+  "google-chrome" = {
+    skip = "unfree; Chromium stays nixarchy's default browser, and Install > Browser offers Chrome";
+    edge = "only";
   };
   "herdr" = {
     nix = "herdr";
@@ -713,6 +887,7 @@
     skip = "Mapped for pkg-add advice only (data/arch-extras.nix); not installed.";
   };
   "mpv-mpris" = {
+    edge = "absent";
     skip = "Unsure; mpv-with-scripts may carry it.";
   };
   "qemu-user-static-binfmt" = {
@@ -731,6 +906,8 @@
     skip = "Not packaged here.";
   };
   "ttf-ia-writer" = {
+    # Quattro ff6533e stopped installing the iA Writer fonts (#1896); the tag still lists them.
+    edge = "absent";
     skip = "Not packaged here.";
   };
   "tzupdate" = {
@@ -754,7 +931,68 @@
   "whois" = {
     skip = "Not installed by default.";
   };
+  "asus-proart-p14-speaker-firmware" = {
+    skip = "One ASUS laptop; not targeted.";
+    edge = "absent";
+  };
+  "evince" = {
+    nix = "evince";
+    edge = "absent";
+  };
+  "moonlight-qt" = {
+    nix = "moonlight-qt";
+    edge = "absent";
+  };
+  "nautilus" = {
+    nix = "nautilus";
+    edge = "absent";
+  };
+  "nautilus-python" = {
+    skip = "Nautilus extension host; not shipped.";
+    edge = "absent";
+  };
+  "sushi" = {
+    nix = "sushi";
+    edge = "absent";
+  };
+  "terminus-font" = {
+    skip = "console font for upstream's Arch first-boot screens (install/provisioning/console-font.sh); the console here is configured by the flake.";
+    edge = "only";
+  };
   "xorg-xsetroot" = {
     skip = "X11 tool; the session is Wayland.";
+    edge = "absent";
+  };
+  "fantasi" = {
+    edge = "only";
+    skip = "Omarchy's local-model image maker (omacom/fantasi, C++), new in quattro 2eb7eb3 and not packaged yet; its install migration is not-needed until it is (#1847)";
+  };
+  "flowtunes" = {
+    edge = "only";
+    skip = "Omarchy's endless genre-music player (omacom/flowtunes), new in quattro e4635a4's base list and not packaged yet; its install migration is not-needed until it is (#1896)";
+  };
+  "nodejs" = {
+    edge = "only";
+    nix = "nodejs";
+  };
+  "playwright-cli" = {
+    edge = "only";
+    skip = "Upstream CLI is installed by its package manager; omarchy-agent-look-page here uses nixpkgs playwright-driver and nodejs directly.";
+  };
+  "uv" = {
+    edge = "only";
+    nix = "uv";
+  };
+  "ghostscript" = {
+    edge = "only";
+    skip = "added to quattro 2eb7eb3's base list with no caller in bin/, default/ or shell/; left out until something here needs it (#1847)";
+  };
+  "omarchy-themes-intros" = {
+    edge = "only";
+    skip = "intro videos for the stock themes; omarchy-theme-set copies them only when the packaged directory exists, so themes switch without them. Not packaged yet (#1847)";
+  };
+  "omarchy-themes-loops" = {
+    edge = "only";
+    skip = "background loops for OWE; omarchy-theme-set copies them only when the packaged directory exists, so themes switch without them. Not packaged yet (#1847)";
   };
 }

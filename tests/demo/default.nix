@@ -29,6 +29,11 @@
 # hard-won comments, kept next to the code they explain.
 let
   inherit (pkgs) lib;
+  defaultAgentRoute =
+    if import ../../pkgs/omarchy/is-quattro.nix lib pkgs.omarchy.version then
+      "agent.harness"
+    else
+      "setup.default.agent";
 
   # A real published plugin, pinned, so the plugin scene shows the plugin
   # system working on something somebody actually wrote rather than a fixture.
@@ -315,7 +320,7 @@ let
           ("update", "menu-update"),
           ("style", "menu-style"),
           ("system", "menu-system"),
-          ("setup.default.agent", "menu-default-agent"),
+          ("${defaultAgentRoute}", "menu-default-agent"),
           ("trigger", "menu-trigger"),
           ("nixarchy", "menu-nixarchy"),
       ]:

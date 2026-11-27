@@ -9,17 +9,30 @@ import re
 import sys
 from pathlib import Path
 
-src, out, name = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
+args = sys.argv[1:]
+edge = "--edge" in args
+if edge:
+    args.remove("--edge")
+src, out, name = args[0], Path(args[1]), args[2]
 text = Path(src).read_text()
 # The catalogues the template's resources.qrc lists.
 expand = {"src/i18n/<code>.json": ["src/i18n/en.json", "src/i18n/da.json"]}
-skip = {"bin/build", "bin/test", ".gitignore", "flake.nix"}  # not part of the build
+# Not part of the build. On edge package.nix runs bin/build, so it is written.
+skip = {".gitignore", "flake.nix"} if edge else {"bin/build", "bin/test", ".gitignore", "flake.nix"}
+# Sections that are prose only; the install rules still need the file (#1776).
+prose = {"LICENSE": "MIT License\n"}
 
 written = []
 for section in re.split(r"(?m)^## ", text)[1:]:
     head, _, body = section.partition("\n")
     paths = re.findall(r"`([^`]+)`", head)
     blocks = re.findall(r"(?ms)^```[a-z]*\n(.*?)^```$", body)
+    if paths and not blocks and all(p in prose for p in paths):
+        for p in paths:
+            (out / p).parent.mkdir(parents=True, exist_ok=True)
+            (out / p).write_text(prose[p])
+            written.append(p)
+        continue
     if not paths or not blocks:
         sys.exit(f"heading {head!r} has no path or no block")
     if len(paths) != len(blocks) and paths[0] not in expand:
@@ -37,8 +50,12 @@ for section in re.split(r"(?m)^## ", text)[1:]:
             )
             written.append(q)
 
-need = {f"{name}.pro", "package.nix", f"dist/{name}.desktop", f"dist/{name}.svg",
-        "src/main.cpp", "src/resources.qrc", "src/Main.qml"}
+if edge:
+    need = {"CMakeLists.txt", "package.nix", "bin/build", "LICENSE", f"share/{name}.desktop", f"share/{name}.svg",
+            "src/main.cpp", "src/resources.qrc", "src/Main.qml"}
+else:
+    need = {f"{name}.pro", "package.nix", f"dist/{name}.desktop", f"dist/{name}.svg",
+            "src/main.cpp", "src/resources.qrc", "src/Main.qml"}
 missing = need - set(written)
 if missing:
     sys.exit(f"templates.md no longer yields: {sorted(missing)}")

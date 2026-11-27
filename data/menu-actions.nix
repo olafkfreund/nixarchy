@@ -4,6 +4,134 @@
 # any other reason must still reach a hazard, or the entry is stale. `pending`
 # is temporary: Part 4 of the series forbids it.
 {
+  "agent.make.app" = {
+    reason = "unreached: omarchy-agent-make starts the default agent through omarchy-agent, which calls omarchy-agent-local only for status and overlay, never share (the branch that sets up sshd); the OpenClaw user unit starts only when OpenClaw is the default agent, as for the agent.harness rows";
+    edge = "only";
+  };
+  "agent.make.game" = {
+    reason = "unreached: omarchy-agent-make starts the default agent through omarchy-agent, which calls omarchy-agent-local only for status and overlay, never share (the branch that sets up sshd); the OpenClaw user unit starts only when OpenClaw is the default agent, as for the agent.harness rows";
+    edge = "only";
+  };
+  "setup.git" = {
+    reason = "session: restarts the user's XCompose unit after writing the git identity into ~/.XCompose (quattro 2eb7eb3 moved the row from setup.config.git)";
+    edge = "only";
+  };
+  "agent.make.plugin" = {
+    reason = "unreached: omarchy-agent-make starts the default agent through omarchy-agent, which calls omarchy-agent-local only for status and overlay, never share (the branch that sets up sshd); the OpenClaw user unit starts only when OpenClaw is the default agent, as for the agent.harness rows";
+    edge = "only";
+  };
+  "agent.make.theme" = {
+    reason = "unreached: omarchy-agent-make starts the default agent through omarchy-agent, which calls omarchy-agent-local only for status and overlay, never share (the branch that sets up sshd); the OpenClaw user unit starts only when OpenClaw is the default agent, as for the agent.harness rows";
+    edge = "only";
+  };
+  "install.browser.chromium" = {
+    reason = "unreached: the row is disabled while omarchy-pkg-present chromium holds, and Chromium is a runtime dependency of the package (chromium-flags in pkgs/omarchy/default.nix), so the pacman path in omarchy-install-browser never runs";
+    edge = "only";
+  };
+  "agent.harness.agy" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.amp" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.claude" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.codex" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.commandcode" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.copilot" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.crush" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.cursor-agent" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.devin" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.dsh" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.freebuff" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.grok" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.hermes" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.kilo" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.kimi" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.kiro-cli" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.mcode" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.muse" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.omp" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.openclaw" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.opencode" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.ori" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.pi" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "agent.harness.qwen" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it The agents panel's tailnet sharing (omarchy-agent-local share) sets up sshd; omarchy-agent calls omarchy-agent-local only for status and overlay, so this row never takes that branch.";
+    edge = "only";
+  };
+  "install.ai.herdr" = {
+    reason = "unreached: its theme refresh reaches theme-set-hermes, which runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
+    edge = "only";
+  };
+  "install.ai.desktop.herdr" = {
+    reason = "session: the desktop install path can stop the user's Hermes unit before replacing it; its theme refresh can run a remote command only for a linked Herdr machine.";
+    edge = "only";
+  };
   "install.preinstalls" =
     "owned: adds missing launchers only, never overwrites; its one rm is its own marker (decision 2, checks.remove-preinstalls)";
   "install.style.font.bitstream" = "session: restarts the user's shell unit";
@@ -14,8 +142,10 @@
   "install.style.font.victor" = "session: restarts the user's shell unit";
   "install.style.theme" =
     "unreached: theme-set-hermes runs omarchy-install-hermes-cli --check only; its user-unit stop is the --now branch";
-  "learn.keybindings" =
-    "unreached: omarchy-menu-keybindings runs omarchy-language with no argument, which only prints the language; its shell restart is the set branch";
+  "learn.keybindings" = {
+    reason = "unreached: omarchy-menu-keybindings runs omarchy-language with no argument, which only prints the language; its shell restart is the set branch";
+    edge = "absent";
+  };
   "remove.development.elixir.phoenix" = "hidden: there is nothing to remove (#1625)";
   "remove.gaming.battlenet" =
     "owned: deletes its own prefix; GE-Proton and umu only after a confirm; pkg-drop is inert here (decision 10)";
@@ -24,57 +154,107 @@
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
   "remove.service.ssh-agent" =
     "session: disables the user's gcr-ssh-agent socket and removes its own environment.d file";
-  "setup.config.git" =
-    "session: restarts the user's XCompose unit after writing the git identity into ~/.XCompose";
+  "setup.config.git" = {
+    reason = "session: restarts the user's XCompose unit after writing the git identity into ~/.XCompose";
+    edge = "absent";
+  };
   "setup.config.xcompose" = "session: restarts the user's XCompose unit";
-  "setup.default.agent.agy" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.amp" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.claude" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.codex" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.commandcode" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.copilot" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.crush" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.cursor-agent" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.devin" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.dsh" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.freebuff" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.grok" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.hermes" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.kilo" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.kimi" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.kiro-cli" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.mcode" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.muse" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.omp" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.openclaw" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.opencode" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.ori" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.pi" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.default.agent.qwen" =
-    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.agy" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.amp" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.claude" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.codex" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.commandcode" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.copilot" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.crush" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.cursor-agent" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.devin" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.dsh" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.freebuff" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.grok" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.hermes" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.kilo" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.kimi" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.kiro-cli" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.mcode" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.muse" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.omp" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.openclaw" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.opencode" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.ori" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.pi" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
+  "setup.default.agent.qwen" = {
+    reason = "session: the OpenClaw branch starts a user unit; other agents never take it";
+    edge = "absent";
+  };
   "setup.default.browser.brave" =
     "owned: its one rm clears its own pending-default-browser marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.browser.brave-origin" =
@@ -97,6 +277,10 @@
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.neovim" =
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
+  "setup.default.editor.plain" = {
+    reason = "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
+    edge = "only";
+  };
   "setup.default.editor.sublime" =
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.vim" =
@@ -105,6 +289,10 @@
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
   "setup.default.editor.zed" =
     "owned: its one rm clears its own pending-default-editor marker after setting the default (#1623, checks.menu-conditions)";
+  "setup.network.dns.alidns" = {
+    reason = "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
+    edge = "only";
+  };
   "setup.network.dns.cloudflare" =
     "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.network.dns.custom" =
@@ -132,7 +320,13 @@
   "update.hardware.trackpad" =
     "runtime: reloads the trackpad driver for this boot; nothing a rebuild owns";
   "update.hardware.wifi" = "runtime: resets wifi for this boot; nothing a rebuild owns";
-  "update.password.drive" =
-    "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+  "update.password" = {
+    reason = "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first); quattro's Update > Password, which changes the login and disk passwords together (#1896)";
+    edge = "only";
+  };
+  "update.password.drive" = {
+    reason = "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
+    edge = "absent";
+  };
   "update.process.shell" = "session: restarts the user's shell unit";
 }

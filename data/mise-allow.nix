@@ -25,6 +25,17 @@
     lines = [
       "[[ ! -L $1 ]] && head -c 4096 \"$1\" | grep -qaE 'mise (use|x) '"
     ];
+    latestEdgeLines = [
+      "! head -c 4096 \"$user_install\" | grep -qaE 'mise (use|x) '; then"
+    ];
+  };
+  "tree/bin/omarchy-agent-integrate-herdr" = {
+    edge = "only";
+    latestEdge = "absent";
+    reason = "reads an environment variable mise would set; empty here, and it runs nothing";
+    lines = [
+      "done < <(jq -r '.[].name' <<<\"\${MISE_INSTALLED_TOOLS:-[]}\" 2>/dev/null)"
+    ];
   };
   "tree/bin/omarchy-agent-usage-codex" = {
     reason = "rejects generated launchers and mise shims without running them";
@@ -34,6 +45,13 @@
       "mise = find_command(\"mise\")"
       "return bool(mise) and os.path.realpath(path) == os.path.realpath(mise)"
       "return b\"mise use\" in head or b\"mise x \" in head"
+    ];
+  };
+  "tree/default/regions/cn/environment.conf" = {
+    edge = "only";
+    reason = "mainland China's package mirrors, which install/config/region.sh copies into /etc/environment.d; nixarchy runs no install/config step and omarchy-region reads no /etc/omarchy/region here, so it is never installed (#1896)";
+    lines = [
+      "MISE_NODE_MIRROR_URL=https://npmmirror.com/mirrors/node/"
     ];
   };
   "tree/bin/omarchy-default-agent" = {
@@ -131,17 +149,31 @@
       "*\":$HOME/.local/share/mise/shims:\"*) ;;"
       "*) PATH=\"\${PATH:+$PATH:}$HOME/.local/share/mise/shims\" ;;"
     ];
+    latestEdgeLines = [
+      "omarchy_old_wrapper_dir=\"\${MISE_DATA_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/mise}/command-wrappers/bin\""
+      "*\":$HOME/.local/share/mise/shims:\"*) ;;"
+      "*) PATH=\"\${PATH:+$PATH:}$HOME/.local/share/mise/shims\" ;;"
+    ];
   };
   "tree/default/uwsm/env.d/10-omarchy" = {
     reason = "nothing here reads it";
     lines = [
       "omarchy-cmd-present mise && eval \"$(mise activate bash --shims)\""
     ];
+    # quattro 9b695d7..fef807e: shims go on PATH without running mise, still behind command -v mise.
+    edgeLines = [
+      "if command -v mise >/dev/null 2>&1; then"
+      "omarchy_mise_data_dir=\"\${MISE_DATA_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/mise}\""
+      "omarchy_mise_shims_dir=\"\${MISE_SHIMS_DIR:-$omarchy_mise_data_dir/shims}\""
+    ];
   };
   "tree/install/config/ssh-command-path.sh" = {
     reason = "nothing here reads it";
     lines = [
       "PATH DEFAULT=/usr/local/sbin:/usr/local/bin:/usr/bin:@{HOME}/.local/share/mise/shims:@{HOME}/.local/bin"
+    ];
+    latestEdgeLines = [
+      "PATH DEFAULT=@{HOME}/.local/share/omarchy/agent-accounts/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:@{HOME}/.local/share/mise/shims:@{HOME}/.local/bin"
     ];
   };
   "tree/install/omarchy-base.packages" = {

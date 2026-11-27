@@ -2194,6 +2194,47 @@ let
       off = (configWith { displayManager = false; }).services.displayManager.sddm.enable;
     };
 
+    # Quattro's after-sleep SDDM recovery on the four sleep units (#1905). The
+    # two configBeside fixtures decouple the gates, which displayManager moves
+    # in lockstep: a user's own SDDM, and nixarchy's option with SDDM forced off.
+    sddmRecover =
+      let
+        units = [
+          "systemd-suspend"
+          "systemd-hibernate"
+          "systemd-hybrid-sleep"
+          "systemd-suspend-then-hibernate"
+        ];
+        hasScript = builtins.pathExists "${inputs.omarchy}/bin/omarchy-system-sddm-recover";
+        hooked =
+          c:
+          builtins.filter (
+            u:
+            builtins.any (pkgs.lib.hasInfix "omarchy-sddm-recover") (
+              pkgs.lib.toList ((c.systemd.services.${u} or { }).serviceConfig.ExecStopPost or [ ])
+            )
+          ) units;
+      in
+      {
+        on =
+          hooked (configWith {
+            displayManager = true;
+          }) == (if hasScript then units else [ ])
+          &&
+            hooked (configBeside {
+              programs.nixarchy.displayManager = false;
+              services.displayManager.sddm.enable = true;
+            }) == [ ]
+          &&
+            hooked (configBeside {
+              services.displayManager.sddm.enable = pkgs.lib.mkForce false;
+            }) == [ ];
+        off =
+          hooked (configWith {
+            displayManager = false;
+          }) != [ ];
+      };
+
     # #1927: the publisher, its path unit and account exist only with a user
     # and a display manager; off covers both ways of not having them.
     greeterTheme =
@@ -2736,9 +2777,27 @@ let
   # one to the other when it gained a module, and the row went with it. A
   # check that knew only about apps would have called that unmapped and been
   # wrong -- the row is wired, just not by the file it used to be wired by.
+  # A row marked edge = "only"/"absent" exists in one Omarchy pin's menu only (#1752).
+  inactiveEdge =
+    if pkgs.lib.hasPrefix "edge-" (pkgs.extend inputs.self.overlays.default).omarchy.version then
+      "absent"
+    else
+      "only";
+  activeRow =
+    r:
+    let
+      edge = if builtins.isAttrs r then r.edge or null else null;
+    in
+    assert pkgs.lib.assertMsg (builtins.elem edge [
+      null
+      "only"
+      "absent"
+    ]) "a menu row's edge marker must be \"only\" or \"absent\", not ${builtins.toJSON edge}";
+    edge != inactiveEdge;
+
   mappedRows =
     pkgs.lib.mapAttrsToList (_: a: a.menuId) (
-      pkgs.lib.filterAttrs (_: a: a ? menuId) (import ../data/apps.nix)
+      pkgs.lib.filterAttrs (_: a: a ? menuId && activeRow a) (import ../data/apps.nix)
     )
     ++ pkgs.lib.mapAttrsToList (_: s: s.menuId) (pkgs.lib.filterAttrs (_: s: s ? menuId) services);
 
@@ -2780,7 +2839,9 @@ let
   # The reason strings are not used here; this check only needs the set. They
   # are read by a human at review time, and the mapping script refuses an
   # exception that carries none.
-  notApps = builtins.attrNames (import ../data/menu-exceptions.nix);
+  notApps = builtins.attrNames (
+    pkgs.lib.filterAttrs (_: activeRow) (import ../data/menu-exceptions.nix)
+  );
 
   # The built reference machine, for the things that are facts about a system
   # rather than about an option.
@@ -3948,6 +4009,14 @@ let
 
   shardSystem =
     assert pkgs.lib.assertMsg (
+      let
+        etc = defaultMachine.environment.etc;
+        edge = defaultMachine.programs.nixarchy.package.passthru.chromeExtensionsPolicy or false;
+      in
+      (etc ? "opt/chrome/policies/managed/omarchy.json") == edge
+      && (etc ? "opt/chrome/policies/managed/omarchy-extensions.json") == edge
+    ) "Chrome policy entries must exist on edge and be absent on v4.5.0";
+    assert pkgs.lib.assertMsg (
       pkgs.lib.hasInfix (pkgs.lib.escapeShellArg unitLinkNormalHome) unitLinkActivation
       && !(pkgs.lib.hasInfix unitLinkSystemHome unitLinkActivation)
       && builtins.elem "graphical-session.target" defaultMachine.systemd.user.services.omarchy-sleep-lock.wantedBy
@@ -4050,6 +4119,19 @@ pkgs.runCommand "nixarchy-options-files"
     # command check pointed at the package's menu could never see one of them.
     treeMenu = "${inputs.self.nixosConfigurations.vm.config.programs.nixarchy.tree}/default/omarchy/omarchy-menu.jsonc";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
+    # #1896: an edge-only row an older edge pin (a fallback build) may not ship yet.
+    edgeOnly = pkgs.lib.concatStringsSep " " (
+      pkgs.lib.mapAttrsToList (_: a: a.menuId) (
+        pkgs.lib.filterAttrs (_: a: a ? menuId && (a.edge or null) == "only" && activeRow a) (
+          import ../data/apps.nix
+        )
+      )
+      ++ builtins.attrNames (
+        pkgs.lib.filterAttrs (_: e: builtins.isAttrs e && (e.edge or null) == "only" && activeRow e) (
+          import ../data/menu-exceptions.nix
+        )
+      )
+    );
     oursBinaries = pkgs.lib.concatStringsSep " " oursBinaries;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;

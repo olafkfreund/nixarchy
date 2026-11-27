@@ -109,6 +109,7 @@
   };
 
   "mise/conf.d/omarchy-agent-accounts.toml" = {
+    edge = "absent";
     class = "divergent";
     reason = "Not installed: nixarchy ships no mise (#1625). Inert under share/omarchy/etc so checks.etc-overlay still sees upstream.";
   };
@@ -133,11 +134,21 @@
     reason = "MODULES+=(i2c-hid-of) for mkinitcpio, only when omarchy-hw-aarch64-qualcomm detects a Snapdragon laptop, so its internal keyboard can type the disk passphrase. nixarchy builds x86_64-linux only, and NixOS builds its initrd from boot.initrd.*; there is no MODULES list to append to.";
   };
 
+  "mkinitcpio.conf.d/omarchy_compression.conf" = {
+    edge = "only";
+    class = "na";
+    reason = "Sets mkinitcpio's COMPRESSION to zstd, because Arch Linux ARM patches its fallback to single-core gzip. NixOS builds its initrd from boot.initrd.*, whose compressor is boot.initrd.compressor (zstd by default), so there is no mkinitcpio setting to make.";
+  };
   "mkinitcpio.conf.d/omarchy_hooks.conf" = {
     class = "na";
     reason = "HOOKS for mkinitcpio, including dropping kms on an NVIDIA-only machine. NixOS builds its initrd from boot.initrd.*; there is no hook list to order.";
   };
 
+  "mkinitcpio.conf.d/omarchy_mount_events.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Copies systemd's 20-mount-events.conf into a mkinitcpio systemd initramfs, so PID 1 in the initrd keeps the raised mount-event burst. NixOS builds its initrd from boot.initrd.*, and modules/nixos.nix sets the burst through systemd.managerEnvironment (#1896).";
+  };
   "mkinitcpio.conf.d/omarchy_vconsole.conf" = {
     class = "na";
     reason = "Wraps mkinitcpio's add_file so a non-Latin first keyboard layout's /etc/vconsole.conf stays out of the initramfs, keeping a LUKS passphrase typeable at the Plymouth prompt (4.0.6). NixOS builds its initrd from boot.initrd.* and console.*, without mkinitcpio, so there is no add_file to wrap.";
@@ -154,6 +165,7 @@
   };
 
   "mpv/mpv.conf" = {
+    edge = "absent";
     class = "installed";
     reason = "hwdec=auto-safe, so mpv decodes video on the GPU where it safely can. libmpv reads /etc/mpv, and ~/.config/mpv still overrides it; installed as the shipped file through environment.etc.";
   };
@@ -161,6 +173,18 @@
   "nsswitch.conf" = {
     class = "native";
     reason = "NixOS generates /etc/nsswitch.conf from system.nssModules and system.nssDatabases. services.avahi.nssmdns4 in modules/nixos.nix adds the mdns entry this file's hosts line exists for.";
+  };
+
+  "pipewire/client.conf.d/50-omarchy-rtkit.conf" = {
+    edge = "only";
+    class = "native";
+    reason = "module.rt.args rtportal.enabled = false, so PipeWire clients ask rtkit for realtime directly rather than through xdg-desktop-portal, whose budget reads 0 when it started before rtkit. modules/nixos.nix declares the same key through services.pipewire.extraConfig.client.\"50-omarchy-rtkit\", which nixpkgs writes to this path; nixpkgs asserts against environment.etc.\"pipewire/...\", so the shipped file cannot be installed as it is (#1498).";
+  };
+
+  "pipewire/jack.conf.d/50-omarchy-rtkit.conf" = {
+    edge = "only";
+    class = "native";
+    reason = "module.rt.args rtportal.enabled = false, so JACK clients ask rtkit for realtime directly rather than through xdg-desktop-portal, whose budget reads 0 when it started before rtkit. modules/nixos.nix declares the same key through services.pipewire.extraConfig.jack.\"50-omarchy-rtkit\", which nixpkgs writes to this path; nixpkgs asserts against environment.etc.\"pipewire/...\", so the shipped file cannot be installed as it is (#1498).";
   };
 
   "plymouth/plymouthd.conf" = {
@@ -181,6 +205,21 @@
   "sddm.conf.d/10-wayland.conf" = {
     class = "native";
     reason = "services.displayManager.sddm.wayland.enable = true in modules/nixos.nix. The CompositorCommand naming /usr/share/sddm/hyprland.lua is Arch's path; nixpkgs' sddm module supplies its own compositor command, so taking this file would break the greeter rather than configure it.";
+  };
+  "systemd/system/sddm.service.d/10-omarchy-wait-drm.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Runs /usr/bin/omarchy-system-sddm-wait-drm before Arch's SDDM unit to wait for the real DRM driver. NixOS has no /usr/bin program or upstream unit override here; the host display manager is configured by modules/nixos.nix.";
+  };
+  "systemd/user/app-models.slice" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Places upstream's local AI model containers under a low-weight user slice. Nixarchy's agent-local service is a NixOS Podman service, so this upstream user slice is not installed or used.";
+  };
+  "systemd/user/omarchy-agent-local-model-.service.d/10-omarchy.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Tunes the upstream template user unit for local AI model containers. Nixarchy does not install that user unit: programs.nixarchy.services.agent-local runs through its NixOS module instead.";
   };
 
   "security/faillock.conf" = {
@@ -230,7 +269,49 @@
 
   "sysctl.d/99-omarchy-sysctl.conf" = {
     class = "native";
-    reason = "BBR and fq, plus desktop memory and writeback tuning, value for value: tcp_mtu_probing, default_qdisc fq, tcp_congestion_control bbr, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included. checks.etc-sysctl compares each with upstream's file.";
+    reason = "BBR and fq, plus desktop memory and writeback tuning: tcp_mtu_probing, default_qdisc fq, tcp_congestion_control bbr, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at priority 1250, so a machine's own value wins, its own mkDefault included. checks.etc-sysctl compares each with upstream's file.";
+    differs."vm.swappiness" = {
+      # Quattro since 3642699; an older quattro fallback still agrees (#1940).
+      edge = "only";
+      upstream = "1";
+      reason = "Keep 150 with zram: preferring cheap compressed swap preserves file cache. Upstream's 1 suits its capped zram plus disk swapfile, but would delay using zram here until memory is nearly full.";
+    };
+  };
+
+  "systemd/system/ldconfig.service.d/10-omarchy.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Drops ldconfig.service's ConditionNeedsUpdate, because pacman already rebuilds /etc/ld.so.cache after every transaction. NixOS has no /usr for that condition to compare and no system-wide library cache for pacman to refresh.";
+  };
+
+  "systemd/system/omarchy-shutdown-ramfs.timer" = {
+    class = "na";
+    edge = "only";
+    reason = "Pre-generates mkinitcpio's shutdown ramfs after boot, behind ConditionPathExists=/run/initramfs/mkinitcpio-shutdown.conf. NixOS does not build its initrd or shutdown ramfs with mkinitcpio, so the condition is never true here.";
+  };
+
+  "systemd/system/systemd-user-sessions.service" = {
+    class = "divergent";
+    edge = "only";
+    reason = "A whole replacement of systemd's unit that drops network.target from its After=, so a graphical login does not wait for network setup. Not adopted: it runs /usr/lib/systemd/systemd-user-sessions, which does not exist on NixOS, and dropping the ordering would gain nothing measured: on the 2026-11-24 boots network.target was reached at 19.7 s on p620 and 9.1 s on razer, while user sessions waited on Home Manager's activation until 45.1 s and 13.7 s.";
+  };
+
+  "systemd/system/thermald.service.d/10-omarchy.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Keeps thermald from starting on ThinkPads whose firmware does thermal management (dytc_lapmode). Nothing here enables services.thermald, so there is no thermald unit for the drop-in to condition.";
+  };
+
+  "systemd/system/ufw.service" = {
+    class = "na";
+    edge = "only";
+    reason = "A whole replacement of ufw's unit that orders it before network-pre.target. The firewall here is the NixOS firewall (networking.firewall, modules/nixos.nix), not ufw, so there is no ufw unit to reorder.";
+  };
+
+  "systemd/user.conf.d/10-faster-shutdown.conf" = {
+    class = "native";
+    edge = "only";
+    reason = "DefaultTimeoutStopSec=2s for the user manager, so a user unit holding a process that ignores SIGTERM does not stall the session stop. modules/nixos.nix sets it through systemd.user.settings.Manager at mkDefault, on edge pins only, since the tag does not ship it.";
   };
 
   "sysusers.d/omarchy-cups-browsed.conf" = {
@@ -246,6 +327,12 @@
   "systemd/logind.conf.d/20-inhibit-delay.conf" = {
     class = "native";
     reason = "services.logind.settings.Login.InhibitDelayMaxSec = 15 in modules/nixos.nix, giving omarchy-sleep-lock time to secure the screen before logind suspends anyway.";
+  };
+
+  "systemd/logind.conf.d/30-lid-external-power.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "HandleLidSwitchExternalPower=ignore, so a docked laptop on external power does not suspend while its display re-enumerates. Not adopted: it changes what closing the lid on AC does on an existing machine. A host that wants it sets services.logind.settings.Login.HandleLidSwitchExternalPower = \"ignore\".";
   };
 
   "systemd/oomd.conf.d/10-omarchy.conf" = {
@@ -303,9 +390,39 @@
     reason = "Mounts binfmt_misc eagerly before systemd-binfmt runs. Not ported: no boot-time binfmt deferral has been seen here, and the pair needs overrideStrategy = \"asDropin\" units, so it is not a line or two. Tracked in #1386.";
   };
 
+  "systemd/system/systemd-hibernate.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "native";
+    reason = "systemd.services.systemd-hibernate.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
+  };
+
+  "systemd/system/systemd-hybrid-sleep.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "native";
+    reason = "systemd.services.systemd-hybrid-sleep.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
+  };
+
+  "systemd/system/systemd-suspend-then-hibernate.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "native";
+    reason = "systemd.services.systemd-suspend-then-hibernate.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
+  };
+
+  "systemd/system/systemd-suspend.service.d/10-omarchy-sddm-recover.conf" = {
+    edge = "only";
+    class = "native";
+    reason = "systemd.services.systemd-suspend.serviceConfig.ExecStopPost in modules/nixos.nix runs upstream's script after sleep through a wrapper with its own PATH, patched from sddm.service to display-manager.service; gated on nixarchy's SDDM and a pin that ships the script (#1905).";
+  };
+
   "systemd/system/user@.service.d/10-faster-shutdown.conf" = {
     class = "native";
     reason = "TimeoutStopSec=5s on the user manager, the per-user half of the faster shutdown, so logout and power-off do not wait on a stuck user service. modules/nixos.nix sets it on systemd.services.\"user@\" at mkDefault.";
+  };
+
+  "systemd/user/session.slice.d/10-omarchy.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "MemorySwapMax=0 and CPUWeight=500 protect the compositor, shell, audio and portals in session.slice under app.slice pressure. Not adopted: modules/nixos.nix currently tunes app.slice for oomd, and this new user slice policy has not been measured on a NixOS session.";
   };
 
   "systemd/user.conf.d/20-omarchy-nofile.conf" = {
@@ -321,6 +438,12 @@
   "tmpfiles.d/omarchy-nopasswd-sudo.conf" = {
     class = "covered";
     reason = "Reaps /etc/sudoers.d/99-omarchy-nopasswd-* at boot so a temporary passwordless sudo cannot outlive it. pkgs/omarchy/nix-bin/omarchy-sudo-passwordless replaces the command that writes those files with a message pointing at security.sudo, so the file this cleans up is never written.";
+  };
+
+  "tmpfiles.d/linux-modules-cleanup.conf" = {
+    class = "na";
+    edge = "only";
+    reason = "Defers kernel-modules-hook's cleanup of /usr/lib/modules/.old to systemd-tmpfiles-clean. NixOS keeps kernel modules in the store per generation, so there is no /usr/lib/modules/.old and no Arch hook to replace.";
   };
 
   "tmpfiles.d/omarchy-zswap.conf" = {

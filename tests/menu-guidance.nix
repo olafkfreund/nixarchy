@@ -50,7 +50,7 @@ pkgs.runCommand "nixarchy-menu-guidance"
     }
 
     rec=$TMPDIR/rec
-    for w in sudo pkexec nmcli tee usermod gpasswd systemctl pacman omarchy-pkg-drop rm; do
+    for w in sudo pkexec hostnamectl nmcli tee usermod gpasswd systemctl pacman omarchy-pkg-drop rm; do
       mk "$rec" "$w" 0 record
     done
     # timedatectl records only a set-*; a list answers from the pick.
@@ -87,6 +87,10 @@ pkgs.runCommand "nixarchy-menu-guidance"
     mk "$TMPDIR/s-gum" gum 0
     run_case "dns Cloudflare" "$TMPDIR/s-gum" out 'networking.nameservers' omarchy-dns Cloudflare
     run_case "dns Custom" "$TMPDIR/s-gum" out 'networking.nameservers' omarchy-dns Custom
+    # edge-only: quattro efcf615 added Setup > Network > Hostname.
+    if [ -e "$bin/omarchy-setup-hostname" ]; then
+      run_case "setup hostname" "$TMPDIR/s-gum" out 'networking.hostName' omarchy-setup-hostname workshop
+    fi
 
     mk "$TMPDIR/s-sd-set" gum 0
     mk "$TMPDIR/s-sd-set" omarchy-sudo-docker 0
@@ -99,7 +103,7 @@ pkgs.runCommand "nixarchy-menu-guidance"
 
     mk "$TMPDIR/s-fp" gum 0
     mk "$TMPDIR/s-fp" omarchy-hw-fingerprint 0
-    run_case "setup fingerprint, fprintd off" "$TMPDIR/s-fp" out 'Enable the reader first' omarchy-setup-security-fingerprint
+    run_case "setup fingerprint, fprintd off" "$TMPDIR/s-fp" out 'Enable the reader first' omarchy-setup-security-fingerprint --terminal
 
     # The opposite: with fprintd on, the guard must let the script reach enrollment.
     mk "$TMPDIR/s-fp-on" gum 0
@@ -107,7 +111,7 @@ pkgs.runCommand "nixarchy-menu-guidance"
     mk "$TMPDIR/s-fp-on" fprintd-enroll 0
     : > "$writes"
     export PATH=$TMPDIR/s-fp-on:$rec:$bin:$base
-    bash "$bin/omarchy-setup-security-fingerprint" > "$TMPDIR/out" 2>&1 </dev/null || true
+    bash "$bin/omarchy-setup-security-fingerprint" --terminal > "$TMPDIR/out" 2>&1 </dev/null || true
     if grep -qx 'sudo fprintd-enroll tester' "$writes"; then
       ok+=("setup fingerprint, fprintd on: reached sudo fprintd-enroll tester")
     else

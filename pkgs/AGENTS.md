@@ -92,6 +92,17 @@ glyph is three bytes of UTF-8, and the sandbox's locale is C, so `awk
 length()` and `wc -c` read an 87-column banner as roughly 250. Count
 characters (`len()` in Python with `encoding="utf-8"`).
 
+**A clean `bash -n` on the phase proves nothing about one `--replace-fail`'s
+quoting.** In #1793, a multi-line `--replace-fail "$(printf '%s\n' '…' '…')"`
+lost the `'` that closed its last line. A `'` further down the phase closed it
+instead, so the extracted `installPhase` passed `bash -n`. The build then
+failed on a *different* substitution, whose pattern had swallowed every
+command in between. To see what a substitution really receives, put its lines
+after `substituteInPlace() { for a in "$@"; do printf '[%s]\n' "$a"; done; }`
+and run them. Each argument prints in brackets, and a misplaced quote is
+visible at once. Extract the phase with `nix derivation show <drv> | jq -r
+'.derivations // . | to_entries[0].value.env.installPhase'`.
+
 ## `writeShellApplication`'s bash has no `compgen`, and an `if` hides that
 
 The shell it wraps is nixpkgs' plain `bash`, not `bashInteractive`, and that
@@ -110,6 +121,17 @@ Everything is patched with `--replace-fail`, so an Omarchy bump that rewords a
 line a patch depends on **fails the build** rather than quietly restoring Arch
 instructions. Only `SKILL.md` and `contributing.md` are replaced outright, where
 the guidance is wrong here rather than merely misspelt.
+
+**`--replace-fail` cannot see that it matched your own text.** One
+`substituteInPlace` call applies its replacements in order, to the file as the
+earlier ones left it. So a pattern can also match text an earlier replacement in
+the same call inserted. In `quattro-user-files.sh`, the agent-instructions guard
+inserts `exec omarchy-launch-config-editor` and later targets that same line.
+When quattro renamed upstream's call to `omarchy-launch-editor` (#1823), the
+later pattern kept matching our inserted copy. The build stayed green and
+upstream's real `--edit` exec went unguarded; only `checks.agent-instructions`
+saw it. When a later pattern repeats an earlier insertion, anchor it on
+upstream-only context, or check the built file for the line you meant to change.
 
 CI additionally asserts that no skill code block contains a `pacman`, `yay`,
 `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch on
@@ -891,6 +913,13 @@ The whole function is the needle, so a reworded one fails
 this build.
 printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
 
+Quattro (from 2026-11, edge's pin since #1736) fixed it upstream
+another way: the IPC's rescanPlugins is now an in-place rescan
+that reloads nothing, and mid-scan it sets pluginRescanPending,
+not pluginReloadPending, so it cannot discard a reload. The
+block now applies only where the old function is present
+(main's v4.5.0 tag), and goes when main moves past it.
+
 ## A layout-only shell.json save rebuilt every plugin and froze the bar
 
 A layout-only shell.json save -- moving one bar icon --
@@ -1422,8 +1451,17 @@ the file because nothing in 4.5 reads it.
   had two), so `1791968925` is `partial` in the ledger.
 
 Every migration that touches a user's files has a decision in
-`data/user-migrations.nix`. **A bump that brings new migrations:** run
-`checks.user-migrations-ledger` and add a row for each id it names.
+`data/user-migrations.nix`: the triage lists a migration whose text matches
+`HOME|XDG_CONFIG|\.config|shell\.json|~/`, or that names an `omarchy-*` command
+whose row in `data/user-migration-commands.nix` has `follow = true` (one level
+of calls; #1763). **A bump that brings new migrations or commands:** run
+`checks.user-migrations-ledger` and add a row for each id or command it names;
+a command row says whether the command writes a user's own files (`follow`),
+and its `edge` marker says on which pin the row is needed. It still cannot see
+writes through a sourced helper, through `$OMARCHY_PATH` scripts that are not
+`omarchy-*` commands, through tools such as `xdg-settings`, `xdg-mime`,
+`gsettings`, or `systemctl --user` without naming a home path, and calls more
+than one level deep.
 `checks.user-migrations` compares the port with upstream's own scripts run on
 the same fixtures, through a stub of the shell's IPC; `checks.plugin` runs it
 against the real shell.
@@ -1608,6 +1646,41 @@ into a sourced `quattro-user-files.sh`, which the phase's size budget forced
   build with `syntax error near unexpected token '('`. Strip the quotes from
   the value first (`tr -d \\047`) rather than matching them.
 
+<a id="chrome-s-policy-on-edge-1764"></a>
+## Chrome's policy on edge (#1764)
+
+On edge (`quattro-user-files.sh`, `passthru.chromeExtensionsPolicy`), the
+package rewrites `file:///usr/share/omarchy/` to `file://$out/share/omarchy/`
+in `default/chromium/policies/chrome-extensions.json` and
+`default/chromium/crx/updates.xml`, and `modules/nixos.nix` installs
+`opt/chrome/policies/managed/{omarchy,omarchy-extensions}.json` from the
+package.
+
+Each of our policy files — Chromium's `omarchy.json` included — is filtered
+with `jq` to drop every policy name the user sets in
+`programs.chromium.extraOpts`, because Chrome and Chromium treat a policy set
+to different values across two managed policy files as undefined.
+The filter applies only when `programs.chromium.enable` is true; a user's own
+`ExtensionSettings` in `extraOpts` replaces ours wholesale, removing Omarchy's
+three extensions, because two managed files cannot both set a dictionary policy.
+
+**Not shipped, and why:**
+
+- `chrome-flags.conf`: nixpkgs' `google-chrome` wrapper never reads it, adds
+  its own Ozone flags, and Chrome ignores `--load-extension`.
+- Migration `1794391847` (1Password): nixarchy's 1Password installer names
+  `programs.chromium.extensions` instead.
+- `omarchy-dev-pack-chrome-extensions`: a maintainer tool for packing the CRXs
+  upstream.
+
+**`update_url` serves the first install only.** Upstream ships
+`chrome-extensions.json` without `override_update_url`, so once Chrome installs
+a bundled CRX from the store, a newer CRX in a later release does not reach
+that installed copy. That is an upstream candidate and is not patched here.
+
+Chrome itself is unfree, so no check builds or runs it; `checks.chrome-policy`
+and `checks.coexistence` verify the packaged files, CRXs and `/etc` entries.
+
 ## nix-update is patched for the updaters only (#1851)
 
 `nix-update-archive.patch` makes `get_flake_store_path` run `nix flake archive`
@@ -1616,3 +1689,44 @@ without writing it. REPORTED upstream as Mic92/nix-update#693; a carried patch
 until that lands, then delete it and the `newScope` in `nixarchy-apps`. Only
 `nixarchy-apps` is built with it: `final.nix-update` is untouched. Why:
 `docs/internals/flake.md#nix-run-update-rewrites-the-pinned-versions-and-ha`.
+
+<a id="quattro-script-ports"></a>
+## Script patches that span three pins (#1896)
+
+`pkgs/omarchy/quattro-script-ports.sh` patches the fingerprint setup, first-run
+`wifi.sh` and the local model runner. It is sourced, not inlined, because the
+install phase sits at its size budget (`checks.install-phase-budget`).
+
+Each patch must hold under three pins at once: `main`'s tag, the current
+quattro, and an older quattro that edge falls back to when a candidate is
+refused. So a patch picks its branch by the text it finds, and every branch
+uses `--replace-fail`. The one exception is `wifi.sh`, whose update probe
+quattro removed: with no probe there is nothing to patch, and any other
+`checkupdates` line fails the build. The runner loop takes whichever of
+`omarchy-models` (quattro ebd2974+) and `omarchy-agent-local` (older edge)
+is shipped; the tag ships neither.
+
+A guard of the form `[ -e old-name ] && patch` is what let the rename through
+silently: at ebd2974 the old file was gone, the patch skipped, and only the
+bin ledger noticed `omarchy-models` still calling pacman.
+
+`omarchy-system-sddm-recover` (#1905) names `sddm.service`, which NixOS does
+not have: SDDM runs as `display-manager.service`, so the script would exit 0 on
+every resume. The patch renames both calls. The tag and edge before ebd2974 ship
+neither the script nor its sleep drop-ins; drop-ins without the script fail the
+build, since that is a rename the hook in `modules/nixos.nix` would miss.
+
+## The keybindings menu drops undescribed submap binds
+
+`omarchy-menu-keybindings` lists every bind Hyprland reports. A hint plugin
+registers about 2,800 undescribed binds in non-default submaps, and the list
+then exceeds the 128 KiB single-argument limit that `omarchy-menu-select`
+hands to perl and omarchy-shell, so the menu never opens. The package drops a
+bind that is in a non-default submap and has no description.
+
+Because the output changes, the script's cache tag is rewritten to
+`v<N>-submaps`, so a cache written by the unpatched script is not reused. The
+tag moves with upstream (v19 on the tag pin, v22 on quattro 9b695d7). The
+build fails with "cache tag moved" when no listed version matched, so a new
+tag has to be added to the loop rather than silently missed.
+

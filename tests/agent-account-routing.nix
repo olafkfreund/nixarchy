@@ -48,7 +48,7 @@ pkgs.runCommand "nixarchy-agent-account-routing"
     got=$(claude 2>err) || bad "case 2: claude exited $?: $(cat err)"
     test "$got" = "CFG=unset PIN=" || bad "case 2: got '$got'"
 
-    # Case 1: the selected account pins the typed command and its children.
+    # Case 1: the typed command uses the selected account, whether pinned or seated.
     mkdir -p "$HOME/.claude"
     pending=$(omarchy-agent-account-state begin claude work)
     printf '%s\n' '{"oauthAccount":{"accountUuid":"u-1","emailAddress":"work@example.org"}}' > "$pending/.claude.json"
@@ -56,14 +56,20 @@ pkgs.runCommand "nixarchy-agent-account-routing"
     omarchy-agent-account-state register claude work "$pending" >/dev/null || bad 'case 1: register failed'
     omarchy-agent-account-use claude work >/dev/null || bad 'case 1: use failed'
     want=$(omarchy-agent-account-home claude)
-    test -n "$want" || bad 'case 1: the selected account has no home'
+    if [ -z "$want" ]; then
+      # Quattro seats Claude's selected login in ~/.claude for running sessions.
+      jq -e '.oauthAccount.accountUuid == "u-1"' "$HOME/.claude.json" >/dev/null || bad 'case 1: selected login was not seated'
+      expected='CFG=unset PIN='
+    else
+      expected="CFG=$want PIN=$want"
+    fi
     got=$(claude 2>err) || bad "case 1: claude exited $?: $(cat err)"
-    test "$got" = "CFG=$want PIN=$want" || bad "case 1: got '$got'"
+    test "$got" = "$expected" || bad "case 1: got '$got'"
 
     # Case 5: the launcher follows the selected account.
     got=$(env -u CLAUDE_CONFIG_DIR -u OMARCHY_AGENT_CLAUDE_HOME omarchy-agent --inline 2>err) \
       || bad "case 5: omarchy-agent exited $?: $(cat err)"
-    test "$got" = "CFG=$want PIN=$want" || bad "case 5: got '$got'"
+    test "$got" = "$expected" || bad "case 5: got '$got'"
 
     # Case 3: a person's own rc can put their command ahead of dispatch.
     got=$(PATH=$base:$PWD/withclaude bash -c 'source "$OMARCHY_PATH/default/bash/rc"; PATH="$PWD/user:$PATH"; claude' 2>err) \
@@ -88,16 +94,17 @@ pkgs.runCommand "nixarchy-agent-account-routing"
     chmod +x old/agent-dispatch/claude
     got=$(PATH=$PWD/old/agent-dispatch:$D:$base:$PWD/withclaude timeout 10 "$D/claude" 2>err) \
       || bad "case 7: dispatch exited $?: $(cat err)"
-    test "$got" = "CFG=$want PIN=$want" || bad "case 7: got '$got'"
+    test "$got" = "$expected" || bad "case 7: got '$got'"
 
     # Case 8: stale mise command wrappers still lose to dispatch after config removal.
     export D MISE_BIN=${pkgs.mise}/bin/mise
-    cp ${omarchy}/share/omarchy/etc/mise/conf.d/omarchy-agent-accounts.toml "$MISE_SYSTEM_CONFIG_DIR/conf.d/"
+    printf '%s\n' '[wrappers.claude]' 'command = "omarchy-agent-account-exec"' 'args = ["claude"]' \
+      > "$MISE_SYSTEM_CONFIG_DIR/conf.d/omarchy-agent-accounts.toml"
     ${pkgs.mise}/bin/mise reshim || bad 'case 8: reshim failed'
     rm "$MISE_SYSTEM_CONFIG_DIR/conf.d/omarchy-agent-accounts.toml"
     got=$(PATH=$base:$PWD/withclaude bash -c 'eval "$(''${MISE_BIN} activate bash)"; PATH="$D:$PATH"; claude' 2>err) \
       || bad "case 8: shell exited $?: $(cat err)"
-    test "$got" = "CFG=$want PIN=$want" || bad "case 8: got '$got'"
+    test "$got" = "$expected" || bad "case 8: got '$got'"
 
     # Case 9: account-add refuses a missing CLI, including its events mode.
     rc=0; PATH=$D:$base omarchy-agent-account-add --events claude >out 2>err || rc=$?
@@ -115,7 +122,12 @@ pkgs.runCommand "nixarchy-agent-account-routing"
     rm -f login
     PATH=$D:$base:$PWD/withclaude omarchy-agent-account-add claude >out 2>err || true
     test -f login || bad 'case 11: login did not reach the CLI'
-    grep -q '^CFG=unset PIN=$' login || bad "case 11: login inherited a pin: $(cat login)"
+    if [ -z "$want" ]; then
+      grep -q "^CFG=$XDG_STATE_HOME/omarchy/agents/accounts/claude/.pending/login-[^ ]* PIN=unset$" login \
+        || bad "case 11: login did not use a fresh pending home: $(cat login)"
+    else
+      grep -q '^CFG=unset PIN=$' login || bad "case 11: login inherited a pin: $(cat login)"
+    fi
 
     # Case 12: the launcher carries dispatch even if its caller did not.
     mkdir -p "$HOME/.config/omarchy/defaults"

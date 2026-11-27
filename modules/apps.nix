@@ -823,12 +823,6 @@ let
         "setup.security.passwordless-sudo" = {
           when = "false";
         };
-        # quattro's Setup > Direct Boot writes a Limine entry for EFI direct
-        # boot. NixOS owns the bootloader (boot.loader.*), so it is hidden (#1278).
-        "setup.direct-boot" = {
-          when = "false";
-        };
-
         # The Arch wiki is the wrong manual on a NixOS host. All three wear
         # nf-linux-nixos (U+F1105), the snowflake -- the icon and label are
         # stated explicitly because the generator only carries upstream's
@@ -890,6 +884,10 @@ let
           action = "omarchy-launch-floating-terminal-with-presentation 'omarchy-plugin-add'";
           description = "Install a plugin from its Git URL, without the audit";
         };
+      }
+      // lib.optionalAttrs (!lib.hasPrefix "edge-" cfg.package.version) {
+        # The tag still has Direct Boot; hide its Arch bootloader action.
+        "setup.direct-boot".when = "false";
       }
       // lib.optionalAttrs devenvEnabled {
         # The Dev environments panel (#802). The helper rather than a bare
@@ -1025,13 +1023,6 @@ let
           action = "true";
           description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";
         };
-        "setup.direct-boot" = {
-          # quattro's `when` tests a path naming omarchy-dgx-spark, which checks.options reads as a missing command.
-          when = "true";
-          disabled = "true";
-          action = "true";
-          description = "Not available on NixOS — needs efibootmgr and an Omarchy UKI. NixOS writes its own boot entries on every rebuild";
-        };
         "install.ai.hermes" = {
           disabled = "true";
           action = "true";
@@ -1071,6 +1062,15 @@ let
       }
       # Snapshots need the `home` snapper config omarchy-snapshot drives;
       # only the installer sets one, so Mode A gets no rows that only refuse (#1303).
+      // lib.optionalAttrs (cfg.enable && !lib.hasPrefix "edge-" cfg.package.version) {
+        # Upstream removed Direct Boot on edge; the tag still needs its unsafe action dimmed.
+        "setup.direct-boot" = {
+          when = "true";
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — needs efibootmgr and an Omarchy UKI. NixOS writes its own boot entries on every rebuild";
+        };
+      }
       // lib.optionalAttrs (config.services.snapper.configs ? home) {
         # Explicit `parent`: MenuModel.js's default parent for this id is
         # "system.recovery.snapshot" (its own id with the last segment
@@ -1140,27 +1140,40 @@ let
             };
           }
       // lib.listToAttrs (
-        lib.mapAttrsToList (
-          name: app:
-          lib.nameValuePair app.menuId (
-            if app ? unavailable then
-              {
-                disabled = "true";
-                # summon would run upstream's action otherwise (omacom/omarchy#15742)
-                action = "true";
-                description = "Not available on NixOS — ${app.unavailable}";
-              }
-            else
-              {
-                action = "nixarchy-app-enable ${name}";
-                # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
-                disabled =
-                  "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
-                  + " || command -v ${appBinary name app} >/dev/null 2>&1";
-                description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
-              }
+        lib.mapAttrsToList
+          (
+            name: app:
+            lib.nameValuePair app.menuId (
+              # An edge-only row an older edge pin (a fallback build) may not ship yet: drop it there (#1896).
+              lib.optionalAttrs ((app.edge or null) == "only") { ifUpstream = true; }
+              // (
+                if app ? unavailable then
+                  {
+                    disabled = "true";
+                    # summon would run upstream's action otherwise (omacom/omarchy#15742)
+                    action = "true";
+                    description = "Not available on NixOS — ${app.unavailable}";
+                  }
+                else
+                  {
+                    action = "nixarchy-app-enable ${name}";
+                    # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
+                    disabled =
+                      "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
+                      + " || command -v ${appBinary name app} >/dev/null 2>&1";
+                    description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
+                  }
+              )
+            )
           )
-        ) (lib.filterAttrs (_: a: a ? menuId) apps)
+          (
+            # A row marked edge = "only"/"absent" names a menu row only one pin has (#1752).
+            lib.filterAttrs (
+              _: a:
+              a ? menuId
+              && (a.edge or null) != (if lib.hasPrefix "edge-" cfg.package.version then "absent" else "only")
+            ) apps
+          )
       )
       # Why: modules/AGENTS.md#the-services-catalogue-as-menu-rows
       // lib.listToAttrs (
@@ -1248,7 +1261,27 @@ let
 
         upstream = json.loads(strip_jsonc(open(upstream_path).read()))
         overrides = json.load(open(spec_path))
+        optional = {k for k, v in overrides.items() if v.pop("ifUpstream", False)}
         arch_map = json.load(open(archmap_path))
+
+        # Quattro split AI rows into Desktop and CLI; keep the tag's IDs in the source data.
+        if "install.ai.desktop.amp" in upstream:
+            renamed = {
+                "install.ai.amp": "install.ai.desktop.amp",
+                "install.ai.chatgpt": "install.ai.desktop.chatgpt",
+                "install.ai.grok-bot": "install.ai.desktop.grok-bot",
+                "install.ai.hermes": "install.ai.desktop.hermes",
+                "install.ai.lm-studio": "install.ai.desktop.lm-studio",
+                "install.ai.ollama": "install.ai.cli.ollama",
+                "install.ai.openclaw": "install.ai.desktop.openclaw",
+                "install.ai.perplexity": "install.ai.desktop.perplexity",
+                "install.ai.t3-code": "install.ai.desktop.t3-code",
+                "remove.ai.hermes": "remove.ai.desktop.hermes",
+                "remove.ai.ollama": "remove.ai.cli.ollama",
+                "remove.ai.perplexity": "remove.ai.desktop.perplexity",
+            }
+            overrides = {renamed.get(k, k): v for k, v in overrides.items()}
+            optional = {renamed.get(k, k) for k in optional}
 
         # Upstream's `omarchy-pkg-*` guards, which the menu answers from the PATH (#1301).
         PKG_GUARD = re.compile(r"\bomarchy-pkg-(present|missing)\b")
@@ -1346,6 +1379,8 @@ let
         missing = []
         for row_id, override in overrides.items():
             base = upstream.get(row_id)
+            if base is None and row_id in optional:
+                continue
             if base is None and not {"label", "icon"} & set(override):
                 # A row we target that upstream no longer ships, and we have no
                 # name of our own for it -- worth failing on rather than
@@ -2221,7 +2256,7 @@ in
                         }; unfree=${lib.boolToString (apps.${row}.unfree or false)} ;;"
                       ) choices
                     }
-                    browser:chromium | editor:nvim)
+                    browser:chromium | editor:nvim | editor:plain)
                       echo "nixarchy: $selection already ships in the session" >&2
                       exit 1
                       ;;

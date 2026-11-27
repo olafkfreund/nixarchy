@@ -39,7 +39,7 @@ mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
 symlinked into `~/.claude/skills`, `~/.agents/skills` and
 `~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex
 reads `~/.agents/skills` too and would list every skill twice — but ships
-eighteen skills instead of upstream's few, and eight Nix skills beside them:
+twenty-two skills instead of upstream's few, and eight Nix skills beside them:
 
 | skill | owns |
 |---|---|
@@ -58,8 +58,13 @@ eighteen skills instead of upstream's few, and eight Nix skills beside them:
 | `nixos-gaming` | Steam and Proton, the 32-bit graphics stack, controllers, gamescope, RetroArch and the launchers |
 | `nixos-fleet` | one flake and several machines: the `hosts/<name>/` layout, sharing without coupling, pulling on a timer, deploying with `--target-host` |
 | `devenv` | per-project environments: `devenv.nix`, the lockfile, and whether a tool belongs to the project or the machine |
-| `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
+| `omarchy-diagnose-crash` / `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
 | `omarchy-app` | scaffolding a C++ and Qt Quick desktop app that follows the Omarchy theme (upstream's, new in 4.5; nixarchy rewrites its packaging half so the app is built with Nix: `nix develop`, `nix run`, and a flake you add to your configuration) |
+| `omarchy-make-app` | `omarchy-app` under its quattro name, with the same Nix rewrite of its packaging half |
+| `omarchy-make-game` | a browser game or 3D toy as one HTML file with three.js, played from Game Vibes (upstream's, new in quattro; was `web-game`) |
+| `omarchy-make-plugin` | a shell plugin in QML under `~/.config/omarchy/plugins` (upstream's, new in quattro) |
+| `omarchy-make-theme` | a theme's palette and wallpapers under `~/.config/omarchy/themes` (upstream's, new in quattro) |
+| `omarchy-contribute` | reporting a bug or sending a fix, routed to Nixarchy for NixOS problems and to Omarchy otherwise (upstream's, new in quattro) |
 | `ai-mirror` | testing an app or driving a desktop: asks whether to use a disposable microVM (`nixarchy-desktop`) or the real desktop, then runs that path, with `mirror-vm` for the guest |
 
 Each is written against the modules on the disk rather than from memory. That is
@@ -184,7 +189,7 @@ a rebuild instead, and it ranks the routes: `nixarchy-app-enable <id>` then
 `nixos-rebuild switch` for anything else; `nix shell nixpkgs#<pkg>` for a
 throwaway try that is not meant to be a change to the machine.
 
-`diagnose-crash` keeps its name because `omarchy-agent-crash` reads that path
+`omarchy-diagnose-crash` (`diagnose-crash` on the tag) keeps upstream's name because `omarchy-agent-crash` reads that path
 literally. Its body is upstream's with three corrections: there is no public
 debuginfod serving nixpkgs builds, so symbols only resolve if the machine runs
 `nixseparatedebuginfod`; "what changed recently" is answered by
@@ -272,9 +277,23 @@ becomes `ExtensionInstallForcelist`, it force-installs the extension so the
 browser will not let you remove it; installing from the Web Store is the
 removable route.
 
+On edge, if you install Chrome, Omarchy's three extensions (`copy-url`,
+`yt-dlp` and `whatsapp-slim`) and its browser policy are installed by managed
+policy too, beside any `programs.chromium.extensions` you declare, and any
+policy you set in `programs.chromium.extraOpts` wins over ours.
+
 Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.
+
+On edge, the picker moved from **Setup ▸ Default ▸ Agent** to **Agent ▸
+Harness** (a root **Agent** menu beside **Make something**, with **Harness**
+and **Instructions**), and `Super + Ctrl + X` opens the agents panel. Picking a
+default agent on edge also runs `omarchy agent instructions` to link that
+harness's global instructions file to the shared `~/.agents/AGENTS.md`. A file
+Home Manager manages, a harness file that is already a symlink, and a file
+inside a Home Manager-linked directory are left alone; a regular file with
+different rules is kept as `<file>.bak`.
 
 ## Nixi, on SUPER + H
 

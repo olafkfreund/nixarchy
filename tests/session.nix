@@ -6,6 +6,45 @@
   doctor,
 }:
 let
+  omarchyPkg = (pkgs.extend inputs.self.overlays.default).omarchy;
+  # The agents panel tries icon candidates in turn and logs each it cannot open.
+  # One upstream never shipped is its fallback, not a file this port lost (#1896).
+  agentAssetsDir = "${inputs.omarchy}/shell/plugins/agents/assets";
+  agentAssets = pkgs.lib.optionals (builtins.pathExists agentAssetsDir) (
+    builtins.attrNames (builtins.readDir agentAssetsDir)
+  );
+  portalProbe = pkgs.writeText "portal-probe.py" ''
+    import sys
+    from gi.repository import Gio, GLib
+
+    connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    token = "nixarchy1793"
+    sender = connection.get_unique_name()[1:].replace(".", "_")
+    request = "/org/freedesktop/portal/desktop/request/" + sender + "/" + token
+    loop = GLib.MainLoop()
+    result = []
+
+    def response(_connection, _sender, _path, _interface, _signal, parameters):
+        result.append(parameters.unpack()[0])
+        loop.quit()
+
+    connection.signal_subscribe(
+        "org.freedesktop.portal.Desktop", "org.freedesktop.portal.Request",
+        "Response", request, None, Gio.DBusSignalFlags.NONE, response)
+    connection.call_sync(
+        "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+        "org.freedesktop.portal.FileChooser", "OpenFile",
+        GLib.Variant("(ssa{sv})", ("", "nixarchy 1793 probe",
+                                    {"handle_token": GLib.Variant("s", token)})),
+        None, Gio.DBusCallFlags.NONE, -1, None)
+    print("requested", flush=True)
+    GLib.timeout_add_seconds(120, loop.quit)
+    loop.run()
+    if not result:
+        print("timeout", flush=True)
+        sys.exit(2)
+    print("response " + str(result[0]), flush=True)
+  '';
   # ai-mirror's MCP requests for the #773 block at the end of the script, one
   # JSON-RPC message per line, as the server reads them.
   aimMsg =
@@ -565,6 +604,59 @@ pkgs.testers.runNixOSTest {
     # still painting, the keystrokes went nowhere, and the login never
     # happened.
     machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")
+
+    # Quattro's after-sleep SDDM recovery (#1905), run the way systemd runs it,
+    # while the greeter holds seat0: it must decide to leave SDDM alone. A
+    # command its wrapper cannot resolve, or a wrong seat test, restarts SDDM,
+    # which on a real machine ends the desktop session on every resume.
+    with subtest("sleep units recover a stranded greeter (#1905)"):
+        recover_units = ["systemd-suspend", "systemd-hibernate",
+                         "systemd-hybrid-sleep", "systemd-suspend-then-hibernate"]
+        recover_shipped = machine.succeed(
+            "test -e /run/current-system/sw/share/omarchy/bin/omarchy-system-sddm-recover"
+            " && echo yes || echo no").strip() == "yes"
+        recover_paths = set()
+        for u in recover_units:
+            show = machine.succeed(f"systemctl show -p ExecStopPost --value {u}.service")
+            entries = [e for e in show.split("}") if "omarchy-sddm-recover" in e]
+            if not recover_shipped:
+                assert not entries, f"{u} runs the SDDM recovery on a pin without the script: {show}"
+                continue
+            assert entries, f"{u} does not run the SDDM recovery after sleep: {show!r}"
+            assert "ignore_errors=yes" in entries[0], (
+                f"{u}'s SDDM recovery lost its '-' prefix, so its failure fails the sleep unit: {entries[0]}")
+            recover_paths.add(entries[0].split("path=", 1)[1].split()[0])
+        if recover_shipped:
+            assert len(recover_paths) == 1, f"the sleep units run different hooks: {recover_paths}"
+            hook = recover_paths.pop()
+            # Reach the seat decision, not one of the script's early exits.
+            machine.succeed("systemctl is-active --quiet display-manager.service")
+            # The hook's own verdict on real loginctl output must be "seated" (#1908):
+            # an unreadable list also leaves SDDM alone, and would pass below unseen.
+            verdict = machine.succeed(
+                "s=$(loginctl list-sessions --no-legend) && "
+                "awk 'NF == 0 { next } NF < 4 || $2 !~ /^[0-9]+$/ || $4 !~ /^(seat|-$)/ { bad = 1 } "
+                "$4 ~ /^seat/ { seat = 1 } END { print (bad ? \"unreadable\" : seat ? \"seated\" : \"seatless\") }' "
+                "<<<\"$s\"").strip()
+            assert verdict == "seated", (
+                f"the recovery probe reads this systemd's loginctl as {verdict}: "
+                + machine.succeed("loginctl list-sessions --no-legend"))
+            before = machine.succeed(
+                "systemctl show -p InvocationID --value display-manager.service").strip()
+            out = machine.succeed(
+                f"rc=0; systemd-run --quiet --wait --pipe --collect {hook} 2>/tmp/recover.err || rc=$?; "
+                "echo rc=$rc; cat /tmp/recover.err")
+            assert out.strip() == "rc=0", f"the SDDM recovery hook did not run cleanly: {out}"
+            # The restart is queued with --no-block, after the hook has exited.
+            machine.wait_until_succeeds(
+                "j=$(systemctl list-jobs --no-legend) && [[ $j != *display-manager.service* ]]",
+                timeout=30)
+            after = machine.succeed(
+                "systemctl show -p InvocationID --value display-manager.service").strip()
+            machine.succeed("systemctl is-active --quiet display-manager.service")
+            assert before == after, (
+                "the SDDM recovery restarted the display manager while the greeter held "
+                f"seat0 ({before} -> {after}); after a real resume that ends the session")
 
     # A blank greeter would still accept the password and log in, so assert
     # something was actually drawn. This theme OCRs badly -- a few characters
@@ -1569,10 +1661,15 @@ pkgs.testers.runNixOSTest {
     # The names matter as much as the links: an agent keys on the directory
     # name, so `omarchy` still being here would mean the rename never reached
     # the only place it is read.
+    # quattro e4635a4 renamed diagnose-crash to omarchy-diagnose-crash; take the
+    # name from the script that opens it, so the link it needs is the one asserted.
+    crash_skill = machine.succeed(
+        "grep -oE 'agents/skills/(omarchy-)?diagnose-crash/SKILL.md' "
+        "$(readlink -f /run/current-system/sw/bin/omarchy-agent-crash)").split("/")[2]
     skills = ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
               "nixos-services", "nixos-secrets", "nixos-performance",
               "nixos-security", "nixos-doctor", "nixos-config-repo",
-              "devenv", "diagnose-crash", "ai-mirror"]
+              "devenv", crash_skill, "ai-mirror"]
     for home in [".agents/skills", ".claude/skills", ".pi/agent/skills"]:
         for skill in skills:
             machine.succeed(f"test -L /home/omarchy/{home}/{skill}")
@@ -1727,10 +1824,8 @@ pkgs.testers.runNixOSTest {
     print("config-repo nudge marks itself done on an already-published config")
 
     # bin/omarchy-agent-crash reads this path literally, so the rename must
-    # never reach it.
-    machine.succeed(
-        "grep -q 'agents/skills/diagnose-crash/SKILL.md' "
-        "$(readlink -f /run/current-system/sw/bin/omarchy-agent-crash)")
+    # never reach it: the skill it names has to be one the agents are given.
+    machine.succeed(f"test -f /home/omarchy/.agents/skills/{crash_skill}/SKILL.md")
 
     # btop.conf asks for a theme literally named "current"; without the link
     # btop starts with no theme at all.
@@ -2214,14 +2309,115 @@ pkgs.testers.runNixOSTest {
         machine.fail(user % f"command -v {app}")
     # The new apps claim these types (#1612); adding them must not move the handler.
     # Markdown is not asserted: upstream sets no default for it.
-    for mime, want in [("application/pdf", "org.gnome.Evince.desktop"),
-                       ("video/mp4", "mpv.desktop"),
-                       ("text/plain", "nvim.desktop")]:
+    mimes = [("application/pdf", "${omarchyPkg.passthru.pdfDesktop}"),
+             ("video/mp4", "${
+               if (omarchyPkg.passthru.hasOmaview or false) then "omaview.desktop" else "mpv.desktop"
+             }"),
+             # From hasPlain, not editorDesktop: the probe must not share the value it tests.
+             ("text/plain", "${
+               if omarchyPkg.passthru.hasPlain then "plain.desktop" else "nvim.desktop"
+             }")]
+    if ${if omarchyPkg.passthru.hasFiles then "True" else "False"}:
+        mimes.append(("inode/directory", "folio.desktop"))
+    for mime, want in mimes:
         got = machine.succeed(user % (
             "XDG_CURRENT_DESKTOP=Hyprland "
             "XDG_DATA_DIRS=/run/current-system/sw/share:/etc/profiles/per-user/omarchy/share "
             f"xdg-mime query default {mime}")).strip()
         assert got == want, f"{mime} opens with {got!r}, not {want}"
+    # Files and Plain, through the launchers the bindings use (#1750). A fresh
+    # home has its ported migrations marked done, so 1794341736 writes no
+    # editor state and omarchy-launch-editor resolves upstream's plain.
+    if ${if omarchyPkg.passthru.hasPlain then "True" else "False"}:
+        machine.wait_until_succeeds(
+            "test -e /home/omarchy/.local/state/omarchy/migrations/1794341736.sh", timeout=120)
+        machine.fail("test -e /home/omarchy/.local/state/omarchy/defaults/editor")
+    for flag, launcher, cls in [
+            (${
+              if omarchyPkg.passthru.hasFiles then "True" else "False"
+            }, "omarchy-launch-files", "folio"),
+            (${
+              if omarchyPkg.passthru.hasPlain then "True" else "False"
+            }, "omarchy-launch-editor", "plain")]:
+        if not flag:
+            continue
+        machine.succeed(
+            "cat > /tmp/launch-" + cls + ".sh <<'PROBE_EOF'\n"
+            "export XDG_RUNTIME_DIR=/run/user/1000\n"
+            "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+            f"hyprctl dispatch 'hl.dsp.exec_cmd(\"{launcher} 2>/tmp/launch-{cls}.err\")' "
+            f"> /tmp/launch-{cls}.txt 2>&1 </dev/null\n"
+            "PROBE_EOF")
+        machine.execute(f"su omarchy -c 'bash /tmp/launch-{cls}.sh'")
+        reply = machine.execute(f"cat /tmp/launch-{cls}.txt")[1].strip()
+        assert reply == "ok", f"hyprctl dispatch did not accept {launcher}: {reply!r}"
+        clients = (
+            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+            " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+            f" hyprctl clients -j' > /tmp/clients-{cls}.json")
+        try:
+            machine.wait_until_succeeds(
+                clients + f" && ${pkgs.jq}/bin/jq -e 'any(.[]; .class == \"{cls}\")' /tmp/clients-{cls}.json",
+                timeout=60)
+        except Exception:
+            print(f"{launcher} stderr: " + machine.execute(f"cat /tmp/launch-{cls}.err")[1])
+            raise
+        pid = machine.succeed(
+            f"${pkgs.jq}/bin/jq -r 'first(.[] | select(.class == \"{cls}\") | .pid)' /tmp/clients-{cls}.json").strip()
+        machine.succeed(f"kill {pid}")
+    # Qt themes through qtengine on Omarchy builds that ship it (#1736). qtdiag
+    # runs inside Hyprland's environment: a plain su shell lacks envs.lua's
+    # QT_QPA_PLATFORMTHEME and WAYLAND_DISPLAY and would fail a working session.
+    if ${if omarchyPkg.passthru.hasQtengine then "True" else "False"}:
+        colors = "/home/omarchy/.local/state/omarchy/current/theme/qtengine.colors"
+        machine.wait_until_succeeds(f"test -s {colors}")
+        machine.succeed("touch /tmp/qtdiag.out && chmod 666 /tmp/qtdiag.out")
+        runner = "${pkgs.qt6.qttools}/bin/qtdiag > /tmp/qtdiag.out 2>&1\n"
+        dispatch = (
+            "export XDG_RUNTIME_DIR=/run/user/1000\n"
+            "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+            "hyprctl dispatch 'hl.dsp.exec_cmd(\"sh /tmp/qtdiag-run.sh\")'\n"
+        )
+        machine.succeed("cat > /tmp/qtdiag-run.sh <<'QTDIAG_EOF'\n" + runner + "QTDIAG_EOF")
+        machine.succeed("cat > /tmp/qtdiag-dispatch.sh <<'QTDIAG_EOF'\n" + dispatch + "QTDIAG_EOF")
+        machine.succeed("su omarchy -c 'bash /tmp/qtdiag-dispatch.sh'")
+        machine.wait_until_succeeds("grep -q QPalette /tmp/qtdiag.out")
+        diag = machine.succeed("cat /tmp/qtdiag.out")
+        ini = machine.succeed(f"cat {colors}")
+        want = None
+        section = ""
+        for line in ini.splitlines():
+            line = line.strip()
+            if line.startswith("["):
+                section = line
+            elif section == "[Colors:Window]" and line.startswith("BackgroundNormal="):
+                want = "".join(f"{int(v):02x}" for v in line.split("=", 1)[1].split(","))
+        # qtdiag's Theme block: "Platforms requested" is the integration's own list
+        # (hyprland,generic), not QT_QPA_PLATFORMTHEME, so it cannot show qtengine;
+        # "Styles requested" comes from the active platform theme. Roles print in enum
+        # order, WindowText before Window.
+        got = None
+        styles = available = ""
+        lines = diag.splitlines()
+        for i, line in enumerate(lines):
+            s = line.strip()
+            if s.startswith("QPalette::Window:"):
+                got = s.split("#", 1)[1].split()[0][-6:].lower()
+            elif s.startswith("Platforms requested"):
+                if i + 1 < len(lines) and lines[i + 1].strip().startswith("available"):
+                    available = lines[i + 1].split(":", 1)[1]
+            elif s.startswith("Styles requested"):
+                styles = s.split(":", 1)[1]
+        env_block = diag[diag.find("Environment"):] if "Environment" in diag else diag
+        assert "qtengine" in styles.replace(",", " ").split(), (
+            f"the active platform theme asks for styles {styles.strip()!r}, not qtengine's. Its output:\n{env_block}")
+        assert "qtengine" in available.replace(",", " ").split(), (
+            f"qtdiag found platform themes {available.strip()!r}, no qtengine. Its output:\n{env_block}")
+        assert want is not None and got == want, (
+            f"QPalette::Window is {got!r}, qtengine.colors [Colors:Window] BackgroundNormal is {want!r}. "
+            f"qtdiag's output:\n{diag}")
+        print("Qt apps take their palette from qtengine")
+
     # LC_ALL and QT_QPA_PLATFORM only on this command (pkgs/AGENTS.md: a parsed
     # tool run in the C locale warns on stdout).
     machine.succeed(user % "LC_ALL=C.UTF-8 QT_QPA_PLATFORM=offscreen hype check --help")
@@ -2376,6 +2572,9 @@ pkgs.testers.runNixOSTest {
                # quattro 1381fa0 (#1447): the launchers read XDG_DATA_DIRS the
                # same way, with the same /usr default.
                "omarchy-launch-browser", "omarchy-launch-webapp",
+               # quattro 723072a (#1776): the app grid's version list reads
+               # XDG_DATA_DIRS with the same default; its pacman -Qo fails here.
+               "omarchy-launch-versions",
                # Arch installers for apps that are mapped, excepted or absent
                # here: Claude Desktop (data/menu-exceptions.nix), its Chromium
                # extension, and the hermes/openclaw CLIs: omarchy-default-agent
@@ -2389,7 +2588,39 @@ pkgs.testers.runNixOSTest {
                # Upstream's Limine default-kernel switcher (#1423). Its one
                # caller, Update > Kernel, shows only when /usr/lib/modules/*/
                # pkgbase lists two kernels, and NixOS has no such files.
-               "omarchy-kernel"]
+               "omarchy-kernel",
+               # quattro a69b19f's Slack theme chain (#1552): the Install >
+               # Service > Slack row runs nixarchy's app toggle (data/apps.nix),
+               # so nothing reaches install-service-slack, the setup that
+               # writes the launcher override, or the launcher it points at.
+               "omarchy-install-service-slack", "omarchy-setup-slack",
+               "omarchy-launch-slack",
+               # quattro 36b70f1 (#1760): a hidden maintainer tool that repacks
+               # Omarchy's own Chrome CRXs with keys from Omarchy's 1Password
+               # vault. No menu row or user path reaches it; Chrome's extras
+               # are a follow-up to #1760.
+               "omarchy-dev-pack-chrome-extensions",
+               # quattro (#1823): writes the Snapdragon UKI's device-tree list,
+               # defaulting to the aarch64 systemd-stub-omarchy under /usr. Its
+               # callers are the Arch Qualcomm installer and a migration that
+               # exits unless omarchy-hw-aarch64-qualcomm; x86_64 reaches neither.
+               "omarchy-update-qualcomm-device-trees",
+               # quattro c6945de (#1847): the hybrid GPU switch now stages files
+               # with /usr/bin/mktemp, install and mv, and writes its sleep hook
+               # under /usr/lib/systemd/system-sleep. Both menu rows that run it
+               # are dimmed to `true` (modules/apps.nix), so nothing reaches it.
+               "omarchy-device-gpu-hybrid",
+               # quattro 2eb7eb3 (#1847): OMARCHY_PACKAGED_THEMES_PATH defaults to
+               # /usr/share/omarchy/themes, read only behind a -d test for the theme
+               # video packages, which this port skips (data/omarchy-packages.nix).
+               "omarchy-theme-set",
+               # Quattro's camera relay unit is not installed on NixOS (#1610).
+               # Its /usr/bin/v4l2-relayd fallback is unreachable without that unit.
+               "omarchy-camera-relay",
+               # quattro e3802fd (#1896): finds the terminal's .desktop file under
+               # XDG_DATA_DIRS, falling back to /usr/local/share:/usr/share only when
+               # it is unset. A NixOS session always sets it.
+               "omarchy-launch-terminal"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched
@@ -2459,6 +2690,67 @@ pkgs.testers.runNixOSTest {
         code = int(m.group(1))
         assert code not in (126, 127), f"speed test client could not run (rc={code}): {got}"
         print("the Network Speed Test reaches its packaged client")
+
+    # ---- the native screensaver maps its overlay and dismisses on a key (#1485)
+    # quattro's omarchy-launch-screensaver execs a Wayland layer-shell program.
+    # The namespace is the one its README says Omarchy's tools find it by.
+    # A property of the pin, not of the guest: v4.5.0 runs the screensaver in a
+    # terminal and ships no omarchy-screensaver, so there is no overlay to map (#1896).
+    if ${
+      if builtins.elem "omarchy-screensaver" omarchyPkg.passthru.basePackages then "True" else "False"
+    }:
+        with subtest("screensaver maps its overlay (#1485)"):
+            ns = "org.omarchy.screensaver"
+            # The screensaver exits as "already running" when any process's
+            # cmdline contains its app id, so no guest command may spell it out.
+            ns_re = "org[.]omarchy[.]screensaver"
+            layers_cmd = (
+                "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+                " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+                " hyprctl layers -j' > /tmp/screensaver-layers.json")
+            machine.succeed(layers_cmd)
+            before = machine.succeed("cat /tmp/screensaver-layers.json")
+            assert ns not in before, f"{ns} is mapped before the screensaver was launched"
+            script = (
+                "export XDG_RUNTIME_DIR=/run/user/1000\n"
+                "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+                "hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-screensaver force 2>/tmp/screensaver.err\")' "
+                "> /tmp/screensaver-dispatch.txt 2>&1 </dev/null\n"
+            )
+            machine.succeed(
+                "cat > /tmp/screensaver-probe.sh <<'PROBE_EOF'\n" + script + "PROBE_EOF")
+            machine.execute("su omarchy -c 'bash /tmp/screensaver-probe.sh'")
+            reply = machine.execute("cat /tmp/screensaver-dispatch.txt")[1].strip()
+            assert reply == "ok", f"hyprctl dispatch did not accept the launch: {reply!r}"
+            # && throughout: a failed hyprctl leaves an empty file, which must fail
+            # the poll rather than read as "the layer is gone".
+            try:
+                machine.wait_until_succeeds(
+                    layers_cmd + f" && grep -q '{ns_re}' /tmp/screensaver-layers.json", timeout=30)
+            except Exception:
+                print("screensaver stderr: " + machine.execute("cat /tmp/screensaver.err")[1])
+                raise
+            # Still running once mapped, so a client that maps and then crashes
+            # cannot pass for one that left because of the key.
+            machine.sleep(2)
+            machine.succeed("pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver")
+            # A key sent before the overlay takes keyboard focus can be lost, so
+            # it is resent; the probe fails only if none of them dismisses it.
+            for _ in range(5):
+                machine.send_key("esc")
+                gone, _ = machine.execute(
+                    layers_cmd + f" && ! grep -q '{ns_re}' /tmp/screensaver-layers.json")
+                if gone == 0:
+                    break
+                machine.sleep(2)
+            else:
+                raise Exception(f"{ns} was still mapped after five Esc presses")
+            machine.wait_until_fails(
+                "pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver", timeout=15)
+            print("the native screensaver maps its overlay and leaves on a key")
+    else:
+        print("skipped: screensaver maps its overlay (#1485): this pin ships no native "
+              "omarchy-screensaver (it runs the screensaver in a terminal)")
 
     # ---- launchers must look on PATH, not in /usr/bin ---------------------
     # Clicking Spotify offered to install Spotify. Both launchers decide
@@ -2946,9 +3238,15 @@ pkgs.testers.runNixOSTest {
     # quattro's background plugin takes `background setSuspended true`, which
     # owe tries first, so it stays enabled and hides its layer instead (#1278
     # edge). Either way the property is the same: the shell is not drawing.
-    layers = aim("hyprctl layers")
+    # Read the Background level (0) only: since quattro 9a90b5e the suspended
+    # plugin maps a clear click-catcher, also namespace omarchy-background, on
+    # the Bottom level above the video (#1485).
+    def background_drawn():
+        levels = [mon["levels"] for mon in json.loads(aim("hyprctl layers -j")).values()]
+        return any(l.get("namespace") == "omarchy-background"
+                   for lv in levels for l in lv.get("0", []))
     assert background is not None and (
-        not background["enabled"] or "namespace: omarchy-background" not in layers), (
+        not background["enabled"] or not background_drawn()), (
         f"the shell's background is still up while owe's renderer holds the "
         f"layer: {background}")
     print("owe: the shell background is off (disabled or suspended) while the renderer holds the layer")
@@ -2990,9 +3288,8 @@ pkgs.testers.runNixOSTest {
     # is the CLI the menu and the doctor both already use to read this back.
     plugins = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
     background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
-    layers = aim("hyprctl layers")
     assert background is not None and background["enabled"] and (
-        "namespace: omarchy-background" in layers), (
+        background_drawn()), (
         f"the shell's background is not back after owe handed the still "
         f"back to the shell: {background}")
     print("owe: back to the original still, renderer warm, background "
@@ -3331,6 +3628,44 @@ pkgs.testers.runNixOSTest {
         "restart (counts above) -- panelEntryModel should have kept its Loader:\n"
         + journal)
 
+    # ---- agents panel with Tailscale stopped (#1760) ------------------------
+    if ${if pkgs.lib.hasPrefix "edge-" omarchyPkg.version then "True" else "False"}:
+        tailscale_status, tailscale_output = machine.execute("systemctl is-active tailscaled")
+        assert tailscale_status != 0, (
+            "#1760: tailscaled is active; this does not test the stopped fallback: "
+            + tailscale_output)
+        print("#1760: tailscaled is inactive (" + tailscale_output.strip() + ")")
+
+        # This layer is mapped by KeyboardPanel only when the panel is visible.
+        agents_layer = (on_desktop("hyprctl layers -j")
+            + " | ${pkgs.jq}/bin/jq -e '[.. | objects | select(.namespace? == \"omarchy-keyboard-panel\")] | length > 0'")
+        machine.fail(agents_layer)
+        # What Super + Ctrl + X runs: default/hypr/helpers.lua turns { panel = ... } into this.
+        agents_since = machine.succeed(as_user("date +%s")).strip()
+        agents_marker = "nixarchy-1760-marker-" + agents_since
+        machine.succeed(as_user("logger -t omarchy-shell " + agents_marker))
+        machine.succeed(as_user("omarchy-shell shell toggle omarchy.agents"))
+        machine.wait_until_succeeds(agents_layer, timeout=30)
+        machine.sleep(2)  # Let the Tailscale fallback's asynchronous work log errors.
+        agents_journal = machine.succeed(as_user(
+            "journalctl --since=@" + agents_since
+            + " -t omarchy-shell --no-pager -o cat"))
+        assert agents_marker in agents_journal, (
+            "#1760: the agents journal window missed its marker:\n" + agents_journal)
+        upstream_assets = set(${builtins.toJSON agentAssets})
+        def upstream_fallback(line):
+            m = re.search(r"Cannot open: file://\S*/shell/plugins/agents/assets/([A-Za-z0-9._-]+)", line)
+            return bool(m) and m.group(1) not in upstream_assets
+        agents_errors = [line for line in agents_journal.splitlines()
+            if ("/agents/" in line or "/panels/tailscale/" in line)
+            and re.search(r"qml:|TypeError|ReferenceError|is not defined|Cannot", line)
+            and not upstream_fallback(line)]
+        assert not agents_errors, (
+            "#1760: agents or Tailscale QML errors:\n" + "\n".join(agents_errors))
+        machine.succeed(as_user("omarchy-shell shell toggle omarchy.agents"))
+        machine.wait_until_fails(agents_layer, timeout=30)
+        print("#1760: agents panel draws and closes with Tailscale stopped")
+
     # ---- live input methods, through compositor keys (#1614) -------------
     # export, not a prefix: a prefix reaches neither $(...), nor && and |, nor
     # the command's own $OMARCHY_PATH.
@@ -3523,6 +3858,29 @@ pkgs.testers.runNixOSTest {
         "the Fcitx5 repair hook touched an already repaired theme")
     print("#1624: the candidate window's theme has its glyphs")
     print("#1614: keyboard and input-method state restored")
+
+    # Folio's chooser opens through the portal and cancelling returns 1 (#1793).
+    if ${if (omarchyPkg.passthru.fileChooserPortal or false) then "True" else "False"}:
+        machine.succeed(desktop_user(
+            "GI_TYPELIB_PATH=${pkgs.glib.out}/lib/girepository-1.0:"
+            "${pkgs.gobject-introspection.out}/lib/girepository-1.0 "
+            "${pkgs.python3.withPackages (p: [ p.pygobject3 ])}/bin/python3 "
+            "${portalProbe} > /tmp/portal-probe.out 2>&1 < /dev/null &"))
+        folio_clients = (desktop_user("hyprctl clients -j")
+            + " | ${pkgs.jq}/bin/jq -e 'any(.[]; (.class // \"\" | ascii_downcase | contains(\"folio\")))'")
+        try:
+            machine.wait_until_succeeds(folio_clients, timeout=60)
+            folio_addr = machine.succeed(desktop_user("hyprctl clients -j")
+                + " | ${pkgs.jq}/bin/jq -r 'first(.[] | select((.class // \"\" | ascii_downcase | contains(\"folio\"))) | .address)'").strip()
+            assert re.fullmatch(r"0x[0-9a-f]+", folio_addr), (
+                "#1793: unexpected Folio window address " + repr(folio_addr))
+            # Hyprland's dispatch takes Lua; close by address as omarchy-hyprland-window-close-all does.
+            machine.succeed(desktop_user(
+                'hyprctl dispatch "hl.dsp.window.close({ window = \\"address:' + folio_addr + '\\" })"'))
+            machine.wait_until_succeeds("grep -qx 'response 1' /tmp/portal-probe.out", timeout=60)
+        except Exception as exc:
+            raise AssertionError("#1793: Folio portal chooser did not open and cancel with response 1: "
+                + machine.execute("cat /tmp/portal-probe.out")[1]) from exc
 
     # ---- power actions ask before closing windows (#1659) -----------------
     import shlex

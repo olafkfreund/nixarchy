@@ -3,12 +3,12 @@
 #
 # `omarchy-crash-watch` announces every core dump and offers an AI diagnosis;
 # clicking runs `omarchy-agent-crash`, which points the agent at the
-# diagnose-crash skill, whose `reporting.md` decides the destination. This port
-# rewrites that file so the destination can be Nixarchy.
+# diagnose-crash skill, whose reporting guide decides the destination. This
+# port rewrites that guide so the destination can be Nixarchy.
 #
-# It rewrote the prose and not the commands. `reporting.md` said "When unsure,
+# It rewrote the prose and not the commands. The guide said "When unsure,
 # file against Nixarchy" three lines above five `gh` invocations that all
-# carried `--repo basecamp/omarchy`. An agent read the rule, concluded
+# carried `--repo` for Omarchy. An agent read the rule, concluded
 # correctly, and then copied a command that filed the issue at Basecamp. The
 # narrative was ported; the executable part was not.
 #
@@ -22,19 +22,25 @@ pkgs.runCommand "nixarchy-crash-report-repo"
   }
   ''
     skills=${omarchy}/share/omarchy/default/agents/skills
-    report=$skills/diagnose-crash/reporting.md
-    test -f "$report" || { echo "no diagnose-crash/reporting.md in the built tree" >&2; exit 1; }
+    if [ -f "$skills/omarchy-contribute/SKILL.md" ]; then
+      report=$skills/omarchy-contribute/SKILL.md
+      upstream=omacom/omarchy
+    else
+      report=$skills/diagnose-crash/reporting.md
+      upstream=basecamp/omarchy
+    fi
+    test -f "$report" || { echo "no crash reporting guide in the built tree" >&2; exit 1; }
 
     fail=0
 
     # 1. Every `gh` command must target this port's repository. A `gh` line is
     #    something a reader copies; a sentence is something they interpret.
-    if bad=$(grep -n '^gh .*--repo basecamp/omarchy' "$report"); then
+    if bad=$(grep -n "^gh .*--repo $upstream" "$report"); then
       echo "" >&2
-      echo "reporting.md still files against Basecamp from a gh command:" >&2
+      echo "crash reporting guide still files against $upstream from a gh command:" >&2
       echo "$bad" >&2
       echo "" >&2
-      echo "Line 3 of that file tells the agent to file against Nixarchy when" >&2
+      echo "That guide tells the agent to file against Nixarchy when" >&2
       echo "unsure. A command that contradicts it is the one that gets run." >&2
       fail=1
     fi
@@ -43,7 +49,7 @@ pkgs.runCommand "nixarchy-crash-report-repo"
     #    by deleting the commands.
     for verb in 'gh search issues' 'gh issue list' 'gh issue view' 'gh issue comment' 'gh issue create'; do
       if ! grep -q "^$verb .*--repo olafkfreund/nixarchy" "$report"; then
-        echo "no '$verb' line targeting olafkfreund/nixarchy in reporting.md" >&2
+        echo "no '$verb' line targeting olafkfreund/nixarchy in crash reporting guide" >&2
         fail=1
       fi
     done
@@ -51,8 +57,8 @@ pkgs.runCommand "nixarchy-crash-report-repo"
     # 3. Omarchy must still be reachable as a destination: this port routes the
     #    Arch-identical half there, and a check that forbade the name outright
     #    would quietly delete that half of the rule.
-    grep -q 'basecamp/omarchy' "$report" || {
-      echo "reporting.md no longer mentions basecamp/omarchy at all." >&2
+    grep -q "$upstream" "$report" || {
+      echo "crash reporting guide no longer mentions $upstream at all." >&2
       echo "Crashes that would happen identically on Arch belong upstream;" >&2
       echo "dropping the destination loses that routing." >&2
       fail=1

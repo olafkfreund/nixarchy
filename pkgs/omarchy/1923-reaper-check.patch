@@ -95,18 +95,3 @@ diff -ru a/shell/shell.qml b/shell/shell.qml
        shell.pluginReloadPending = true
        return
      }
-@@ -1620,6 +1620,14 @@
-         Qt.callLater(shell.reloadPlugins)
-         return
-       }
-+      if (shell.pluginRegistry.lastScanSkipped) {
-+        if (shell.pluginReloading) return
-+        if (shell.pluginRescanPending) {
-+          shell.pluginRescanPending = false
-+          Qt.callLater(shell.rescanPlugins)
-+        }
-+        return
-+      }
-       shell.pluginReloading = false
-       shell._syncServices()
-       shell.syncPanelEntries()

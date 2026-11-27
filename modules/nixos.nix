@@ -11,6 +11,23 @@ let
   greeterThemeOn = cfg.displayManager && cfg.greeterThemeUser != null;
   greeterPkgs = pkgs.extend inputs.self.overlays.default;
 
+  filteredBrowserPolicy =
+    name: source:
+    pkgs.runCommand name
+      {
+        nativeBuildInputs = [ pkgs.jq ];
+        inherit source;
+        policyNames = builtins.toJSON (
+          if config.programs.chromium.enable then
+            builtins.attrNames config.programs.chromium.extraOpts
+          else
+            [ ]
+        );
+      }
+      ''
+        jq --argjson names "$policyNames" 'reduce $names[] as $name (. ; del(.[$name]))' "$source" > "$out"
+      '';
+
   # Omarchy's language registry (#1289). Absent on v4.0.4, so the option's enum
   # is empty there and `language` can only be null.
   registryFile = "${inputs.omarchy}/default/i18n/locales.json";
@@ -19,6 +36,25 @@ let
       builtins.fromJSON (builtins.readFile registryFile)
     else
       { };
+
+  # Quattro's after-sleep SDDM recovery (#1905). Absent under the tag and older
+  # edge pins. The wrapper's own PATH, not the sleep unit's: an unresolved awk
+  # reads as "no seat" and the script would restart SDDM, ending the session.
+  hasSddmRecover = builtins.pathExists "${inputs.omarchy}/bin/omarchy-system-sddm-recover";
+  sddmRecover = pkgs.writeShellApplication {
+    name = "omarchy-sddm-recover";
+    runtimeInputs = [
+      config.systemd.package
+      pkgs.gawk
+    ];
+    inheritPath = false;
+    text = ''
+      for c in systemctl loginctl awk; do
+        command -v "$c" >/dev/null || { echo "omarchy-sddm-recover: $c not found" >&2; exit 1; }
+      done
+      exec ${cfg.package}/bin/omarchy-system-sddm-recover "$@"
+    '';
+  };
 
   # Hyprland's own nixpkgs pin, so its GPU drivers share its glibc. See the
   # hardware.graphics block below.
@@ -44,8 +80,13 @@ let
   );
 
   # The rows of upstream's /etc overlay that are installed as themselves.
+  isEdge = lib.hasPrefix "edge-" cfg.package.version;
   installedEtc = lib.attrNames (
-    lib.filterAttrs (_: row: row.class == "installed") (import ../data/etc-overlay.nix)
+    lib.filterAttrs (
+      _: row:
+      row.class == "installed"
+      && !(row.edge or "" == "only" && !isEdge || row.edge or "" == "absent" && isEdge)
+    ) (import ../data/etc-overlay.nix)
   );
 
   # Every storage driver nixpkgs would put in a "supports most hardware"
@@ -981,20 +1022,26 @@ in
         let
           # Left with Omarchy 4.5. Still accepted, and do nothing, so a machine that
           # already opted out keeps evaluating.
+          # moonlight-qt and sushi leave with the pin that stops installing them.
+          pin = cfg.package.passthru;
+          hasMoonlight = pin.preinstallsMoonlight;
+          hasSushi = builtins.elem "sushi" pin.basePackages;
           retired = [
             "xournalpp"
             "obs-studio"
             "kdenlive"
-          ];
+          ]
+          ++ lib.optional (!hasMoonlight) "moonlight-qt"
+          ++ lib.optional (!hasSushi) "sushi";
           current = [
             "pinta"
             "libreoffice"
-            "moonlight-qt"
             "gnome-disk-utility"
-            "sushi"
             "cliamp"
             "gliff"
-          ];
+          ]
+          ++ lib.optional hasMoonlight "moonlight-qt"
+          ++ lib.optional hasSushi "sushi";
         in
         {
           # removeAttrs ignores a name that is not there, so a typo would leave
@@ -1442,6 +1489,7 @@ in
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.
         ++ map lib.lowPrio (lib.optional cfg.session omarchySession)
+        ++ map lib.lowPrio (lib.optional cfg.package.passthru.hasQtengine pkgs.qtengine)
         # Built against the session's own Hyprland, so its ABI matches (#1572).
         # lowPrio like everything else here: a user's own copy wins (#1167).
         ++ lib.optional cfg.session (
@@ -1576,39 +1624,45 @@ in
             # search.nixos.org, and pname disagrees with it often enough to matter
             # -- pinta's is "Pinta", capitalised.
             lib.attrValues (
-              lib.removeAttrs {
-                # omarchy-install-preinstalls, minus what cannot be here.
-                inherit (pkgs)
-                  pinta
-                  libreoffice
-                  moonlight-qt
-                  ;
+              lib.removeAttrs (
+                {
+                  # omarchy-install-preinstalls, minus what cannot be here.
+                  inherit (pkgs)
+                    pinta
+                    libreoffice
+                    ;
 
-                # install/omarchy-base.packages. The GUIs manual sends people to
-                # Disks for formatting and SMART, and sushi is what makes Space
-                # preview a file in Nautilus without opening it.
-                inherit (pkgs) gnome-disk-utility sushi;
+                  # install/omarchy-base.packages. The GUIs manual sends people to
+                  # Disks for formatting and SMART.
+                  inherit (pkgs) gnome-disk-utility;
 
-                # Omarchy's own music TUI, bound to SUPER + SHIFT + ALT + M. The
-                # text above said it was not in nixpkgs; it arrived after that was
-                # written, so the keybinding had been failing on a package that was
-                # available the whole time.
-                # nixpkgs installs no desktop entry; upstream's repo ships one, and the
-                # dock drops a pin with no entry of that id (#1777).
-                cliamp = pkgs.symlinkJoin {
-                  name = "cliamp-${pkgs.cliamp.version}";
-                  paths = [ pkgs.cliamp ];
-                  postBuild = ''
-                    install -Dm644 ${pkgs.cliamp.src}/cliamp.desktop $out/share/applications/cliamp.desktop
-                    install -Dm644 ${pkgs.cliamp.src}/Cliamp.svg $out/share/icons/hicolor/scalable/apps/cliamp.svg
-                  '';
-                  inherit (pkgs.cliamp) meta;
-                };
+                  # Omarchy's own music TUI, bound to SUPER + SHIFT + ALT + M. The
+                  # text above said it was not in nixpkgs; it arrived after that was
+                  # written, so the keybinding had been failing on a package that was
+                  # available the whole time.
+                  # nixpkgs installs no desktop entry; upstream's repo ships one, and the
+                  # dock drops a pin with no entry of that id (#1777).
+                  cliamp = pkgs.symlinkJoin {
+                    name = "cliamp-${pkgs.cliamp.version}";
+                    paths = [ pkgs.cliamp ];
+                    postBuild = ''
+                      install -Dm644 ${pkgs.cliamp.src}/cliamp.desktop $out/share/applications/cliamp.desktop
+                      install -Dm644 ${pkgs.cliamp.src}/Cliamp.svg $out/share/icons/hicolor/scalable/apps/cliamp.svg
+                    '';
+                    inherit (pkgs.cliamp) meta;
+                  };
 
-                # install/omarchy-base.packages names it (omacom/omarchy#14712).
-                # Not in nixpkgs, and this module's pkgs has no overlay of ours.
-                inherit (pkgs.extend inputs.self.overlays.default) gliff;
-              } cfg.preinstallsExclude
+                  # install/omarchy-base.packages names it (omacom/omarchy#14712).
+                  # Not in nixpkgs, and this module's pkgs has no overlay of ours.
+                  inherit (pkgs.extend inputs.self.overlays.default) gliff;
+                }
+                # Only what the pin still installs: moonlight-qt left the preinstalls
+                # and sushi left base.packages when Files replaced Nautilus.
+                // lib.optionalAttrs cfg.package.passthru.preinstallsMoonlight { inherit (pkgs) moonlight-qt; }
+                // lib.optionalAttrs (builtins.elem "sushi" cfg.package.passthru.basePackages) {
+                  inherit (pkgs) sushi;
+                }
+              ) cfg.preinstallsExclude
             )
           )
         )
@@ -1733,11 +1787,10 @@ in
       {
         "omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
 
-        # Omarchy's managed Chromium policy (#1491). A file, not programs.chromium,
-        # so a user's own programs.chromium (extra.json, default.json) merges beside it
-        # rather than colliding; the dir's tmpfiles rule stays for the theme script.
+        # Omarchy's managed Chromium policy (#1491). Drop names set by the user
+        # through programs.chromium.extraOpts, whose extra.json lives beside it.
         "chromium/policies/managed/omarchy.json".source =
-          "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
+          filteredBrowserPolicy "nixarchy-chromium-policy.json" "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
 
         # The flake nixarchy-apply rebuilds, for the tools and plugins that
         # cannot ask the module system and cannot rely on the session
@@ -1770,6 +1823,12 @@ in
             nixarchy ${cfg.package.version}
           '';
         };
+      }
+      // lib.optionalAttrs (cfg.package.passthru.chromeExtensionsPolicy or false) {
+        "opt/chrome/policies/managed/omarchy.json".source =
+          filteredBrowserPolicy "nixarchy-chrome-policy.json" "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
+        "opt/chrome/policies/managed/omarchy-extensions.json".source =
+          filteredBrowserPolicy "nixarchy-chrome-extensions-policy.json" "${cfg.package}/share/omarchy/default/chromium/policies/chrome-extensions.json";
       }
       # Upstream's /etc overlay, the rows data/etc-overlay.nix classes
       # `installed`: the file itself, at the path Omarchy's Arch package puts
@@ -1914,9 +1973,15 @@ in
     # which unstable hides behind a rename (checks.stable-eval).
     systemd.user.${if options.systemd.user ? settings then "settings" else "extraConfig"} =
       if options.systemd.user ? settings then
-        { Manager.DefaultLimitNOFILE = lib.mkDefault "65536:524288"; }
+        {
+          Manager = {
+            DefaultLimitNOFILE = lib.mkDefault "65536:524288";
+          }
+          # and quattro's user.conf.d/10-faster-shutdown.conf, which the tag does not ship.
+          // lib.optionalAttrs isEdge { DefaultTimeoutStopSec = lib.mkDefault "2s"; };
+        }
       else
-        "DefaultLimitNOFILE=65536:524288";
+        "DefaultLimitNOFILE=65536:524288" + lib.optionalString isEdge "\nDefaultTimeoutStopSec=2s";
 
     systemd = {
       # systemd/system.conf.d/20-mount-events.conf: PID 1's mount-event burst.
@@ -2020,7 +2085,25 @@ in
       # mkIf on an attrsOf entry still defines a unit with no ExecStart.
       // lib.optionalAttrs config.services.fprintd.enable {
         fprintd.serviceConfig.TimeoutStopSec = lib.mkDefault "3s";
-      };
+      }
+      # Quattro's systemd/system/<unit>.service.d/10-omarchy-sddm-recover.conf: runs
+      # after each sleep, even a failed one. No unit PATH, so systemd-sleep's is untouched.
+      //
+        lib.optionalAttrs
+          (cfg.displayManager && config.services.displayManager.sddm.enable && hasSddmRecover)
+          (
+            lib.genAttrs
+              [
+                "systemd-suspend"
+                "systemd-hibernate"
+                "systemd-hybrid-sleep"
+                "systemd-suspend-then-hibernate"
+              ]
+              (_: {
+                enableDefaultPath = lib.mkDefault false;
+                serviceConfig.ExecStopPost = [ "-${sddmRecover}/bin/omarchy-sddm-recover" ];
+              })
+          );
 
       paths = lib.optionalAttrs greeterThemeOn {
         nixarchy-greeter-publish = {
@@ -2460,18 +2543,85 @@ in
       "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}"
     ];
 
+    # Hyprland sets QT_QPA_PLATFORMTHEME=qtengine; Qt finds that platform-theme
+    # plugin only through QT_PLUGIN_PATH (#1736).
+    environment.profileRelativeSessionVariables.QT_PLUGIN_PATH =
+      lib.mkIf cfg.package.passthru.hasQtengine
+        [
+          "/lib/qt-6/plugins"
+        ];
+
     # Without defaults, sorted mimeinfo.cache hands PDFs to the browser.
     # mkDefault per key avoids conflicting strings when a user picks a handler.
-    xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) {
-      "application/pdf" = "org.gnome.Evince.desktop";
-      "video/mp4" = "mpv.desktop";
-      "video/x-matroska" = "mpv.desktop";
-      "video/quicktime" = "mpv.desktop";
-      "video/webm" = "mpv.desktop";
-      "video/x-msvideo" = "mpv.desktop";
-      "video/mpeg" = "mpv.desktop";
-      "text/plain" = "nvim.desktop";
-    };
+    xdg.mime.defaultApplications = lib.mapAttrs (_: lib.mkDefault) (
+      {
+        "application/pdf" = cfg.package.passthru.pdfDesktop;
+        "text/plain" = cfg.package.passthru.editorDesktop;
+      }
+      // (
+        if (cfg.package.passthru.mediaViewerDesktop or null) != null then
+          # Upstream's default/applications/mimeapps.list Omaview rows (#1793).
+          lib.genAttrs [
+            "image/png"
+            "image/jpeg"
+            "image/gif"
+            "image/webp"
+            "image/bmp"
+            "image/tiff"
+            "image/svg+xml"
+            "image/x-icon"
+            "image/x-tga"
+            "image/x-portable-pixmap"
+            "image/x-portable-graymap"
+            "image/x-portable-bitmap"
+            "image/x-xbitmap"
+            "image/x-xpixmap"
+            "image/heif"
+            "image/heic"
+            "image/avif"
+            "image/jxl"
+            "video/mp4"
+            "video/x-msvideo"
+            "video/x-matroska"
+            "video/x-flv"
+            "video/x-ms-wmv"
+            "video/mpeg"
+            "video/ogg"
+            "video/webm"
+            "video/quicktime"
+            "video/3gpp"
+            "video/3gpp2"
+            "video/x-ms-asf"
+            "video/x-ogm+ogg"
+            "video/x-theora+ogg"
+            "video/mp2t"
+            "video/x-m4v"
+            "application/ogg"
+            "audio/mpeg"
+            "audio/flac"
+            "audio/ogg"
+            "audio/x-wav"
+            "audio/wav"
+            "audio/mp4"
+            "audio/aac"
+            "audio/opus"
+            "audio/x-vorbis+ogg"
+            "audio/x-matroska"
+          ] (_: cfg.package.passthru.mediaViewerDesktop)
+        else
+          {
+            "video/mp4" = "mpv.desktop";
+            "video/x-matroska" = "mpv.desktop";
+            "video/quicktime" = "mpv.desktop";
+            "video/webm" = "mpv.desktop";
+            "video/x-msvideo" = "mpv.desktop";
+            "video/mpeg" = "mpv.desktop";
+          }
+      )
+      // lib.optionalAttrs (cfg.package.passthru.fileManagerDesktop != null) {
+        "inode/directory" = cfg.package.passthru.fileManagerDesktop;
+      }
+    );
 
     xdg.portal = {
       enable = lib.mkDefault true;
@@ -2479,6 +2629,8 @@ in
       # registered, not merely installed, so it belongs here rather than in
       # the package's runtimeDeps. The hyprland portal comes from
       # programs.hyprland.portalPackage above.
+      # Folio's FileChooser portal needs no entry here: Folio is in the system
+      # path, which links share/xdg-desktop-portal and its D-Bus service (#1793).
       extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
     };
   };

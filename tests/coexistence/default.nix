@@ -200,19 +200,98 @@ let
     ))
   ];
 
-  chromiumEtc = (configOf fixtures.chromium-own-policy).environment.etc;
+  chromiumConfig = configOf fixtures.chromium-own-policy;
+  chromiumEtc = chromiumConfig.environment.etc;
+  # Every key but the one the user sets must survive; the file differs per pin (#1764).
+  upstreamBrowserPolicy = "${chromiumConfig.programs.nixarchy.package}/share/omarchy/default/chromium/policies/omarchy.json";
+  chromePolicyOnEdge =
+    chromiumConfig.programs.nixarchy.package.passthru.chromeExtensionsPolicy or false;
+  chromeManagedFiles = [
+    "opt/chrome/policies/managed/default.json"
+    "opt/chrome/policies/managed/extra.json"
+    "opt/chrome/policies/managed/omarchy.json"
+    "opt/chrome/policies/managed/omarchy-extensions.json"
+  ];
   chromiumScript =
     if
-      chromiumEtc ? "chromium/policies/managed/extra.json"
-      && chromiumEtc ? "chromium/policies/managed/omarchy.json"
+      !(
+        chromiumEtc ? "chromium/policies/managed/extra.json"
+        && chromiumEtc ? "chromium/policies/managed/omarchy.json"
+      )
     then
-      ''
-        echo "chromium-own-policy: ok"
-      ''
-    else
       ''
         echo "chromium-own-policy: FAIL extra.json and omarchy.json are not both in etc" >&2
         fail=1
+      ''
+    else if chromePolicyOnEdge && !lib.all (f: chromiumEtc ? ${f}) chromeManagedFiles then
+      ''
+        echo "chromium-own-policy: FAIL not all four opt/chrome/policies/managed/*.json files are in etc" >&2
+        fail=1
+      ''
+    else if
+      !chromePolicyOnEdge
+      && (
+        chromiumEtc ? "opt/chrome/policies/managed/omarchy.json"
+        || chromiumEtc ? "opt/chrome/policies/managed/omarchy-extensions.json"
+      )
+    then
+      ''
+        echo "chromium-own-policy: FAIL Chrome omarchy policy files exist on non-edge" >&2
+        fail=1
+      ''
+    else
+      ''
+        chromium_ok=1
+        if ! ${pkgs.jq}/bin/jq -e --slurpfile want ${shQuote upstreamBrowserPolicy} '. == ($want[0] | del(.DefaultBrowserSettingEnabled))' ${
+          shQuote chromiumEtc."chromium/policies/managed/omarchy.json".source
+        } >/dev/null; then
+          echo "chromium-own-policy: FAIL chromium omarchy.json is not upstream's policy minus the user's DefaultBrowserSettingEnabled" >&2
+          chromium_ok=0
+          fail=1
+        fi
+        ${lib.optionalString chromePolicyOnEdge ''
+          if ! ${pkgs.jq}/bin/jq -e --slurpfile want ${shQuote upstreamBrowserPolicy} '. == ($want[0] | del(.DefaultBrowserSettingEnabled))' ${
+            shQuote chromiumEtc."opt/chrome/policies/managed/omarchy.json".source
+          } >/dev/null; then
+            echo "chromium-own-policy: FAIL chrome omarchy.json is not upstream's policy minus the user's DefaultBrowserSettingEnabled" >&2
+            chromium_ok=0
+            fail=1
+          fi
+          if ! ${pkgs.jq}/bin/jq -e '.ExtensionSettings | type == "object" and length > 0' ${
+            shQuote chromiumEtc."opt/chrome/policies/managed/omarchy-extensions.json".source
+          } >/dev/null; then
+            echo "chromium-own-policy: FAIL chrome omarchy-extensions.json has no ExtensionSettings" >&2
+            chromium_ok=0
+            fail=1
+          fi
+        ''}
+        if [ "$chromium_ok" = 1 ]; then
+          echo "chromium-own-policy: ok"
+        fi
+      '';
+
+  chromiumDisabledEtc = (configOf fixtures.chromium-policy-disabled).environment.etc;
+  chromiumDisabledScript =
+    if !(chromiumDisabledEtc ? "chromium/policies/managed/omarchy.json") then
+      ''
+        echo "chromium-policy-disabled: FAIL omarchy.json is absent from etc" >&2
+        fail=1
+      ''
+    else if chromiumDisabledEtc ? "chromium/policies/managed/extra.json" then
+      ''
+        echo "chromium-policy-disabled: FAIL extra.json exists in etc" >&2
+        fail=1
+      ''
+    else
+      ''
+        if ${pkgs.jq}/bin/jq -e 'has("DefaultBrowserSettingEnabled")' ${
+          shQuote chromiumDisabledEtc."chromium/policies/managed/omarchy.json".source
+        } >/dev/null; then
+          echo "chromium-policy-disabled: ok"
+        else
+          echo "chromium-policy-disabled: FAIL omarchy.json lost DefaultBrowserSettingEnabled" >&2
+          fail=1
+        fi
       '';
 
   # agent-local (#1577): their podman and their toolkit choice stand, and no
@@ -261,9 +340,18 @@ let
   keyHarness = pkgs.writeText "dictation-keys.lua" ''
     local backend, missing = arg[1], arg[2] == "missing"
     local binds = {}
+    -- The 4.5 tag asks a command for the backend; rc1 reads defaults/dictation
+    -- under config_home through two modules of its own. Answer both ways.
     io.popen = function()
       return { read = function() return backend end, close = function() end }
     end
+    local config = os.getenv("TMPDIR") .. "/dictation-config"
+    os.execute("mkdir -p " .. config .. "/omarchy/defaults")
+    local f = assert(io.open(config .. "/omarchy/defaults/dictation", "w"))
+    f:write(backend, "\n")
+    f:close()
+    package.loaded["default.hypr.paths"] = { config_home = config }
+    package.loaded["default.hypr.keyboard"] = { altgr = function() return false end }
     o = {
       cmd_missing = function() return missing end,
       bind = function(key, _, command) binds[key] = command end,
@@ -304,6 +392,11 @@ let
     (agentLocalCheck "preinstalls-exclude-retired" (_: true))
     (agentLocalCheck "xdg-mime-own-pdf" (
       c: c.xdg.mime.defaultApplications."application/pdf" == "own.desktop"
+    ))
+    (agentLocalCheck "xdg-mime-own-files-editor" (
+      c:
+      c.xdg.mime.defaultApplications."inode/directory" == "thunar.desktop"
+      && c.xdg.mime.defaultApplications."text/plain" == "org.gnome.TextEditor.desktop"
     ))
     # #1613. Each reads what nixarchy would add if it touched the thing the
     # person owns; the fixtures' comments say which.
@@ -545,6 +638,22 @@ let
         fi
       '';
 
+  qtPluginPaths =
+    (configOf fixtures.qt-own-platform-theme)
+    .environment.profileRelativeSessionVariables.QT_PLUGIN_PATH;
+  # The user's own entry always counts; the second is nixarchy's, present only when the pin ships qtengine.
+  qtExpected = if pkgs.omarchy.hasQtengine then 2 else 1;
+  qtScript =
+    if lib.count (p: p == "/lib/qt-6/plugins") qtPluginPaths == qtExpected then
+      ''
+        echo "qt-own-platform-theme: ok"
+      ''
+    else
+      ''
+        echo ${shQuote "qt-own-platform-theme: FAIL /lib/qt-6/plugins should appear exactly ${toString qtExpected} time(s) (hasQtengine = ${lib.boolToString pkgs.omarchy.hasQtengine}): ${builtins.toJSON qtPluginPaths}"} >&2
+        fail=1
+      '';
+
   nmScript =
     if nmConnectivity.uri == "http://example.invalid/check" && nmConnectivity.enabled == false then
       ''
@@ -574,6 +683,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${lib.concatStrings viScripts}
     ${ownHypeScript}
     ${nmScript}
+    ${qtScript}
     ${
       if homeConflictCheck then
         ''
@@ -599,6 +709,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${hyprlandScript}
     ${systemdOnceScript}
     ${chromiumScript}
+    ${chromiumDisabledScript}
     ${lib.concatStrings agentLocalScripts}
     if [ "${
       if

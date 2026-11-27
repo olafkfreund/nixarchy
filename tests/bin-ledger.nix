@@ -1,4 +1,7 @@
 { inputs, pkgs }:
+let
+  shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
+in
 # Every command this port does not ship verbatim, classified and checked.
 #
 # data/bin-ledger.nix claims which of Omarchy's commands differ here and why.
@@ -27,7 +30,7 @@ pkgs.runCommand "nixarchy-bin-ledger"
   {
     nativeBuildInputs = [ pkgs.python3 ];
     upstream = inputs.omarchy;
-    shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
+    inherit shipped;
     ledger = ../data/bin-ledger.nix;
     nixbin = ../pkgs/omarchy/nix-bin;
     script = ../.github/scripts/check-bin-ledger.py;
@@ -37,6 +40,6 @@ pkgs.runCommand "nixarchy-bin-ledger"
       --upstream "$upstream" \
       --shipped "$shipped/share/omarchy" \
       --nix-bin "$nixbin" \
-      --ledger "$ledger"
+      --ledger "$ledger" ${pkgs.lib.optionalString (pkgs.lib.hasPrefix "edge-" shipped.version) "--edge"}
     touch $out
   ''

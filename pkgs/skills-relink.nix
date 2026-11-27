@@ -39,6 +39,17 @@ writeShellApplication {
     # listed every skill twice (#897).
     clean_dirs=".agents/skills .claude/skills .codex/skills .pi/agent/skills"
     link_dirs=".agents/skills .claude/skills .pi/agent/skills"
+    # Gemini and Hermes too, as omarchy-agent-skills-link does, but only where the
+    # harness has a directory: a link made once by a migration would point at a
+    # store path the next rebuild replaces (#1847).
+    extra=""
+    [ -d "$home/.gemini" ] && extra="$extra .gemini/config/skills"
+    [ -d "$home/.hermes" ] && extra="$extra .hermes/skills"
+    for profile in "$home"/.hermes/profiles/*/; do
+      [ -d "$profile" ] && extra="$extra ''${profile#"$home"/}skills"
+    done
+    clean_dirs="$clean_dirs$extra"
+    link_dirs="$link_dirs$extra"
 
     # Only links into a skills tree in the store are removed -- both ours and
     # the input's. A skill somebody wrote by hand is a real directory and is

@@ -44,6 +44,7 @@ def main():
     ap.add_argument("--entries")
     ap.add_argument("--measure", action="store_true")
     ap.add_argument("--no-pending", action="store_true")
+    ap.add_argument("--edge", action="store_true")
     a = ap.parse_args()
 
     ledger = load(a.ledger_script)
@@ -111,6 +112,29 @@ def main():
 
     entries = json.load(open(a.entries, encoding="utf-8"))
     errors = []
+    for rid, value in sorted(entries.items()):
+        if isinstance(value, dict):
+            if set(value) != {"reason", "edge"}:
+                errors.append(f"entry for {rid} must have exactly reason and edge")
+            if value.get("edge") not in ("only", "absent"):
+                errors.append(f"entry for {rid} has invalid edge marker")
+            reason = value.get("reason")
+        else:
+            reason = value
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"entry for {rid} has no reason")
+        elif a.no_pending and reason.startswith("pending"):
+            errors.append(f"pending reason left after the series: {rid}")
+    if errors:
+        print("\n".join("menu-actions: " + e for e in errors), file=sys.stderr)
+        return 1
+    edge_only = {rid for rid, value in entries.items()
+                 if isinstance(value, dict) and value["edge"] == "only"}
+    entries = {
+        rid: value["reason"] if isinstance(value, dict) else value
+        for rid, value in entries.items()
+        if not isinstance(value, dict) or value["edge"] == ("only" if a.edge else "absent")
+    }
     # A dimmed "Not available" row must run nothing: summon ignores disabled (omacom/omarchy#15742).
     for rid, row in sorted(menu.items()):
         if str(row.get("disabled", "")).strip() == "true" and row.get("action") != "true":
@@ -120,18 +144,16 @@ def main():
         if rid not in entries:
             errors.append(f"{rid} reaches {fmt(flagged[rid])}, with no entry in data/menu-actions.nix")
     for rid, reason in sorted(entries.items()):
-        if not isinstance(reason, str) or not reason.strip():
-            errors.append(f"entry for {rid} has no reason")
-            continue
         if reason.startswith("hidden:"):
             row = menu.get(rid)
             when = "<no such row>" if row is None else str(row.get("when", "<no when>"))
             if when.strip() != "false":
                 errors.append(f"{rid} is listed hidden but its when is {when!r}")
+        elif rid not in flagged and rid in edge_only and rid not in menu:
+            # An older edge pin (edge's fallback) lacks a newer pin's row (#1896).
+            print(f"menu-actions: edge-only entry this pin's menu does not have yet: {rid}")
         elif rid not in flagged:
             errors.append(f"entry for {rid}, which reaches no hazard: stale")
-        if a.no_pending and reason.startswith("pending"):
-            errors.append(f"pending reason left after the series: {rid}")
     if errors:
         print("\n".join("menu-actions: " + e for e in errors), file=sys.stderr)
         return 1

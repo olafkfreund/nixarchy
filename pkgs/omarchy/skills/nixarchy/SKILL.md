@@ -70,6 +70,8 @@ matching guide before starting:
 - [`hyprland.md`](hyprland.md) - keybindings, monitors, window rules, and other Hyprland config
 - [`plugins.md`](plugins.md) - the Omarchy shell: bar layout, widgets, plugins, idle behavior
 - [`theming.md`](theming.md) - themes, backgrounds, and fonts
+- [`apps.md`](apps.md) - default apps, web app and TUI launchers, installing and removing software
+- [`system.md`](system.md) - environment variables, toggles, language, power, network, audio, security, updates
 - [`hooks.md`](hooks.md) - automation hooks that run on system events
 - [`capture.md`](capture.md) - screenshots, screen recordings, OCR text capture, and file sharing
 - [`contributing.md`](contributing.md) - reporting Nixarchy and Omarchy bugs
@@ -181,20 +183,32 @@ Run `omarchy --help` for the full list. The most common groups:
 
 | Group | Purpose | Example |
 |-------|---------|---------|
+| `omarchy default` | Default browser, terminal, editor, dictation, agent | `omarchy default browser firefox` |
 | `omarchy refresh` | Reset config to defaults (backs up first) | `omarchy refresh shell` |
 | `omarchy restart` | Restart a service/app | `omarchy restart shell` |
 | `omarchy toggle` | Toggle feature on/off | `omarchy toggle nightlight` |
 | `omarchy theme` | Theme management | `omarchy theme set <name>` |
+| `omarchy font` / `icons` | Monospace font; app icon set (quattro) | `omarchy font set <name>` |
 | `omarchy bar` | Bar layout and widgets | `omarchy bar move omarchy.clock --section right` |
+| `omarchy dock` | Dock layout and pinned apps | `omarchy dock position bottom` |
+| `omarchy hyprland` | Windows, monitors, layouts | `omarchy hyprland monitor scaling 1.6` |
+| `omarchy display` | Text scaling everywhere | `omarchy display text size 14` |
+| `omarchy device` | Touchpad and touchscreen toggles (quattro) | `omarchy device touchpad off` |
 | `omarchy plugin` | Manage/clone shell plugins | `omarchy plugin clone omarchy.clock` |
 | `omarchy hook` | Install automation hooks | `omarchy hook install theme-set <script>` |
 | `omarchy install` | Queue an app into the Nix selection (see the `nixos` skill) | `omarchy install docker dbs` |
+| `omarchy remove` | Drop preinstalled launchers or fingerprints (packages use `nixarchy-app-remove`) | `omarchy remove preinstalls` |
+| `omarchy webapp` / `tui` | Launchers for web apps and terminal apps | `omarchy webapp install` |
 | `omarchy launch` | Launch apps | `omarchy launch browser` |
 | `omarchy capture` | Screenshots and recordings | `omarchy capture screenshot` |
+| `omarchy language` / `region` | Display language; date and number formats (quattro) | `omarchy language da` |
+| `omarchy powerprofiles` | Power profile per power source | `omarchy powerprofiles set battery power-saver` |
 | `omarchy reminder` | Desktop notification reminders | `omarchy reminder 15 "Pickup Jack"` |
 | `omarchy pkg` | **Explains the declarative route; installs nothing** | `omarchy pkg add <pkg>` |
 | `omarchy setup` | Interactive setup wizards | `omarchy setup security fingerprint` |
+| `omarchy agent` | Coding agents and accounts; local models (quattro) | `omarchy agent account list` |
 | `omarchy update` | `nix flake update` + `nixos-rebuild switch` | `omarchy update` |
+| `omarchy snapshot` | Home directory snapshots (system rollback is generations) | `omarchy snapshot list` |
 
 ## Ask The Shell What Is Open — Do Not Screenshot To Find Out
 
@@ -261,7 +275,11 @@ changes in the stub; the `/etc` file is replaced on every rebuild.
 | fastfetch | `/etc/fastfetch/config.jsonc` default; `~/.config/fastfetch/config.jsonc` user override |
 | lazygit | `~/.config/lazygit/config.yml` |
 | starship | `~/.config/starship.toml` |
-| git | `~/.config/git/config` |
+| git | `~/.config/git/config` (name and email: `omarchy setup git`) |
+| tmux | `~/.config/tmux/tmux.conf` (`omarchy restart tmux`) |
+| Shell aliases and exports | `~/.bashrc` |
+| Desktop environment variables | `~/.config/uwsm/env.d/` (or `home.sessionVariables`; see [`system.md`](system.md)) |
+| Which app opens a file type | `~/.config/mimeapps.list` (see [`apps.md`](apps.md)) |
 
 Note that `/etc` on NixOS is generated from the system configuration. A file there
 may be a symlink into the store, in which case it is not editable and its content
@@ -551,9 +569,11 @@ When user requests system changes:
 2. **Is it a config edit under `~/.config/`?** Edit it there, never `$OMARCHY_PATH`
 3. **Is it a theme customization?** Follow [`theming.md`](theming.md); create a NEW custom theme directory
 4. **Is it automation?** Follow [`hooks.md`](hooks.md); use `omarchy hook install` and the hook `.d` directories
-5. **Is it a package install, or any change outside `~/.config/`?** **Use the `nixos` skill.** Do not run `omarchy pkg add` expecting an install, and never install imperatively — it will not survive the next rebuild
-6. **Is it built-in shell/plugin code?** Follow [`plugins.md`](plugins.md); clone it with `omarchy plugin clone`, never edit the packaged copy
-7. **Unsure if command exists?** Run `omarchy commands` (or `omarchy <group> --help` for one group)
+5. **Is it a package install, or any change outside `~/.config/`?** **Use the `nixos` skill.** Do not run `omarchy pkg add` expecting an install, and never install imperatively — it will not survive the next rebuild (see [`apps.md`](apps.md))
+6. **Is it which app opens something?** Use `omarchy default ...` or `xdg-mime`; see [`apps.md`](apps.md)
+7. **Is it an environment variable?** `~/.bashrc` for terminals, `~/.config/uwsm/env.d/` for the desktop, or `home.sessionVariables` in Home Manager across machines; see [`system.md`](system.md)
+8. **Is it built-in shell/plugin code?** Follow [`plugins.md`](plugins.md); clone it with `omarchy plugin clone`, never edit the packaged copy
+9. **Unsure if command exists?** Run `omarchy commands` (or `omarchy <group> --help` for one group)
 
 ### Reminder Requests
 
@@ -579,11 +599,25 @@ This skill intentionally does not cover:
 - "Change my theme to catppuccin" -> `omarchy theme set catppuccin`
 - "Add a keybinding for Super+E to open file manager" -> Check existing bindings first, call `hl.unbind` if needed, then `o.bind` in `~/.config/hypr/bindings.lua`
 - "Configure my external monitor" -> Edit `~/.config/hypr/monitors.lua`
-- "Make the window gaps smaller" -> Edit `~/.config/hypr/looknfeel.lua`
+- "Make the window gaps smaller" -> Edit `~/.config/hypr/looknfeel.lua` (`omarchy hyprland window gaps toggle` turns them off entirely)
+- "Make windows square" -> `omarchy hyprland corners sharp`
 - "Turn on night light" -> `omarchy toggle nightlight` (for time-based schedules, edit `~/.config/hypr/hyprsunset.conf` profiles, then `omarchy restart hyprsunset`)
+- "Make Firefox my default browser" -> `omarchy default browser firefox` (queues it in `~/.config/nixarchy/apps.nix` and runs `nixarchy-apply` first if it is missing)
+- "Use Ghostty instead of foot" -> Enable Ghostty in `~/.config/nixarchy/apps.nix` (`nixarchy-app-enable ghostty && nixarchy-apply`, see the `nixos` skill), then `omarchy default terminal ghostty`
+- "Open PDFs in another app" -> `xdg-mime default <app>.desktop application/pdf`
+- "Add YouTube as an app" -> `omarchy webapp install "YouTube" https://youtube.com <icon-url>`
+- "Show a 12-hour clock" -> `omarchy bar set omarchy.clock format "h:mm AP"`
+- "Move the bar to the bottom" -> `omarchy bar position bottom`
+- "Keep my laptop awake" -> `omarchy toggle idle stay-awake`
+- "Add a Danish keyboard layout" -> `kb_layout = "us,dk"` in `~/.config/hypr/input.lua` (or `omarchy setup keyboard`)
+- "Set an environment variable for all apps" -> A file in `~/.config/uwsm/env.d/` (applied at next login), or `home.sessionVariables` in Home Manager across machines (see `system.md`)
+- "Make text bigger everywhere" -> `omarchy display text size <9-20>`
 - "Set a reminder to pickup jack in 15 minutes" -> `omarchy reminder 15 "Pickup Jack"`
+- "Show my reminders" -> `omarchy reminder show`
+- "Clear all reminders" -> `omarchy reminder clear`
 - "Customize the catppuccin theme colors" -> Overlay: put an edited `colors.toml` in `~/.config/omarchy/themes/catppuccin/`, then re-apply the theme (see `theming.md`)
 - "Run a script every time I change themes" -> Install it with `omarchy hook install theme-set <script>`
+- "Change how workspace labels are rendered" -> Clone `omarchy.workspaces`, which switches the bar to `<username>.workspaces`, then edit the clone
 - "Lock after ten minutes" -> Set `idle.lock` to `600` in `~/.config/omarchy/shell.json`
 - "Reset shell/bar to defaults" -> `omarchy refresh shell`
 - "Record my screen" -> `omarchy screenrecord --fullscreen`, then `omarchy screenrecord --stop-recording` (see `capture.md`)

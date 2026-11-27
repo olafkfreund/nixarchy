@@ -20,6 +20,7 @@
   socat,
   systemd,
   glib,
+  shared-mime-info,
   dbus,
   xdg-utils,
   libnotify,
@@ -32,12 +33,14 @@
   hyprlock,
   quickshell,
   wl-clipboard,
+  xrandr,
   wtype,
   grim,
   slurp,
   # Media / capture
   imagemagick,
   ffmpeg,
+  librsvg,
   gpu-screen-recorder,
   mpv,
   yt-dlp,
@@ -78,7 +81,12 @@
   uwsm,
   foot,
   chromium,
+  nodejs,
+  playwright-driver,
   nautilus,
+  folio,
+  omaview,
+  plain,
   neovim,
   lazygit,
   lazydocker,
@@ -88,6 +96,7 @@
   gtk3,
   udiskie,
   git,
+  desktop-file-utils,
   less,
   man-db,
   unzip,
@@ -95,6 +104,7 @@
   alsa-utils,
   imv,
   evince,
+  papers,
   libretro-core-info,
   localsend,
   runCommand,
@@ -126,6 +136,22 @@
   symlinkJoin,
 }:
 let
+  isEdge = lib.hasPrefix "edge-" version;
+  # Derived from the pinned source, so one line holds under both Omarchy pins
+  # (v4.5.0 ships Evince and no qtengine). `src` is a flake input path: no IFD.
+  basePackages = builtins.filter (l: l != "" && !(lib.hasPrefix "#" l)) (
+    map lib.trim (lib.splitString "\n" (builtins.readFile "${src}/install/omarchy-base.packages"))
+  );
+  hasPapers = builtins.elem "papers" basePackages;
+  hasFiles = builtins.elem "folio" basePackages;
+  hasOmaview = builtins.elem "omaview" basePackages;
+  hasPlain = builtins.elem "plain" basePackages;
+  hasScreensaverPackage = builtins.elem "omarchy-screensaver" basePackages;
+  preinstallsMoonlight = lib.hasInfix "moonlight-qt" (
+    builtins.readFile "${src}/bin/omarchy-install-preinstalls"
+  );
+  hasQtengine = builtins.pathExists "${src}/config/qtengine";
+
   osakaJadeTheme = fetchFromGitHub {
     owner = "omacom";
     repo = "omarchy-osaka-jade-theme";
@@ -214,6 +240,8 @@ let
     dbus
     xdg-utils
     libnotify
+    # omarchy-tray-context-menu places an XWayland tray menu by xrandr's geometry
+    xrandr
     hyprland
     hyprpicker
     hyprsunset
@@ -225,6 +253,7 @@ let
     slurp
     imagemagick
     ffmpeg
+    librsvg # rsvg-convert, which omarchy-icons-preview needs for a set without a prebuilt preview
     gpu-screen-recorder
     mpv
     yt-dlp
@@ -276,7 +305,7 @@ let
     uwsm
     foot
     chromium-flags
-    nautilus
+    (if hasFiles then folio else nautilus)
     neovim
     lazygit
     lazydocker
@@ -292,13 +321,14 @@ let
     # autostart.lua execs this on every login.
     udiskie
     git # theme install, update checks
+    desktop-file-utils # update-desktop-database, which user migrations run (#1793)
     less
     man-db
     unzip
     pamixer # audio bins
     alsa-utils # amixer/alsamixer
-    imv # image viewer the menus open
-    evince # PDF viewer
+    (if hasOmaview then omaview else imv) # image viewer the menus open
+    (if hasPapers then papers else evince) # PDF viewer
     # See pkgs/omarchy/pacman-shim.sh: turns `pacman: command not found` into
     # a pointer at the Nix equivalent, for the ~15 upstream bins that still
     # call it. nixpkgs does carry a `pacman`, so a user who installs that one
@@ -364,7 +394,8 @@ let
     ttfx
     # quattro's omarchy-launch-screensaver execs this native overlay (#1485).
     omarchy-screensaver
-  ];
+  ]
+  ++ lib.optional hasPlain plain;
   # arch-name<TAB>kind<TAB>attr<TAB>note<TAB>binary, one per line. Apps come from
   # data/apps.nix so the two cannot drift; everything the menu does not select
   # -- fonts, the packages omarchy-install-dev-env adds behind a language --
@@ -437,6 +468,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     mkdir -p $out/share/omarchy
                     cp -r . $out/share/omarchy/
                     rm -rf $out/share/omarchy/{.git,.github,docs,manual,test,plans,agents}
+                    ${lib.optionalString isEdge ". ${./quattro-boot-refuse.sh}"}
+                    # Shared ownership guard for scripts that edit user files (#1304).
+                    install -Dm644 ${./nixarchy-store-owned.sh} $out/share/omarchy/lib/nixarchy-store-owned.sh
+
 
                     # Why: pkgs/AGENTS.md#osaka-jade-is-bundled-again-1698
                     theme_dir=$out/share/omarchy/themes/osaka-jade
@@ -452,13 +487,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # CARRIED (#1192): the panel Loader's error handler called a function Qt 6's Loader lacks.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1192-panel-loader-errorstring.patch}
 
-                    # Drop undescribed binds in non-default submaps (a hint plugin registers
-                    # ~2,800): the list otherwise exceeds the 128 KiB single-argument limit
-                    # omarchy-menu-select hands to perl and omarchy-shell, so the menu never opens.
+                    # Why: pkgs/AGENTS.md#the-keybindings-menu-drops-undescribed-submap-binds
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
                       --replace-fail '      if (!seen) return' '      if (!seen) return
-      if (f["submap"] != "" && f["description"] == "") { seen = 0; return }' \
-                      --replace-fail "printf 'v19\\n'" "printf 'v19-submaps\\n'"
+      if (f["submap"] != "" && f["description"] == "") { seen = 0; return }'
+                    # The tag pin says v19, quattro v22 or v23: one must match.
+                    for v in 19 20 21 22 23; do
+                      substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings --replace-quiet "printf 'v$v\\n'" "printf 'v$v-submaps\\n'"
+                    done
+                    grep -q "printf 'v[0-9]*-submaps" $out/share/omarchy/bin/omarchy-menu-keybindings \
+                      || { echo "omarchy-menu-keybindings: cache tag moved; update the -submaps tag" >&2; exit 1; }
                     # Summoned from a key bind, the menu reaches the screen after omarchy-shell's
                     # 2 s IPC timeout; the script then exits and the menu it opened does nothing.
                     # The script waits for the selection anyway, so a longer timeout costs nothing.
@@ -507,21 +545,22 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                         --replace-fail "  \"\$download\" --appimage-extract 'usr/share/icons/hicolor/*/apps/t3code.png' >/dev/null" ""
                     fi
 
-                    # The local model runner installs podman with pacman on first use. Here
-                    # the module provides it; check that before any download (#1577). Edge only:
-                    # main's tag has no omarchy-agent-local.
-                    if [ -e $out/share/omarchy/bin/omarchy-agent-local ]; then
-                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-local \
-                        --replace-fail "$(cat ${./agent-local-use.upstream.sh})" "$(cat ${./agent-local-preflight.sh})"
+                    # Look page takes Node and Playwright from mise on first use; no mise
+                    # here, so both come from nixpkgs (#1886). Quattro only.
+                    if [ -e $out/share/omarchy/bin/omarchy-agent-look-page ]; then
+                      if grep -q 'mise where playwright' $out/share/omarchy/bin/omarchy-agent-look-page; then
+                        substituteInPlace $out/share/omarchy/bin/omarchy-agent-look-page \
+                          --replace-fail "$(cat ${./look-page-playwright.upstream.sh})" 'playwright=${playwright-driver}' \
+                          --replace-fail '"$playwright/node_modules/playwright"' '"$playwright"' \
+                          --replace-fail 'mise exec node -- node -' '${nodejs}/bin/node -'
+                      else
+                        substituteInPlace $out/share/omarchy/bin/omarchy-agent-look-page \
+                          --replace-fail '/usr/bin/node -' '${nodejs}/bin/node -'
+                      fi
                     fi
 
-                    # CARRIED (#1370): nixpkgs wraps kitty (and may wrap ghostty), so the running
-                    # process is .kitty-wrapped, and an exact match on the bare name misses it.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \
-                      --replace-fail 'if pgrep -x kitty >/dev/null; then' "if pgrep -x '[.]?kitty(-wrapped)?' >/dev/null; then" \
-                      --replace-fail '  killall -SIGUSR1 kitty >/dev/null' "  pkill -USR1 -x '[.]?kitty(-wrapped)?' >/dev/null" \
-                      --replace-fail 'if pgrep -x ghostty >/dev/null; then' "if pgrep -x '[.]?ghostty(-wrapped?)?' >/dev/null; then" \
-                      --replace-fail '  killall -SIGUSR2 ghostty' "  pkill -USR2 -x '[.]?ghostty(-wrapped?)?'"
+                    # #1370: match nixpkgs' wrapped kitty and ghostty process names.
+                    . ${./restart-terminal.sh}
 
                     # Cursor resolves through PATH, because /usr/bin is not where anything
                     # lives here.
@@ -582,10 +621,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     }
 
                     # Why: pkgs/AGENTS.md#every-web-app-failed-with
-                    substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-                      --replace-fail \
-                        'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;' \
-                        'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium* | chromium*) ;;'
+                    ${lib.optionalString (!isEdge) ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
+                        --replace-fail \
+                          'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;' \
+                          'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium* | chromium*) ;;'
+                    ''}
 
                     # No $BROWSER edit: quattro's omarchy-cmd-default-browser runs
                     # xdg-settings under `env -u BROWSER` itself.
@@ -641,10 +682,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace $out/share/omarchy/bin/omarchy-network-speedtest \
                       --replace-fail '/usr/lib/omarchy/speedtest' '${omarchy-speedtest}/bin/omarchy-speedtest'
 
+                    ${lib.optionalString hasScreensaverPackage (
+                      "# quattro's launcher execs the native screensaver from /usr/lib; it is packaged here (#1485).\n"
+                      # The outer string strips 4 columns from source lines, not from this text.
+                      + "                substituteInPlace $out/share/omarchy/bin/omarchy-launch-screensaver \\\n"
+                      + "                  --replace-fail 'exec /usr/lib/omarchy-screensaver/omarchy-screensaver \"$@\"' 'exec ${omarchy-screensaver}/lib/omarchy-screensaver/omarchy-screensaver \"$@\"'"
+                    )}
+
                     # The channel splice goes in front of the FIRST pacman grep, not before the final comparison.
                     # Why: pkgs/AGENTS.md#version-channel-reads-nixos-version
                     substituteInPlace $out/share/omarchy/bin/omarchy-version-channel \
-                      --replace-fail 'if grep -Eq "https://(arm-)?stable-mirror\.omarchy\.org/" /etc/pacman.d/mirrorlist; then' 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; if grep -Eq "https://(arm-)?stable-mirror\.omarchy\.org/" /etc/pacman.d/mirrorlist; then'
+                      --replace-fail "# Arch Linux ARM's mirrors are the same hosts with an arm- prefix." 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; # Arch Linux ARM'"'"'s mirrors are the same hosts with an arm- prefix.'
 
                     # The channel switch is nixarchy-channel's, not pacman's.
                     #
@@ -723,29 +771,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 pairBranch=$(cat ${./bluetooth-pair-branch.sh})
                 substituteInPlace "$pairCommand" --replace-fail "$pairLine" "$pairBranch"
 
-                # "Restart to finish the update" was going to be the answer every time.
-                #
-                # Upstream decides whether the kernel changed by walking
-                # $kernel_modules_path/*/modules.builtin and asking pacman who owns each. Here the
-                # glob matches nothing, so the loop never runs and kernel_updated keeps the
-                # `true` it was initialised with -- a reboot prompt after every update,
-                # whether or not anything needing one changed.
-                #
-                # NixOS answers this exactly rather than by inference: /run/booted-system
-                # is what is running and /run/current-system is what is activated, so the
-                # kernels differing is precisely "you are not running what you installed".
-                substituteInPlace $out/share/omarchy/bin/omarchy-update-restart \
-                  --replace-fail 'for kernel in "$kernel_modules_path"/*/modules.builtin; do' \
-                  'for kernel in /run/current-system/kernel; do' \
-                  --replace-fail 'if [[ -f $kernel ]] && pacman -Qo "$kernel" &>/dev/null; then' \
-                  'if [[ -e $kernel ]]; then
-                  if [[ "$(readlink -f /run/booted-system/kernel)" == "$(readlink -f "$kernel")" ]]; then
-                    kernel_updated=false
-                  fi
-                  continue
-                fi
-                if false; then'
-
                 # The speaker-tuning limiter was never found.
                 #
                 # omarchy-audio-tuning tests for the LSP limiter at a fixed path under
@@ -804,6 +829,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                   --replace-fail 'as_root install -Dm644 -o root -g root "$stop_timeout_src" "$stop_timeout_dst"' ":" \
                   --replace-fail 'as_root rm -f /etc/pam.d/omarchy-lock-fingerprint "$resume_hook_dst"' \
                   'as_root rm -f /etc/pam.d/omarchy-lock-fingerprint'
+                # NixOS owns the fingerprint lock stack; enrollment and upgrades must leave it alone.
+                substituteInPlace $out/share/omarchy/bin/omarchy-apply-lock \
+                  --replace-fail "as_root tee /etc/pam.d/omarchy-lock-fingerprint >/dev/null <<'EOF'" ": <<'EOF'" \
+                  --replace-fail 'as_root rm -f /etc/pam.d/omarchy-lock-fingerprint' ':'
+
 
                 # #1385: sudo is configuration on NixOS, so the bar's passwordless-sudo indicator is neutered and unoffered.
                 substituteInPlace $out/share/omarchy/shell/plugins/bar/indicators/PasswordlessSudo.qml \
@@ -835,14 +865,30 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 # recorded for the next rebuild, never generated at runtime, and the
                 # script stops before LANG or the interface changes. The menu shows
                 # no stderr, hence the notification.
-                substituteInPlace $out/share/omarchy/bin/omarchy-language \
+                # quattro 2eb7eb3 moved both into a helper that omarchy-language and
+                # the formats command (omarchy-region, omarchy-region-formats from
+                # quattro efcf615) source; v4.5.0 still has them in omarchy-language.
+                locale_helper=$out/share/omarchy/bin/omarchy-language
+                if [ -e $out/share/omarchy/bin/omarchy-locale-session ]; then
+                  locale_helper=$out/share/omarchy/bin/omarchy-locale-session
+                  sourcing=$(grep -lx 'source omarchy-locale-session' $out/share/omarchy/bin/*)
+                  # Both the language and a formats command must be patched.
+                  [ "$(wc -l <<<"$sourcing")" -ge 2 ] || { echo "omarchy-locale-session: expected two callers, got: $sourcing" >&2; exit 1; }
+                  substituteInPlace $sourcing \
+                    --replace-fail 'source omarchy-locale-session' 'source "$OMARCHY_PATH/bin/omarchy-locale-session"'
+                fi
+                substituteInPlace "$locale_helper" \
                   --replace-fail 'generator=/usr/bin/omarchy-locale-generate' \
                   'generator=$OMARCHY_PATH/bin/omarchy-locale-generate' \
                   --replace-fail 'generate_locale() {' 'generate_locale() {
                   local code=$1 locale=$2 msg
                   locale_generated "$locale" && return
-                  nixarchy-language-select "$code" >/dev/null
-                  msg="$(name_for "$code") needs its locale built into the system. It is recorded in your configuration: apply it (Install > Apply changes, or nixarchy-apply), then choose it again."
+                  if [[ ''${0##*/} == omarchy-language ]]; then
+                    nixarchy-language-select "$code" >/dev/null
+                    msg="$(name_for "$code") needs its locale built into the system. It is recorded in your configuration: apply it (Install > Apply changes, or nixarchy-apply), then choose it again."
+                  else
+                    msg="$locale is not built into this system. Add \"$locale/UTF-8\" to i18n.extraLocales in your configuration, apply it, then choose it again."
+                  fi
                   echo "$msg" >&2
                   omarchy-notification-send "Language" "$msg" >/dev/null 2>&1 || true
                   return 1
@@ -880,31 +926,77 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 # which is in the runtime list above, so neither needs a patch.
 
                 # Why: pkgs/AGENTS.md#onepassword-extension-dir
-                substituteInPlace $out/share/omarchy/bin/omarchy-install-service-1password \
-                  --replace-fail 'sudo mkdir -p "$EXTENSION_DIR"' \
-                  'echo "Chromium extensions are declared on NixOS, not dropped into a directory." >&2
-                  echo "" >&2
-                  echo "  Add the extension to your configuration:" >&2
-                  echo "" >&2
-                  echo "    programs.chromium.enable = true;" >&2
-                  echo "    programs.chromium.extensions = [ \"$EXTENSION_ID\" ];" >&2
-                  echo "" >&2
-                  echo "  then rebuild. 1Password itself is handled above." >&2
-                  return' \
-                  --replace-fail 'printf '"'"'{ "external_update_url": "%s" }\n'"'"' "$WEBSTORE_UPDATE_URL" | sudo tee "$EXTENSION_FILE" >/dev/null' \
-                  ':' \
-                  --replace-fail 'sudo chmod 644 "$EXTENSION_FILE"' ':' \
-              --replace-fail 'EXTENSION_DIR="/usr/share/chromium/extensions"' \
-              'EXTENSION_DIR=""  # declared, not written -- see the message below'
+                ${
+                  if isEdge then
+                    ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-install-service-1password \
+                        --replace-fail '  local dir
+
+                        for dir in /usr/share/google-chrome/extensions /usr/share/chromium/extensions; do
+                          sudo mkdir -p "$dir"
+                          printf '"'"'{ "external_update_url": "%s" }\n'"'"' "$WEBSTORE_UPDATE_URL" | sudo tee "$dir/$EXTENSION_ID.json" >/dev/null
+                          sudo chmod 644 "$dir/$EXTENSION_ID.json"
+                        done' \
+                        '  echo "Chromium extensions are declared on NixOS, not dropped into a directory." >&2
+                        echo "" >&2
+                        echo "  Add the extension to your configuration:" >&2
+                        echo "" >&2
+                        echo "    programs.chromium.enable = true;" >&2
+                        echo "    programs.chromium.extensions = [ \"$EXTENSION_ID\" ];" >&2
+                        echo "" >&2
+                        echo "  then rebuild. 1Password itself is handled above." >&2
+                        return'
+                    ''
+                  else
+                    ''
+                      substituteInPlace $out/share/omarchy/bin/omarchy-install-service-1password \
+                        --replace-fail 'sudo mkdir -p "$EXTENSION_DIR"' \
+                        'echo "Chromium extensions are declared on NixOS, not dropped into a directory." >&2
+                        echo "" >&2
+                        echo "  Add the extension to your configuration:" >&2
+                        echo "" >&2
+                        echo "    programs.chromium.enable = true;" >&2
+                        echo "    programs.chromium.extensions = [ \"$EXTENSION_ID\" ];" >&2
+                        echo "" >&2
+                        echo "  then rebuild. 1Password itself is handled above." >&2
+                        return' \
+                        --replace-fail 'printf '"'"'{ "external_update_url": "%s" }\n'"'"' "$WEBSTORE_UPDATE_URL" | sudo tee "$EXTENSION_FILE" >/dev/null' \
+                        ':' \
+                        --replace-fail 'sudo chmod 644 "$EXTENSION_FILE"' ':' \
+                        --replace-fail 'EXTENSION_DIR="/usr/share/chromium/extensions"' \
+                        'EXTENSION_DIR=""  # declared, not written -- see the message below'
+                    ''
+                }
+
+                # Chrome's policy is environment.etc's, filtered by programs.chromium.extraOpts; NixOS owns /etc (#1793).
+                ${lib.optionalString isEdge ''
+                  substituteInPlace $out/share/omarchy/bin/omarchy-install-browser-extensions \
+                    --replace-fail "$(printf '%s\n' \
+                      '  browser_policy_dir_hardened "$chrome_policy_dir" &&' \
+                      '    browser_policy_parents_hardened "$chrome_policy_dir" &&' \
+                      '    cmp -s "$OMARCHY_PATH/default/chromium/policies/chrome-extensions.json" "$chrome_policy_dir/omarchy-extensions.json"')" \
+                    '  [[ -e $chrome_policy_dir/omarchy-extensions.json ]]' \
+                    --replace-fail '      browser_policy_setup_dir "$chrome_policy_dir"' \
+                    "$(printf '%s\n' \
+                      '      echo "The Chrome extension policy comes from the system configuration; rebuild to install it." >&2' \
+                      '      exit 1')"
+                ''}
 
                 # Why: pkgs/AGENTS.md#every-web-app-failed-with
-            substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-              --replace-fail '*) browser="chromium.desktop" ;;' \
-              '*) browser="chromium-browser.desktop" ;;'
-
-            substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-              --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
-              'exec setsid uwsm-app -- "$browser_exec"'
+            ${
+              if isEdge then
+                ''
+                  substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
+                    --replace-fail '*) browsers=(google-chrome.desktop chromium.desktop) ;;' \
+                    '*) browsers=(chromium-browser.desktop google-chrome.desktop) ;;'
+                ''
+              else
+                ''
+                  substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
+                    --replace-fail '*) browser="chromium.desktop" ;;' \
+                    '*) browser="chromium-browser.desktop" ;;'
+                ''
+            }
 
             # The registered native host must outlive an update's store-path GC (#1491).
             substituteInPlace $out/share/omarchy/bin/omarchy-install-chromium-copy-url \
@@ -979,7 +1071,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     "uwsm-app -- $binary"
                 done
 
-                for entry in 'service-spotify spotify' 'service-signal signal-desktop' 'ai-chatgpt chatgpt'; do
+                for entry in ${
+                  lib.optionalString (!isEdge) "'service-spotify spotify' "
+                }'service-signal signal-desktop' 'ai-chatgpt chatgpt'; do
                   read -r script binary <<< "$entry"
                   substituteInPlace "$out/share/omarchy/bin/omarchy-install-$script" \
                     --replace-fail "uwsm-app -- /usr/bin/$binary" "uwsm-app -- $binary"
@@ -1027,6 +1121,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       # yet unreachable to the scripts that call it.
                       [ -e "$out/bin/$name" ] || ln -s "$target" "$out/bin/$name"
                     done
+                    if [ -e $out/share/omarchy/bin/omarchy-pkg-add-curated ]; then
+                      install -m755 ${./curated-pkg-add.sh} $out/share/omarchy/bin/omarchy-pkg-add-curated
+                    fi
 
                     # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
                     substituteInPlace $out/share/omarchy/bin/nixarchy-version \
@@ -1047,10 +1144,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     menu=$out/share/omarchy/default/omarchy/omarchy-menu.jsonc
                     # Each id is its own command; antigravity is the one that differs.
                     # Why: pkgs/AGENTS.md#default-agent-menu-commands-use-the-id
-                    for a in agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen; do
-                      substituteInPlace $menu \
-                        --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"
-                    done
+                    # No Agent menu on quattro (#19785).
+                    if grep -qF '== \"claude\" ]]' $menu; then
+                      for a in agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen; do
+                        substituteInPlace $menu \
+                          --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"
+                      done
+                    fi
 
                     # quattro ships its own Antigravity row, id agy, which the loop above
                     # install-checks like every other agent.
@@ -1085,10 +1185,20 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'omp)' 'antigravity) command=(agy --dangerously-skip-permissions) ;; omp)'
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1625-no-mise.patch}
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 --no-backup-if-mismatch < ${
+                      if lib.hasSuffix "745271c" version then
+                        ./1625-no-mise-edge.patch
+                      else if isEdge then
+                        ./1625-no-mise-edge-364.patch
+                      else
+                        ./1625-no-mise.patch
+                    }
                     # Why: pkgs/AGENTS.md#power-actions-authorise-before-closing-windows-1659
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1659-system-authorise-first.patch}
-                    rm $out/share/omarchy/install/user/mise.sh
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
+                      if isEdge then ./1659-system-authorise-first-edge.patch else ./1659-system-authorise-first.patch
+                    }
+                    # New quattro keeps only mise-work.sh, which creates Work directories.
+                    rm -f $out/share/omarchy/install/user/mise.sh
                     substituteInPlace $out/share/omarchy/bin/omarchy-agent $out/share/omarchy/bin/omarchy-agent-account-exec \
                       --replace-fail '@omarchyDispatch@' "$out/share/omarchy/agent-dispatch"
                     mkdir -p $out/share/omarchy/agent-dispatch
@@ -1108,11 +1218,19 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     skills=$out/share/omarchy/default/agents/skills
 
+                    # Quattro 2eb7eb3 renamed plugins.md to shell.md, while our SKILL.md
+                    # still links plugins.md. Our ported apps.md and system.md are copied above.
+                    if [ -e $skills/nixarchy/shell.md ] && [ ! -e $skills/nixarchy/plugins.md ]; then
+                      ln -s shell.md $skills/nixarchy/plugins.md
+                    fi
+
                     # cp --no-preserve=mode above drops the executable bit.
                     chmod +x $skills/ai-mirror/mirror-vm
 
                     # Why: pkgs/AGENTS.md#the-agent-skills-upstream-writes-for-arch (#1406)
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1406-omarchy-app-nix.patch}
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
+                      if isEdge then ./1406-omarchy-app-nix-edge.patch else ./1406-omarchy-app-nix.patch
+                    }
 
                     # The boundary between our devenv skill and nix-skills'
                     # devenv-project (#888): ours is devenv ON a nixarchy machine,
@@ -1128,8 +1246,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # Paths. $OMARCHY_PATH is exported for every one of these readers, and
                     # hardcoding a store hash into documentation would be wrong at the next
                     # bump anyway.
+                    # quattro 2eb7eb3 moved making a theme into the omarchy-make-theme skill.
+                    ${lib.optionalString isEdge ''
+                      substituteInPlace $skills/omarchy-make-theme/SKILL.md \
+                        --replace-fail '(dark or light) from `/usr/share/omarchy/themes/` and change' '(dark or light) from `$OMARCHY_PATH/themes/` and change'
+                    ''}
                     substituteInPlace $skills/nixarchy/theming.md \
-                      --replace-fail '2. See how an existing theme is done via `/usr/share/omarchy/themes/catppuccin`.' '2. See how an existing theme is done via `$OMARCHY_PATH/themes/catppuccin`.' \
+                      ${
+                        lib.optionalString (!isEdge)
+                          "--replace-fail '2. See how an existing theme is done via `/usr/share/omarchy/themes/catppuccin`.' '2. See how an existing theme is done via `$OMARCHY_PATH/themes/catppuccin`.'"
+                      } \
                       --replace-fail 'Never edit stock themes under `/usr/share/omarchy/themes/` — changes are lost' 'Stock themes live under `$OMARCHY_PATH/themes/` — a read-only store path, so' \
                       --replace-fail 'on update. Two safe options:' 'editing one is not possible. Two safe options:' \
                       --replace-fail 'cp /usr/share/omarchy/themes/catppuccin/colors.toml ~/.config/omarchy/themes/catppuccin/' 'cp --no-preserve=mode "$OMARCHY_PATH"/themes/catppuccin/colors.toml ~/.config/omarchy/themes/catppuccin/' \
@@ -1140,18 +1266,36 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # sees the name mentioned upstream should find out here that it is dead.
                     substituteInPlace $skills/nixarchy/hooks.md \
                       --replace-fail '├── pre-refresh-pacman.d/   # After `omarchy refresh pacman` re-syncs the package config, before it updates packages' '├── pre-refresh-pacman.d/   # Arch only — never runs on NixOS' \
-                      --replace-fail '├── post-update.d/          # At the end of `omarchy update`, after privileged work' '├── post-update.d/          # During `omarchy update`, i.e. after nixos-rebuild switch'
+                      --replace-fail ${
+                        if isEdge then
+                          "'├── post-update.d/          # Late in `omarchy update`, after packages, migrations and service restarts'"
+                        else
+                          "'├── post-update.d/          # At the end of `omarchy update`, after privileged work'"
+                      } '├── post-update.d/          # During `omarchy update`, i.e. after nixos-rebuild switch'
+                    # quattro 2eb7eb3's paragraph describes Arch's update order (mise, AUR, pacman).
+                    ${lib.optionalString isEdge ''
+                      substituteInPlace $skills/nixarchy/hooks.md \
+                        --replace-fail "Both package hooks run as your user with your PATH. \`post-update\` runs inside \`omarchy update\`'s sudo authorization, so a hook that invokes \`sudo\` does not prompt again; it comes after the system packages, migrations and service restarts, and before mise tools, AUR packages and the boot-file check. \`pre-refresh-pacman\` runs inside \`omarchy refresh pacman\` (which channel switches and \`omarchy reinstall\` use, not \`omarchy update\`), right after it writes the new package config with sudo and before the package transaction, so custom repositories and \`IgnorePkg\` entries shape that transaction." "Both package hooks run as your user with your PATH. \`post-update\` runs during \`omarchy update\`, after \`nixos-rebuild switch\` and the migrations. \`pre-refresh-pacman\` never runs here: \`omarchy refresh pacman\` is Arch only."
+                    ''}
 
                     # The crash skill is upstream's and mostly distro-neutral; three claims
                     # are not. Arch'"'"'s debuginfod does not serve nixpkgs builds, "recent
                     # package updates" has a far better answer here than mtimes, and a bug
                     # report has two possible destinations rather than one.
-                    substituteInPlace $skills/diagnose-crash/SKILL.md \
+                    # quattro e4635a4 renamed it omarchy-diagnose-crash; an older edge pin (a fallback) still ships diagnose-crash.
+                    crash=$skills/omarchy-diagnose-crash
+                    [ -d "$crash" ] || crash=$skills/diagnose-crash
+                    substituteInPlace "$crash/SKILL.md" \
                       --replace-fail 'This is Arch, which runs a public debuginfod server:' 'No public debuginfod serves nixpkgs builds. Symbols resolve only if this machine runs `nixseparatedebuginfod` (which serves the whole store on 127.0.0.1:1949 and exports `DEBUGINFOD_URLS` itself) or the package was built with `separateDebugInfo`. Run it anyway — gdb degrades to an unsymbolized stack rather than failing:' \
                       --replace-fail 'DEBUGINFOD_URLS="https://debuginfod.archlinux.org" \' 'DEBUGINFOD_URLS="''${DEBUGINFOD_URLS:-}" \' \
                       --replace-fail '- **Recent package updates.** A crash that starts right after an update points at' '- **Recent system generations.** A crash that starts right after a rebuild points at' \
                       --replace-fail '  the update.' '  the rebuild. `nix profile diff-closures --profile /nix/var/nix/profiles/system` names exactly what changed between generations — stronger evidence than any package log — and `sudo nixos-rebuild --rollback switch` tests the theory in one command.' \
-                      --replace-fail '  Covers reporting a confirmed Omarchy bug upstream — see reporting.md.' '  Covers reporting a confirmed Nixarchy or Omarchy bug — see reporting.md.' \
+                      ${
+                        if isEdge then
+                          "--replace-fail '  Reporting a confirmed Omarchy bug upstream follows the omarchy-contribute skill.' '  Reporting a confirmed Nixarchy or Omarchy bug follows the omarchy-contribute skill.'"
+                        else
+                          "--replace-fail '  Covers reporting a confirmed Omarchy bug upstream — see reporting.md.' '  Covers reporting a confirmed Nixarchy or Omarchy bug — see reporting.md.'"
+                      } \
                       --replace-fail '## If it is an Omarchy bug' '## If it is a Nixarchy or Omarchy bug' \
                       --replace-fail 'Most application crashes are upstream bugs in those applications, not Omarchy'"'"'s' 'Most application crashes are upstream bugs in those applications, not the distribution'"'"'s' \
                       --replace-fail 'doing. In the minority of cases where the cause really does sit within Omarchy'"'"'s' 'doing. In the minority of cases where the cause really does sit within Nixarchy'"'"'s or Omarchy'"'"'s'
@@ -1163,32 +1307,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'A process crashed on this Omarchy machine and I want to know why.' 'A process crashed on this Nixarchy machine and I want to know why.' \
                       --replace-fail 'when a crash is worth reporting upstream to Omarchy. If your harness has no skill' 'when a crash is worth reporting to Nixarchy or Omarchy. If your harness has no skill'
 
-                    substituteInPlace $skills/diagnose-crash/reporting.md \
-                      --replace-fail '# Reporting a Crash Upstream to Omarchy' '# Reporting a Crash to Nixarchy or Omarchy' \
-                      --replace-fail 'Read this only after concluding that a crash is genuinely Omarchy'"'"'s to fix.' 'Read this only after concluding that a crash is genuinely the distribution'"'"'s to fix. Two projects can own it: Nixarchy (<https://github.com/olafkfreund/nixarchy>) for anything specific to NixOS — the store, a rebuild, `nixarchy-apply`, a hardcoded `/usr` path, a replaced `omarchy-*` command — and Omarchy (<https://github.com/basecamp/omarchy>) for anything that would happen identically on Arch. When unsure, file against Nixarchy; the `nixarchy` skill'"'"'s `contributing.md` has the full rule.' \
-                      --replace-fail 'Omarchy is a configuration layer over Arch Linux, so a crash' 'Omarchy is a configuration layer and Nixarchy packages it for NixOS, so a crash' \
-                      --replace-fail 'Include what happened, what was expected, steps to reproduce, system details from' 'Include what happened, what was expected, steps to reproduce, `nixos-version` and the locked inputs from `nix flake metadata`, system details from' \
-                      --replace-fail '## Is it even Omarchy'"'"'s bug?' '## Is it even the distribution'"'"'s bug?' \
-                      --replace-fail 'Omarchy'"'"'s sphere of control is roughly:' 'The distribution'"'"'s sphere of control is roughly the list below. Nixarchy owns the NixOS half of each line -- how the thing is packaged, seeded and exposed on NixOS -- and Omarchy owns the behaviour itself:' \
-                      --replace-fail 'A crash in a program Omarchy merely installs is **not** an Omarchy bug unless' 'A crash in a program the distribution merely installs is **not** its bug unless' \
-                      --replace-fail 'Omarchy'"'"'s own packaging or configuration is implicated.' 'Nixarchy'"'"'s or Omarchy'"'"'s own packaging or configuration is implicated.' \
-                      --replace-fail 'If it is not Omarchy'"'"'s, say so and stop. Suggesting the right upstream project is' 'If it belongs to neither, say so and stop. Suggesting the right upstream project is' \
-                      --replace-fail '1. **It is a verified bug in Omarchy'"'"'s sphere**, established on evidence. Issues' '1. **It is a verified bug in Nixarchy'"'"'s or Omarchy'"'"'s sphere**, established on evidence. Issues' \
-                      --replace-fail 'gh search issues --repo omacom/omarchy "<program> crash"' 'gh search issues --repo olafkfreund/nixarchy "<program> crash"' \
-                      --replace-fail 'gh issue list --repo omacom/omarchy --state all --search "<signal> <program>"' 'gh issue list --repo olafkfreund/nixarchy --state all --search "<signal> <program>"' \
-                      --replace-fail 'gh issue view <number> --repo omacom/omarchy --comments' 'gh issue view <number> --repo olafkfreund/nixarchy --comments' \
-                      --replace-fail 'gh issue comment <number> --repo omacom/omarchy --body "..."' 'gh issue comment <number> --repo olafkfreund/nixarchy --body "..."' \
-                      --replace-fail 'gh issue create --repo omacom/omarchy --title "..." --body "..."' 'gh issue create --repo olafkfreund/nixarchy --title "..." --body "..."'
-
-                    # The agent-room half of the same file (#271): a search beside the gh
-                    # search, and closing the loop after filing -- the two sections live in
-                    # their own .md files rather than inline, because a multi-line bash
-                    # argument inside this indented string changes its minimal indentation
-                    # and makes nixfmt re-flow the entire installPhase. $'\n\n' keeps each
-                    # replacement on one source line for the same reason.
-                    substituteInPlace $skills/diagnose-crash/reporting.md \
-                      --replace-fail 'anything else. Leaving it off searches both, which is what you want here.' 'anything else. Leaving it off searches both, which is what you want here.'$'\n\n'"$(cat ${./crash-room-search.md})" \
-                      --replace-fail 'the path to drag into the web form.' 'the path to drag into the web form.'$'\n\n'"$(cat ${./crash-room-loop.md})"
+                    # quattro 2eb7eb3 folded reporting.md into the omarchy-contribute skill: the
+                    # same two-project rule and room steps, moved with it (#1847).
+                    source ${./crash-report-port.sh} ${./crash-room-search.md} ${./crash-room-loop.md}
 
                     # The Arch-name lookup omarchy-pkg-add answers with. Generated rather than
                     # hand-written into the script: data/apps.nix already maps every Install
@@ -1265,22 +1386,40 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     done
 
                     # The one place a shipped entry is named rather than merely launched.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
-                      --replace-fail 'xdg-mime default HEY.desktop' \
-                        'xdg-mime default omarchy-HEY.desktop'
+                    # quattro efcf615 dropped HEY's mailto default; the tag still sets it.
+                    if grep -q 'HEY.desktop' $out/share/omarchy/bin/omarchy-provision-user; then
+                      substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+                        --replace-fail 'xdg-mime default HEY.desktop' \
+                          'xdg-mime default omarchy-HEY.desktop'
+                    fi
+
+                    ${lib.optionalString isEdge ''
+                      sharedMimeInfo=${shared-mime-info}
+                      . ${./quattro-user-files.sh}
+                    ''}
+
 
                     # No skill links into ~/.codex/skills: Codex reads ~/.agents/skills
                     # too and does not merge same-named skills, so upstream's list made it
                     # show every skill twice. Matches the relink loop in modules/home.nix;
                     # --replace-fail so an upstream change here breaks the build, not Codex.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
-                      --replace-fail '~/.claude/skills ~/.codex/skills ~/.pi/agent/skills' \
-                        '~/.claude/skills ~/.pi/agent/skills' \
-                      --replace-fail 'ln -sfn "$skill" ~/.codex/skills/"$name"' \
-                        ': # nixarchy: not ~/.codex/skills; Codex reads ~/.agents/skills'
+                    # quattro 2eb7eb3 moved the linking into omarchy-agent-skills-link.
+                    if [ -e $out/share/omarchy/bin/omarchy-agent-skills-link ]; then
+                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-skills-link \
+                        --replace-fail 'dirs=(~/.agents/skills ~/.claude/skills ~/.codex/skills ~/.pi/agent/skills' \
+                          'dirs=(~/.agents/skills ~/.claude/skills ~/.pi/agent/skills'
+                    else
+                      substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+                        --replace-fail '~/.claude/skills ~/.codex/skills ~/.pi/agent/skills' \
+                          '~/.claude/skills ~/.pi/agent/skills' \
+                        --replace-fail 'ln -sfn "$skill" ~/.codex/skills/"$name"' \
+                          ': # nixarchy: not ~/.codex/skills; Codex reads ~/.agents/skills'
+                    fi
 
                     # Why: pkgs/AGENTS.md#chromium-browserdesktop-is-renamed-on-three-more-paths-that-name-it
-                    for f in omarchy-provision-user omarchy-default-browser omarchy-remove-browser; do
+                    for f in ${
+                      lib.optionalString (!isEdge) "omarchy-provision-user "
+                    }omarchy-default-browser omarchy-remove-browser; do
                       substituteInPlace $out/share/omarchy/bin/$f \
                         --replace-fail 'chromium.desktop' 'chromium-browser.desktop'
                     done
@@ -1302,12 +1441,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'omarchy-install-browser "$browser" || exit 1' 'exec nixarchy-default-install browser "$browser" "$command"' \
                       --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
-                      --replace-fail "$(cat ${./default-editor-install.upstream.sh})" 'exec nixarchy-default-install editor "$selection" "$editor"' \
+                      --replace-fail "$(cat ${
+                        if hasPlain then
+                          ./default-editor-install-plain.upstream.sh
+                        else
+                          ./default-editor-install.upstream.sh
+                      })" 'exec nixarchy-default-install editor "$selection" "$editor"' \
                       --replace-fail '>"$editor_file"' '>"$editor_file" && rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-editor"'
-
-                    # #1623: nothing ships checkupdates, and its 127 read as "updates pending".
-                    substituteInPlace $out/share/omarchy/install/user/first-run/wifi.sh \
-                      --replace-fail 'checkupdates --nocolor >/dev/null 2>&1 || status=$?' 'status=2'
 
                     install -Dm755 ${./superwhisper-first-run.sh} \
                       $out/share/omarchy/install/user/first-run/superwhisper.sh
@@ -1335,7 +1475,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     pambin=$out/share/omarchy/bin
                     for pair in \
                       omarchy-setup-security-fido2:setup_pam_config \
-                      omarchy-setup-security-fingerprint:setup_pam_config \
                       omarchy-remove-security-fido2:remove_pam_config \
                       omarchy-remove-security-fingerprint:remove_pam_config \
                       omarchy-remove-security-fingerprint:remove_resume_hook \
@@ -1347,8 +1486,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     done
                     sed -i \
                       -e '/^setup_pam_config() {$/,/^}$/d' \
-                      $pambin/omarchy-setup-security-fido2 \
-                      $pambin/omarchy-setup-security-fingerprint
+                      $pambin/omarchy-setup-security-fido2
+                    if grep -q '^setup_pam_config() {$' $pambin/omarchy-setup-security-fingerprint; then
+                      sed -i '/^setup_pam_config() {$/,/^}$/d' $pambin/omarchy-setup-security-fingerprint
+                      substituteInPlace $pambin/omarchy-setup-security-fingerprint \
+                        --replace-fail 'setup_pam_config' "$(cat ${./1975-setup-pam-guidance.sh})"
+                    fi
                     sed -i '/^remove_pam_config() {$/,/^}$/d' \
                       $pambin/omarchy-remove-security-fido2 \
                       $pambin/omarchy-remove-security-fingerprint
@@ -1379,22 +1522,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                         echo "    security.pam.u2f.settings.cue = true;" >&2
                         echo "    security.pam.services.sudo.u2fAuth = true;" >&2
                         echo "    security.pam.services.polkit-1.u2fAuth = true;" >&2
-                        echo "" >&2
-                        echo "  then: sudo nixos-rebuild switch --flake <your-flake>" >&2
-                        exit 1'
-
-                    substituteInPlace $out/share/omarchy/bin/omarchy-setup-security-fingerprint \
-                      --replace-fail 'setup_pam_config' \
-                        'echo "" >&2
-                        echo "PAM is configured by your NixOS build, not by editing /etc/pam.d." >&2
-                        echo "" >&2
-                        echo "  Your fingerprint is enrolled and verified. What is left is" >&2
-                        echo "  telling PAM to accept it:" >&2
-                        echo "" >&2
-                        echo "    services.fprintd.enable = true;" >&2
-                        echo "    security.pam.services.sudo.fprintAuth = true;" >&2
-                        echo "    security.pam.services.polkit-1.fprintAuth = true;" >&2
-                        echo "    security.pam.services.hyprlock.fprintAuth = true;" >&2
                         echo "" >&2
                         echo "  then: sudo nixos-rebuild switch --flake <your-flake>" >&2
                         exit 1'
@@ -1431,6 +1558,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # The drift guard for all four: if an upstream release moves these edits
                     # into a script this does not name, the build stops here rather than
                     # shipping something that detaches a PAM stack.
+                    if [ -e "$pambin/omarchy-apply-fingerprint-pam" ]; then
+                      install -m 0755 ${./1975-apply-fingerprint-pam.sh} "$pambin/omarchy-apply-fingerprint-pam"
+                    fi
                     if grep -rln '/etc/pam.d/sudo\|/etc/pam.d/polkit-1' $out/share/omarchy/bin/; then
                       echo "the scripts above still edit a NixOS-managed PAM stack" >&2
                       exit 1
@@ -1453,11 +1583,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'echo -e "\e[32mRemoving FIDO2 device from authentication.\n\e[0m"' \
                         "$(cat ${./1304-guidance-remove-fido2.sh})"
 
-                    substituteInPlace $out/share/omarchy/bin/omarchy-setup-security-fingerprint \
-                      --replace-fail 'if omarchy-pkg-missing libfprint-git fprintd usbutils; then' \
-                        'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
-                      --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 -- libfprint-git fprintd usbutils' \
-                        "$(cat ${./1304-guidance-setup-fingerprint.sh})"
+                    # fingerprint setup, first-run wifi and the local model runner (#1577, #1623, #1896)
+                    source ${./quattro-script-ports.sh} ${./1304-guidance-setup-fingerprint.sh} ${./agent-local-use.upstream.sh} ${./agent-local-preflight.sh} ${./1896-guidance-hostname.sh}
 
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-timezone \
                       --replace-fail 'sudo timedatectl set-timezone "$timezone"' \
@@ -1495,9 +1622,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # blank tile. This is the drift guard: an upstream release that adds a
                     # desktop file, or renames an icon, fails here rather than shipping.
                     for desktop in $out/share/applications/*.desktop; do
+                      ${lib.optionalString isEdge "grep -qx 'NoDisplay=true' \"$desktop\" && continue"}
                       icon=$(sed -n 's/^Icon=//p' "$desktop")
                       [ -n "$icon" ] || continue
-                      if [ ! -e "$out/share/icons/hicolor/256x256/apps/$icon.png" ]; then
+                      # Themed and papercraft icons are drawn into the home by omarchy-theme-set-icons (#1776, #1793).
+                      if [ ! -e "$out/share/icons/hicolor/256x256/apps/$icon.png" ] \
+                        && [ ! -e "$out/share/omarchy/default/themed/icons/$icon.svg.tpl" ] \
+                        && [ ! -e "$out/share/omarchy/icons/papercraft/$icon.svg.tpl" ] \
+                        && [ ! -e "$out/share/omarchy/icons/papercraft/$icon.svg" ]; then
                         echo "$(basename "$desktop") wants icon '$icon', which is not installed" >&2
                         exit 1
                       fi
@@ -1689,13 +1821,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # it may have gained a callback, or fixed something we are now
                     # carrying a copy of. There is no way to notice that automatically, so
                     # the build stops and asks.
-                    echo "908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d  ${src}/default/plymouth/omarchy.script" \
-                      | sha256sum -c - > /dev/null || {
+                    # One hash per upstream script read: the tag's and older quattro's, and
+                    # quattro 196e190's faster progress and quit callback, taken into ours (#1896).
+                    case $(sha256sum < ${src}/default/plymouth/omarchy.script | cut -d' ' -f1) in
+                      908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d | e68af11fdf48a5e8ed192a87d215112862e20b136a2d8dbcf9477c0709a58100) ;;
+                      *)
                       echo "plymouth: upstream's omarchy.script changed." >&2
                       echo "plymouth: read it against nixarchy-plymouth.script, take what" >&2
                       echo "plymouth: is worth taking, then update the hash here." >&2
                       exit 1
-                    }
+                      ;;
+                    esac
 
                     # And what the script says it plays has to be what was written. The
                     # two numbers are set in different files by different tools; this is
@@ -1834,7 +1970,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       '      // watcher, so one removal costs one reload rather than two.' \
                       '      localPluginReloadTimer.restart()' \
                       '    }')
-                    substituteInPlace "$shellQml" --replace-fail "$rescanOld" "$rescanNew"
+                    # Quattro made the IPC an in-place rescan (#1736): only the old tree needs it.
+                    if [[ $(<"$shellQml") == *"$rescanOld"* ]]; then
+                      substituteInPlace "$shellQml" --replace-fail "$rescanOld" "$rescanNew"
+                    fi
 
                     # Why: pkgs/AGENTS.md#a-layout-only-shelljson-save-rebuilt-every-plugin-and-froze-the-bar
 
@@ -1970,9 +2109,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     substituteInPlace "$shellBin" --replace-fail "$ipcOld" "$ipcNew"
                     # Use the same display resolver for desktop and SSH callers;
                     # choosing the newest socket can target an unrelated session.
-                    displayOld=$(sed -n '/^if \[\[ -z \''${WAYLAND_DISPLAY:-}/,/^fi$/p' "$shellBin")
+                    displayOld=$(sed -n '/^if \[\[ -z \''${WAYLAND_DISPLAY:-} ||/,/^fi$/p' "$shellBin")
                     [[ -n $displayOld ]] || { echo "Missing upstream display discovery" >&2; exit 1; }
                     substituteInPlace "$shellBin" --replace-fail "$displayOld" ':'
+                    # quattro 94a8c3c then fails with no display; the session resolver needs none.
+                    noDisplay=$(printf '%s\n' 'if [[ -z ''${WAYLAND_DISPLAY:-} ]]; then' '  fail "omarchy-shell is not running"' 'fi')
+                    if grep -qxF 'if [[ -z ''${WAYLAND_DISPLAY:-} ]]; then' "$shellBin"; then
+                      substituteInPlace "$shellBin" --replace-fail "$noDisplay" ':'
+                    fi
 
 
                     # A monitor surviving a rebuild must use its own helpers,
@@ -2007,8 +2151,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
 
                     # Why: pkgs/AGENTS.md#the-watcher-reaper-checks-the-scan-1923
-                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-reaper-check.patch}
-                    if grep -q '^  function rescanPlugins() {$' "$out/share/omarchy/shell/shell.qml"; then
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
+                      if lib.hasSuffix "745271c" version then ./1923-reaper-check-155.patch else ./1923-reaper-check.patch
+                    }
+                    patch_reaper_guard
+                    if grep -q '^    if (shell.pluginReloading || shell.pluginRegistry.scanning) {$' "$out/share/omarchy/shell/shell.qml"; then
                       patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1923-rescan-guard.patch}
                     fi
 
@@ -2028,12 +2175,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail '  function activateIndex(index, fromPointer) {' "$(cat ${./1305-menu-right-enters.js})"$'\n\n'"  function activateIndex(index, fromPointer) {"
                     # Bug 2: a request the next one displaces releases its caller.
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
-                      --replace-fail "  function openExistingMenu(initialMenu) {"$'\n'"    requestSerial += 1" "$(cat ${./1305-menu-release-displaced.js})"$'\n\n'"  function openExistingMenu(initialMenu) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1" \
+                      --replace-fail "  function openExistingMenu(initialMenu) {"$'\n'"${lib.optionalString isEdge "    altHeld = false\n"}    requestSerial += 1" "$(cat ${./1305-menu-release-displaced.js})"$'\n\n'"  function openExistingMenu(initialMenu) {"$'\n'"${lib.optionalString isEdge "    altHeld = false\n"}    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1" \
                       --replace-fail "  function openDmenu(payload) {"$'\n'"    requestSerial += 1" "  function openDmenu(payload) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1"
 
                     # Why: pkgs/AGENTS.md#the-menu-fits-its-widest-label-1339
-                    substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
-                      --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "appearance.font" || root.activeMenu === "update.kernel") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
+                    if grep -q 'root.wideMenus\[root.activeMenu\]' $out/share/omarchy/shell/plugins/menu/Menu.qml; then
+                      substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                        --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : (root.wideMenus[root.activeMenu] === true ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width-155.qml})"
+                    else
+                      substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                        --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "appearance.font" || root.activeMenu === "update.kernel") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
+                    fi
 
                     # The plugin lives in the system profile, not /usr/lib (#1572).
                     substituteInPlace $out/share/omarchy/default/hypr/workspace-modes.lua \
@@ -2107,7 +2259,23 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   passthru = {
-    inherit runtimeDeps;
+    chromeExtensionsPolicy = isEdge;
+    inherit
+      runtimeDeps
+      hasQtengine
+      hasFiles
+      hasOmaview
+      hasPlain
+      basePackages
+      preinstallsMoonlight
+      ;
+    fileManagerDesktop = if hasFiles then "folio.desktop" else null;
+    mediaViewerDesktop = if hasOmaview then "omaview.desktop" else null;
+    fileManager = if hasFiles then folio else null;
+    fileChooserPortal = hasFiles;
+    editorDesktop = if hasPlain then "plain.desktop" else "nvim.desktop";
+    pdfViewer = if hasPapers then papers else evince;
+    pdfDesktop = if hasPapers then "org.gnome.Papers.desktop" else "org.gnome.Evince.desktop";
     userMigrations = callPackage ./user-migrations.nix {
       omarchy = finalAttrs.finalPackage;
     };

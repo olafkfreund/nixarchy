@@ -7,6 +7,8 @@ pkgs.runCommand "nixarchy-menu-keys"
     nativeBuildInputs = [
       pkgs.bash
       pkgs.coreutils
+      # quattro 4d0418c builds the select and input payloads with jq, a package runtime input.
+      pkgs.jq
       pkgs.perl
       omarchy.quickshell
     ];

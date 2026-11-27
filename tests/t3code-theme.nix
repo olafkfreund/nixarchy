@@ -87,10 +87,12 @@ let
     set_calls() { grep -Fc 't3 theme set omarchy --base-dir ' "$T3_CALLS" || :; }
     no_set() { [ "$(set_calls)" -eq 0 ]; }
     published() { grep -Fxq publish "$T3_CALLS"; }
+    # Quattro publishes through jq, which reformats; the content is what must match.
+    same_json() { cmp -s <(${pkgs.jq}/bin/jq -S . "$1") <(${pkgs.jq}/bin/jq -S . "$2"); }
     choice() { [ ! -e "$settings" ] || ${pkgs.jq}/bin/jq -r '.defaultTheme // empty' "$settings"; }
     fresh() {
       source_entry ${regular}
-      published && cmp -s "$theme" "$palette" && [ "$(choice)" = omarchy ] &&
+      published && same_json "$theme" "$palette" && [ "$(choice)" = omarchy ] &&
         [ -f "$marker" ] && [ "$(set_calls)" -eq 1 ]
     }
     case "$1" in
@@ -118,7 +120,7 @@ let
       9) [ ! -e "$(dirname "$marker")" ]; fresh ;;
       10) t3home="$HOME/my t3"; settings=$t3home/userdata/settings.json
           palette=$t3home/userdata/themes/omarchy.json
-          source_entry ${spaced}; published && cmp -s "$theme" "$palette" &&
+          source_entry ${spaced}; published && same_json "$theme" "$palette" &&
             [ "$(choice)" = omarchy ] && [ -f "$marker" ] && [ "$(set_calls)" -eq 1 ] ;;
       # The marker's parent exists, so only run's dry-run guard keeps the marker away.
       11) mkdir -p "$(dirname "$palette")" "$(dirname "$marker")"; cp "$theme" "$palette"

@@ -45,6 +45,9 @@ function world(name, present) {
   fs.mkdirSync(path.join(home, ".config/nixarchy"), { recursive: true })
   fs.writeFileSync(path.join(home, ".config/nixarchy/apps.nix"), "{ }\n")
   if (present) for (const n of names) fs.writeFileSync(path.join(bin, n), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
+  // The reference machine: x86_64 with no /etc/omarchy/region, so global (quattro efcf615).
+  for (const [n, rc] of [["omarchy-hw-x86", 0], ["omarchy-region-global", 0], ["omarchy-region-cn", 1]])
+    fs.writeFileSync(path.join(bin, n), `#!/bin/sh\nexit ${rc}\n`, { mode: 0o755 })
   const env = { PATH: bin + ":" + basePath, HOME: home }
   const script = M.guardScript(rows)
   const r = spawnSync(bash, ["--noprofile", "--norc", "-c", script], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
@@ -95,6 +98,12 @@ for (const id of install) {
   const inWhen = PKG.test(String(r.when || ""))
   const inDisabled = PKG.test(String(r.disabled || ""))
   if (!inWhen && !inDisabled) continue
+  // Mainland China's rows are hidden on a global machine whatever is installed.
+  if (/\bomarchy-region-cn\b/.test(String(r.when || ""))) {
+    count("region-cn-hidden")
+    if (absent.visible(id) || present.visible(id)) fail(`${id}: a mainland China row shown on a global machine`)
+    continue
+  }
   count("package-guarded")
   if (!absent.visible(id) || (inDisabled && absent.dim(id))) fail(`${id}: not offered with nothing installed`)
   if (inWhen && present.visible(id)) fail(`${id}: visible with its package present (${r.when})`)

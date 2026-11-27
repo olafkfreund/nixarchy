@@ -216,8 +216,9 @@ ci_row() {
       return
       ;;
     cancelled)
-      # The one that went unreported for two nights. Almost always a timeout.
-      finding "$wf" "${age}h ago" "cancelled" "timed out, most likely -- raise the budget or split the job"
+      # The one that went unreported for two nights. A timeout, an eviction or a
+      # person: only the job's annotation says which (CLAUDE.md §6).
+      finding "$wf" "${age}h ago" "cancelled" "a timeout, an eviction or by hand -- read the job's annotation"
       return
       ;;
     *)

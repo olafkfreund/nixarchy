@@ -8,7 +8,7 @@ let
   allRows = import ../data/mise-allow.nix;
   # An optional `edge` marker ("only" or "absent"), validated on every row first (#1752).
   isEdge = lib.hasPrefix "edge-" pkgs.omarchy.version;
-  isLatestEdge = lib.hasSuffix "-155c4b4" pkgs.omarchy.version;
+  isLatestEdge = lib.hasSuffix "-745271c" pkgs.omarchy.version;
   badMarker = lib.attrNames (
     lib.filterAttrs (
       _: r:

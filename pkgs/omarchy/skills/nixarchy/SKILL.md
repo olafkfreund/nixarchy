@@ -129,6 +129,29 @@ enter a password there, such as a command launched by an agent or a graphical
 background process. Do not replace `sudo` with `pkexec` merely because a
 command changes system state.
 
+When you run `pkexec` yourself, if `omarchy-shell` has the `omarchy.polkit`
+target, give the password dialog a reason. Without one, the dialog shows who is
+asking and the command, which tells the person what will run but not why. Build
+the command as an array and set the reason directly before `pkexec`, in the
+same shell command:
+
+```bash
+cmd=(install -d -m 0755 /etc/myapp)
+omarchy-shell -q omarchy.polkit expect "${cmd[*]}" "Claude needs a system configuration directory for MyApp"
+pkexec "${cmd[@]}"
+```
+
+The reason appears only on a prompt whose command line matches `${cmd[*]}` —
+the command after `pkexec` with arguments joined by single spaces (keep
+`pkexec`'s own options out of the array, e.g. `pkexec --user postgres
+"${cmd[@]}"`). Using one array keeps the two in step; if they do not match, or
+if the shell has no `omarchy.polkit` target, the call fails quietly and the
+dialog simply has no reason. The reason replaces the line naming who is asking
+on a single line while your command still appears beneath it, so name yourself,
+keep it short, and do not repeat the command. Each reason applies once, to the
+next matching prompt within a minute, and only the latest one is kept. Give
+each `pkexec` its own reason and run them one at a time.
+
 ## System Architecture
 
 Nixarchy is built on:

@@ -322,7 +322,7 @@
     # (`git ls-remote --tags` is empty), which is the situation sops-nix is
     # already in. Bump it deliberately; never track the branch.
     mcp-servers-nix = {
-      url = "github:natsukium/mcp-servers-nix/47945d9392b28359ff15abc4837f669306afbdca";
+      url = "github:natsukium/mcp-servers-nix/056517f2329b35db93b873b96f6c117d9fa2dce0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

@@ -1066,30 +1066,28 @@
   };
   "omarchy-boot-rebuild" = {
     edge = "only";
-    class = "vendor";
-    allow = "initrd-boot";
-    pacman = "Reads pacman kernel transactions for Arch boot images; NixOS builds its own initrd and the pacman hooks are not installed here.";
-    reason = "Builds Arch mkinitcpio and Limine/systemd-boot images. Its installed-kernel scan needs /usr/lib/modules/*/pkgbase, absent on NixOS, so the rebuild path has no kernel to act on.";
+    class = "patch";
+    reason = "Refuses Arch mkinitcpio and Limine/systemd-boot image writes; NixOS builds its boot images from the flake.";
   };
   "omarchy-boot-switch" = {
     edge = "only";
-    class = "vendor";
-    allow = "etc-write initrd-boot systemctl-system";
-    pacman = "The switch installs Arch's omarchy-boot-systemd with pacman; no NixOS path installs this package or invokes the switch.";
-    reason = "Converts Limine to Arch's systemd-boot by writing /etc/fstab, boot files and system units. NixOS already owns its bootloader and initrd through the flake; no menu or installer path invokes this command here.";
+    class = "patch";
+    reason = "Refuses Arch's Limine-to-systemd-boot conversion; NixOS owns its bootloader through the flake.";
   };
   "omarchy-boot-sync" = {
     edge = "only";
-    class = "vendor";
-    allow = "boot-write etc-write";
-    reason = "Publishes Arch kernel images into a separately mounted boot store and ESP, and reads /etc/kernel/uki.conf. Those mounts and its snapshot hooks are not installed by Nixarchy; NixOS builds boot entries declaratively.";
+    class = "patch";
+    reason = "Refuses Arch boot-store and ESP writes; NixOS builds boot entries declaratively.";
   };
   "omarchy-boot-sync-initcpio" = {
     edge = "only";
-    class = "vendor";
-    allow = "initrd-boot";
-    pacman = "Checks an Arch pacman hook and mkinitcpio state; NixOS has neither pacman transactions nor mkinitcpio hooks.";
-    reason = "Tracks Arch initcpio hook changes and asks omarchy-boot-rebuild for new images. NixOS builds its initrd from the flake and never installs this hook.";
+    class = "patch";
+    reason = "Refuses Arch initcpio hook updates; NixOS builds its initrd from the flake.";
+  };
+  "omarchy-boot-backend" = {
+    edge = "only";
+    class = "patch";
+    reason = "Refuses Arch bootloader detection, which reads an Arch snapper marker; NixOS's bootloader is configured in the flake.";
   };
   "omarchy-camera-guard" = {
     edge = "only";
@@ -1106,9 +1104,14 @@
   };
   "omarchy-rollcall" = {
     edge = "only";
-    class = "vendor";
+    class = "patch";
     allow = "rfkill";
-    reason = "Hardware diagnostic checks rfkill state while reporting Wi-Fi and Bluetooth health; it does not change radio state. It is available manually on NixOS.";
+    reason = "Reports failed NixOS systemd units from store fragments, instead of looking only under Arch's /usr/lib/systemd/system; rfkill only reads radio state.";
+  };
+  "omarchy-theme-bg-boot-intro" = {
+    edge = "only";
+    class = "patch";
+    reason = "Reads packaged themes from the Omarchy store tree instead of Arch's /usr/share/omarchy/themes fallback.";
   };
   "omarchy-update-qualcomm-device-trees" = {
     edge = "only";

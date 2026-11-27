@@ -36,6 +36,10 @@
   # quattro's Install > AI > Claude Desktop (#1278).
   "install.ai.claude" =
     "Claude Desktop: nixpkgs has no claude-desktop package (checked 2026-10-15). The Claude Code agent is in the Default Agent menu.";
+  "install.ai.desktop.claude" = {
+    edge = "only";
+    reason = "Claude Desktop has no mapped Linux package; Claude Code CLI is a separate app selection.";
+  };
   "install.package" = "installs an arbitrary named package; the row IS the mechanism.";
   "install.preinstalls" =
     "re-runs Omarchy's own preinstall set, which this port expresses as modules.";
@@ -79,13 +83,107 @@
   "install.ai.hermes" =
     "dimmed with a reason (#1320): upstream installs a binary with its own installer under "
     + "/usr/share/hermes-desktop; nixpkgs has no hermes";
+  "install.ai.desktop.hermes" = {
+    edge = "only";
+    reason = "Hermes Desktop uses an upstream binary installer, not a Nixarchy app selection.";
+  };
   # New in quattro ae64a4b.
-  "install.ai.herdr" = {
+  "install.ai.desktop.herdr" = {
     reason =
       "Herdr's desktop app, which Herdr's own installer puts in ~/.local/share/herdr-app and updates itself; "
       + "nixpkgs has no herdr-app (its herdr is the terminal multiplexer, carried as nixarchy's herdr plugin). "
       + "The row runs upstream's installer unchanged, and the app runs through nix-ld (untested).";
     edge = "only";
+  };
+  "install.ai.desktop.opencode" = {
+    edge = "only";
+    reason = "OpenCode Desktop is a separate Electron app from the mapped opencode CLI; no desktop package is selected by programs.nixarchy.apps.opencode.";
+  };
+  "install.ai.desktop.perplexity" = {
+    edge = "only";
+    reason = "Perplexity Desktop has no mapped package in this catalogue; its upstream action uses the Arch package.";
+  };
+  # Quattro's new agent CLIs are Arch curated packages. The four available
+  # catalogue apps (Amp, Claude Code, Codex and OpenCode) are mapped above.
+  "install.ai.cli.antigravity" = {
+    edge = "only";
+    reason = "Antigravity CLI is separate from the mapped Antigravity desktop app; no CLI app is offered by this catalogue.";
+  };
+  "install.ai.cli.copilot" = {
+    edge = "only";
+    reason = "GitHub Copilot CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.crush" = {
+    edge = "only";
+    reason = "Crush CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.cursor" = {
+    edge = "only";
+    reason = "Cursor Agent is separate from the mapped Cursor desktop app; no CLI app is offered by this catalogue.";
+  };
+  "install.ai.cli.deepseek" = {
+    edge = "only";
+    reason = "DeepSeek dsh is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.devin" = {
+    edge = "only";
+    reason = "Devin CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.freebuff" = {
+    edge = "only";
+    reason = "Freebuff CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.grok" = {
+    edge = "only";
+    reason = "Grok CLI is separate from the mapped Grok Bot desktop app; no CLI app is offered by this catalogue.";
+  };
+  "install.ai.cli.kilo" = {
+    edge = "only";
+    reason = "Kilo CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.kimi" = {
+    edge = "only";
+    reason = "Kimi CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.minimax" = {
+    edge = "only";
+    reason = "MiniMax CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.muse" = {
+    edge = "only";
+    reason = "Muse CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.oh-my-pi" = {
+    edge = "only";
+    reason = "Oh My Pi is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.ori" = {
+    edge = "only";
+    reason = "Ori CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.ai.cli.qwen" = {
+    edge = "only";
+    reason = "Qwen CLI is an Arch curated package, not a Nixarchy app selection.";
+  };
+  "install.cli.basecamp" = {
+    edge = "only";
+    reason = "Basecamp CLI uses upstream's installer, not an app package selected by this catalogue.";
+  };
+  "install.cli.cloudflare" = {
+    edge = "only";
+    reason = "Cloudflare CLI is requested through Omarchy's curated package action, not this app catalogue.";
+  };
+  "install.cli.github" = {
+    edge = "only";
+    reason = "GitHub CLI is requested through Omarchy's curated package action, not this app catalogue.";
+  };
+  "install.cli.hey" = {
+    edge = "only";
+    reason = "Hey CLI uses upstream's installer, not an app package selected by this catalogue.";
+  };
+  "install.cli.hunk" = {
+    edge = "only";
+    reason = "Hunk CLI is requested through Omarchy's curated package action, not this app catalogue.";
   };
   # New in quattro efcf615 (#1896), with regions.
   "install.service.dingtalk" = {

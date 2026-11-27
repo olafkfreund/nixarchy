@@ -370,6 +370,14 @@
     unavailable = "Amp Desktop is an AUR binary with no nixpkgs package; the Amp CLI is in nixpkgs as amp-cli.";
     arch = "amp-desktop-bin";
   };
+  amp-cli = {
+    edge = "only";
+    menuId = "install.ai.cli.amp";
+    label = "Amp CLI";
+    category = "AI";
+    attr = "amp-cli";
+    arch = "amp-cli";
+  };
   notion-desktop = {
     # nixpkgs' notion-app builds only for aarch64-darwin, so there is nothing
     # to map on NixOS. Install > Web App reaches Notion's site.
@@ -379,27 +387,15 @@
     unavailable = "Notion's desktop app has no Linux package in nixpkgs; its notion-app is macOS-only.";
     arch = "notion-desktop";
   };
-  # The terminal coding agents. Four entries that share one shape, so the
-  # reasoning is here once rather than repeated four times.
-  #
-  # NO menuId, deliberately, following t3-code above: Omarchy v4.0.2's menu
-  # ships exactly five install.ai.* rows -- chatgpt, dictation, grok-bot,
-  # lm-studio, ollama -- and the row generator FAILS on a menuId upstream does
-  # not have. These are reachable as programs.nixarchy.apps.<name> and through
-  # `nixarchy-app-enable`, and each gains a menu row for free if upstream ever
-  # adds one.
-  #
-  # NO arch, also deliberately. That field maps an Arch package name onto our
-  # app id so the generator can rewrite upstream's `remove.*` rows, which
-  # identify their target with `omarchy-pkg-present <arch>`. Upstream has no
-  # rows for these, so there is no name to match -- and inventing a plausible
-  # AUR name would create a mapping that fires on somebody else's package.
-  # `archMap` filters on `a ? arch` (modules/apps.nix:787), so omitting it is
-  # supported rather than merely tolerated.
+  # Quattro gives these terminal agents CLI install rows. `edge` gates only
+  # the menu row; the app selection remains available on the stable pin.
   claude-code = {
+    edge = "only";
+    menuId = "install.ai.cli.claude";
     label = "Claude Code";
     category = "AI";
     attr = "claude-code";
+    arch = "claude-code";
     # Anthropic's licence is not a free-software licence; nixpkgs marks the
     # package unfree, and an entry without this flag fails to evaluate for a
     # user who has not set allowUnfree.
@@ -437,17 +433,23 @@
   };
 
   codex = {
+    edge = "only";
+    menuId = "install.ai.cli.codex";
     label = "Codex";
     category = "AI";
     attr = "codex";
+    arch = "openai-codex";
     # Apache-2.0. Not unfree, unlike the ChatGPT desktop app above, which is a
     # different piece of software from the same vendor.
   };
 
   opencode = {
+    edge = "only";
+    menuId = "install.ai.cli.opencode";
     label = "OpenCode";
     category = "AI";
     attr = "opencode";
+    arch = "opencode";
     # Absent from this catalogue until now, which was an oversight rather than
     # a decision: omarchy-default-agent already maps `opencode` to this exact
     # attribute and installs it through nixarchy-pkg-add, and
@@ -468,9 +470,9 @@
     # other three track upstream within days.
   };
   antigravity = {
-    # The marker gates the menu row only: quattro added install.ai.antigravity (#1896), the tag has none.
+    # The marker gates the menu row only; quattro moved it under AI > Desktop.
     edge = "only";
-    menuId = "install.ai.antigravity";
+    menuId = "install.ai.desktop.antigravity";
     arch = "antigravity";
     label = "Antigravity";
     category = "AI";

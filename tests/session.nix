@@ -2614,6 +2614,9 @@ pkgs.testers.runNixOSTest {
                # /usr/share/omarchy/themes, read only behind a -d test for the theme
                # video packages, which this port skips (data/omarchy-packages.nix).
                "omarchy-theme-set",
+               # Quattro's camera relay unit is not installed on NixOS (#1610).
+               # Its /usr/bin/v4l2-relayd fallback is unreachable without that unit.
+               "omarchy-camera-relay",
                # quattro e3802fd (#1896): finds the terminal's .desktop file under
                # XDG_DATA_DIRS, falling back to /usr/local/share:/usr/share only when
                # it is unset. A NixOS session always sets it.

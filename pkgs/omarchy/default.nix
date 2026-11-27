@@ -468,6 +468,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     mkdir -p $out/share/omarchy
                     cp -r . $out/share/omarchy/
                     rm -rf $out/share/omarchy/{.git,.github,docs,manual,test,plans,agents}
+                    ${lib.optionalString isEdge ''
+                      # Quattro's boot image commands operate on Arch's Limine, UKI and mkinitcpio state.
+                      for name in omarchy-boot-backend omarchy-boot-rebuild omarchy-boot-switch omarchy-boot-sync omarchy-boot-sync-initcpio; do
+                        printf '%s\n' '#!/usr/bin/env bash' "echo '$name manages Arch boot images; configure the NixOS bootloader in your flake instead.' >&2" 'exit 1' > "$out/share/omarchy/bin/$name"
+                      done
+                      substituteInPlace $out/share/omarchy/bin/omarchy-rollcall \
+                        --replace-fail '[[ $fragment == /usr/lib/systemd/system/* ]]' '[[ $fragment == /nix/store/* ]]'
+                      substituteInPlace $out/share/omarchy/bin/omarchy-theme-bg-boot-intro \
+                        --replace-fail '/usr/share/omarchy/themes' "$out/share/omarchy/themes"
+                    ''}
                     # Shared ownership guard for scripts that edit user files (#1304).
                     install -Dm644 ${./nixarchy-store-owned.sh} $out/share/omarchy/lib/nixarchy-store-owned.sh
 

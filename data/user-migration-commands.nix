@@ -13,11 +13,6 @@
     follow = true;
     reason = "links Omarchy's Pi extensions folder to ~/.pi/agent/extensions/omarchy, replacing a link into another Omarchy tree and leaving a folder or link of the user's own, and writes collapseChangelog into ~/.pi/agent/settings.json only where the user has not chosen";
   };
-  "omarchy-agent-local-launchers" = {
-    edge = "only";
-    follow = true;
-    reason = "writes one .desktop file and a vendor-logo SVG icon under ~/.local/share for each local model that is set up, and removes those of models taken away";
-  };
   "omarchy-models-launchers" = {
     edge = "only";
     follow = true;

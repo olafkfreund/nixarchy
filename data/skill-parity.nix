@@ -53,17 +53,18 @@
 
   "## Critical Safety Rules" = {
     class = "adapted";
-    upstream = "a99ca335d725";
+    upstream = "355acc3bad25";
+    tag_upstream = "a99ca335d725";
     anchor = "read-only `/nix/store` path";
-    reason = "Upstream's rule is that /usr/share/omarchy is overwritten on update. Here the path is a store path mounted read-only, so the rule is stronger and stated as such: a write does not lose later, it fails now.";
+    reason = "Upstream's rule is that /usr/share/omarchy is overwritten on update. Here the path is a store path mounted read-only, so the rule is stronger and stated as such: a write does not lose later, it fails now. Quattro also asks for a reason on pkexec's dialog; this port does not carry that yet (see Privilege Escalation).";
   };
 
   "## Privilege Escalation" = {
     class = "adapted";
-    upstream = "fde15ad3173f";
+    upstream = "092eba3f21f2";
     tag_upstream = "d4ded906a1a4";
     anchor = "Use `pkexec` only when the caller cannot interact with a terminal";
-    reason = "The sudo/pkexec split is upstream's and kept. Omarchy's new exception for installing curated Arch packages does not apply: Nixarchy installs packages declaratively, and the earlier passwordless-sudo arrangement is not made here.";
+    reason = "The sudo/pkexec split is upstream's and kept. Omarchy's new exception for installing curated Arch packages does not apply: Nixarchy installs packages declaratively, omarchy-pkg-add-curated only delegates to omarchy-pkg-add here, and the earlier passwordless-sudo arrangement is not made. Quattro's advice to give pkexec's dialog a reason through `omarchy-shell -q omarchy.polkit expect` is not carried: main's v4.5.0 tag has no such call, though quattro's shell here does.";
   };
 
   "## System Architecture" = {

@@ -46,6 +46,7 @@
     nix = "btop";
   };
   "btrfs-progs" = {
+    edge = "absent";
     nix = "btrfs-progs";
   };
   "chromium" = {
@@ -169,6 +170,7 @@
     nix = "less";
   };
   "libpulse" = {
+    edge = "absent";
     nix = "pulseaudio";
   };
   "libreoffice-fresh" = {
@@ -306,6 +308,7 @@
     nix = "slurp";
   };
   "snapper" = {
+    edge = "absent";
     nix = "snapper";
   };
   "socat" = {
@@ -436,6 +439,7 @@
     module = "programs.hyprland.enable";
   };
   "linux-firmware" = {
+    edge = "absent";
     module = "hardware.enableRedistributableFirmware";
   };
   "networkmanager" = {
@@ -448,15 +452,18 @@
     module = "services.power-profiles-daemon.enable";
   };
   "pipewire" = {
+    edge = "absent";
     module = "services.pipewire.enable";
   };
   "pipewire-alsa" = {
+    edge = "absent";
     module = "services.pipewire.alsa.enable";
   };
   "pipewire-jack" = {
     nix = "pipewire.jack";
   };
   "pipewire-pulse" = {
+    edge = "absent";
     module = "services.pipewire.pulse.enable";
   };
   "plocate" = {
@@ -486,15 +493,18 @@
 
   # ── Arch-only tooling and packaging ───────────────────────────────────────
   "autoconf-archive" = {
+    edge = "absent";
     skip = "Arch build dependency; not installed by default.";
   };
   "base" = {
+    edge = "absent";
     skip = "Arch base meta-package; NixOS has its own base system.";
   };
   "base-devel" = {
     skip = "Arch build meta-package; makepkg is not used here.";
   };
   "dkms" = {
+    edge = "absent";
     skip = "Arch out-of-tree module build; NixOS builds modules into the kernel package set.";
   };
   "expac" = {
@@ -507,12 +517,15 @@
     skip = "Arch kernel-upgrade hook; NixOS boots a generation that carries its own modules.";
   };
   "limine" = {
+    edge = "absent";
     skip = "Arch boot-loader choice; the installer picks the boot loader.";
   };
   "limine-mkinitcpio-hook" = {
+    edge = "absent";
     skip = "Arch limine/mkinitcpio integration.";
   };
   "limine-snapper-sync" = {
+    edge = "absent";
     skip = "Arch limine/snapper integration.";
   };
   "pacman-contrib" = {
@@ -525,6 +538,7 @@
     skip = "AUR helper; no AUR here.";
   };
   "yay-debug" = {
+    edge = "absent";
     skip = "AUR helper debug package.";
   };
 
@@ -616,6 +630,7 @@
     skip = "Dell XPS hardware; not targeted.";
   };
   "egl-wayland" = {
+    edge = "absent";
     skip = "NVIDIA EGL glue; comes with the user NVIDIA driver choice.";
   };
   "intel-ipu7-camera" = {
@@ -707,9 +722,11 @@
     skip = "GB10 (aarch64) only.";
   };
   "nvidia-dkms" = {
+    edge = "absent";
     skip = "As nvidia-open-dkms.";
   };
   "nvidia-open-dkms" = {
+    edge = "absent";
     skip = "The NVIDIA driver is the user own hardware.nvidia choice; Omarchy picks an Arch package by detection, nixarchy does not.";
   };
   "nvidia-utils" = {
@@ -765,6 +782,7 @@
     skip = "Intel video runtime; not listed.";
   };
   "vulkan-asahi" = {
+    edge = "absent";
     skip = "Apple Silicon hardware; this port targets x86_64.";
   };
   "vulkan-freedreno" = {
@@ -791,6 +809,7 @@
     skip = "GStreamer plugin; not shipped separately.";
   };
   "gtk4-layer-shell" = {
+    edge = "absent";
     skip = "Library; comes with the programs that link it.";
   };
   "libsecret" = {
@@ -836,6 +855,7 @@
     skip = "Language runtime; installed on request through the language rows.";
   };
   "webp-pixbuf-loader" = {
+    edge = "absent";
     skip = "gdk-pixbuf loader; not shipped separately.";
   };
 

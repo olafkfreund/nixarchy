@@ -515,21 +515,11 @@
     run = "upstream";
     reason = "marks the first-update setup task done under ~/.local/state/omarchy/done/, so the bar's update icon watches Omarchy only; a marker is harmless on a machine whose updates are rebuilds (#1896)";
   };
-  "1795274792" = {
-    edge = "only";
-    decision = "not-needed";
-    reason = "gated on omarchy-hw-aarch64-qualcomm and a Snapdragon X device tree; adds the display chain to the boot image with limine-mkinitcpio, which this x86_64-linux port neither targets nor uses (#1896)";
-  };
   "1795277141" = {
     edge = "only";
     decision = "ported";
     run = "upstream";
     reason = "runs omarchy-models-launchers to take away the launchers of image, video and music models, which Fantasi now lists itself, leaving the coding models' alone. Upstream already skips a machine without omarchy-local-ai, which is opt-in here (services.agent-local), so it holds unedited (#1896)";
-  };
-  "1795285870" = {
-    edge = "only";
-    decision = "not-needed";
-    reason = "gated on omarchy-hw-match ZBook Ultra G3a 16; writes amdgpu.dcdebugmask=0x402 into /etc/limine-entry-tool.d and rebuilds the boot image with limine-mkinitcpio. The kernel command line here comes from boot.kernelParams, so a host with that laptop sets the parameter there (#1896)";
   };
   "1795318856" = {
     edge = "only";
@@ -589,5 +579,10 @@
     edge = "only";
     decision = "not-needed";
     reason = "Anduril camera migration depends on the Arch anduril-bluechip-support package and its legacy units";
+  };
+  "1795709363" = {
+    edge = "only";
+    decision = "declined";
+    reason = "installs Shure's hidraw udev rule with sudo into /etc/udev/rules.d, which NixOS generates, then puts omarchy.mv7plus on the bar. Nixarchy ships no such rule, so an existing bar is left as it is; an owner of the mic adds default/udev/shure-mv7plus.rules through services.udev.packages (before 73-seat-late) and runs `omarchy bar put omarchy.mv7plus`";
   };
 }

@@ -329,6 +329,12 @@
     reason = "services.logind.settings.Login.InhibitDelayMaxSec = 15 in modules/nixos.nix, giving omarchy-sleep-lock time to secure the screen before logind suspends anyway.";
   };
 
+  "systemd/logind.conf.d/30-lid-external-power.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "HandleLidSwitchExternalPower=ignore, so a docked laptop on external power does not suspend while its display re-enumerates. Not adopted: it changes what closing the lid on AC does on an existing machine. A host that wants it sets services.logind.settings.Login.HandleLidSwitchExternalPower = \"ignore\".";
+  };
+
   "systemd/oomd.conf.d/10-omarchy.conf" = {
     class = "native";
     reason = "systemd-oomd kills at 50% memory pressure held for 20s rather than nixpkgs' 60% and systemd's 30s, so one runaway app goes before the session thrashes. modules/nixos.nix sets both through systemd.oomd.settings.OOM at mkDefault.";
@@ -443,13 +449,6 @@
   "tmpfiles.d/omarchy-zswap.conf" = {
     class = "covered";
     reason = "Writes N to zswap's enabled parameter so it cannot compete with zram. nixpkgs' kernels leave CONFIG_ZSWAP_DEFAULT_ON off and nothing here turns zswap on, so zram -- enabled in modules/nixos.nix -- is already the only compressed swap.";
-  };
-
-  "udev/rules.d/60-omarchy-hp-zbook-ultra-g3a-usb.rules" = {
-    # Only older quattro ships it; edge-only rows a pin lacks are reported (#1896).
-    edge = "only";
-    class = "divergent";
-    reason = "Disables a phantom USB2 port on the HP ZBook Ultra G3a, which stalls its fingerprint reader. It would act on that laptop only, through services.udev.extraRules since NixOS generates /etc/udev/rules.d, and is not adopted: no machine here can test it. A host with this laptop can carry the rule in that option itself.";
   };
 
   "udev/rules.d/60-omarchy-io-scheduler.rules" = {

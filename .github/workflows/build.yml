@@ -1177,10 +1177,12 @@ jobs:
           for cmd in xdg-terminal-exec uwsm-app foot hyprctl quickshell jq gum \
                      wl-copy grim slurp brightnessctl pactl wpctl nmcli \
                      bluetoothctl notify-send nvim gtk-launch udiskie \
-                     git less man unzip pamixer imv magick rg zbarimg \
+                     git less man unzip pamixer magick rg zbarimg \
                      inotifywait starship zoxide eza lazygit; do
             [ -x "result/bin/$cmd" ] || missing="$missing $cmd"
           done
+          # The menus' image viewer: omaview where the pin ships it (4.6 on), imv before.
+          [ -x result/bin/omaview ] || [ -x result/bin/imv ] || missing="$missing omaview-or-imv"
           if [ -n "$missing" ]; then
             echo "::error::runtimeDeps does not provide:$missing"
             exit 1

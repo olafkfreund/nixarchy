@@ -1679,6 +1679,18 @@ in
     # mkForce their way out one option at a time. Their setting wins now, and
     # they lose only the feature that depended on it.
     services = {
+      udev.packages =
+        lib.optional
+          (builtins.pathExists "${cfg.package.src or inputs.omarchy}/default/udev/shure-mv7plus.rules")
+          (
+            pkgs.runCommand "shure-mv7plus-udev" { } ''
+              mkdir -p "$out/lib/udev/rules.d"
+              if [ -f ${cfg.package}/share/omarchy/default/udev/shure-mv7plus.rules ]; then
+                cp ${cfg.package}/share/omarchy/default/udev/shure-mv7plus.rules "$out/lib/udev/rules.d/62-shure-mv7plus.rules"
+              fi
+            ''
+          );
+
       # The shebang half of #566: a script starting `#!/bin/bash` or
       # `#!/usr/bin/env python` fails with "no such file or directory" on a
       # bare NixOS, because /bin holds only sh and /usr/bin only env. envfs

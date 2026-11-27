@@ -2984,6 +2984,11 @@
             pkgs = pkgsFor.${system};
             reference = inputs.self.nixosConfigurations.reference;
           };
+          mv7plus-udev = import ./tests/mv7plus-udev.nix {
+            pkgs = pkgsFor.${system};
+            reference = inputs.self.nixosConfigurations.reference;
+            omarchySource = inputs.omarchy;
+          };
 
           # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
           # for what that can and cannot prove. Costs about what reference-toplevel

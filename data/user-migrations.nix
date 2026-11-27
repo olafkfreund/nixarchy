@@ -583,6 +583,6 @@
   "1795709363" = {
     edge = "only";
     decision = "declined";
-    reason = "installs Shure's hidraw udev rule with sudo into /etc/udev/rules.d, which NixOS generates, then puts omarchy.mv7plus on the bar. Nixarchy ships no such rule, so an existing bar is left as it is; an owner of the mic adds default/udev/shure-mv7plus.rules through services.udev.packages (before 73-seat-late) and runs `omarchy bar put omarchy.mv7plus`";
+    reason = "installs Shure's hidraw udev rule with sudo into /etc/udev/rules.d, which NixOS generates, then puts omarchy.mv7plus on the bar. The NixOS module ships the rule through services.udev.packages when the pin has it; the existing bar is left as it is, and an owner of the mic can run `omarchy bar put omarchy.mv7plus`";
   };
 }

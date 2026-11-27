@@ -202,9 +202,14 @@
     class = "patch";
     reason = "The install command launches /usr/bin/spotify, which is absent on NixOS; launch the installed command from PATH.";
   };
+  "omarchy-apply-fingerprint-pam" = {
+    edge = "only";
+    class = "patch";
+    reason = "Checks the active NixOS-declared sudo and polkit fingerprint rules instead of editing their PAM stacks.";
+  };
   "omarchy-apply-lock" = {
     class = "patch";
-    reason = "Its root PATH reset points at /usr/bin, which holds nothing here, so it lost tee and getent while writing lock-screen PAM files; and its `-x /usr/bin/fprintd-list` probe was never true. On quattro (#1285) it also copies a resume hook into /usr/lib and a stop timeout into /etc/systemd; modules/nixos.nix declares both, so those copies are dropped.";
+    reason = "Its root PATH reset points at /usr/bin, which holds nothing here, and its `-x /usr/bin/fprintd-list` probe was never true. NixOS owns the fingerprint lock PAM stack, resume hook and stop timeout, so their runtime writes and removal are dropped.";
     allow = "etc-write";
   };
   "omarchy-apply-pacman" = {
@@ -711,6 +716,11 @@
   "omarchy-setup-security-fingerprint" = {
     class = "patch";
     reason = "Same as fido2: setup_pam_config and setup_lock_fingerprint_pam edit NixOS-managed PAM stacks. fprintd-enroll stays; the PAM step names services.fprintd and the fprintAuth options instead. The pacman install becomes the services.fprintd.enable line (#1304).";
+  };
+  "omarchy-setup-security-fingerprint-enroll" = {
+    edge = "only";
+    class = "patch";
+    reason = "The panel's root helper uses the trusted NixOS PATH and packaged Omarchy tree after pkexec, and checks for fprintd-enroll instead of installing Arch packages.";
   };
   "omarchy-setup-security-sshd" = {
     class = "vendor";

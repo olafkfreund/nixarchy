@@ -2002,6 +2002,7 @@
             "menu-verbs"
             # The menu scripts patched to explain and exit 1 call no writer (#1304).
             "menu-guidance"
+            "fingerprint-pam"
             # Removal asks fprintd first, then removes only the invoking account's files (#1620).
             "remove-fingerprint"
             # A font row run with no terminal reopens itself in one, when the font is missing (#1304).

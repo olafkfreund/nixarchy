@@ -103,7 +103,7 @@ pkgs.runCommand "nixarchy-menu-guidance"
 
     mk "$TMPDIR/s-fp" gum 0
     mk "$TMPDIR/s-fp" omarchy-hw-fingerprint 0
-    run_case "setup fingerprint, fprintd off" "$TMPDIR/s-fp" out 'Enable the reader first' omarchy-setup-security-fingerprint
+    run_case "setup fingerprint, fprintd off" "$TMPDIR/s-fp" out 'Enable the reader first' omarchy-setup-security-fingerprint --terminal
 
     # The opposite: with fprintd on, the guard must let the script reach enrollment.
     mk "$TMPDIR/s-fp-on" gum 0
@@ -111,7 +111,7 @@ pkgs.runCommand "nixarchy-menu-guidance"
     mk "$TMPDIR/s-fp-on" fprintd-enroll 0
     : > "$writes"
     export PATH=$TMPDIR/s-fp-on:$rec:$bin:$base
-    bash "$bin/omarchy-setup-security-fingerprint" > "$TMPDIR/out" 2>&1 </dev/null || true
+    bash "$bin/omarchy-setup-security-fingerprint" --terminal > "$TMPDIR/out" 2>&1 </dev/null || true
     if grep -qx 'sudo fprintd-enroll tester' "$writes"; then
       ok+=("setup fingerprint, fprintd on: reached sudo fprintd-enroll tester")
     else

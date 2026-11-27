@@ -1,6 +1,6 @@
 # Sourced from the install phase on edge only (#1964): quattro's boot image
 # commands operate on Arch's Limine, UKI and mkinitcpio state, so they refuse.
-# Each edit is guarded: edge's fallback pin (3642699) ships none of these files.
+# Each edit is guarded: edge's fallback pin (3642699) lacks these files or their /usr paths.
 bin=$out/share/omarchy/bin
 for name in omarchy-boot-backend omarchy-boot-rebuild omarchy-boot-switch omarchy-boot-sync omarchy-boot-sync-initcpio; do
   [ -e "$bin/$name" ] || continue
@@ -10,5 +10,6 @@ for name in omarchy-boot-backend omarchy-boot-rebuild omarchy-boot-switch omarch
 done
 [ ! -e "$bin/omarchy-rollcall" ] || substituteInPlace "$bin/omarchy-rollcall" \
   --replace-fail '[[ $fragment == /usr/lib/systemd/system/* ]]' '[[ $fragment == /nix/store/* ]]'
-[ ! -e "$bin/omarchy-theme-bg-boot-intro" ] || substituteInPlace "$bin/omarchy-theme-bg-boot-intro" \
-  --replace-fail '/usr/share/omarchy/themes' "$out/share/omarchy/themes"
+if grep -qs /usr/share/omarchy/themes "$bin/omarchy-theme-bg-boot-intro"; then
+  substituteInPlace "$bin/omarchy-theme-bg-boot-intro" --replace-fail '/usr/share/omarchy/themes' "$out/share/omarchy/themes"
+fi

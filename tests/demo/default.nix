@@ -30,7 +30,10 @@
 let
   inherit (pkgs) lib;
   defaultAgentRoute =
-    if lib.hasPrefix "edge-" pkgs.omarchy.version then "agent.harness" else "setup.default.agent";
+    if import ../../pkgs/omarchy/is-quattro.nix lib pkgs.omarchy.version then
+      "agent.harness"
+    else
+      "setup.default.agent";
 
   # A real published plugin, pinned, so the plugin scene shows the plugin
   # system working on something somebody actually wrote rather than a fixture.

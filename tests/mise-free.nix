@@ -7,8 +7,11 @@ let
   inherit (pkgs) lib;
   allRows = import ../data/mise-allow.nix;
   # An optional `edge` marker ("only" or "absent"), validated on every row first (#1752).
-  isEdge = lib.hasPrefix "edge-" pkgs.omarchy.version;
-  isLatestEdge = lib.hasSuffix "-745271c" pkgs.omarchy.version;
+  isQuattro = import ../pkgs/omarchy/is-quattro.nix lib;
+  isEdge = isQuattro pkgs.omarchy.version;
+  isLatestEdge =
+    lib.hasSuffix "-745271c" pkgs.omarchy.version
+    || (isQuattro pkgs.omarchy.version && !lib.hasPrefix "edge-" pkgs.omarchy.version);
   badMarker = lib.attrNames (
     lib.filterAttrs (
       _: r:

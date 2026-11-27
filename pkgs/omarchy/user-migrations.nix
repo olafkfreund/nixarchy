@@ -7,7 +7,7 @@
   omarchy-nvim-config,
 }:
 let
-  isEdge = lib.hasPrefix "edge-" omarchy.version;
+  isEdge = import ./is-quattro.nix lib omarchy.version;
   ledger = builtins.toFile "nixarchy-user-migrations.json" (
     builtins.toJSON (
       lib.filterAttrs (

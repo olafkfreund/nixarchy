@@ -1,7 +1,7 @@
 { pkgs, ... }:
 let
   package = pkgs.nixarchy-omarchy or pkgs.omarchy;
-  isEdge = pkgs.lib.hasPrefix "edge-" package.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix pkgs.lib package.version;
   storeList = pkgs.writeText "editor-mimeapps.list" ''
     [Default Applications]
     text/plain=kate.desktop

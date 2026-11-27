@@ -2697,7 +2697,7 @@
           # tests/omarchy-app-template.nix.
           omarchy-app-template =
             let
-              isEdge = lib.hasPrefix "edge-" self.packages.${system}.omarchy.version;
+              isEdge = import ./pkgs/omarchy/is-quattro.nix lib self.packages.${system}.omarchy.version;
             in
             import ./tests/omarchy-app-template.nix {
               pkgs = pkgsFor.${system};

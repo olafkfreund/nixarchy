@@ -1,6 +1,6 @@
 { pkgs, omarchy }:
 let
-  isEdge = pkgs.lib.hasPrefix "edge-" omarchy.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix pkgs.lib omarchy.version;
 in
 pkgs.runCommand "nixarchy-stale-scripts"
   {

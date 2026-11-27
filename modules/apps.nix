@@ -7,6 +7,7 @@ inputs:
 }:
 let
   cfg = config.programs.nixarchy;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix lib cfg.package.version;
   apps = import ../data/apps.nix;
   carried =
     (import ../pkgs/cargo-system-libs.nix {
@@ -885,7 +886,7 @@ let
           description = "Install a plugin from its Git URL, without the audit";
         };
       }
-      // lib.optionalAttrs (!lib.hasPrefix "edge-" cfg.package.version) {
+      // lib.optionalAttrs (!isEdge) {
         # The tag still has Direct Boot; hide its Arch bootloader action.
         "setup.direct-boot".when = "false";
       }
@@ -1062,7 +1063,7 @@ let
       }
       # Snapshots need the `home` snapper config omarchy-snapshot drives;
       # only the installer sets one, so Mode A gets no rows that only refuse (#1303).
-      // lib.optionalAttrs (cfg.enable && !lib.hasPrefix "edge-" cfg.package.version) {
+      // lib.optionalAttrs (cfg.enable && !isEdge) {
         # Upstream removed Direct Boot on edge; the tag still needs its unsafe action dimmed.
         "setup.direct-boot" = {
           when = "true";
@@ -1168,11 +1169,7 @@ let
           )
           (
             # A row marked edge = "only"/"absent" names a menu row only one pin has (#1752).
-            lib.filterAttrs (
-              _: a:
-              a ? menuId
-              && (a.edge or null) != (if lib.hasPrefix "edge-" cfg.package.version then "absent" else "only")
-            ) apps
+            lib.filterAttrs (_: a: a ? menuId && (a.edge or null) != (if isEdge then "absent" else "only")) apps
           )
       )
       # Why: modules/AGENTS.md#the-services-catalogue-as-menu-rows

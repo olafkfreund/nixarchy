@@ -3629,7 +3629,7 @@ pkgs.testers.runNixOSTest {
         + journal)
 
     # ---- agents panel with Tailscale stopped (#1760) ------------------------
-    if ${if pkgs.lib.hasPrefix "edge-" omarchyPkg.version then "True" else "False"}:
+    if ${if import ../pkgs/omarchy/is-quattro.nix pkgs.lib omarchyPkg.version then "True" else "False"}:
         tailscale_status, tailscale_output = machine.execute("systemctl is-active tailscaled")
         assert tailscale_status != 0, (
             "#1760: tailscaled is active; this does not test the stopped fallback: "

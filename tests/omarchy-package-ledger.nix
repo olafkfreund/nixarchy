@@ -21,7 +21,7 @@ let
   # Exactly one key, nix/module/skip, holding a non-empty string: a typo'd extra
   # key or an empty reason is not a decision.
   # An optional `edge` marker ("only" or "absent") is validated first and is not a decision key.
-  isEdge = lib.hasPrefix "edge-" pkgs.omarchy.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix lib pkgs.omarchy.version;
   wellFormed =
     r:
     let

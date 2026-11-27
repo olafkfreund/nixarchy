@@ -8,7 +8,7 @@
 let
   inherit (pkgs) lib;
   pkg = inputs.self.nixosConfigurations.reference.config.programs.nixarchy.package;
-  isEdge = lib.hasPrefix "edge-" pkg.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix lib pkg.version;
   tree = "${pkg}/share/omarchy";
 in
 pkgs.runCommand "nixarchy-omarchy-system"

@@ -8,7 +8,7 @@ let
   inherit (pkgs) lib;
   omarchy = pkgs.nixarchy-omarchy or pkgs.omarchy;
   runtime = map lib.getName omarchy.passthru.runtimeDeps;
-  isEdge = lib.hasPrefix "edge-" omarchy.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix lib omarchy.version;
   # command autostart starts -> package that must provide it
   rows = {
     # v4.5.0 starts it; quattro (v4.6.0-rc1) no longer does.

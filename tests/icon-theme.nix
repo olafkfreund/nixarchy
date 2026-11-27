@@ -1,7 +1,7 @@
 { pkgs, ... }:
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
-  isEdge = pkgs.lib.hasPrefix "edge-" shipped.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix pkgs.lib shipped.version;
   migrations = shipped.passthru.userMigrations;
   storeQt = pkgs.writeText "qtengine-store-icons.json" ''{"theme":{"iconTheme":"Yaru-blue"}}'';
 in

@@ -28,7 +28,7 @@ let
   # An optional `edge` marker ("only" or "absent"): validated on every row, then
   # rows inactive under this pin leave the comparison (#1752). Not a version
   # string: edge's carries the run's date, so one would go stale the next day (#1940).
-  isEdge = lib.hasPrefix "edge-" (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix lib (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
   manifest = lib.filterAttrs (
     _: r: !(r.edge or "" == "only" && !isEdge || r.edge or "" == "absent" && isEdge)
   ) allRows;

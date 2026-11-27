@@ -80,7 +80,7 @@ let
   );
 
   # The rows of upstream's /etc overlay that are installed as themselves.
-  isEdge = lib.hasPrefix "edge-" cfg.package.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix lib cfg.package.version;
   installedEtc = lib.attrNames (
     lib.filterAttrs (
       _: row:

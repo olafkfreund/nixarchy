@@ -1429,21 +1429,26 @@ installed before it. v4.5 moved the bar to `centerBegin`/`center`/`centerEnd`
 and stopped reading `bar.centerAnchor`, so a v4.0.x seed lost its centred
 clock and never got Elsewhen.
 
-`omarchy-migrate-user` ports the three bar migrations (`1790042972` Elsewhen
+`omarchy-migrate-user` ports three legacy bar migrations (`1790042972` Elsewhen
 after the clock, `1791968925` tray order, `1791969355` centre split), in that
-order, from the `post-boot.d/user-migrations` hook. It runs only when
+order, from the `post-boot.d/user-migrations` hook. The legacy pass runs only when
 `.bar` still has `centerAnchor` (only v4.0.x seeds do), and the key stays in
 the file because nothing in 4.5 reads it.
 
 - **IPC only.** The running shell owns `shell.json` and rewrites it from
   memory, so a direct write is lost or clobbers the user's change (#847; the
   `build.yml` step "Nothing we ship writes shell.json" enforces it). Every
-  change is `putBarWidget` or `moveBarWidget`.
+  legacy change is `putBarWidget` or `moveBarWidget`. The local-models ports
+  (`1795200237`, `1795380483`) use `migrateLocalModelsBar` in the normal
+  migration list, so a fresh seed receives their markers along with the other
+  listed migrations. The shell evaluates their guards against its live
+  layout and writes via `mutateShellConfig`; the local-models service keeps
+  its own enablement state. If a listed bar migration remains pending, later
+  bar entries wait for the next login while unrelated migrations keep running.
 - **A refused move is a reply, not an exit status.** `moveBarWidget` prints
   e.g. `widget at center[0] is not omarchy.clock` and leaves the file alone.
-  The script stops at the first reply that is not `ok`, and still judges each
-  step by re-reading the file, because `ok` does not prove the save landed
-  (the shell skips it on an unreadable file).
+  A reply other than `ok` leaves the migration pending. The script also checks
+  the file after `ok` to confirm the shell saved the change.
 - **Markers** are upstream's own: `$OMARCHY_MIGRATION_STATE/<id>.sh`, default
   `~/.local/state/omarchy/migrations`, written only once the file shows the
   result. A shell that never answers means no marker, and the next login retries.

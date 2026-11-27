@@ -962,6 +962,63 @@ compare_oracle() {
   normalise "$XDG_CONFIG_HOME/omarchy/shell.json" "$work/$case.oracle.json"
   diff -u "$work/$case.oracle.json" "$work/$case.actual.json" || fail "$case differs from upstream"
 }
+case_local_models() {
+  local mode=$1 id=$2 layout=$3 expected_calls=$4
+  local fixture=$work/models-$1.json port
+  [[ -f $oracle/migrations/$id.sh ]] || return 0
+  case=models-$mode
+  jq -n --argjson layout "$layout" '{version:1, bar:{layout:$layout}, plugins:[{id:"other.service", keep:true}]}' > "$fixture"
+  setup "$case" "$fixture"
+  run_ids "$id"
+  [[ -e $OMARCHY_MIGRATION_STATE/$id.sh ]] || fail "$case: migration marker missing"
+  [[ $(grep -cFx "shell migrateLocalModelsBar $id" "$HOME/ipc.log" || true) -eq $expected_calls ]] || fail "$case: unexpected migration IPC count"
+  if ((expected_calls == 0)); then
+    [[ ! -s $HOME/ipc.log ]] || fail "$case: no-op called the shell"
+  fi
+  port=$XDG_CONFIG_HOME/omarchy/shell.json
+  setup "$case.oracle" "$fixture"
+  bash -euo pipefail "$oracle/migrations/$id.sh"
+  diff -u <(jq -S . "$XDG_CONFIG_HOME/omarchy/shell.json") <(jq -S . "$port") || fail "$case differs from upstream"
+}
+case_local_models_order() {
+  local list_dir=$work/models-order-list
+  [[ -f $oracle/migrations/1795200237.sh && -f $oracle/migrations/1795380483.sh ]] || return 0
+  case=models-order
+  setup "$case" "$work/models-insert.json"
+  mkdir -p "$list_dir"
+  printf '%s\n' 'printf "%s\\n" ran >> "$HOME/order"' > "$list_dir/ordinary.sh"
+  printf '%s\t%s\n' 1795200237 bar 1795263097 "$list_dir/ordinary.sh" \
+    1795380483 bar 1795380484 "$list_dir/ordinary.sh" > "$list_dir/list"
+  if STUB_NOWRITE=1 NIXARCHY_USER_MIGRATIONS=$list_dir run_port; then fail "$case: missing write reported success"; fi
+  [[ -f $HOME/order && $(<"$HOME/order") == $'ran\nran' ]] || fail "$case: pending bar migration blocked ordinary migrations"
+  [[ -e $OMARCHY_MIGRATION_STATE/1795263097.sh && -e $OMARCHY_MIGRATION_STATE/1795380484.sh ]] || fail "$case: ordinary migration markers missing"
+  assert_markers 2
+  grep -Fx '1795200237: shell.json did not show the migration' "$HOME/journal.log" >/dev/null || fail "$case: missing persistence failure log"
+  : > "$HOME/ipc.log"
+  NIXARCHY_USER_MIGRATIONS=$list_dir run_port
+  assert_markers 4
+  [[ $(<"$HOME/order") == $'ran\nran' ]] || fail "$case: marked ordinary migrations retried"
+  diff -u <(printf '%s\n' 'shell migrateLocalModelsBar 1795200237' 'shell migrateLocalModelsBar 1795380483') \
+    <(grep -F 'shell migrateLocalModelsBar ' "$HOME/ipc.log") || fail "$case: wrong migration order"
+  diff -u <(jq -S . "$work/models-insert.json") <(jq -S . "$XDG_CONFIG_HOME/omarchy/shell.json") || fail "$case: round trip changed the fixture"
+  : > "$HOME/ipc.log"
+  run_ids 1795200237 1795380483
+  [[ ! -s $HOME/ipc.log ]] || fail "$case: marked migrations retried"
+
+  case=models-unreadable
+  jq 'del(.version)' "$work/models-insert.json" > "$work/$case.json"
+  setup "$case" "$work/$case.json"
+  if run_ids 1795200237; then fail "$case: refused reply reported success"; fi
+  assert_markers 0
+  grep -Fx '1795200237: shell config is unreadable' "$HOME/journal.log" >/dev/null || fail "$case: missing IPC refusal log"
+
+  case=models-missing-file
+  setup "$case" "$work/models-insert.json"
+  rm "$XDG_CONFIG_HOME/omarchy/shell.json" # 847-allow: disposable fixture
+  run_ids 1795200237 1795380483
+  assert_markers 2
+  [[ ! -s $HOME/ipc.log && ! -e $XDG_CONFIG_HOME/omarchy/shell.json ]] || fail "$case: IPC or config appeared"
+}
 case_a() {
   case=a
   setup a "$fixture_a"
@@ -975,6 +1032,13 @@ case_a() {
 case_a
 [[ ${1:-} == expected ]] && exit 0
 cmp "$out" "$EXPECTED_A" || fail 'a: expectedA differs from check result'
+
+case_local_models insert 1795200237 '{"left":["omarchy.agents"],"right":[{"id":"omarchy.agents","keep":true},"other.widget"]}' 1
+case_local_models no-agents 1795200237 '{"right":["other.widget"]}' 0
+case_local_models already-present 1795200237 '{"left":["omarchy.local-models"],"right":["omarchy.agents"]}' 0
+case_local_models remove 1795380483 '{"left":["omarchy.local-models"],"right":[{"id":"omarchy.local-models"},"other.widget"]}' 1
+case_local_models already-absent 1795380483 '{"right":["omarchy.agents","other.widget"]}' 0
+case_local_models_order
 
 case=b
 jq '.bar.layout.centerBegin = [{id:"local.before"}] | .bar.layout.centerEnd = [{id:"local.after"}] | .bar.layout.center = [{id:"local.one"}] + .bar.layout.center + [{id:"local.two"}] | .bar.layout.right = [{id:"local.right"}] + .bar.layout.right' "$fixture_a" > "$work/b.fixture.json"

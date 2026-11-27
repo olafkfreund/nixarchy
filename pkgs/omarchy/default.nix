@@ -2147,6 +2147,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # Why: pkgs/AGENTS.md#notification-history-keeps-text-for-the-newest-rows-1663
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./904-notification-history-text.patch}
 
+                    # Why: pkgs/AGENTS.md#user-file-migrations-1610
+                    if [ -f "$out/share/omarchy/migrations/1795200237.sh" ] || [ -f "$out/share/omarchy/migrations/1795380483.sh" ]; then
+                      patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1975-local-models-bar-migration.patch}
+                    fi
+
                     # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
                     substituteInPlace $out/share/omarchy/shell/shell.qml \
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"

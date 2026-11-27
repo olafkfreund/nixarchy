@@ -1,0 +1,40 @@
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -2015,6 +2015,37 @@
+       }
+     }
+ 
++    // Migrate the saved layout without enabling or disabling the local-models service.
++    function migrateLocalModelsBar(id: string): string {
++      if (id !== "1795200237" && id !== "1795380483") return "unknown migration"
++      if (shell.userConfigUnreadable) return "shell config is unreadable"
++
++      const models = "omarchy.local-models"
++      const agents = "omarchy.agents"
++      const layout = shell.barConfig.layout
++      if (!Util.isPlainObject(layout)) return "ok"
++      const sections = Object.keys(layout).filter(section => Array.isArray(layout[section]))
++      const entryId = entry => Util.isPlainObject(entry) ? entry.id : entry
++      const has = widget => sections.some(section => layout[section].some(entry => entryId(entry) === widget))
++      const insert = id === "1795200237"
++      if (insert ? (has(models) || !has(agents)) : !has(models)) return "ok"
++
++      shell.mutateShellConfig(function(config) {
++        for (const section of sections) {
++          const entries = []
++          for (const entry of config.bar.layout[section]) {
++            const widget = entryId(entry)
++            if (insert && widget === agents) entries.push({ id: models })
++            if (insert || widget !== models) entries.push(entry)
++          }
++          config.bar.layout[section] = entries
++        }
++      })
++      shell.pluginRegistry.registryRevision++
++      shell.pluginRegistry.pluginsChanged()
++      return "ok"
++    }
++
+     function listPlugins(): string {
+       var out = []
+       var plugins = shell.pluginRegistry.installedPlugins

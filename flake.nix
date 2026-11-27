@@ -2121,7 +2121,7 @@
           };
           # A real login and mapped app window; the update job selects the bumped GUI apps (#1943).
           update-launch-vm = import ./tests/update-launch-vm.nix {
-            inputs = realInputs;
+            inherit inputs;
             pkgs = pkgsFor.${system};
             names =
               let

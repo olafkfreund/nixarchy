@@ -98,10 +98,24 @@ pkgs.testers.runNixOSTest {
         if drawn:
             break
     assert drawn, "the greeter never drew anything in 40s"
-    machine.send_chars("omarchy\n")
-    machine.wait_until_succeeds(
-        "out=$(journalctl -b -u display-manager --no-pager); "
-        "grep -q 'Authentication for user .*omarchy.* successful' <<<\"$out\"")
+    # A key sent before the greeter reads input is lost (tests/keyboard-boot.nix), and one
+    # lost password waited out the whole 900 s on a slow hosted runner: retype until it lands.
+    authed = "out=$(journalctl -b -u display-manager --no-pager); grep -q 'Authentication for user .*omarchy.* successful' <<<\"$out\""
+    def typed_in():
+        for _ in range(20):
+            if machine.execute(authed)[0] == 0:
+                return True
+            machine.sleep(1)
+        return False
+
+    for attempt in range(12):
+        for _ in range(12):
+            machine.send_key("backspace")
+        machine.send_chars("omarchy\n")
+        if typed_in():
+            break
+    else:
+        raise AssertionError("the greeter never took the password in 12 tries")
     machine.wait_until_succeeds("systemctl is-active user@1000.service")
     machine.wait_until_succeeds("loginctl list-sessions --no-legend | awk '$3 == \"omarchy\" {found=1} END {exit !found}'")
     machine.wait_until_succeeds("test -S /run/user/1000/hypr/$(ls -t /run/user/1000/hypr | head -1)/.socket.sock", timeout=90)

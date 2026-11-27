@@ -340,9 +340,18 @@ let
   keyHarness = pkgs.writeText "dictation-keys.lua" ''
     local backend, missing = arg[1], arg[2] == "missing"
     local binds = {}
+    -- The 4.5 tag asks a command for the backend; rc1 reads defaults/dictation
+    -- under config_home through two modules of its own. Answer both ways.
     io.popen = function()
       return { read = function() return backend end, close = function() end }
     end
+    local config = os.getenv("TMPDIR") .. "/dictation-config"
+    os.execute("mkdir -p " .. config .. "/omarchy/defaults")
+    local f = assert(io.open(config .. "/omarchy/defaults/dictation", "w"))
+    f:write(backend, "\n")
+    f:close()
+    package.loaded["default.hypr.paths"] = { config_home = config }
+    package.loaded["default.hypr.keyboard"] = { altgr = function() return false end }
     o = {
       cmd_missing = function() return missing end,
       bind = function(key, _, command) binds[key] = command end,

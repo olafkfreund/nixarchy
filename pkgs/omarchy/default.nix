@@ -1832,9 +1832,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # carrying a copy of. There is no way to notice that automatically, so
                     # the build stops and asks.
                     # One hash per upstream script read: the tag's and older quattro's, and
-                    # quattro 196e190's faster progress and quit callback, taken into ours (#1896).
+                    # quattro 196e190's progress and cafb698's shutdown-only artwork (#1985).
                     case $(sha256sum < ${src}/default/plymouth/omarchy.script | cut -d' ' -f1) in
-                      908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d | e68af11fdf48a5e8ed192a87d215112862e20b136a2d8dbcf9477c0709a58100) ;;
+                      908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d | e68af11fdf48a5e8ed192a87d215112862e20b136a2d8dbcf9477c0709a58100 | 988953f2cbdca6af9dd5ab80829d713484495a7f36c7e0b2bf531c0fb8f75710) ;;
                       *)
                       echo "plymouth: upstream's omarchy.script changed." >&2
                       echo "plymouth: read it against nixarchy-plymouth.script, take what" >&2

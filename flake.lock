@@ -1242,8 +1242,8 @@
       },
       "original": {
         "owner": "basecamp",
-        "ref": "v4.6.0-rc1",
         "repo": "omarchy",
+        "rev": "745271ccd293fc2e7a233b269004a9926a5c6cb4",
         "type": "github"
       }
     },

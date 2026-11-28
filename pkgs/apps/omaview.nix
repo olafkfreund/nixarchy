@@ -12,13 +12,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omaview";
-  version = "0.1.0";
+  version = "0.1.2";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omaview";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-5eKq/ztuZkUVsT+oOVSXKxJ799kkk/SK3gtXxykutjI=";
+    hash = "sha256-+ZuJPfMCNDM2UT1+fXPCu9IAw3pn0HLzTJVa5MQ2SNs=";
   };
 
   nativeBuildInputs = [

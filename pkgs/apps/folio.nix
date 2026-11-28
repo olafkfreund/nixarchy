@@ -12,13 +12,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "folio";
-  version = "0.5.0";
+  version = "0.7.5";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "folio";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-EYOdr8DiE06aF8he1kGzK0n7Nhal67kN7f6sX/D2U0g=";
+    hash = "sha256-VOLVGgpqnaYuVmDlHOQCTrRff4sOfRA7msDD89ZkYGE=";
   };
 
   nativeBuildInputs = [
@@ -40,31 +40,24 @@ stdenv.mkDerivation (finalAttrs: {
     zlib
   ];
 
-  # The packaged plugins live in the store, not /usr/share/folio/plugins.
-  postPatch = ''
-    substituteInPlace src/plugins.cpp \
-      --replace-fail '"/usr/share/folio/plugins"' "\"$out/share/folio/plugins\""
-  '';
+  # Since 0.7, `cmake --install` puts everything where a package does: the
+  # plugin path is compiled from CMAKE_INSTALL_FULL_DATADIR, and the D-Bus
+  # services (the file chooser and FileManager1) name $out/bin/folio.
 
-  # Upstream's CMakeLists has no install rules; this installs what its
-  # packaging does, plus the file-chooser portal (#1793).
-  installPhase = ''
-    runHook preInstall
-
-    install -Dm755 folio $out/bin/folio
-    install -Dm644 ../share/folio.desktop $out/share/applications/folio.desktop
-    install -Dm644 ../share/folio-chooser.desktop $out/share/applications/folio-chooser.desktop
-    install -Dm644 ../share/folio.svg $out/share/icons/hicolor/scalable/apps/folio.svg
-    install -Dm644 ../share/folio.portal $out/share/xdg-desktop-portal/portals/folio.portal
-    install -Dm644 ../share/org.freedesktop.impl.portal.desktop.folio.service \
-      $out/share/dbus-1/services/org.freedesktop.impl.portal.desktop.folio.service
-    substituteInPlace $out/share/dbus-1/services/org.freedesktop.impl.portal.desktop.folio.service \
-      --replace-fail "Exec=/usr/bin/folio" "Exec=$out/bin/folio"
-    mkdir -p $out/share/folio
-    cp -r ../plugins $out/share/folio/plugins
-    install -Dm644 ../LICENSE $out/share/licenses/folio/LICENSE
-
-    runHook postInstall
+  # The plugin path is compiled in as a QStringLiteral (UTF-16), so a build that
+  # missed CMAKE_INSTALL_FULL_DATADIR would look for /usr/share/folio/plugins.
+  doInstallCheck = true;
+  installCheckPhase = ''
+    runHook preInstallCheck
+    [ -d "$out/share/folio/plugins" ] || { echo "folio: no bundled plugins" >&2; exit 1; }
+    # The path is ASCII, so its UTF-16LE form is each byte followed by 00.
+    want=$(printf '%s' "$out/share/folio/plugins" | od -An -tx1 -v | tr -s ' \n' ' ' | sed 's/ \([0-9a-f][0-9a-f]\)/\100/g; s/ //g')
+    od -An -tx1 -v "$out/bin/.folio-wrapped" | tr -d ' \n' > binary.hex
+    grep -qF "$want" binary.hex || {
+      echo "folio: the binary does not name $out/share/folio/plugins" >&2
+      exit 1
+    }
+    runHook postInstallCheck
   '';
 
   # nix-update-script is a list that only works under nixpkgs' update.nix;

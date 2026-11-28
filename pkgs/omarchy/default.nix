@@ -842,41 +842,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                   --replace-fail 'as_root rm -f /etc/pam.d/omarchy-lock-fingerprint' ':'
 
 
-                # #1385: sudo is configuration on NixOS, so the bar's passwordless-sudo indicator is neutered and unoffered.
-                substituteInPlace $out/share/omarchy/shell/plugins/bar/indicators/PasswordlessSudo.qml \
-                  --replace-fail '  active: granted' '  visible: false; active: granted' \
-                  --replace-fail '    if (!root.bar) return' '    return'
-                if [ -f "$out/share/omarchy/bin/omarchy-setup-security-passwordless-login" ]; then
-                  printf '%s\n' '#!${bash}/bin/bash' \
-                    '[[ "''${1:-}" == --active ]] && exit 1' \
-                    'echo "Passwordless login is configured through your NixOS configuration." >&2' \
-                    'exit 1' > "$out/share/omarchy/bin/omarchy-setup-security-passwordless-login"
-                  printf '%s\n' 'import qs.Ui' 'BarIndicator { visible: false }' \
-                    > "$out/share/omarchy/shell/plugins/bar/indicators/PasswordlessLogin.qml"
-                  substituteInPlace "$out/share/omarchy/shell/plugins/bar/widgets/Indicators.qml" \
-                    --replace-fail '"PasswordlessLogin", ' ""
-                fi
-                ${jq}/bin/jq 'del(.barWidget.schema[].options[]? | select(.value == "PasswordlessSudo" or .value == "PasswordlessLogin"))' \
-                  $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json > indicators.manifest.tmp
-                cat indicators.manifest.tmp > $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json
-                if grep -Eq 'Passwordless(Sudo|Login)' $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json; then
-                  echo "A passwordless indicator is still offered in Indicators.manifest.json" >&2
-                  exit 1
-                fi
-
-                # udiskie still reads existing device rules and is on the Nixarchy runtime PATH.
-                autostart="$out/share/omarchy/default/hypr/autostart.lua"
-                if grep -qF 'o.launch("omarchy-drive-automount")' "$autostart"; then
-                  substituteInPlace "$autostart" \
-                    --replace-fail 'o.launch("omarchy-drive-automount")' \
-                    "o.launch(\"udiskie --automount --no-notify --no-tray --password-prompt 'omarchy-drive-unlock {device_file}'\")"
-                  # A failed password prompt tells udiskie the shell handles the unlock.
-                  printf '\nexit 1\n' >> "$out/share/omarchy/bin/omarchy-drive-unlock"
-                fi
-                if [ -f "$out/share/omarchy/bin/omarchy-agent-resume" ]; then
-                  substituteInPlace "$out/share/omarchy/bin/omarchy-agent-resume" \
-                    --replace-fail 'ExecStart=/bin/bash' 'ExecStart=/run/current-system/sw/bin/bash'
-                fi
+                . ${./quattro-desktop-compat.sh} ${bash}/bin/bash ${jq}/bin/jq
 
                 # quattro's /usr paths that a nixarchy session actually reaches (#1278).
                 # The input-method and font tools run stdlib-only Python helpers.
@@ -1477,7 +1443,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
                       --replace-fail "$(cat ${
-                        if hasPlain then
+                        if
+                          lib.hasInfix ''plain) echo "Installing $name...";'' (
+                            builtins.readFile "${src}/bin/omarchy-default-editor"
+                          )
+                        then
+                          ./default-editor-install-notice.upstream.sh
+                        else if hasPlain then
                           ./default-editor-install-plain.upstream.sh
                         else
                           ./default-editor-install.upstream.sh

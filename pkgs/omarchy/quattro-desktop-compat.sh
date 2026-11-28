@@ -4,6 +4,7 @@
 if [ -f "$out/share/omarchy/bin/omarchy-setup-security-passwordless-login" ]; then
   # shellcheck disable=SC2016
   printf '%s\n' "#!$1" \
+    '# omarchy:summary=Passwordless login is configured through NixOS' \
     '[[ "${1:-}" == --active ]] && exit 1' \
     'echo "Passwordless login is configured through your NixOS configuration." >&2' \
     'exit 1' > "$out/share/omarchy/bin/omarchy-setup-security-passwordless-login"

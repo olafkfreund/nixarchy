@@ -35,7 +35,7 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # others are the `options` job's matrix in build.yml (#1463).
 #
 # wifi-hwsim is a nixosTest and needs /dev/kvm. The generated step runs in the
-# omarchy job, which has no KVM setup -- the udev rule lives in `box` -- so
+# omarchy job, which has no KVM setup -- the udev rule lives in `box-vms` -- so
 # leaving it generated put a VM test in a job that cannot boot one. The
 # integration that added the check is what surfaced it.
 # factory-reset is a nixosTest and needs /dev/kvm, as wifi-hwsim.

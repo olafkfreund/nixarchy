@@ -2109,17 +2109,29 @@ jobs:
           done
           exit $fail
 
-  # PROPOSED CI-GATE CHANGE (AGENTS.md 4 and 11): this job is new gate wiring,
-  # merged by a human, not an agent.
-  #
-  # Creates and enters a real box inside a NixOS test VM -- see
-  # tests/box-boot.nix. Its own job, with its own budget and an explicit KVM
-  # assertion.
-  box:
+  # The greeter's two desktop VMs get a separate budget from the other KVM checks (#1987).
+  box-vms:
     needs: [gate, carry]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 40  # +greeter-theme (#1927)
+    # Each suite may build its own closures on a cold hosted runner.
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: greeter
+            installables: .#checks.x86_64-linux.greeter-theme
+          - suite: box
+            installables: >-
+              .#checks.x86_64-linux.wifi-hwsim
+              .#checks.x86_64-linux.update-launch-vm
+              .#checks.x86_64-linux.hibernate-resume
+              .#checks.x86_64-linux.boot-hang-detect
+              .#checks.x86_64-linux.factory-reset
+              .#checks.x86_64-linux.remove-fingerprint-vm
+              .#checks.x86_64-linux.sshd-login
+              .#checks.x86_64-linux.box-boot
     steps:
       - name: The gate did not succeed, so this check cannot pass
         if: needs.gate.result != 'success'
@@ -2186,60 +2198,30 @@ jobs:
           test -w /dev/kvm || { echo "::error::/dev/kvm is not writable"; exit 1; }
           ls -l /dev/kvm
 
-      # Here rather than in the generated batch, and the integration is what
-      # showed why: it is a nixosTest and needs the /dev/kvm the step above
-      # sets up. The generated step runs in the `omarchy` job, which has no
-      # KVM, so a VM test landed in a job that cannot boot one -- a bespoke
-      # need, which is exactly what the claimed list is for.
-      - name: A VM with a radio can associate to a network
+      - name: Run the KVM checks for ${{ matrix.suite }}
         if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.wifi-hwsim
+        env:
+          INSTALLABLES: ${{ matrix.installables }}
+        run: |
+          # Keep one build at a time so guests do not compete for disk and memory.
+          read -r -a checks <<< "$INSTALLABLES"
+          test "${#checks[@]}" -gt 0
+          for check in "${checks[@]}"; do
+            .github/scripts/build-unless-proven.sh "$check"
+          done
 
-      # checks.greeter-theme is a nixosTest with two desktop guests; it needs the /dev/kvm set up above (#1927).
-      - name: The SDDM greeter follows the published theme
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.greeter-theme
-
-      # checks.update-launch-vm needs the same writable /dev/kvm and real login seat (#1943).
-      - name: A bumped app opens and keeps its own window
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.update-launch-vm
-
-      # checks.hibernate-resume is a nixosTest and needs the /dev/kvm set up above (#1303).
-      - name: A VM with resume configured sees the Hibernate row
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.hibernate-resume
-
-      # checks.boot-hang-detect is a nixosTest and needs the /dev/kvm set up above (#1594).
-      - name: A frozen guest fails the multi-user wait fast, with registers
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.boot-hang-detect
-
-      # checks.factory-reset is a nixosTest and needs the /dev/kvm set up above (#1621).
-      - name: A failed factory reset leaves both halves untouched, on real btrfs
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.factory-reset
-
-      # checks.remove-fingerprint-vm is a nixosTest and needs the /dev/kvm set up above (#1620).
-      - name: A fingerprint removed through real fprintd and a virtual reader is gone
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.remove-fingerprint-vm
-
-      # checks.sshd-login is a nixosTest and needs the /dev/kvm set up above (#1611).
-      - name: The menu's sshd refuses passwords, and the plain line still takes them
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.sshd-login
-
-      - name: Create a box offline, and pin what enter does without a network
-        if: needs.gate.outputs.relevant == 'true'
-        # checks.box-boot: the pinned image is preloaded from the store
-        # (dockerTools.pullImage is fixed-output), the argv the Distrobox
-        # panel builds -- `distrobox create --yes --name <name> --image
-        # <image>` under `env DBX_CONTAINER_MANAGER=podman`, with the image
-        # read out of the generated INI -- runs end to end as a rootless
-        # user, the recorded distrobox-init mount is
-        # not a /nix/store path (nixpkgs#478154), and the first offline
-        # `distrobox enter` fails loudly at the entrypoint -- the measured
-        # answer to the epic's open first-start question, asserted as
-        # observed. See tests/box-boot.nix.
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.box-boot
+  # Keep the required context and fail it if the VM matrix failed or skipped (#1144).
+  box:
+    needs: box-vms
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Both KVM suites passed
+        env:
+          VM_RESULT: ${{ needs.box-vms.result }}
+        run: |
+          if [ "$VM_RESULT" != success ]; then
+            echo "::error::box-vms concluded '$VM_RESULT'; refusing to report box as passed"
+            exit 1
+          fi

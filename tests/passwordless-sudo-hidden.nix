@@ -52,6 +52,7 @@ pkgs.runCommand "nixarchy-passwordless-sudo-hidden" { nativeBuildInputs = [ pkgs
     fi
     sed '/^\/\//d' ${menu} | jq -e '.["setup.security.passwordless-login"].when == "false"' >/dev/null
     # Check the refusal before executing even the read-only status path.
+    grep -qE '^# omarchy:summary=.+$' "$login"
     grep -qF 'Passwordless login is configured through your NixOS configuration.' "$login"
     rc=0
     response=$("$login" --active 2>&1) || rc=$?

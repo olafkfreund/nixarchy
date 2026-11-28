@@ -9,7 +9,11 @@ let
   isEdge = import ../pkgs/omarchy/is-quattro.nix lib (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
   inherit (pkgs) lib;
 
-  rows = lib.filterAttrs (name: _: lib.hasPrefix "sysctl.d/" name) (import ../data/etc-overlay.nix);
+  rows = lib.filterAttrs (
+    name: row:
+    lib.hasPrefix "sysctl.d/" name
+    && (row.edge or "" != "only" || isEdge && builtins.pathExists "${upstream}/etc/${name}")
+  ) (import ../data/etc-overlay.nix);
 
   parse =
     text:
@@ -26,7 +30,7 @@ let
         lib.reverseList (
           map (
             l:
-            lib.nameValuePair (lib.trim (builtins.elemAt (fields l) 0)) (
+            lib.nameValuePair (lib.removePrefix "-" (lib.trim (builtins.elemAt (fields l) 0))) (
               lib.trim (builtins.elemAt (fields l) 1)
             )
           ) (builtins.filter (l: fields l != null) lines)

@@ -722,6 +722,23 @@
     class = "patch";
     reason = "The panel's root helper uses the trusted NixOS PATH and packaged Omarchy tree after pkexec, and checks for fprintd-enroll instead of installing Arch packages.";
   };
+  "omarchy-setup-security-passwordless-login" = {
+    edge = "only";
+    class = "patch";
+    reason = "Refuses Arch's edits to LUKS, mkinitcpio and systemd because NixOS owns disk unlock and the login configuration. The sleep hooks' --active check reports inactive silently.";
+  };
+  "omarchy-agent-resume" = {
+    edge = "only";
+    class = "patch";
+    allow = "systemctl-user";
+    reason = "Manages its opt-in user service only. The generated unit starts Bash from the current system profile, including on a host without envfs.";
+  };
+  "omarchy-drive-unlock" = {
+    edge = "only";
+    class = "patch";
+    adopted = "745271c";
+    reason = "On newer quattro, keep using udiskie with the user's existing device rules. Return nonzero from its password callback because the shell unlocks the drive independently.";
+  };
   "omarchy-setup-security-sshd" = {
     class = "vendor";
     reason = "Vendored unchanged. Since v4.5.0-rc3 it enables and (re)starts sshd.service only once a key is authorized, then runs `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach. Its remote-exec match is a false positive: the echo at the end only prints the ssh command to connect with.";

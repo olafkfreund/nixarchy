@@ -152,6 +152,12 @@ let
     builtins.readFile "${src}/bin/omarchy-install-preinstalls"
   );
   hasQtengine = builtins.pathExists "${src}/config/qtengine";
+  hasAccountDispatch = lib.hasInfix "_omarchy_transform_mise_init()" (
+    builtins.readFile "${src}/default/bash/init"
+  );
+  hasRescanQueue = lib.hasInfix "property bool rescanQueued: false" (
+    builtins.readFile "${src}/shell/services/PluginRegistry.qml"
+  );
 
   osakaJadeTheme = fetchFromGitHub {
     owner = "omacom";
@@ -840,12 +846,36 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                 substituteInPlace $out/share/omarchy/shell/plugins/bar/indicators/PasswordlessSudo.qml \
                   --replace-fail '  active: granted' '  visible: false; active: granted' \
                   --replace-fail '    if (!root.bar) return' '    return'
-                ${jq}/bin/jq 'del(.barWidget.schema[].options[]? | select(.value == "PasswordlessSudo"))' \
+                if [ -f "$out/share/omarchy/bin/omarchy-setup-security-passwordless-login" ]; then
+                  printf '%s\n' '#!${bash}/bin/bash' \
+                    '[[ "''${1:-}" == --active ]] && exit 1' \
+                    'echo "Passwordless login is configured through your NixOS configuration." >&2' \
+                    'exit 1' > "$out/share/omarchy/bin/omarchy-setup-security-passwordless-login"
+                  printf '%s\n' 'import qs.Ui' 'BarIndicator { visible: false }' \
+                    > "$out/share/omarchy/shell/plugins/bar/indicators/PasswordlessLogin.qml"
+                  substituteInPlace "$out/share/omarchy/shell/plugins/bar/widgets/Indicators.qml" \
+                    --replace-fail '"PasswordlessLogin", ' ""
+                fi
+                ${jq}/bin/jq 'del(.barWidget.schema[].options[]? | select(.value == "PasswordlessSudo" or .value == "PasswordlessLogin"))' \
                   $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json > indicators.manifest.tmp
                 cat indicators.manifest.tmp > $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json
-                if grep -q PasswordlessSudo $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json; then
-                  echo "#1385: PasswordlessSudo is still offered in Indicators.manifest.json" >&2
+                if grep -Eq 'Passwordless(Sudo|Login)' $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json; then
+                  echo "A passwordless indicator is still offered in Indicators.manifest.json" >&2
                   exit 1
+                fi
+
+                # udiskie still reads existing device rules and is on the Nixarchy runtime PATH.
+                autostart="$out/share/omarchy/default/hypr/autostart.lua"
+                if grep -qF 'o.launch("omarchy-drive-automount")' "$autostart"; then
+                  substituteInPlace "$autostart" \
+                    --replace-fail 'o.launch("omarchy-drive-automount")' \
+                    "o.launch(\"udiskie --automount --no-notify --no-tray --password-prompt 'omarchy-drive-unlock {device_file}'\")"
+                  # A failed password prompt tells udiskie the shell handles the unlock.
+                  printf '\nexit 1\n' >> "$out/share/omarchy/bin/omarchy-drive-unlock"
+                fi
+                if [ -f "$out/share/omarchy/bin/omarchy-agent-resume" ]; then
+                  substituteInPlace "$out/share/omarchy/bin/omarchy-agent-resume" \
+                    --replace-fail 'ExecStart=/bin/bash' 'ExecStart=/run/current-system/sw/bin/bash'
                 fi
 
                 # quattro's /usr paths that a nixarchy session actually reaches (#1278).
@@ -1187,13 +1217,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 --no-backup-if-mismatch < ${
-                      if lib.hasSuffix "745271c" version || (isQuattro version && !lib.hasPrefix "edge-" version) then
+                      if isEdge && hasAccountDispatch then
                         ./1625-no-mise-edge.patch
                       else if isEdge then
                         ./1625-no-mise-edge-364.patch
                       else
                         ./1625-no-mise.patch
                     }
+                    ${lib.optionalString (isEdge && hasAccountDispatch) ''
+                      substituteInPlace "$out/share/omarchy/bin/omarchy-agent" \
+                        --replace-fail 'omarchy-cmd-missing "$agent" && !' 'PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$agent" && !'
+                    ''}
                     # Why: pkgs/AGENTS.md#power-actions-authorise-before-closing-windows-1659
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
                       if isEdge then ./1659-system-authorise-first-edge.patch else ./1659-system-authorise-first.patch
@@ -2158,10 +2192,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     # Why: pkgs/AGENTS.md#the-watcher-reaper-checks-the-scan-1923
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
-                      if lib.hasSuffix "745271c" version || (isQuattro version && !lib.hasPrefix "edge-" version) then
-                        ./1923-reaper-check-155.patch
-                      else
-                        ./1923-reaper-check.patch
+                      if hasRescanQueue then ./1923-reaper-check-155.patch else ./1923-reaper-check.patch
                     }
                     patch_reaper_guard
                     if grep -q '^    if (shell.pluginReloading || shell.pluginRegistry.scanning) {$' "$out/share/omarchy/shell/shell.qml"; then

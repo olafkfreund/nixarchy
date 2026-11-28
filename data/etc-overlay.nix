@@ -242,6 +242,12 @@
     reason = "`Defaults passwd_tries=10`, the sudo half of the lockout Omarchy loosens, so a mistyped password does not end the attempt at three. modules/nixos.nix carries the same line through security.sudo.extraConfig.";
   };
 
+  "sudoers.d/omarchy-sudo-no-lecture" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Disables sudo's first-use lecture. Nixarchy leaves that authentication policy to the host, which can declare Defaults lecture=never through security.sudo.extraConfig.";
+  };
+
   "sudoers.d/omarchy-sudo-timeout" = {
     class = "divergent";
     reason = "`Defaults timestamp_timeout=10`, upstream's ten-minute sudo grace period (v4.5.0-rc3, omacom/omarchy#17000). Not adopted, by the owner's choice: nixarchy keeps sudo's own default. A user who wants upstream's period sets it in security.sudo.extraConfig.";
@@ -265,6 +271,16 @@
   "sysctl.d/90-omarchy-file-watchers.conf" = {
     class = "covered";
     reason = "fs.inotify.max_user_watches=524288, the limit that stops a watcher in a large checkout failing with ENOSPC. nixpkgs' own nixos/modules/config/sysctl.nix already sets exactly 524288 by default, on every NixOS machine, so nothing here needs to.";
+  };
+
+  "sysctl.d/99-omarchy-nmi-watchdog.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Disables the NMI hard-lockup watchdog to free a performance counter. Nixarchy leaves kernel hard-lockup detection under the host's boot.kernel.sysctl settings.";
+    differs."kernel.nmi_watchdog" = {
+      upstream = "0";
+      reason = "Keep the host's hard-lockup diagnostics and kernel default.";
+    };
   };
 
   "sysctl.d/99-omarchy-sysctl.conf" = {
@@ -449,6 +465,54 @@
   "tmpfiles.d/omarchy-zswap.conf" = {
     class = "covered";
     reason = "Writes N to zswap's enabled parameter so it cannot compete with zram. nixpkgs' kernels leave CONFIG_ZSWAP_DEFAULT_ON off and nothing here turns zswap on, so zram -- enabled in modules/nixos.nix -- is already the only compressed swap.";
+  };
+
+  "intel_lpmd/omarchy-mtl.xml" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Enables Intel Low Power Mode Daemon workload hints on Meteor Lake when passed with -c. Nixarchy does not configure this machine-specific daemon or its policy.";
+  };
+
+  "systemd/journald.conf.d/10-omarchy.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Caps persistent and runtime journals at 100 MB and 32 MB. Nixarchy leaves retention to services.journald so hosts keep their chosen diagnostic history.";
+  };
+
+  "systemd/system/user-.slice.d/10-omarchy-memory.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Delegates 768 MiB of memory.low through per-user system slices. Nixarchy has not adopted the session.slice reclaim policy that consumes this budget.";
+  };
+
+  "systemd/system/user.slice.d/10-omarchy-memory.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Protects 768 MiB of memory across all user slices to back upstream's session.slice policy. Nixarchy leaves cgroup memory budgets to the host.";
+  };
+
+  "systemd/system/user@.service.d/20-omarchy-memory.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Delegates memory.low to the user manager and orders it after upstream's high-memory unit. Nixarchy neither ships that unit nor applies this session memory policy.";
+  };
+
+  "tmpfiles.d/omarchy-intel-hwp-boost.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Enables intel_pstate dynamic boost on I/O wakeups at boot. Nixarchy leaves Intel CPU governor tuning to the machine's power and thermal configuration.";
+  };
+
+  "tmpfiles.d/omarchy-power-profiles.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Seeds power-profiles-daemon state to prevent its battery-aware downgrade. Nixarchy allows the host power policy and the daemon's own settings to govern this.";
+  };
+
+  "tmpfiles.d/omarchy-thp.conf" = {
+    edge = "only";
+    class = "divergent";
+    reason = "Sets transparent huge pages to madvise through sysfs. Nixarchy leaves that memory policy to the host rather than setting it at boot through tmpfiles.";
   };
 
   "udev/rules.d/60-omarchy-io-scheduler.rules" = {

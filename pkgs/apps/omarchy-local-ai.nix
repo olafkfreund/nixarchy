@@ -9,13 +9,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omarchy-local-ai";
-  version = "0.16.1";
+  version = "0.18.0";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omarchy-local-ai";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-67qcmNsI3bAfdTJC5G6zApSQ5lt3+of2ngSVode2JvI=";
+    hash = "sha256-HknRGteB1E02m2SfCPxGiQ3FbxwlZnWjpyJwYLh+GN4=";
   };
 
   nativeBuildInputs = [ python3 ];

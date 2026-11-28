@@ -842,6 +842,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                   --replace-fail 'as_root rm -f /etc/pam.d/omarchy-lock-fingerprint' ':'
 
 
+                substituteInPlace $out/share/omarchy/shell/plugins/bar/indicators/PasswordlessSudo.qml \
+                  --replace-fail '  active: granted' '  visible: false; active: granted' \
+                  --replace-fail '    if (!root.bar) return' '    return'
                 . ${./quattro-desktop-compat.sh} ${bash}/bin/bash ${jq}/bin/jq
 
                 # quattro's /usr paths that a nixarchy session actually reaches (#1278).

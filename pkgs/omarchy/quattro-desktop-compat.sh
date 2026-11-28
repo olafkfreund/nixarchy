@@ -1,10 +1,6 @@
 # shellcheck shell=bash
 # Sourced by the install phase with the Bash and jq executable paths.
 # shellcheck disable=SC2154
-# #1385: sudo is configuration on NixOS, so the bar's passwordless-sudo indicator is neutered and unoffered.
-substituteInPlace "$out/share/omarchy/shell/plugins/bar/indicators/PasswordlessSudo.qml" \
-  --replace-fail '  active: granted' '  visible: false; active: granted' \
-  --replace-fail '    if (!root.bar) return' '    return'
 if [ -f "$out/share/omarchy/bin/omarchy-setup-security-passwordless-login" ]; then
   # shellcheck disable=SC2016
   printf '%s\n' "#!$1" \

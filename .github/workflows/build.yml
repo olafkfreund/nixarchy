@@ -19,3 +19,9 @@ jobs:
           nix build -L --no-link \
             .#omarchy \
             .#checks.x86_64-linux.{install-phase-budget,panel-loaders,menu-conditions,menu-actions,bin-ledger,etc-overlay,user-migrations-ledger}
+      - name: Validate the packaged command catalogue and README counts
+        run: |
+          tree=$(nix path-info .#omarchy)
+          "$tree/bin/omarchy" commands --check
+          OMARCHY_TREE="$tree" bash .github/scripts/readme-counts.sh --fix
+          OMARCHY_TREE="$tree" bash .github/scripts/readme-counts.sh --check

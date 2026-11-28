@@ -40,5 +40,24 @@ pkgs.runCommand "nixarchy-passwordless-sudo-hidden" { nativeBuildInputs = [ pkgs
     echo "setup.security.passwordless-sudo has when='$when', not 'false': the menu row is shown (#1385)" >&2
     exit 1
   fi
+
+  login=${omarchy}/share/omarchy/bin/omarchy-setup-security-passwordless-login
+  if [ -e "$login" ]; then
+    grep -qF 'BarIndicator { visible: false }' "$shell/indicators/PasswordlessLogin.qml"
+    test -f "$manifest"
+    test -f "$shell/widgets/Indicators.qml"
+    if grep -qF PasswordlessLogin "$manifest" "$shell/widgets/Indicators.qml"; then
+      echo "The bar still offers the Arch passwordless-login indicator" >&2
+      exit 1
+    fi
+    sed '/^\/\//d' ${menu} | jq -e '.["setup.security.passwordless-login"].when == "false"' >/dev/null
+    # Check the refusal before executing even the read-only status path.
+    grep -qE '^# omarchy:summary=.+$' "$login"
+    grep -qF 'Passwordless login is configured through your NixOS configuration.' "$login"
+    rc=0
+    response=$("$login" --active 2>&1) || rc=$?
+    test "$rc" -eq 1
+    test -z "$response"
+  fi
   touch "$out"
 ''

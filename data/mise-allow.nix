@@ -25,13 +25,13 @@
     lines = [
       "[[ ! -L $1 ]] && head -c 4096 \"$1\" | grep -qaE 'mise (use|x) '"
     ];
-    latestEdgeLines = [
+    accountDispatchLines = [
       "! head -c 4096 \"$user_install\" | grep -qaE 'mise (use|x) '; then"
     ];
   };
   "tree/bin/omarchy-agent-integrate-herdr" = {
     edge = "only";
-    latestEdge = "absent";
+    accountDispatch = "absent";
     reason = "reads an environment variable mise would set; empty here, and it runs nothing";
     lines = [
       "done < <(jq -r '.[].name' <<<\"\${MISE_INSTALLED_TOOLS:-[]}\" 2>/dev/null)"
@@ -149,10 +149,14 @@
       "*\":$HOME/.local/share/mise/shims:\"*) ;;"
       "*) PATH=\"\${PATH:+$PATH:}$HOME/.local/share/mise/shims\" ;;"
     ];
-    latestEdgeLines = [
+    accountDispatchLines = [
       "omarchy_old_wrapper_dir=\"\${MISE_DATA_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/mise}/command-wrappers/bin\""
       "*\":$HOME/.local/share/mise/shims:\"*) ;;"
       "*) PATH=\"\${PATH:+$PATH:}$HOME/.local/share/mise/shims\" ;;"
+    ];
+    shimOrderLines = [
+      "omarchy_old_wrapper_dir=\"\${MISE_DATA_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/mise}/command-wrappers/bin\""
+      "omarchy_shims_dir=\"$HOME/.local/share/mise/shims\""
     ];
   };
   "tree/default/uwsm/env.d/10-omarchy" = {
@@ -172,8 +176,11 @@
     lines = [
       "PATH DEFAULT=/usr/local/sbin:/usr/local/bin:/usr/bin:@{HOME}/.local/share/mise/shims:@{HOME}/.local/bin"
     ];
-    latestEdgeLines = [
+    accountDispatchLines = [
       "PATH DEFAULT=@{HOME}/.local/share/omarchy/agent-accounts/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:@{HOME}/.local/share/mise/shims:@{HOME}/.local/bin"
+    ];
+    shimOrderLines = [
+      "PATH DEFAULT=@{HOME}/.local/share/omarchy/agent-accounts/bin:@{HOME}/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/bin:@{HOME}/.local/bin"
     ];
   };
   "tree/install/omarchy-base.packages" = {

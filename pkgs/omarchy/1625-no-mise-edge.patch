@@ -126,11 +126,7 @@
  # have, and a login would quietly reuse it. The CLIs open their login page
 --- a/bin/omarchy-agent
 +++ b/bin/omarchy-agent
-@@ -112,21 +112,10 @@
- 
- # OpenClaw's launcher sets OpenClaw up when the package became the seed before
- # this user's OpenClaw moved, so with the package a missing command is its to fix.
--if omarchy-cmd-missing "$agent" && ! { [[ $agent == "openclaw" ]] && omarchy-pkg-present openclaw; }; then
+@@ -116,15 +116,4 @@
 -  # An agent you still have a sign-in for can be missing its CLI: removed, or
 -  # signed in to on another machine and copied over. Launching it installs the
 -  # CLI first and then opens as asked, in this terminal or a floating one.
@@ -145,18 +141,12 @@
 -    echo "$agent is not installed. Choose an installed agent with: omarchy default agent <name>" >&2
 -    exit 1
 -  fi
-+if PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$agent" && ! { [[ $agent == "openclaw" ]] && omarchy-pkg-present openclaw; }; then
 +  echo "$agent is not installed. Choose an installed agent with: omarchy default agent <name>" >&2
 +  omarchy-notification-send -u normal "$agent is not installed" "Choose an installed agent with: omarchy default agent <name>" || true
 +  exit 1
  fi
+@@ -268,2 +257,11 @@
  
- # Agents launched from the keybinding or menu run unattended, so each one starts
-@@ -265,6 +254,15 @@
-   exit 1
-   ;;
- esac
-+
 +# An explicit user CLI wins over a system one, but never run a retired mise launcher.
 +user_install="$HOME/.local/bin/$agent"
 +if [[ $agent != "openclaw" && -f $user_install && -x $user_install && ! -L $user_install ]] &&
@@ -165,9 +155,8 @@
 +    [[ ${command[i]} != "$agent" ]] || command[i]=$user_install
 +  done
 +fi
- 
++
  # A model that is set up but not running, as one opened from its launcher may
- # be, is started first, in the terminal the agent will have: loading takes a
 @@ -370,6 +368,9 @@
    fi
  fi

@@ -20,12 +20,12 @@ let
   ) allRows;
   # Exactly one key, nix/module/skip, holding a non-empty string: a typo'd extra
   # key or an empty reason is not a decision.
-  # An optional `edge` marker ("only" or "absent") is validated first and is not a decision key.
+  # Channel and retirement markers are validated separately from the decision.
   isEdge = import ../pkgs/omarchy/is-quattro.nix lib pkgs.omarchy.version;
   wellFormed =
     r:
     let
-      ks = lib.filter (k: k != "edge") (lib.attrNames r);
+      ks = lib.filter (k: k != "edge" && k != "retired") (lib.attrNames r);
     in
     (
       !(r ? edge)
@@ -34,6 +34,7 @@ let
         "absent"
       ]
     )
+    && (!(r ? retired) || (r.retired == true && !(r ? edge)))
     && lib.length ks == 1
     && lib.elem (lib.head ks) [
       "nix"
@@ -55,14 +56,16 @@ pkgs.runCommand "nixarchy-omarchy-package-ledger"
   {
     nativeBuildInputs = [ pkgs.jq ];
     ledgerNames = builtins.toJSON (lib.attrNames ledger);
-    # #1896: an edge-only row an older edge pin (a fallback build) may not list yet.
-    edgeOnlyNames = builtins.toJSON (
-      lib.attrNames (lib.filterAttrs (_: r: r.edge or "" == "only") ledger)
+    # An older quattro pin may predate an addition or still list a retired package.
+    optionalNames = builtins.toJSON (
+      lib.attrNames (
+        lib.filterAttrs (_: r: r.edge or "" == "only" || (isEdge && r.retired or false)) ledger
+      )
     );
     resolvedJson = builtins.toJSON resolved;
     passAsFile = [
       "ledgerNames"
-      "edgeOnlyNames"
+      "optionalNames"
       "resolvedJson"
     ];
   }
@@ -77,11 +80,11 @@ pkgs.runCommand "nixarchy-omarchy-package-ledger"
     jq -r 'to_entries[] | select(.value == false) | .key' "$resolvedJsonPath" | sort -u > unresolvable
     comm -23 wanted have > unclassified
     comm -13 wanted have > stale-all
-    jq -r '.[]' "$edgeOnlyNamesPath" | sort -u > edge-only
-    comm -12 stale-all edge-only > pending
-    comm -23 stale-all edge-only > stale
+    jq -r '.[]' "$optionalNamesPath" | sort -u > optional
+    comm -12 stale-all optional > pending
+    comm -23 stale-all optional > stale
     if [ -s pending ]; then
-      echo "edge-only rows this pin does not have yet: $(tr '\n' ' ' < pending)"
+      echo "edge-only or retired rows this pin does not list: $(tr '\n' ' ' < pending)"
     fi
 
     fail=0

@@ -18,6 +18,7 @@
 #   module  the NixOS option that provides it, which modules/*.nix sets.
 #   skip    a one-line reason it is knowingly absent. When unsure, say so here:
 #           an honest skip is reviewed, a guess is trusted.
+# `retired = true` records a name removed during quattro that an older pin still lists.
 #
 # tests/omarchy-package-ledger.nix fails in three ways and names every offender
 # in one pass: a name in the lists with no row (unclassified), a row for a name
@@ -336,6 +337,8 @@
     nix = "nixarchy-apps.ttfx";
   };
   "udiskie" = {
+    # Quattro fd25d60 switched to UDisks2; the RC fallback still lists udiskie.
+    retired = true;
     nix = "udiskie";
   };
   "unzip" = {
@@ -477,6 +480,10 @@
   };
   "sddm" = {
     module = "services.displayManager.sddm.enable";
+  };
+  "udisks2" = {
+    edge = "only";
+    module = "services.udisks2.enable";
   };
   "ufw" = {
     module = "networking.firewall.enable";
@@ -627,6 +634,7 @@
     skip = "Dell XPS hardware; not targeted.";
   };
   "dell-xps13-sidecar-amps" = {
+    retired = true;
     skip = "Dell XPS hardware; not targeted.";
   };
   "egl-wayland" = {
@@ -679,6 +687,7 @@
     skip = "Intel video library; not listed.";
   };
   "linux-firmware-cirrus-dx13260" = {
+    retired = true;
     skip = "Cirrus codec firmware for one laptop; not targeted.";
   };
   "linux-firmware-marvell" = {

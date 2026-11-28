@@ -152,6 +152,12 @@ let
     builtins.readFile "${src}/bin/omarchy-install-preinstalls"
   );
   hasQtengine = builtins.pathExists "${src}/config/qtengine";
+  hasAccountDispatch = lib.hasInfix "_omarchy_transform_mise_init()" (
+    builtins.readFile "${src}/default/bash/init"
+  );
+  hasRescanQueue = lib.hasInfix "property bool rescanQueued: false" (
+    builtins.readFile "${src}/shell/services/PluginRegistry.qml"
+  );
 
   osakaJadeTheme = fetchFromGitHub {
     owner = "omacom";
@@ -836,17 +842,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                   --replace-fail 'as_root rm -f /etc/pam.d/omarchy-lock-fingerprint' ':'
 
 
-                # #1385: sudo is configuration on NixOS, so the bar's passwordless-sudo indicator is neutered and unoffered.
                 substituteInPlace $out/share/omarchy/shell/plugins/bar/indicators/PasswordlessSudo.qml \
                   --replace-fail '  active: granted' '  visible: false; active: granted' \
                   --replace-fail '    if (!root.bar) return' '    return'
-                ${jq}/bin/jq 'del(.barWidget.schema[].options[]? | select(.value == "PasswordlessSudo"))' \
-                  $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json > indicators.manifest.tmp
-                cat indicators.manifest.tmp > $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json
-                if grep -q PasswordlessSudo $out/share/omarchy/shell/plugins/bar/widgets/Indicators.manifest.json; then
-                  echo "#1385: PasswordlessSudo is still offered in Indicators.manifest.json" >&2
-                  exit 1
-                fi
+                . ${./quattro-desktop-compat.sh} ${bash}/bin/bash ${jq}/bin/jq
 
                 # quattro's /usr paths that a nixarchy session actually reaches (#1278).
                 # The input-method and font tools run stdlib-only Python helpers.
@@ -1187,13 +1186,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 --no-backup-if-mismatch < ${
-                      if lib.hasSuffix "745271c" version || (isQuattro version && !lib.hasPrefix "edge-" version) then
+                      if isEdge && hasAccountDispatch then
                         ./1625-no-mise-edge.patch
                       else if isEdge then
                         ./1625-no-mise-edge-364.patch
                       else
                         ./1625-no-mise.patch
                     }
+                    ${lib.optionalString (isEdge && hasAccountDispatch) ''
+                      substituteInPlace "$out/share/omarchy/bin/omarchy-agent" \
+                        --replace-fail 'omarchy-cmd-missing "$agent" && !' 'PATH=$(omarchy-agent-real-path) omarchy-cmd-missing "$agent" && !'
+                    ''}
                     # Why: pkgs/AGENTS.md#power-actions-authorise-before-closing-windows-1659
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
                       if isEdge then ./1659-system-authorise-first-edge.patch else ./1659-system-authorise-first.patch
@@ -1443,7 +1446,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                       --replace-fail 'default-web-browser "$desktop_id" || exit 1' 'default-web-browser "$desktop_id" || exit 1; rm -f "''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/pending-default-browser"'
                     substituteInPlace $out/share/omarchy/bin/omarchy-default-editor \
                       --replace-fail "$(cat ${
-                        if hasPlain then
+                        if
+                          lib.hasInfix ''plain) echo "Installing $name...";'' (
+                            builtins.readFile "${src}/bin/omarchy-default-editor"
+                          )
+                        then
+                          ./default-editor-install-notice.upstream.sh
+                        else if hasPlain then
                           ./default-editor-install-plain.upstream.sh
                         else
                           ./default-editor-install.upstream.sh
@@ -1655,6 +1664,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     install -d $out/share/plymouth/themes
                     cp -r ${src}/default/plymouth $out/share/plymouth/themes/omarchy
                     chmod -R u+w $out/share/plymouth/themes/omarchy
+                    # The Nixarchy script does not draw upstream's new shutdown art.
+                    rm -f "$out/share/plymouth/themes/omarchy/shutdown.png"
 
                     # The theme names its own directory twice, absolutely, and Plymouth reads
                     # those literally -- left alone it would look for the script under
@@ -1823,9 +1834,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # carrying a copy of. There is no way to notice that automatically, so
                     # the build stops and asks.
                     # One hash per upstream script read: the tag's and older quattro's, and
-                    # quattro 196e190's faster progress and quit callback, taken into ours (#1896).
+                    # quattro 196e190's progress and cafb698's shutdown-only artwork (#1985).
                     case $(sha256sum < ${src}/default/plymouth/omarchy.script | cut -d' ' -f1) in
-                      908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d | e68af11fdf48a5e8ed192a87d215112862e20b136a2d8dbcf9477c0709a58100) ;;
+                      908adf752b05afdb2f5b0fe08fa81bf76963baf88aa67860610e3b6391f5725d | e68af11fdf48a5e8ed192a87d215112862e20b136a2d8dbcf9477c0709a58100 | 988953f2cbdca6af9dd5ab80829d713484495a7f36c7e0b2bf531c0fb8f75710) ;;
                       *)
                       echo "plymouth: upstream's omarchy.script changed." >&2
                       echo "plymouth: read it against nixarchy-plymouth.script, take what" >&2
@@ -2158,10 +2169,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     # Why: pkgs/AGENTS.md#the-watcher-reaper-checks-the-scan-1923
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
-                      if lib.hasSuffix "745271c" version || (isQuattro version && !lib.hasPrefix "edge-" version) then
-                        ./1923-reaper-check-155.patch
-                      else
-                        ./1923-reaper-check.patch
+                      if hasRescanQueue then ./1923-reaper-check-155.patch else ./1923-reaper-check.patch
                     }
                     patch_reaper_guard
                     if grep -q '^    if (shell.pluginReloading || shell.pluginRegistry.scanning) {$' "$out/share/omarchy/shell/shell.qml"; then

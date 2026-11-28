@@ -9,9 +9,13 @@ let
   # An optional `edge` marker ("only" or "absent"), validated on every row first (#1752).
   isQuattro = import ../pkgs/omarchy/is-quattro.nix lib;
   isEdge = isQuattro pkgs.omarchy.version;
-  isLatestEdge =
-    lib.hasSuffix "-745271c" pkgs.omarchy.version
-    || (isQuattro pkgs.omarchy.version && !lib.hasPrefix "edge-" pkgs.omarchy.version);
+  inherit (pkgs.omarchy) src;
+  hasAccountDispatch = lib.hasInfix "_omarchy_transform_mise_init()" (
+    builtins.readFile "${src}/default/bash/init"
+  );
+  hasShimOrder = lib.hasInfix "omarchy_shims_dir=" (
+    builtins.readFile "${src}/default/bash/env-bootstrap"
+  );
   badMarker = lib.attrNames (
     lib.filterAttrs (
       _: r:
@@ -20,7 +24,7 @@ let
         "only"
         "absent"
       ])
-      || r ? latestEdge && r.latestEdge != "absent"
+      || r ? accountDispatch && r.accountDispatch != "absent"
     ) allRows
   );
   # `edgeLines` replaces `lines` under an edge pin, where quattro words a file differently.
@@ -32,12 +36,16 @@ let
           (
             r
             // lib.optionalAttrs (isEdge && r ? edgeLines) { lines = r.edgeLines; }
-            // lib.optionalAttrs (isLatestEdge && r ? latestEdgeLines) { lines = r.latestEdgeLines; }
+            // lib.optionalAttrs (hasAccountDispatch && r ? accountDispatchLines) {
+              lines = r.accountDispatchLines;
+            }
+            // lib.optionalAttrs (hasShimOrder && r ? shimOrderLines) { lines = r.shimOrderLines; }
           )
           [
             "edgeLines"
-            "latestEdgeLines"
-            "latestEdge"
+            "accountDispatchLines"
+            "shimOrderLines"
+            "accountDispatch"
           ]
       )
       (
@@ -46,7 +54,7 @@ let
           !(
             r.edge or "" == "only" && !isEdge
             || r.edge or "" == "absent" && isEdge
-            || r.latestEdge or "" == "absent" && isLatestEdge
+            || r.accountDispatch or "" == "absent" && hasAccountDispatch
           )
         ) allRows
       );

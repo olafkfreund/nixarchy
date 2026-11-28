@@ -585,4 +585,29 @@
     decision = "declined";
     reason = "installs Shure's hidraw udev rule with sudo into /etc/udev/rules.d, which NixOS generates, then puts omarchy.mv7plus on the bar. Nixarchy ships no such rule, so an existing bar is left as it is; an owner of the mic adds default/udev/shure-mv7plus.rules through services.udev.packages (before 73-seat-late) and runs `omarchy bar put omarchy.mv7plus`";
   };
+  "1795743653" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "repairs Git credential helpers after Omarchy retired its mise-provided gh. Nixarchy never provided that shim; it leaves any user-managed Git credential configuration alone (#1985)";
+  };
+  "1795777042" = {
+    edge = "only";
+    decision = "declined";
+    reason = "unconditionally removes imv.desktop, including a customized file or a Home Manager link. The checksum-based 1794774234 already removes stock copies while preserving user-owned launchers (#1985)";
+  };
+  "1795778751" = {
+    edge = "only";
+    decision = "declined";
+    reason = "rewrites Chromium-family flags files through symlinks and overrides browser settings the user may manage declaratively (#1985)";
+  };
+  "1795791370" = {
+    edge = "only";
+    decision = "not-needed";
+    reason = "reorders Arch's mise shims by editing its PAM environment file. Nixarchy has no managed mise shims, and NixOS owns the SSH PAM configuration (#1985)";
+  };
+  "1795799308" = {
+    edge = "only";
+    decision = "declined";
+    reason = "translates udiskie keyfile rules into persistent automatic-unlock links. It assumes Arch's /usr/bin/python3 and package installation, and the new automounter cannot preserve all udiskie device rules. Leave existing configuration and keyfiles in place (#1985)";
+  };
 }

@@ -824,6 +824,10 @@ let
         "setup.security.passwordless-sudo" = {
           when = "false";
         };
+        "setup.security.passwordless-login" = {
+          ifUpstream = true;
+          when = "false";
+        };
         # The Arch wiki is the wrong manual on a NixOS host. All three wear
         # nf-linux-nixos (U+F1105), the snowflake -- the icon and label are
         # stated explicitly because the generator only carries upstream's

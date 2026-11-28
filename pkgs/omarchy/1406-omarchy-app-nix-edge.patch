@@ -69,14 +69,10 @@
  
  ## Loop
  
-@@ -93,7 +94,7 @@
- 2. `bin/test` after each change. Its arguments go to `ctest`, so `bin/test -V` shows every Qt test function as it runs. Warnings are on for the whole project; keep the build free of them.
- 3. Look at it with `omarchy agent look app` before calling it done: on the user's theme, on a light theme as well as a dark one (`--theme catppuccin-latte`), in Danish (`--language da`), where longer words must not clip and nothing should still be in English, and in a right-to-left language (`--language ar`). Open every dialog and popup with `--keys`, not only the window.
+@@ -95,3 +96,3 @@
  4. Drive the window in the test when a change is about interaction: the starter's window test loads `qrc:/Main.qml` offscreen and sends it keys and clicks with `QTest`, which also types into fields, where `--keys` only reaches `Shortcut`s. Set `QT_FORCE_STDERR_LOGGING=1` when running a test binary by hand, or QML warnings go to the journal instead of the terminal.
 -5. `cmake --install build --prefix ~/.local` installs the binary, the `.desktop` entry, and the icon for this user, so the app appears in the Omarchy app launcher (`Super + Space`) before it is packaged. Run it again after every change the user should see there. Once the package is installed, remove the local copy with `xargs rm < build/install_manifest.txt`, or its `.desktop` entry keeps shadowing the package's.
 +5. `nix run` builds the package and runs it. To see it in the Omarchy app launcher (`Super + Space`), add the flake to the system configuration and rebuild, which installs the binary, the `.desktop` entry, and the icon. Rebuild again after every change the user should see there.
- 
- ## Qt Quick traps
  
 @@ -119,6 +120,4 @@
  ## README and release

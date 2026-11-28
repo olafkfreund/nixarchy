@@ -57,6 +57,7 @@ concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.ref }}-${{
 
+
       github.ref == 'refs/heads/main' && github.sha || 'shared' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
@@ -202,6 +203,8 @@ jobs:
             | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v5
         if: needs.gate.outputs.relevant == 'true'
+        with:
+          fetch-depth: 0
       - name: Free disk space
         if: needs.gate.outputs.relevant == 'true'
         # Three VM checks plus the box images outgrew the runner's disk once

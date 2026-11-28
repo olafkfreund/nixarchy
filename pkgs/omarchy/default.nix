@@ -136,7 +136,8 @@
   symlinkJoin,
 }:
 let
-  isEdge = lib.hasPrefix "edge-" version;
+  isQuattro = import ./is-quattro.nix lib;
+  isEdge = isQuattro version;
   # Derived from the pinned source, so one line holds under both Omarchy pins
   # (v4.5.0 ships Evince and no qtengine). `src` is a flake input path: no IFD.
   basePackages = builtins.filter (l: l != "" && !(lib.hasPrefix "#" l)) (
@@ -1186,7 +1187,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
                     # Why: pkgs/AGENTS.md#typed-agents-go-through-a-nix-dispatch-directory
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 --no-backup-if-mismatch < ${
-                      if lib.hasSuffix "745271c" version then
+                      if lib.hasSuffix "745271c" version || (isQuattro version && !lib.hasPrefix "edge-" version) then
                         ./1625-no-mise-edge.patch
                       else if isEdge then
                         ./1625-no-mise-edge-364.patch
@@ -2146,13 +2147,21 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     # Why: pkgs/AGENTS.md#notification-history-keeps-text-for-the-newest-rows-1663
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./904-notification-history-text.patch}
 
+                    # Why: pkgs/AGENTS.md#user-file-migrations-1610
+                    if [ -f "$out/share/omarchy/migrations/1795200237.sh" ] || [ -f "$out/share/omarchy/migrations/1795380483.sh" ]; then
+                      patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1975-local-models-bar-migration.patch}
+                    fi
+
                     # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
                     substituteInPlace $out/share/omarchy/shell/shell.qml \
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
 
                     # Why: pkgs/AGENTS.md#the-watcher-reaper-checks-the-scan-1923
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${
-                      if lib.hasSuffix "745271c" version then ./1923-reaper-check-155.patch else ./1923-reaper-check.patch
+                      if lib.hasSuffix "745271c" version || (isQuattro version && !lib.hasPrefix "edge-" version) then
+                        ./1923-reaper-check-155.patch
+                      else
+                        ./1923-reaper-check.patch
                     }
                     patch_reaper_guard
                     if grep -q '^    if (shell.pluginReloading || shell.pluginRegistry.scanning) {$' "$out/share/omarchy/shell/shell.qml"; then

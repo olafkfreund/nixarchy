@@ -5,7 +5,8 @@
 # Why: pkgs/AGENTS.md#user-file-migrations-1610
 let
   # Edge pins carry an `edge-` version; rows may be marked edge = "only" or "absent".
-  isEdge = if pkgs.lib.hasPrefix "edge-" pkgs.omarchy.version then "true" else "false";
+  isEdge =
+    if import ../pkgs/omarchy/is-quattro.nix pkgs.lib pkgs.omarchy.version then "true" else "false";
   ledger = pkgs.writeText "user-migrations.json" (
     builtins.toJSON (import ../data/user-migrations.nix)
   );

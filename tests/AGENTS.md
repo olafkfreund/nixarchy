@@ -1637,6 +1637,14 @@ omarchy setup input mozc         # or pick under Setup > Typing > Input Methods
 
 ## Working here
 
+- **Do not run `Hyprland --verify-config` on the full Omarchy desktop config.**
+  On 2026-11-26 a review agent did, against Omarchy 4.5.0's config, and Hyprland
+  segfaulted on exit and left a core dump: a timer from `startup-cursor.lua`'s
+  `config.reloaded` hook is cleaned up with no event loop (hyprwm/Hyprland#16591).
+  For a changed Lua file run `luac -p` for syntax; for a running session read
+  `hyprctl configerrors`. `--verify-config` belongs to the isolated template
+  check in `tests/microvm-ai-mirror.nix`, which runs it on the template's own
+  small file.
 - **`pgrep -f <pattern>` in a VM check matches the driver's own shell.**
   The driver runs every command as `bash -c '…'`, and that shell's command
   line contains the pattern. So `machine.succeed("pgrep -f X")` passes with no

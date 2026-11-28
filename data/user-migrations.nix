@@ -506,8 +506,8 @@
   "1795200237" = {
     edge = "only";
     decision = "ported";
-    run = "upstream";
-    reason = "puts the omarchy.local-models bar entry before omarchy.agents in ~/.config/omarchy/shell.json with jq, only where the agents entry is and the local models one is not. It holds here: the plugin ships in the tree, and its icon shows only on a machine that can run a model (#1896)";
+    run = "bar";
+    reason = "inserts omarchy.local-models before each omarchy.agents entry through shell IPC, only when agents are present and local models are absent (#1975)";
   };
   "1795263097" = {
     edge = "only";
@@ -535,8 +535,8 @@
   "1795380483" = {
     edge = "only";
     decision = "ported";
-    run = "upstream";
-    reason = "drops the omarchy.local-models bar entry from ~/.config/omarchy/shell.json with jq, the reverse of 1795200237, because quattro moved local models into the agents panel and removed that plugin; with no entry or no shell.json it does nothing (#1896)";
+    run = "bar";
+    reason = "removes every omarchy.local-models bar entry through shell IPC after local models moved into the agents panel, leaving the local models service enabled (#1975)";
   };
   "1795376239" = {
     edge = "only";

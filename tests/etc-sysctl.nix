@@ -6,7 +6,7 @@
 # Upstream's sysctl.d, value for value, against the file a machine reads.
 # Why: tests/AGENTS.md#etc-sysctl-compares-values-every-other-native-row-is-still-a-name
 let
-  isEdge = lib.hasPrefix "edge-" (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix lib (pkgs.nixarchy-omarchy or pkgs.omarchy).version;
   inherit (pkgs) lib;
 
   rows = lib.filterAttrs (name: _: lib.hasPrefix "sysctl.d/" name) (import ../data/etc-overlay.nix);

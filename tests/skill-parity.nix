@@ -25,7 +25,8 @@ pkgs.runCommand "nixarchy-skill-parity"
     manifest = ../data/skill-parity.nix;
     script = ../.github/scripts/check-skill-parity.py;
     # tag_upstream rows are read for main's tag pin (#1752).
-    edgeFlag = if pkgs.lib.hasPrefix "edge-" pkgs.omarchy.version then "--edge" else "";
+    edgeFlag =
+      if import ../pkgs/omarchy/is-quattro.nix pkgs.lib pkgs.omarchy.version then "--edge" else "";
   }
   ''
     python3 $script $edgeFlag \

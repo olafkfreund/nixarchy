@@ -1,6 +1,7 @@
 { inputs, pkgs }:
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix pkgs.lib shipped.version;
 in
 # Every command this port does not ship verbatim, classified and checked.
 #
@@ -40,6 +41,6 @@ pkgs.runCommand "nixarchy-bin-ledger"
       --upstream "$upstream" \
       --shipped "$shipped/share/omarchy" \
       --nix-bin "$nixbin" \
-      --ledger "$ledger" ${pkgs.lib.optionalString (pkgs.lib.hasPrefix "edge-" shipped.version) "--edge"}
+      --ledger "$ledger" ${pkgs.lib.optionalString isEdge "--edge"}
     touch $out
   ''

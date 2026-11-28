@@ -1,7 +1,7 @@
 { pkgs, ... }:
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
-  isEdge = pkgs.lib.hasPrefix "edge-" shipped.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix pkgs.lib shipped.version;
   header = "<!-- Your instructions for every coding agent. Omarchy links this file into each agent harness (Claude Code, Codex, Pi, OpenCode, and the rest), so what you write here applies to all of them. -->";
   storeHeader = pkgs.writeText "agent-instructions-header" "${header}\n";
   storeOther = pkgs.writeText "agent-instructions-other" "other rules\n";

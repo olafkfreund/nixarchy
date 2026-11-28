@@ -1,7 +1,7 @@
 { pkgs, ... }:
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
-  isEdge = pkgs.lib.hasPrefix "edge-" shipped.version;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix pkgs.lib shipped.version;
   # v4.5.0 names it install_chromium_extension and checks for Chromium first.
   extensionFunction = if isEdge then "install_browser_extension" else "install_chromium_extension";
 in

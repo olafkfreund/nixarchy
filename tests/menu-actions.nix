@@ -13,6 +13,7 @@ let
     ];
   };
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
+  isEdge = import ../pkgs/omarchy/is-quattro.nix pkgs.lib shipped.version;
 in
 pkgs.runCommand "nixarchy-menu-actions"
   {
@@ -24,6 +25,6 @@ pkgs.runCommand "nixarchy-menu-actions"
     ledger = ../.github/scripts/check-bin-ledger.py;
   }
   ''
-    python3 -B $script --no-pending ${pkgs.lib.optionalString (pkgs.lib.hasPrefix "edge-" shipped.version) "--edge"} --menu "$menu" --bin "$bin" --entries "$entries" --ledger-script "$ledger"
+    python3 -B $script --no-pending ${pkgs.lib.optionalString isEdge "--edge"} --menu "$menu" --bin "$bin" --entries "$entries" --ledger-script "$ledger"
     touch $out
   ''

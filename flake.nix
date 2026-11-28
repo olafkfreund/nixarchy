@@ -79,7 +79,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/745271ccd293fc2e7a233b269004a9926a5c6cb4";
+      url = "github:basecamp/omarchy/v4.6.0-rc1";
       flake = false;
     };
 
@@ -433,7 +433,7 @@
         ) boxImagePins
       );
 
-      omarchyVersion = "edge-20261127-745271c";
+      omarchyVersion = "4.6.0-rc1";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).
@@ -2697,7 +2697,7 @@
           # tests/omarchy-app-template.nix.
           omarchy-app-template =
             let
-              isEdge = lib.hasPrefix "edge-" self.packages.${system}.omarchy.version;
+              isEdge = import ./pkgs/omarchy/is-quattro.nix lib self.packages.${system}.omarchy.version;
             in
             import ./tests/omarchy-app-template.nix {
               pkgs = pkgsFor.${system};

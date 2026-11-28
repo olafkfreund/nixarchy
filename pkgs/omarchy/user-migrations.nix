@@ -7,7 +7,7 @@
   omarchy-nvim-config,
 }:
 let
-  isEdge = lib.hasPrefix "edge-" omarchy.version;
+  isEdge = import ./is-quattro.nix lib omarchy.version;
   ledger = builtins.toFile "nixarchy-user-migrations.json" (
     builtins.toJSON (
       lib.filterAttrs (
@@ -25,7 +25,7 @@ runCommand "nixarchy-user-migrations"
     set -euo pipefail
     mkdir -p "$out/scripts"
     : > "$out/list"
-    jq -r 'del(.predates) | to_entries[] | select((.value.decision | IN("ported", "partial")) and .value.run != "bar") | [.key, .value.run, (.value.edge // "-")] | @tsv' ${ledger} | sort > rows
+    jq -r 'del(.predates) | to_entries[] | select(.value.decision | IN("ported", "partial")) | [.key, .value.run, (.value.edge // "-")] | @tsv' ${ledger} | sort > rows
     while IFS=$'\t' read -r id run edge; do
       [[ $id =~ ^[0-9]+$ && -n $run ]] || { echo "invalid migration row: $id" >&2; exit 1; }
       # An older edge pin (edge's fallback) lacks a newer pin's migrations (#1896).
@@ -34,6 +34,13 @@ runCommand "nixarchy-user-migrations"
         continue
       fi
       case $run in
+        bar)
+          case $id in
+            1790042972|1791968925|1791969355) continue ;; # The legacy bar ports run before the list.
+            1795200237|1795380483) script=bar ;;
+            *) echo "no bar port defined for $id" >&2; exit 1 ;;
+          esac
+          ;;
         upstream)
           script=${tree}/migrations/$id.sh
           test -f "$script"

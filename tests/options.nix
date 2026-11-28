@@ -2779,7 +2779,10 @@ let
   # wrong -- the row is wired, just not by the file it used to be wired by.
   # A row marked edge = "only"/"absent" exists in one Omarchy pin's menu only (#1752).
   inactiveEdge =
-    if pkgs.lib.hasPrefix "edge-" (pkgs.extend inputs.self.overlays.default).omarchy.version then
+    if
+      import ../pkgs/omarchy/is-quattro.nix pkgs.lib
+        (pkgs.extend inputs.self.overlays.default).omarchy.version
+    then
       "absent"
     else
       "only";

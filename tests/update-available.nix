@@ -2,7 +2,7 @@
 # Exercise the bar command with a local lock and a fake remote; no network.
 let
   shipped = pkgs.nixarchy-omarchy or pkgs.omarchy;
-  isEdge = if pkgs.lib.hasPrefix "edge-" shipped.version then "1" else "";
+  isEdge = if import ../pkgs/omarchy/is-quattro.nix pkgs.lib shipped.version then "1" else "";
 in
 pkgs.runCommand "nixarchy-update-available"
   {

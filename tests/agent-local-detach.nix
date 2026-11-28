@@ -8,7 +8,7 @@
 # The script is upstream's and unwrapped, so PATH stubs are reached
 # (tests/AGENTS.md, "A PATH stub loses to runtimeInputs").
 let
-  isEdge = if pkgs.lib.hasPrefix "edge-" omarchy.version then "1" else "";
+  isEdge = if import ../pkgs/omarchy/is-quattro.nix pkgs.lib omarchy.version then "1" else "";
 in
 pkgs.runCommand "nixarchy-agent-local-detach" { inherit isEdge; } ''
   set -euo pipefail

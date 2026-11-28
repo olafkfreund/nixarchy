@@ -1664,6 +1664,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
                     install -d $out/share/plymouth/themes
                     cp -r ${src}/default/plymouth $out/share/plymouth/themes/omarchy
                     chmod -R u+w $out/share/plymouth/themes/omarchy
+                    # The Nixarchy script does not draw upstream's new shutdown art.
+                    rm -f "$out/share/plymouth/themes/omarchy/shutdown.png"
 
                     # The theme names its own directory twice, absolutely, and Plymouth reads
                     # those literally -- left alone it would look for the script under
